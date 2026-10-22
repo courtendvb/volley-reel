@@ -1,6 +1,7 @@
 // Reel = the blueprint of one highlight video (design §3.4). Pure functions returning new reels,
 // so the UI can treat a reel as immutable state and every change is unit-testable.
 import { roundCoords, type Annotation } from './annotation'
+import type { ClipOverlayOverride, OverlaySettings } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
 export type Marker = 1 | 2 | 3 | 4 | 5
@@ -16,6 +17,7 @@ export interface Clip {
   inSec: number | null // video time; null = default rule (rally start)
   outSec: number | null
   annotations: Annotation[] // design §3.6; times are absolute video times
+  overlayOverride?: ClipOverlayOverride // design §3.7: hide an auto element or rewrite the caption
 }
 
 export interface Reel {
@@ -27,6 +29,7 @@ export interface Reel {
   clips: Record<string, Clip>
   scope: 'marked' | 'all'
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
+  overlay?: Partial<OverlaySettings> // added in M6; read through overlaySettings()
   updatedAt: string
 }
 
@@ -218,4 +221,10 @@ export function setAnnotations(reel: Reel, clipId: string, annotations: Annotati
   const c = reel.clips[clipId]
   if (!c) return reel
   return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, annotations: annotations.map(roundCoords) } } })
+}
+
+export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, overlayOverride: o } } })
 }

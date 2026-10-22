@@ -8,6 +8,15 @@ export interface SeqItem {
   out: number
 }
 
+// A title card in a through-play: shown over the paused video for durationSec, then the next item.
+export interface CardItem {
+  card: { marker: number; name: string; match: string | null }
+  durationSec: number
+}
+
+export type SequenceItem = SeqItem | CardItem
+const isCard = (it: SequenceItem): it is CardItem => 'card' in it
+
 export interface PlaybackState {
   time: number
   duration: number
@@ -15,6 +24,7 @@ export interface PlaybackState {
   ready: boolean
   seq: { index: number; total: number } | null // through-play position, when a reel is playing
   loop: SeqItem | null // the clip being trimmed: playback wraps from OUT back to IN
+  card: CardItem['card'] | null // title card on screen during a through-play
 }
 
 type Listener = (s: PlaybackState) => void
@@ -25,9 +35,10 @@ class Playback {
   private pending: { key: string; t: number; play: boolean } | null = null
   private fps = 30
   private listeners = new Set<Listener>()
-  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null }
+  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null, card: null }
   private detachEvents: (() => void) | null = null
-  private seq: { items: SeqItem[]; index: number; onIndex: (i: number | null) => void } | null = null
+  private seq: { items: SequenceItem[]; index: number; onIndex: (i: number | null) => void } | null = null
+  private cardTimer = 0
 
   attach(video: HTMLVideoElement | null, fps: number, key: string | null = null): void {
     if (video === this.video) { this.fps = fps || 30; return }
@@ -94,7 +105,7 @@ class Playback {
 
   // Through-play: each item from `in` to `out`, switching matches as needed. onIndex reports the
   // item playing (null when finished or stopped) so the reel panel can follow along.
-  playSequence(items: SeqItem[], onIndex: (i: number | null) => void, startAt = 0): void {
+  playSequence(items: SequenceItem[], onIndex: (i: number | null) => void, startAt = 0): void {
     this.stopSequence()
     if (!items.length) return
     this.seq = { items, index: -1, onIndex }
@@ -113,7 +124,8 @@ class Playback {
     const s = this.seq
     if (!s) return
     this.seq = null
-    this.set({ ...this.state, seq: null })
+    clearTimeout(this.cardTimer)
+    this.set({ ...this.state, seq: null, card: null })
     s.onIndex(null)
   }
 
@@ -159,9 +171,22 @@ class Playback {
     const s = this.seq!
     s.index = i
     const it = s.items[i]
-    this.set({ ...this.state, seq: { index: i, total: s.items.length } })
+    clearTimeout(this.cardTimer)
+    this.set({ ...this.state, seq: { index: i, total: s.items.length }, card: isCard(it) ? it.card : null })
     s.onIndex(i)
+    if (isCard(it)) {
+      this.video?.pause()
+      this.cardTimer = window.setTimeout(() => this.advance(), it.durationSec * 1000)
+      return
+    }
     this.queueSeek(it.key, it.in, true)
+  }
+
+  private advance(): void {
+    const s = this.seq
+    if (!s) return
+    if (s.index + 1 < s.items.length) this.startItem(s.index + 1)
+    else { this.video?.pause(); this.stopSequence() }
   }
 
   // Advance when the playing item reaches its OUT. Only trusted once the seek to this item has
@@ -176,9 +201,8 @@ class Playback {
       return
     }
     const it = s.items[s.index]
-    if (this.key !== it.key || t < it.in - 0.25 || t < it.out) return
-    if (s.index + 1 < s.items.length) this.startItem(s.index + 1)
-    else { v.pause(); this.stopSequence() }
+    if (isCard(it) || this.key !== it.key || t < it.in - 0.25 || t < it.out) return
+    this.advance()
   }
 
   private queueSeek(key: string, t: number, play: boolean): void {

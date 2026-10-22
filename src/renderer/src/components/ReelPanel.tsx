@@ -33,6 +33,7 @@ interface Props {
   orderCount: number
   orderSec: number
   overlaps: Map<string, string[]>
+  onOpenOverlay: () => void
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -119,6 +120,7 @@ export function ReelPanel(p: Props) {
           <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}>マーカー付き</button>
           <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}>全部</button>
         </div>
+        <button onClick={p.onOpenOverlay} title="スコアボード・テロップ・タイトルカード・配色">オーバーレイ</button>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount}>▶ 通し再生</button>}

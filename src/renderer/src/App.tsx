@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, toggleMarker, trimClip,
+  addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
   type Clip, type Group, type Marker, type Reel,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -13,8 +13,12 @@ import { TrimBar } from './components/TrimBar'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools } from './components/AnnotationTools'
 import type { Annotation } from '../../shared/annotation'
+import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
+import { OverlayLayer } from './components/OverlayLayer'
+import { OverlayDialog } from './components/OverlayDialog'
+import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { VideoPane } from './components/VideoPane'
-import { playback, type SeqItem } from './playback'
+import { playback, type SequenceItem } from './playback'
 
 const api = window.api
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
@@ -36,6 +40,7 @@ export function App() {
   const [annTool, setAnnTool] = useState<Tool>('select')
   const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#FACC15', width: 6, size: 36 })
   const [selectedAnn, setSelectedAnn] = useState<string | null>(null)
+  const [overlayOpen, setOverlayOpen] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -168,8 +173,9 @@ export function App() {
     setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
   }
 
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn })
-  latest.current = { results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn }
+  const overlay = useMemo(() => overlaySettings(reel?.overlay), [reel?.overlay])
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null) })
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings }
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -193,14 +199,30 @@ export function App() {
     playback.seekIn(c.matchId, range.in, { play: true })
   }, [])
 
+  // Through-play items: the clips in order, with a title card before each marker group when enabled.
+  // startAt and the reported index count clips, not cards.
   const playThrough = useCallback((startAt = 0) => {
-    const { order: o, clipInfo: info } = latest.current
-    const items: SeqItem[] = o.map(c => ({ key: c.matchId, ...info(c).range! }))
+    const { order: o, clipInfo: info, reel: r, overlay: ov, matches: ms, settings: st } = latest.current
+    const items: SequenceItem[] = [], clipAt: (Clip | null)[] = []
+    let startItem = 0
+    o.forEach((c, i) => {
+      if (i === startAt) startItem = items.length // a card before this clip plays first
+      const g = r ? groupOf(r, c.id) : null
+      if (r && ov.titleCard.enabled && g !== null && g !== 'none' && (i === 0 || groupOf(r, o[i - 1].id) !== g)) {
+        const groupMatches = new Set(r.groups[g].map(id => r.clips[id]?.matchId))
+        const m = ms[c.matchId]
+        items.push({ card: { marker: g, name: r.markerNames[g], match: groupMatches.size === 1 && m ? cardMatchLabel(m, st?.ourTeamCodes ?? []) : null }, durationSec: ov.titleCard.durationSec })
+        clipAt.push(null)
+      }
+      items.push({ key: c.matchId, ...info(c).range! })
+      clipAt.push(c)
+    })
     playback.playSequence(items, i => {
-      const c = i === null ? null : o[i]
+      // On a title card, the clip after it is the one the panels follow.
+      const c = i === null ? null : clipAt[i] ?? clipAt[i + 1] ?? null
       setPlayingClipId(c?.id ?? null)
       if (c) { setActiveClipId(c.id); setSelected({ matchId: c.matchId, playId: c.playId }); setMatchId(c.matchId) }
-    }, startAt)
+    }, startItem)
   }, [])
 
   // Number keys tag the active clip — the one playing in a through-play, or the last clicked.
@@ -238,6 +260,19 @@ export function App() {
   useEffect(() => setSelectedAnn(null), [activeClipId])
 
   // ---- annotations (design §3.6) --------------------------------------------------------------
+  // Scoreboard and caption for a clip, from its play in the DVW.
+  const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData } | null => {
+    const d = c ? dvws[c.matchId] : null, play = c && d ? d.plays[c.playId] : null
+    if (!c || !d || !play) return null
+    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption) }
+  }, [dvws, settings, overlay])
+  const activeOverlay = overlayData(active)
+  latest.current.overlayData = overlayData
+  const setOverlay = useCallback((s: OverlaySettings) => {
+    const r = latest.current.reel
+    if (r) updateReel({ ...r, overlay: s, updatedAt: new Date().toISOString() })
+  }, [updateReel])
+
   const setAnns = useCallback((list: Annotation[]) => {
     const { reel: r, activeClipId: id } = latest.current
     if (r && id && r.clips[id]) updateReel(setAnnotations(r, id, list))
@@ -295,6 +330,7 @@ export function App() {
       if (opts.reel) return smokeReel(opts.reel, res)
       if (opts.trim) return smokeTrim(res)
       if (opts.ann) return smokeAnn(res)
+      if (opts.ov) return smokeOverlay(res, opts.ov)
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -314,6 +350,57 @@ export function App() {
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
       }
+    }
+
+    // Automatic overlays: three clips (markers 1, 1, 2), pixels where the scoreboard and caption
+    // should be, a per-clip hide and caption rewrite, theme switch, then a through-play with title
+    // cards. ov = 'dialog' leaves the settings dialog open for the screenshot.
+    const smokeOverlay = async (res: PlayRef[], mode: string) => {
+      const picks = [res.find(x => x.play.skill === 'S' && x.play.effect === '#'), res.find(x => x.play.skill === 'A' && x.play.effect === '#'), res.find(x => x.play.skill === 'R' && x.play.effect === '#')]
+        .filter((x): x is PlayRef => !!x)
+      let r = addClips(newReel('overlay smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
+      const ids = r.groups.none.slice()
+      r = toggleMarker(toggleMarker(toggleMarker(r, ids[0], 1), ids[1], 1), ids[2], 2)
+      r = { ...r, markerNames: { ...r.markerNames, 1: 'Big serves', 2: 'Perfect passes' },
+        overlay: { ...overlaySettings(undefined), theme: { base: '#0B1F3A', accent: '#C9A227' }, titleCard: { enabled: true, durationSec: 1.5, showMarkerName: true, showMatch: true } } }
+      setReels(rs => [...rs, r]); setReelId(r.id)
+      await waitFor(() => latest.current.reel?.id === r.id || null, 20000, 'overlay reel')
+      activateClip(latest.current.reel!.clips[ids[0]])
+      await waitFor(() => playback.attachedKey === picks[0].matchId && playback.current.ready ? true : null, 20000, 'video')
+      const range = latest.current.clipInfo(latest.current.reel!.clips[ids[0]]).range!
+      await playback.seekAndWait(range.in + 1)
+      await sleep(300)
+      const alphaAt = (fx: number, fy: number) => {
+        const c = document.querySelector<HTMLCanvasElement>('[data-testid=overlay-canvas]')!
+        return c.getContext('2d')!.getImageData(Math.round(c.width * fx), Math.round(c.height * fy), 1, 1).data[3]
+      }
+      // Scoreboard: top centre, ~4% down. Caption: bottom left, ~6% from the left, ~93% down.
+      const shown = { scoreboard: alphaAt(0.5, 0.045), caption: alphaAt(0.06, 0.93) }
+      const data = latest.current.overlayData!(latest.current.reel!.clips[ids[0]])
+
+      updateReel(setOverlayOverride(latest.current.reel!, ids[0], { scoreboard: { hidden: true }, playerCaption: { line: 'what a serve' } }))
+      await sleep(300)
+      const hidden = { scoreboard: alphaAt(0.5, 0.045), caption: alphaAt(0.06, 0.93) }
+      const rewritten = latest.current.overlayData!(latest.current.reel!.clips[ids[0]])?.caption.line
+      setOverlay({ ...latest.current.overlay, theme: { base: '#111111', accent: '#C8102E' } })
+      await sleep(200)
+      const theme = latest.current.overlay.theme
+
+      if (mode === 'dialog') { updateReel(setOverlayOverride(latest.current.reel!, ids[0], undefined)); await sleep(200); setOverlayOpen(true); await sleep(500); return { shown, hidden, rewritten, theme, data } }
+
+      const t0 = performance.now()
+      const timeline: { kind: string; at: number }[] = []
+      let lastCard: unknown = null, lastIdx = -1
+      const unsub = playback.subscribe(s => {
+        if (s.card !== lastCard) { lastCard = s.card; if (s.card) timeline.push({ kind: `card ${s.card.marker} ${s.card.name} / ${s.card.match}`, at: Math.round(performance.now() - t0) }) }
+        if (s.seq && s.seq.index !== lastIdx) { lastIdx = s.seq.index; if (!s.card) timeline.push({ kind: `clip (item ${s.seq.index})`, at: Math.round(performance.now() - t0) }) }
+      })
+      playThrough(0)
+      await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 120000, 'through-play')
+      unsub()
+      // Screenshot on the first title card.
+      playThrough(0); await sleep(600)
+      return { shown, hidden, rewritten, theme, data, timeline, totalMs: Math.round(performance.now() - t0) }
     }
 
     // Annotations through real pointer/key events on the overlay canvas: draw four kinds, move one,
@@ -461,7 +548,7 @@ export function App() {
       await sleep(1500)
       return { plan, timeline, totalMs, expectedMs: Math.round(plan.reduce((s, x) => s + (x.out - x.in) * 1000, 0)) }
     }
-  }, [jump, loadProject, playThrough, activateClip, updateReel])
+  }, [jump, loadProject, playThrough, activateClip, updateReel, overlayData, setOverlay])
 
   // ---- project ------------------------------------------------------------------------------
   const openProject = async () => {
@@ -530,13 +617,22 @@ export function App() {
           </aside>
           <section className="stage">
             {match && (
-              <VideoPane key={match.id} match={match} overlay={size => active && activeInfo?.range && active.matchId === match.id ? (
-                <AnnotationLayer
-                  size={size} annotations={active.annotations} clip={{ key: active.matchId, ...activeInfo.range }}
-                  editable={!seqPlaying} tool={annTool} style={annStyle}
-                  selectedId={selectedAnn} onSelect={setSelectedAnn} onChange={setAnns}
-                />
-              ) : null} />
+              <VideoPane key={match.id} match={match} overlay={size => {
+                const here = active && activeInfo?.range && active.matchId === match.id ? { key: active.matchId, ...activeInfo.range } : null
+                return (
+                  <>
+                    <OverlayLayer size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
+                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
+                    {here && active && (
+                      <AnnotationLayer
+                        size={size} annotations={active.annotations} clip={here}
+                        editable={!seqPlaying} tool={annTool} style={annStyle}
+                        selectedId={selectedAnn} onSelect={setSelectedAnn} onChange={setAnns}
+                      />
+                    )}
+                  </>
+                )
+              }} />
             )}
             {active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <TrimBar
@@ -558,17 +654,29 @@ export function App() {
                 clip={activeInfo.range} disabled={seqPlaying}
               />
             )}
+            {active && activeInfo?.ref && active.matchId === matchId && (
+              <ClipOverlayRow
+                override={active.overlayOverride}
+                autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
+                autoLine={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showSkill: true, showEvaluation: true }).line ?? '' : ''}
+                onChange={o => { const r = latest.current.reel; if (r) updateReel(setOverlayOverride(r, active.id, o)) }}
+              />
+            )}
           </section>
           <ReelPanel
             reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
             onNewReel={createReel} onDeleteReel={deleteReel} onChange={updateReel}
             info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
             onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough(0)} onStop={() => playback.stopSequence()}
-            orderCount={order.length} orderSec={orderSec} overlaps={overlaps}
+            orderCount={order.length} orderSec={orderSec} overlaps={overlaps} onOpenOverlay={() => setOverlayOpen(true)}
           />
         </main>
       )}
 
+      {overlayOpen && reel && (
+        <OverlayDialog settings={overlay} onChange={setOverlay} onClose={() => setOverlayOpen(false)}
+          sample={overlaySample(overlayData(active ?? order[0] ?? Object.values(reel.clips)[0] ?? null), reel)} />
+      )}
       {settingsOpen && settings && (
         <SettingsDialog settings={settings} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       )}
@@ -584,7 +692,25 @@ interface SmokeOpts {
   keys?: string[]
   trim?: boolean
   ann?: boolean
+  ov?: string
   reel?: { markers: (Marker | null)[]; groupOrder?: Marker[]; scope?: 'marked' | 'all'; shotAt?: number }
+}
+
+// Title card match line: "VS SMT · 2026-10-11".
+function cardMatchLabel(m: Match, codes: string[]): string {
+  const side = ourSide(m.teams, codes)
+  const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
+  return `VS ${opp}${m.date ? ` · ${m.date}` : ''}`
+}
+
+// Dialog preview data: the active (or first) clip's real data, or a placeholder for an empty reel.
+function overlaySample(d: { scoreboard: ScoreboardData; caption: CaptionData } | null, r: Reel) {
+  const m = r.groupOrder.find(g => r.groups[g].length) ?? 1
+  return {
+    scoreboard: d?.scoreboard ?? { left: 'HTH', right: 'OPP', ptsL: 17, ptsR: 9, setsL: 1, setsR: 0, winner: 'L' as const },
+    caption: d?.caption ?? { number: 1, name: 'PLAYER', line: 'SERVE · ACE' },
+    card: { marker: m, name: r.markerNames[m], match: null },
+  }
 }
 
 // Short label for the match column: "10/11 SMT" (the opponent when one side is ours).

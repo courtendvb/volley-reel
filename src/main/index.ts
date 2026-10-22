@@ -1,0 +1,110 @@
+import { createReadStream, existsSync, readFileSync } from 'node:fs'
+import { stat, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { Readable } from 'node:stream'
+import { BrowserWindow, app, dialog, ipcMain, protocol } from 'electron'
+import { Project } from './project'
+
+// media://<matchId>/ streams that match's video with Range support, so <video> can seek.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+])
+
+let project: Project | null = null
+let win: BrowserWindow | null = null
+const settingsFile = () => join(app.getPath('userData'), 'settings.json')
+
+app.whenReady().then(async () => {
+  protocol.handle('media', serveMedia)
+  registerIpc()
+
+  const last = process.env.VR_PROJECT || readSettings().lastProject
+  if (last && existsSync(last)) project = await Project.open(last)
+
+  win = new BrowserWindow({
+    width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'volley-reel',
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
+  })
+  win.setMenuBarVisibility(false)
+  if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL)
+  else await win.loadFile(join(__dirname, '../renderer/index.html'))
+
+  if (process.env.VR_SMOKE) await smoke(win, process.env.VR_SMOKE)
+})
+
+app.on('window-all-closed', () => app.quit())
+
+function registerIpc(): void {
+  ipcMain.handle('project:get', () => project?.info() ?? null)
+
+  ipcMain.handle('project:choose', async () => {
+    const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトフォルダを選択', properties: ['openDirectory', 'createDirectory'] })
+    if (r.canceled || !r.filePaths[0]) return null
+    project = await Project.open(r.filePaths[0])
+    await writeFile(settingsFile(), JSON.stringify({ ...readSettings(), lastProject: project.dir }, null, 2))
+    return project.info()
+  })
+
+  ipcMain.handle('match:import', async e => {
+    if (!project) throw new Error('先にプロジェクトフォルダを開いてください')
+    const v = await dialog.showOpenDialog(win!, { title: '試合の動画を選択', properties: ['openFile'],
+      filters: [{ name: '動画', extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] })
+    if (v.canceled || !v.filePaths[0]) return null
+    const d = await dialog.showOpenDialog(win!, { title: 'スカウトファイル（.dvw）を選択', properties: ['openFile'],
+      filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
+    if (d.canceled || !d.filePaths[0]) return null
+    return project.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
+  })
+
+  ipcMain.handle('match:parse', (_e, id: string) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    return project.parse(id)
+  })
+}
+
+async function serveMedia(req: Request): Promise<Response> {
+  const id = new URL(req.url).hostname
+  const file = project?.getMatch(id)?.videoPath
+  if (!file || !existsSync(file)) return new Response('not found', { status: 404 })
+  const size = (await stat(file)).size
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') ?? '')
+  if (!m) {
+    return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream, {
+      status: 200, headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
+    })
+  }
+  let start = m[1] ? +m[1] : size - +m[2]
+  let end = m[1] && m[2] ? +m[2] : size - 1
+  start = Math.max(0, start); end = Math.min(end, size - 1)
+  return new Response(Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream, {
+    status: 206,
+    headers: {
+      'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes',
+      'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1),
+    },
+  })
+}
+
+function readSettings(): { lastProject?: string } {
+  try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
+}
+
+// Dev self-check: VR_PROJECT=<dir> VR_IMPORT="<video>|<dvw>" VR_SMOKE=<out.png>
+// imports the match if needed, jumps to a play, and saves a screenshot of the window.
+async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
+  try {
+    if (!project) throw new Error('VR_PROJECT is required for VR_SMOKE')
+    const [video, dvw] = (process.env.VR_IMPORT ?? '').split('|')
+    if (video && dvw && !project.findBySources(video, dvw)) {
+      await project.importMatch(video, dvw, p => console.log(`[import] ${p.message}${p.ratio != null ? ` ${(p.ratio * 100).toFixed(0)}%` : ''}`))
+    }
+    const result = await w.webContents.executeJavaScript(`window.__smoke(${Number(process.env.VR_SMOKE_PLAY ?? 40)})`)
+    await new Promise(r => setTimeout(r, 400))
+    await writeFile(outPng, (await w.webContents.capturePage()).toPNG())
+    console.log(`[smoke] ${JSON.stringify(result)}`)
+  } catch (e) {
+    console.error(`[smoke] failed: ${(e as Error).message}`)
+    process.exitCode = 1
+  }
+  app.quit()
+}

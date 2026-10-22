@@ -25,6 +25,7 @@ export interface Reel {
   groups: Record<Group, string[]> // array order = clip order inside the group ('none' is shown chronologically)
   clips: Record<string, Clip>
   scope: 'marked' | 'all'
+  rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
   updatedAt: string
 }
 
@@ -36,7 +37,7 @@ export function newReel(name: string): Reel {
     markerNames: { 1: '', 2: '', 3: '', 4: '', 5: '' },
     groupOrder: [...MARKERS],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], none: [] },
-    clips: {}, scope: 'marked', updatedAt: new Date().toISOString(),
+    clips: {}, scope: 'marked', rangeDefaults: { ...DEFAULT_RANGE }, updatedAt: new Date().toISOString(),
   }
 }
 
@@ -147,20 +148,67 @@ export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Ree
   return { reel: changed ? { ...reel, clips } : reel, missing, changed }
 }
 
-// Default clip range in video time (design §3.5 "ラリー全体"): serve to the last contact. The point
-// line is logged ~10s after the last contact (M0 finding), so it is not used for the end.
-export const RALLY_LEAD_SEC = 1.5
-export const RALLY_TAIL_SEC = 2.5
+// ---- clip ranges (design §3.5) -----------------------------------------------------------
+// All times are video times. "rally": first serve - lead → last contact + tail (the point line is
+// logged ~10s after the last contact, M0 finding, so it is not used). "keyplay": key play ± seconds.
+export interface RangeDefaults {
+  mode: 'rally' | 'keyplay'
+  rallyLead: number
+  rallyTail: number
+  keyBefore: number
+  keyAfter: number
+}
 
-export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number): { in: number; out: number } {
+export const DEFAULT_RANGE: RangeDefaults = { mode: 'rally', rallyLead: 1.5, rallyTail: 2.5, keyBefore: 3, keyAfter: 4 }
+export const MIN_CLIP_SEC = 0.5
+
+// Reels saved before M4 have no rangeDefaults.
+export function rangeDefaults(r: Reel): RangeDefaults {
+  return { ...DEFAULT_RANGE, ...(r.rangeDefaults ?? {}) }
+}
+
+export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE): { in: number; out: number } {
   const r = play.rallyId !== null ? dvw.rallies[play.rallyId] : null
-  const [a, b] = r ? [r.serveTime - RALLY_LEAD_SEC, r.lastActionTime + RALLY_TAIL_SEC] : [play.time - 3, play.time + 4]
+  const [a, b] = d.mode === 'rally' && r
+    ? [r.serveTime - d.rallyLead, r.lastActionTime + d.rallyTail]
+    : [play.time - d.keyBefore, play.time + d.keyAfter]
   return { in: Math.max(0, a + offsetSec), out: b + offsetSec }
 }
 
-export function clipRange(c: Clip, dvw: ParsedDVW, offsetSec: number): { in: number; out: number } | null {
+export function clipRange(c: Clip, dvw: ParsedDVW, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE): { in: number; out: number } | null {
   const play = dvw.plays[c.playId]
   if (!play) return null
-  const d = defaultRange(dvw, play, offsetSec)
-  return { in: c.inSec ?? d.in, out: c.outSec ?? d.out }
+  const def = defaultRange(dvw, play, offsetSec, d)
+  return { in: c.inSec ?? def.in, out: c.outSec ?? def.out }
+}
+
+// Sets IN or OUT (null = back to the default) while keeping the clip at least MIN_CLIP_SEC long:
+// an IN past the OUT pushes nothing — it is clamped instead, so a stray key press can't flip the clip.
+export function trimClip(reel: Reel, clipId: string, edge: 'in' | 'out', t: number | null,
+  current: { in: number; out: number }, def: { in: number; out: number }, durationSec = Infinity): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  let next: Clip
+  if (t === null) next = edge === 'in' ? { ...c, inSec: null } : { ...c, outSec: null }
+  else if (edge === 'in') next = { ...c, inSec: round(Math.max(0, Math.min(t, current.out - MIN_CLIP_SEC))) }
+  else next = { ...c, outSec: round(Math.min(durationSec, Math.max(t, current.in + MIN_CLIP_SEC))) }
+  // A value equal to the default is stored as "default" so later changes to the defaults apply.
+  if (next.inSec !== null && Math.abs(next.inSec - def.in) < 0.001) next.inSec = null
+  if (next.outSec !== null && Math.abs(next.outSec - def.out) < 0.001) next.outSec = null
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: next } })
+}
+
+const round = (t: number) => Math.round(t * 1000) / 1000
+
+// Clips of the same match whose ranges overlap (e.g. two plays of one rally). Warned, never merged.
+export function findOverlaps(items: { id: string; matchId: string; in: number; out: number }[]): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  const sorted = [...items].sort((a, b) => a.matchId.localeCompare(b.matchId) || a.in - b.in)
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length && sorted[j].matchId === sorted[i].matchId && sorted[j].in < sorted[i].out; j++) {
+      out.set(sorted[i].id, [...(out.get(sorted[i].id) ?? []), sorted[j].id])
+      out.set(sorted[j].id, [...(out.get(sorted[j].id) ?? []), sorted[i].id])
+    }
+  }
+  return out
 }

@@ -1,8 +1,8 @@
 import { useState, type DragEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, moveClip, placeGroup, removeClip, renameMarker, shiftClip, shiftGroup,
-  type Clip, type Group, type Marker, type Reel,
+  MARKERS, MARKER_COLORS, chronological, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker, shiftClip, shiftGroup,
+  type Clip, type Group, type Marker, type RangeDefaults, type Reel,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
 import { pad2 } from '../format'
@@ -10,6 +10,7 @@ import { pad2 } from '../format'
 export interface ClipInfo {
   ref: PlayRef | undefined
   range: { in: number; out: number } | null
+  def: { in: number; out: number } | null
   matchLabel: string
   date: string
 }
@@ -31,6 +32,7 @@ interface Props {
   onStop: () => void
   orderCount: number
   orderSec: number
+  overlaps: Map<string, string[]>
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -68,6 +70,7 @@ export function ReelPanel(p: Props) {
   const clipRow = (c: Clip, g: Group, i: number) => {
     const inf = p.info(c), r = inf.ref
     const dur = inf.range ? inf.range.out - inf.range.in : 0
+    const trimmed = c.inSec !== null || c.outSec !== null
     return (
       <div
         key={c.id} role="listitem" draggable
@@ -86,7 +89,8 @@ export function ReelPanel(p: Props) {
             <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill}`}>{playLabel(r.play.skill, r.play.effect)}</span>
           </span>
         )}
-        <span className="clip-dur">{dur.toFixed(1)}s</span>
+        {p.overlaps.has(c.id) && <span className="overlap" title="同じ試合の別のクリップと範囲が重なっています">⚠</span>}
+        <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? '長さを個別に調整済み' : '初期値の長さ'}>{dur.toFixed(1)}s</span>
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
           {g !== 'none' && <button title="上へ" onClick={() => change(shiftClip(reel, c.id, -1))}>↑</button>}
           {g !== 'none' && <button title="下へ" onClick={() => change(shiftClip(reel, c.id, 1))}>↓</button>}
@@ -119,6 +123,7 @@ export function ReelPanel(p: Props) {
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount}>▶ 通し再生</button>}
       </div>
+      <Defaults d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
       <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list">
@@ -148,6 +153,27 @@ export function ReelPanel(p: Props) {
       </div>
       <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（同じ数字か 0 で解除）。ドラッグでも並べ替えられます。</p>
     </aside>
+  )
+}
+
+// Default clip length for clips without their own IN/OUT (design §3.5).
+function Defaults({ d, onChange }: { d: RangeDefaults; onChange: (d: RangeDefaults) => void }) {
+  const num = (v: number, set: (n: number) => RangeDefaults, label: string) => (
+    <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label}
+      onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(set(n)) }} />
+  )
+  return (
+    <div className="reel-defaults">
+      <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
+        <option value="rally">ラリー全体</option>
+        <option value="keyplay">キープレー中心</option>
+      </select>
+      {d.mode === 'rally' ? (
+        <span>サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒 〜 最後 +{num(d.rallyTail, n => ({ ...d, rallyTail: n }), '最後のプレーの何秒後まで')}秒</span>
+      ) : (
+        <span>キープレー −{num(d.keyBefore, n => ({ ...d, keyBefore: n }), 'キープレーの何秒前から')}秒 〜 +{num(d.keyAfter, n => ({ ...d, keyAfter: n }), 'キープレーの何秒後まで')}秒</span>
+      )}
+    </div>
   )
 }
 

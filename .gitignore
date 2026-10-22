@@ -14,4 +14,8 @@ release/
 *.vsm
 
 # ffmpeg バイナリは同梱するがリポジトリには入れない
-vendor/ffmpeg/
+vendor/
+
+# M0 の作業・出力
+m0/work/
+m0/out/

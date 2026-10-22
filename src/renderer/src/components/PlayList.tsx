@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { playLabel } from '../../../shared/labels'
+import { MARKER_COLORS, type Group } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
@@ -17,10 +18,12 @@ interface Props {
   currentMatchId: string | null
   selected: PlayKey | null
   onJump: (r: PlayRef) => void
+  reelGroups: Map<string, Group> // `${matchId}:${playId}` -> group, for plays already in the reel
+  onAdd: (r: PlayRef) => void
 }
 
 // Only the rows in view are rendered: "all matches" can be tens of thousands of plays.
-export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId, selected, onJump }: Props) {
+export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId, selected, onJump, reelGroups, onAdd }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(600)
@@ -56,6 +59,7 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
         key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW} showMatch={showMatch} matchLabel={matchLabels[r.matchId]}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
+        group={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onAdd={onAdd}
       />,
     )
   }
@@ -69,13 +73,13 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
   )
 }
 
-const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime, selected, now, onJump }: {
+const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime, selected, now, onJump, group, onAdd }: {
   r: PlayRef; top: number; showMatch: boolean; matchLabel: string; videoTime: number; selected: boolean; now: boolean
-  onJump: (r: PlayRef) => void
+  onJump: (r: PlayRef) => void; group: Group | null; onAdd: (r: PlayRef) => void
 }) {
   const p = r.play
   return (
-    <button role="listitem" style={{ top, height: ROW }}
+    <div role="listitem" style={{ top, height: ROW }}
       className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}`} onClick={() => onJump(r)}>
       {showMatch && <span className="match">{matchLabel}</span>}
       <span className="set">S{p.setNum}</span>
@@ -84,7 +88,13 @@ const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
       <span className={`skill skill-${p.skill}`}>{playLabel(p.skill, p.effect)}</span>
       <span className="vtime">{formatTime(videoTime)}</span>
-    </button>
+      {group === null ? (
+        <button className="add" title="リールに追加" onClick={e => { e.stopPropagation(); onAdd(r) }}>＋</button>
+      ) : (
+        <span className="in-reel" title={group === 'none' ? 'リールに入っています（マーカーなし）' : `リールに入っています（マーカー ${group}）`}
+          style={group === 'none' ? undefined : { background: MARKER_COLORS[group], color: '#fff' }}>{group === 'none' ? '✓' : group}</span>
+      )}
+    </div>
   )
 })
 

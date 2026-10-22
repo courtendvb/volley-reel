@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import type { Reel } from '../shared/reel'
 import { basename, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
@@ -20,6 +21,7 @@ export class Project {
     const p = new Project(dir)
     await mkdir(join(dir, 'matches'), { recursive: true })
     await mkdir(join(dir, 'cache'), { recursive: true })
+    await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
     const file = join(dir, 'project.json')
     const saved = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {}
     p.settings = {
@@ -38,6 +40,26 @@ export class Project {
   info(): ProjectInfo {
     const matches = [...this.matches.values()].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return { path: this.dir, matches, settings: this.settings }
+  }
+
+  // One file per reel (design §5), so a bad write can only ever cost one reel.
+  async listReels(): Promise<Reel[]> {
+    const out: Reel[] = []
+    for (const f of await readdir(join(this.dir, 'reels'))) {
+      if (!f.endsWith('.json')) continue
+      try { out.push(JSON.parse(await readFile(join(this.dir, 'reels', f), 'utf8'))) } catch { /* skip unreadable file; it stays on disk */ }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async saveReel(r: Reel): Promise<void> {
+    await writeJSON(join(this.dir, 'reels', `${safeId(r.id)}.json`), r)
+  }
+
+  // Deleting moves the file to reels/deleted/ rather than erasing it.
+  async deleteReel(id: string): Promise<void> {
+    const f = join(this.dir, 'reels', `${safeId(id)}.json`)
+    if (existsSync(f)) await rename(f, join(this.dir, 'reels', 'deleted', `${safeId(id)}-${Date.now()}.json`))
   }
 
   async saveSettings(s: ProjectSettings): Promise<void> {
@@ -110,6 +132,11 @@ export class Project {
     this.matches.set(id, match)
     return match
   }
+}
+
+function safeId(id: string): string {
+  if (!/^[A-Za-z0-9-]+$/.test(id)) throw new Error(`invalid id: ${id}`)
+  return id
 }
 
 // Write to a temp file then rename, so a crash never leaves half a JSON behind.

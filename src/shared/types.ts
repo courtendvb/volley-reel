@@ -1,4 +1,5 @@
 // Types shared by main, preload and renderer.
+import type { Reel } from './reel'
 
 export type Side = '*' | 'a'
 
@@ -95,5 +96,8 @@ export interface Api {
   importMatch(): Promise<Match | null>
   parseMatch(id: string): Promise<ParsedDVW>
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
+  listReels(): Promise<Reel[]>
+  saveReel(r: Reel): Promise<void>
+  deleteReel(id: string): Promise<void>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }

@@ -431,8 +431,8 @@ export function App() {
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
       else if (e.key === 'Escape') playback.stopSequence()
-      else if (latest.current.activeClipId && /^[vtacrf]$/i.test(e.key)) {
-        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand' }
+      else if (latest.current.activeClipId && /^[vtacrflp]$/i.test(e.key)) {
+        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand', l: 'polyline', p: 'polygon' }
         setAnnTool(tools[e.key.toLowerCase()])
       }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {
@@ -500,6 +500,7 @@ export function App() {
       if (opts.exportTo) return smokeExport(res, opts.exportTo)
       if (opts.m8) return smokeM8(res, opts.m8)
       if (opts.video) return smokeVideo(res, opts)
+      if (opts.obj) return smokeObjects(res, opts)
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -519,6 +520,95 @@ export function App() {
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
       }
+    }
+
+    // Objects through real pointer, key and form events: a polygon by clicks, a box resized by its
+    // corner, an arrow end dragged, a vertex inserted from a midpoint and one deleted, then fill,
+    // transparency, dash, arrow heads and a boxed text set from the format panel; optional export.
+    const smokeObjects = async (res: PlayRef[], opts: SmokeOpts) => {
+      const r0 = res.find(x => x.play.rallyId !== null)!
+      const sc = { ...addClips(newReel('object smoke'), [{ matchId: r0.matchId, play: r0.play }]).reel, scope: 'all' as const } // unmarked clip, so export everything
+      smokeUse(sc)
+      await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+      const clip = latest.current.reel!.clips[sc.groups.none[0]]
+      activateClip(clip)
+      await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready ? true : null, 20000, 'video')
+      const range = latest.current.clipInfo(clip).range!
+      await playback.seekAndWait(range.in + 2)
+      const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 20000, 'canvas')
+      // Measured on every event: the layout can move while panels change.
+      const pt = (x: number, y: number) => { const b = canvas.getBoundingClientRect(); return { clientX: b.left + x * b.width, clientY: b.top + y * b.height, bubbles: true, pointerId: 1 } }
+      const key = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); await sleep(80) }
+      const down = async (x: number, y: number) => { canvas.dispatchEvent(new PointerEvent('pointerdown', pt(x, y))); await sleep(40); canvas.dispatchEvent(new PointerEvent('pointerup', pt(x, y))); await sleep(60) }
+      const stroke = async (path: [number, number][], shift = false) => {
+        canvas.dispatchEvent(new PointerEvent('pointerdown', pt(...path[0]))); await sleep(40)
+        for (const q of path.slice(1)) { canvas.dispatchEvent(new PointerEvent('pointermove', { ...pt(...q), shiftKey: shift })); await sleep(25) }
+        canvas.dispatchEvent(new PointerEvent('pointerup', pt(...path[path.length - 1]))); await sleep(120)
+      }
+      const dbl = async (x: number, y: number) => { canvas.dispatchEvent(new MouseEvent('dblclick', pt(x, y))); await sleep(150) }
+      const anns = () => latest.current.reel!.clips[clip.id].annotations
+      const find = (k: string) => anns().find(a => a.kind === k) as Record<string, unknown> | undefined
+      const ctl = <T extends HTMLElement>(label: string) => document.querySelector<T>(`[aria-label="${label}"]`)!
+      const setValue = async (label: string, value: string) => {
+        const el = ctl<HTMLInputElement | HTMLSelectElement>(label)
+        const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+        Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value)
+        el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await sleep(120)
+      }
+      const log: Record<string, unknown> = {}
+
+      // Polygon: three clicks, then a double-click (whose two clicks add one duplicate point).
+      await key('p')
+      await down(0.2, 0.2); await down(0.4, 0.2); await down(0.3, 0.4); await down(0.3, 0.4); await dbl(0.3, 0.4)
+      log.polygon = (find('polygon')?.points as unknown[] | undefined)?.length ?? 0
+
+      // Rect drawn, then resized by its bottom-right handle.
+      await key('r'); await stroke([[0.55, 0.15], [0.65, 0.25], [0.75, 0.35]])
+      await key('v'); await stroke([[0.75, 0.35], [0.8, 0.4], [0.85, 0.45]])
+      const rect = find('rect')!
+      log.rectResized = { w: +(rect.w as number).toFixed(3), h: +(rect.h as number).toFixed(3) }
+
+      // Arrow drawn, then its end dragged.
+      await key('a'); await stroke([[0.1, 0.6], [0.2, 0.65], [0.3, 0.7]])
+      await key('v'); await stroke([[0.3, 0.7], [0.35, 0.75], [0.4, 0.8]])
+      const arrow = find('arrow')!
+      log.arrowEnd = [+(arrow.x2 as number).toFixed(3), +(arrow.y2 as number).toFixed(3)]
+      await setValue('矢印の先', 'both')
+      log.arrowHeads = find('arrow')!.heads
+
+      // Polygon: select by its top edge, drag the top edge's midpoint up (adds a vertex), then
+      // double-click the new vertex to delete it again.
+      await down(0.3, 0.2)
+      await stroke([[0.3, 0.2], [0.3, 0.15], [0.3, 0.1]])
+      log.polygonAfterInsert = (find('polygon')!.points as unknown[]).length
+      await dbl(0.3, 0.1)
+      log.polygonAfterDelete = (find('polygon')!.points as unknown[]).length
+
+      // Rect formats from the panel: fill on, 60% transparent, dashed outline.
+      await down(0.85, 0.3) // right edge of the resized rect
+      ctl<HTMLInputElement>('塗りつぶす').click(); await sleep(120)
+      await setValue('塗りの透明度', '60')
+      await setValue('線の種類', 'dash')
+      const rf = find('rect')!
+      log.rectFormat = { fill: rf.fill, fillOpacity: rf.fillOpacity, dash: rf.dash }
+
+      // Text, then boxed.
+      await key('t'); await down(0.08, 0.86)
+      const input = await waitFor(() => document.querySelector<HTMLInputElement>('.ann-text-input'), 5000, 'text input')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'BLOCK!')
+      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
+      ctl<HTMLInputElement>('枠付き').click(); await sleep(150)
+      log.text = { box: !!find('text')!.box, padding: (find('text')!.box as { padding?: number } | undefined)?.padding }
+      await key('v'); setSelectedAnn(null); await sleep(300)
+
+      if (opts.videoExportTo) {
+        const job = await startExport(opts.videoExportTo)
+        await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 120000, 'export')
+        log.exportStatus = latest.current.exportState?.status
+        return { ...log, videoExport: opts.videoExportTo, exported: { checks: [{ name: 'objects', t: (job?.items[0]?.kind === 'card' ? (job.items[0] as { durationSec: number }).durationSec : 0) + 2.5 }] } }
+      }
+      return log
     }
 
     // Videos made of shared scenes: "ハイライト" = attack scene (two marker groups) + serve scene,
@@ -1140,6 +1230,7 @@ interface SmokeOpts {
   exportTo?: string
   m8?: string
   video?: boolean
+  obj?: boolean
   videoExportTo?: string
   home?: string
   folders?: string[]

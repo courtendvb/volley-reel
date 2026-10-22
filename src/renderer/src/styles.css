@@ -299,3 +299,17 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .video-add select { flex: 1; min-width: 0; }
 .field-label.wide { width: auto; }
 .video-panel .count { padding: 4px 10px 8px; }
+
+/* ---- object format panel (v3 step 3) ---- */
+.fmt-grid { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.fmt-group { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: #F8FAFC; }
+.fmt-title { font-size: 11px; font-weight: 700; color: var(--sub); }
+.fmt-body { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fmt-body input[type=number] { width: 52px; padding: 1px 4px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }
+.fmt-body input[type=color] { width: 24px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 4px; }
+.fmt-body select { padding: 1px 4px; font-size: 12px; }
+.fmt-pct input { width: 80px; accent-color: var(--primary); }
+.fmt-pct span { min-width: 32px; font-variant-numeric: tabular-nums; }
+.ann-hint { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 4px; background: rgba(15, 23, 42, 0.75); color: #fff; font-size: 12px; pointer-events: none; }
+/* Fixed height so the video doesn't jump when the selection (and so the panel's content) changes. */
+.ann-tools { height: 156px; overflow-y: auto; }

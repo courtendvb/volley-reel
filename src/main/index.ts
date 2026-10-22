@@ -294,6 +294,7 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
 // [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run]
 // [VR_SMOKE_VIDEO=1 [VR_SMOKE_EXPORT=<out.mp4>]: videos of shared scenes, cards, undo, export]
+// [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>]: object handles, polygon drawing, format panel, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
@@ -314,11 +315,12 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       trim: !!process.env.VR_SMOKE_TRIM,
       ann: !!process.env.VR_SMOKE_ANN,
       ov: process.env.VR_SMOKE_OV,
-      exportTo: process.env.VR_SMOKE_VIDEO ? undefined : process.env.VR_SMOKE_EXPORT,
-      videoExportTo: process.env.VR_SMOKE_VIDEO ? process.env.VR_SMOKE_EXPORT : undefined,
+      exportTo: process.env.VR_SMOKE_VIDEO || process.env.VR_SMOKE_OBJ ? undefined : process.env.VR_SMOKE_EXPORT,
+      videoExportTo: process.env.VR_SMOKE_VIDEO || process.env.VR_SMOKE_OBJ ? process.env.VR_SMOKE_EXPORT : undefined,
       m8: process.env.VR_SMOKE_M8,
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
+      obj: !!process.env.VR_SMOKE_OBJ,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import {
-  bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt, type Annotation, type AnnotationKind,
+  applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt,
+  type Annotation, type AnnotationKind, type StylePatch,
 } from '../../../shared/annotation'
+import { dragHandle, handlesOf, removeVertex, type Handle } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 
 export type Tool = 'select' | AnnotationKind
-export interface AnnStyle { color: string; width: number; size: number }
+// The style for the next shape; also what the format panel shows when nothing is selected.
+export type AnnStyle = StylePatch & { color: string; width: number; size: number }
 
 interface Props {
   size: { w: number; h: number }
@@ -19,24 +22,39 @@ interface Props {
   onChange: (list: Annotation[]) => void
 }
 
+type PathDraft = { kind: 'polyline' | 'polygon'; points: [number, number][]; hover: [number, number] | null }
+
 type Drag =
   | { mode: 'move'; id: string; from: [number, number]; orig: Annotation }
+  | { mode: 'handle'; id: string; handle: string }
   | { mode: 'draw'; draft: Annotation; from: [number, number] }
 
 const uid = () => crypto.randomUUID()
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
+const HANDLE_PX = 7 // grab radius around a handle
 
 // Canvas over the video box. Shows the annotations visible at the playhead (others faint while
-// editing, so they can still be picked) and handles drawing, selecting, moving and text editing.
+// editing, so they can still be picked) and handles drawing, selecting, moving, handle editing
+// (arrow ends, box resize, vertices), polyline / polygon drawing by clicks, and text editing.
 export function AnnotationLayer(p: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
+  // A polyline / polygon being drawn: fixed points plus the rubber-band point under the cursor.
+  const [path, setPathState] = useState<PathDraft | null>(null)
+  // Mirrors path so finishing reads the latest points and runs once, outside any state updater.
+  const pathRef = useRef<PathDraft | null>(null)
+  const setPath = (q: PathDraft | null) => { pathRef.current = q; setPathState(q) }
   const [textEdit, setTextEdit] = useState<{ id: string | null; x: number; y: number; value: string } | null>(null)
   const [time, setTime] = useState(playback.current.time)
   useEffect(() => playback.subscribe(s => setTime(s.time)), [])
 
   const onScreen = playback.attachedKey === p.clip.key
-  const shown = drag?.mode === 'draw' ? [...p.annotations, drag.draft] : p.annotations
+  const pathDraft: Annotation | null = path && path.points.length
+    ? applyStyle({ id: 'path-draft', kind: path.kind, color: p.style.color, width: p.style.width, points: path.hover ? [...path.points, path.hover] : path.points } as Annotation, p.style)
+    : null
+  const shown = drag?.mode === 'draw' ? [...p.annotations, drag.draft] : pathDraft ? [...p.annotations, pathDraft] : p.annotations
+  const selected = p.editable && p.selectedId ? p.annotations.find(a => a.id === p.selectedId) ?? null : null
+  const handles = selected ? handlesOf(selected) : []
 
   useEffect(() => {
     const c = canvas.current
@@ -49,31 +67,75 @@ export function AnnotationLayer(p: Props) {
     if (!onScreen) return
     for (const a of shown) {
       if (textEdit?.id === a.id) continue
-      const vis = visibleAt(a, time, p.clip)
+      const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'
       if (!vis && !p.editable) continue
       ctx.globalAlpha = vis ? 1 : 0.3
       drawAnnotation(ctx, a, p.size.w, p.size.h)
     }
     ctx.globalAlpha = 1
-    const sel = p.editable && p.selectedId ? shown.find(a => a.id === p.selectedId) : null
-    if (sel) {
-      const b = bounds(ctx, sel, p.size.w, p.size.h)
+    if (selected) {
+      const b = bounds(ctx, selected, p.size.w, p.size.h)
       ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#4B61D1'
       ctx.strokeRect(b.x * p.size.w - 6, b.y * p.size.h - 6, b.w * p.size.w + 12, b.h * p.size.h + 12)
+      ctx.setLineDash([])
+      for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, time, p.size.w, p.size.h, p.editable, p.selectedId, p.clip, onScreen, textEdit])
+  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit])
+
+  // Enter / Escape finish or cancel a polyline / polygon being drawn.
+  useEffect(() => {
+    if (!path) return
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finishPath() }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); setPath(null) }
+      else if (e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); const q = pathRef.current; setPath(q && q.points.length > 1 ? { ...q, points: q.points.slice(0, -1) } : null) }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  })
+  useEffect(() => { if (p.tool !== 'polyline' && p.tool !== 'polygon') setPath(null) }, [p.tool])
 
   const at = (e: { clientX: number; clientY: number }): [number, number] => {
     const r = canvas.current!.getBoundingClientRect()
     return [clamp01((e.clientX - r.left) / r.width), clamp01((e.clientY - r.top) / r.height)]
   }
   const ctx2d = () => canvas.current!.getContext('2d')!
+  const handleAt = (pt: [number, number]): Handle | null => {
+    // Vertices win over midpoints when they overlap.
+    const near = handles.filter(h => Math.hypot((h.x - pt[0]) * p.size.w, (h.y - pt[1]) * p.size.h) <= HANDLE_PX)
+    return near.find(h => h.kind !== 'mid') ?? near[0] ?? null
+  }
+  const replace = (a: Annotation) => p.onChange(p.annotations.map(x => (x.id === a.id ? a : x)))
+
+  const finishPath = (points?: [number, number][]) => {
+    const cur = pathRef.current
+    setPath(null)
+    if (!cur) return
+    const q = { ...cur, points: points ?? cur.points }
+    const min = q.kind === 'polygon' ? 3 : 2
+    if (q.points.length < min) return
+    const a = applyStyle({ id: uid(), kind: q.kind, color: p.style.color, width: p.style.width, points: q.points } as Annotation, p.style)
+    p.onChange([...p.annotations, a])
+    p.onSelect(a.id)
+  }
 
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
     try { canvas.current!.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
     const pt = at(e)
+    if (p.tool === 'polyline' || p.tool === 'polygon') {
+      playback.pause()
+      const q = pathRef.current
+      if (!q) { setPath({ kind: p.tool as 'polyline' | 'polygon', points: [pt], hover: null }); return }
+      // Clicking the first point closes a polygon.
+      const first = q.points[0]
+      if (q.kind === 'polygon' && q.points.length >= 3 && Math.hypot((first[0] - pt[0]) * p.size.w, (first[1] - pt[1]) * p.size.h) <= HANDLE_PX) { finishPath(); return }
+      setPath({ ...q, points: [...q.points, pt] })
+      return
+    }
     if (p.tool === 'select') {
+      const h = handleAt(pt)
+      if (h && selected) { playback.pause(); setDrag({ mode: 'handle', id: selected.id, handle: h.id }); return }
       const hit = hitTest(ctx2d(), p.annotations, pt[0], pt[1], p.size.w, p.size.h)
       p.onSelect(hit?.id ?? null)
       if (hit) setDrag({ mode: 'move', id: hit.id, from: pt, orig: hit })
@@ -84,23 +146,31 @@ export function AnnotationLayer(p: Props) {
     const base = { id: uid(), color: p.style.color }
     const draft: Annotation = p.tool === 'arrow' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width }
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
-      : { ...base, kind: p.tool, x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
-    setDrag({ mode: 'draw', draft, from: pt })
+      : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
+    setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
   }
 
   const onMove = (e: PointerEvent) => {
-    if (!drag) return
     const [x, y] = at(e)
+    if (pathRef.current) { setPath({ ...pathRef.current, hover: [x, y] }); return }
+    if (!drag) return
     if (drag.mode === 'move') {
-      const moved = translate(drag.orig, x - drag.from[0], y - drag.from[1])
-      p.onChange(p.annotations.map(a => (a.id === drag.id ? moved : a)))
+      replace(translate(drag.orig, x - drag.from[0], y - drag.from[1]))
+      return
+    }
+    if (drag.mode === 'handle') {
+      const cur = p.annotations.find(a => a.id === drag.id)
+      if (!cur) return
+      const r = dragHandle(cur, drag.handle, x, y, { keepAspect: e.shiftKey })
+      replace(r.a)
+      if (r.id !== drag.handle) setDrag({ ...drag, handle: r.id }) // a midpoint became a vertex
       return
     }
     const d = drag.draft
     const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
-      : d.kind === 'text' ? d
-      : { ...d, w: x - drag.from[0], h: y - drag.from[1] }
+      : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
+      : d
     setDrag({ ...drag, draft: next })
   }
 
@@ -109,8 +179,8 @@ export function AnnotationLayer(p: Props) {
       const d = drag.draft
       const big = d.kind === 'arrow' ? Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > 0.01
         : d.kind === 'freehand' ? d.points.length > 2
-        : d.kind === 'text' ? true
-        : Math.abs(d.w) > 0.005 && Math.abs(d.h) > 0.005
+        : d.kind === 'rect' || d.kind === 'circle' ? Math.abs(d.w) > 0.005 && Math.abs(d.h) > 0.005
+        : true
       if (big) {
         const done = d.kind === 'circle' || d.kind === 'rect' ? normalizeBox(d) : d
         p.onChange([...p.annotations, done])
@@ -123,6 +193,14 @@ export function AnnotationLayer(p: Props) {
   const onDouble = (e: MouseEvent) => {
     if (!p.editable) return
     const pt = at(e)
+    const q = pathRef.current
+    if (q) {
+      // The two clicks of a double-click each added a point; drop the duplicate, then finish.
+      finishPath(q.points.length > 1 ? q.points.slice(0, -1) : q.points)
+      return
+    }
+    const h = handleAt(pt)
+    if (h?.kind === 'vertex' && selected) { replace(removeVertex(selected, Number(h.id.slice(1)))); return }
     const hit = hitTest(ctx2d(), p.annotations, pt[0], pt[1], p.size.w, p.size.h)
     if (hit?.kind === 'text') { p.onSelect(hit.id); setTextEdit({ id: hit.id, x: hit.x, y: hit.y, value: hit.text }) }
   }
@@ -137,7 +215,7 @@ export function AnnotationLayer(p: Props) {
       return
     }
     if (!value) return
-    const a: Annotation = { id: uid(), kind: 'text', color: p.style.color, x: t.x, y: t.y, text: value, size: p.style.size }
+    const a = applyStyle({ id: uid(), kind: 'text', color: p.style.color, x: t.x, y: t.y, text: value, size: p.style.size }, p.style)
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
   }
@@ -149,11 +227,13 @@ export function AnnotationLayer(p: Props) {
 
   const editingText = textEdit?.id ? p.annotations.find(a => a.id === textEdit.id) : null
   const textSize = (editingText?.kind === 'text' ? editingText.size : p.style.size) * (p.size.h / 720)
+  const cursor = p.tool === 'select' ? 'default' : 'crosshair'
 
   return (
-    <div className="ann-layer" style={{ pointerEvents: p.editable ? 'auto' : 'none', cursor: p.tool === 'select' ? 'default' : 'crosshair' }}>
+    <div className="ann-layer" style={{ pointerEvents: p.editable ? 'auto' : 'none', cursor }}>
       <canvas ref={canvas} style={{ width: p.size.w, height: p.size.h }} data-testid="ann-canvas"
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onDoubleClick={onDouble} />
+      {path && <div className="ann-hint">クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止</div>}
       {textEdit && (
         <input
           className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト"
@@ -163,4 +243,18 @@ export function AnnotationLayer(p: Props) {
       )}
     </div>
   )
+}
+
+// Office-like handles: squares for corners / ends / vertices, small circles for midpoints.
+function drawHandle(ctx: CanvasRenderingContext2D, h: Handle, W: number, H: number): void {
+  const x = h.x * W, y = h.y * H
+  ctx.save()
+  ctx.lineWidth = 1.5
+  ctx.strokeStyle = '#4B61D1'
+  ctx.fillStyle = h.kind === 'mid' ? 'rgba(255,255,255,0.75)' : '#FFFFFF'
+  ctx.beginPath()
+  if (h.kind === 'mid') ctx.arc(x, y, 4, 0, Math.PI * 2)
+  else ctx.rect(x - 5, y - 5, 10, 10)
+  ctx.fill(); ctx.stroke()
+  ctx.restore()
 }

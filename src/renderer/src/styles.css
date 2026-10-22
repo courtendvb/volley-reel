@@ -183,3 +183,26 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .trim-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 12.5px; }
 .trim-edge { display: inline-flex; align-items: center; gap: 6px; }
 .trim-edge input { width: 70px; padding: 2px 6px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }
+
+.video-box { position: relative; flex: none; }
+.video-box video { display: block; width: 100%; height: 100%; max-width: none; max-height: none; }
+.ann-layer { position: absolute; inset: 0; }
+.ann-layer canvas { display: block; touch-action: none; }
+.ann-text-input {
+  position: absolute; min-width: 120px; width: auto !important; padding: 0 4px !important;
+  font-weight: 700; background: rgba(15, 23, 42, 0.55) !important; border: 1px dashed #fff !important;
+  border-radius: 4px; outline: none;
+}
+
+.ann-tools { flex: none; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
+.ann-tools.disabled { opacity: 0.55; }
+.ann-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 26px; }
+.ann-swatches { display: inline-flex; gap: 4px; }
+.ann-swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 2px solid #CBD5E1; }
+.ann-swatch.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+.ann-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.ann-group button { border: 0; border-radius: 0; padding: 2px 8px; min-width: 28px; display: inline-flex; align-items: center; justify-content: center; }
+.ann-group button + button { border-left: 1px solid var(--border); }
+.ann-group button.on { background: var(--primary-light); color: var(--primary); }
+.ann-line { display: inline-block; width: 16px; background: currentColor; border-radius: 2px; }
+.ann-sel { font-weight: 600; }

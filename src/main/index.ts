@@ -113,7 +113,8 @@ function readSettings(): { lastProject?: string } {
 
 // Dev self-check: VR_PROJECT=<dir> VR_IMPORT="<video>|<dvw>[;...]" VR_SMOKE=<out.png>
 // [VR_SMOKE_PLAY=<n>] [VR_SMOKE_SCOPE=match|all] [VR_SMOKE_FILTER=<PlayFilter JSON>] [VR_SMOKE_SETTINGS=1]
-// [VR_SMOKE_KEYS=3,3,1: keys pressed after the jump] [VR_SMOKE_TRIM=1: loop and trim a clip] [VR_SMOKE_MINIMIZE=1]
+// [VR_SMOKE_KEYS=3,3,1: keys pressed after the jump] [VR_SMOKE_TRIM=1: loop and trim a clip]
+// [VR_SMOKE_ANN=1: draw, move and time annotations through pointer events] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
@@ -129,7 +130,8 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
     const opts = { play: Number(process.env.VR_SMOKE_PLAY ?? 40), filter: process.env.VR_SMOKE_FILTER ? JSON.parse(process.env.VR_SMOKE_FILTER) : null, scope: process.env.VR_SMOKE_SCOPE ?? 'match', settings: !!process.env.VR_SMOKE_SETTINGS,
       reel: process.env.VR_SMOKE_REEL ? JSON.parse(process.env.VR_SMOKE_REEL) : undefined,
       keys: process.env.VR_SMOKE_KEYS ? process.env.VR_SMOKE_KEYS.split(',') : undefined,
-      trim: !!process.env.VR_SMOKE_TRIM }
+      trim: !!process.env.VR_SMOKE_TRIM,
+      ann: !!process.env.VR_SMOKE_ANN }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())

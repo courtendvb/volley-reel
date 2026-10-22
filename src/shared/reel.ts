@@ -1,5 +1,6 @@
 // Reel = the blueprint of one highlight video (design §3.4). Pure functions returning new reels,
 // so the UI can treat a reel as immutable state and every change is unit-testable.
+import { roundCoords, type Annotation } from './annotation'
 import type { ParsedDVW, Play } from './types'
 
 export type Marker = 1 | 2 | 3 | 4 | 5
@@ -14,7 +15,7 @@ export interface Clip {
   fingerprint: string // re-links the clip when the DVW is edited and ids shift
   inSec: number | null // video time; null = default rule (rally start)
   outSec: number | null
-  annotations: unknown[] // M5
+  annotations: Annotation[] // design §3.6; times are absolute video times
 }
 
 export interface Reel {
@@ -211,4 +212,10 @@ export function findOverlaps(items: { id: string; matchId: string; in: number; o
     }
   }
   return out
+}
+
+export function setAnnotations(reel: Reel, clipId: string, annotations: Annotation[]): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, annotations: annotations.map(roundCoords) } } })
 }

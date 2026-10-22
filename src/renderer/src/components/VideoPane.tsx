@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Match } from '../../../shared/types'
 import { playback, type PlaybackState } from '../playback'
 import { formatTime } from '../format'
 
-export function VideoPane({ match }: { match: Match }) {
+// The video sits in a box with its exact aspect ratio, so an overlay (annotations) laid over the
+// box lines up with the picture — normalized 0..1 coordinates map straight onto it.
+export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: { w: number; h: number }) => ReactNode }) {
   const ref = useRef<HTMLVideoElement>(null)
+  const frame = useRef<HTMLDivElement>(null)
   const [s, setS] = useState<PlaybackState>(playback.current)
+  const [box, setBox] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
     playback.attach(ref.current, match.fps, match.id)
@@ -13,10 +17,27 @@ export function VideoPane({ match }: { match: Match }) {
   }, [match.id, match.fps])
   useEffect(() => playback.subscribe(setS), [])
 
+  useLayoutEffect(() => {
+    const el = frame.current
+    if (!el) return
+    const ratio = match.width && match.height ? match.width / match.height : 16 / 9
+    const fit = () => {
+      const w = el.clientWidth, h = el.clientHeight
+      setBox(w / h > ratio ? { w: Math.floor(h * ratio), h } : { w, h: Math.floor(w / ratio) })
+    }
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    fit()
+    return () => ro.disconnect()
+  }, [match.width, match.height])
+
   return (
     <div className="video-pane">
-      <div className="video-frame">
-        <video ref={ref} src={`media://${match.id}/video.mp4`} muted playsInline preload="auto" />
+      <div className="video-frame" ref={frame}>
+        <div className="video-box" style={{ width: box.w, height: box.h }}>
+          <video ref={ref} src={`media://${match.id}/video.mp4`} muted playsInline preload="auto" />
+          {overlay && box.w > 0 && overlay(box)}
+        </div>
       </div>
       <div className="transport">
         <button onClick={() => playback.toggle()} title="再生 / 一時停止 (Space)">{s.paused ? '▶' : '❚❚'}</button>

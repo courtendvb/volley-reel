@@ -1,0 +1,17 @@
+node_modules/
+dist/
+out/
+release/
+*.log
+.env*
+
+# 試合素材は大きい・個人データなのでリポジトリに入れない
+*.mp4
+*.MP4
+*.mts
+*.MTS
+*.dvw
+*.vsm
+
+# ffmpeg バイナリは同梱するがリポジトリには入れない
+vendor/ffmpeg/

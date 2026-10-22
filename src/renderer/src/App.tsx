@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, toggleMarker, trimClip,
+  addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, toggleMarker, trimClip,
   type Clip, type Group, type Marker, type Reel,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -10,6 +10,9 @@ import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TrimBar } from './components/TrimBar'
+import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
+import { AnnotationTools } from './components/AnnotationTools'
+import type { Annotation } from '../../shared/annotation'
 import { VideoPane } from './components/VideoPane'
 import { playback, type SeqItem } from './playback'
 
@@ -30,6 +33,9 @@ export function App() {
   const [activeClipId, setActiveClipId] = useState<string | null>(null)
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [annTool, setAnnTool] = useState<Tool>('select')
+  const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#FACC15', width: 6, size: 36 })
+  const [selectedAnn, setSelectedAnn] = useState<string | null>(null)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -162,8 +168,8 @@ export function App() {
     setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
   }
 
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo })
-  latest.current = { results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo }
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn })
+  latest.current = { results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn }
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -229,6 +235,14 @@ export function App() {
     playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying ? { key: active.matchId, in: loopIn, out: loopOut } : null)
   }, [active, loopIn, loopOut, seqPlaying])
 
+  useEffect(() => setSelectedAnn(null), [activeClipId])
+
+  // ---- annotations (design §3.6) --------------------------------------------------------------
+  const setAnns = useCallback((list: Annotation[]) => {
+    const { reel: r, activeClipId: id } = latest.current
+    if (r && id && r.clips[id]) updateReel(setAnnotations(r, id, list))
+  }, [updateReel])
+
   const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
     const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
     const c = r && id ? r.clips[id] : null
@@ -246,6 +260,15 @@ export function App() {
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
       else if (e.key === 'Escape') playback.stopSequence()
+      else if (latest.current.activeClipId && /^[vtacrf]$/i.test(e.key)) {
+        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand' }
+        setAnnTool(tools[e.key.toLowerCase()])
+      }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {
+        const { reel: r, activeClipId: id, selectedAnn: sel } = latest.current
+        const c = r && id ? r.clips[id] : null
+        if (r && c) { e.preventDefault(); updateReel(setAnnotations(r, c.id, c.annotations.filter(a => a.id !== sel))); setSelectedAnn(null) }
+      }
       else if (e.key === '[' || e.key === ']') {
         const { reel: r, activeClipId: id } = latest.current
         if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
@@ -271,6 +294,7 @@ export function App() {
       })
       if (opts.reel) return smokeReel(opts.reel, res)
       if (opts.trim) return smokeTrim(res)
+      if (opts.ann) return smokeAnn(res)
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -289,6 +313,68 @@ export function App() {
         perMatch: Object.fromEntries(p.matches.map(m => [m.name, res.filter(x => x.matchId === m.id).length])),
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
+      }
+    }
+
+    // Annotations through real pointer/key events on the overlay canvas: draw four kinds, move one,
+    // give the arrow a show-from time, and read canvas pixels on either side of it.
+    const smokeAnn = async (res: PlayRef[]) => {
+      const r0 = res.find(x => x.play.rallyId !== null)!
+      const { reel: built, ids } = addClips(newReel('annotation smoke'), [{ matchId: r0.matchId, play: r0.play }])
+      setReels(rs => [...rs, built]); setReelId(built.id)
+      await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'ann reel')
+      activateClip(built.clips[ids[0]])
+      await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready ? true : null, 20000, 'video')
+      const range = latest.current.clipInfo(built.clips[ids[0]]).range!
+      await playback.seekAndWait(range.in + 2)
+      const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 20000, 'canvas')
+      const box = canvas.getBoundingClientRect()
+      const pt = (x: number, y: number) => ({ clientX: box.left + x * box.width, clientY: box.top + y * box.height, bubbles: true, pointerId: 1 })
+      const key = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); await sleep(80) }
+      const stroke = async (path: [number, number][]) => {
+        canvas.dispatchEvent(new PointerEvent('pointerdown', pt(...path[0]))); await sleep(30)
+        for (const p of path.slice(1)) { canvas.dispatchEvent(new PointerEvent('pointermove', pt(...p))); await sleep(20) }
+        canvas.dispatchEvent(new PointerEvent('pointerup', pt(...path[path.length - 1]))); await sleep(120)
+      }
+      const anns = () => latest.current.reel!.clips[ids[0]].annotations
+
+      await key('a'); await stroke([[0.3, 0.3], [0.4, 0.4], [0.5, 0.5]])
+      await key('r'); await stroke([[0.8, 0.4], [0.7, 0.3], [0.6, 0.2]])
+      await key('f'); await stroke([[0.2, 0.6], [0.25, 0.62], [0.3, 0.6], [0.35, 0.65]])
+      await key('t'); await stroke([[0.1, 0.8]])
+      const input = await waitFor(() => document.querySelector<HTMLInputElement>('.ann-text-input'), 5000, 'text input')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Watch the block')
+      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
+      const drawn = anns().map(a => a.kind)
+
+      await key('v'); await stroke([[0.7, 0.21], [0.72, 0.23], [0.75, 0.26]]) // drag the rect by its top edge
+      const rect = anns().find(a => a.kind === 'rect')
+
+      await stroke([[0.4, 0.4]]) // select the arrow
+      await playback.seekAndWait(range.in + 3)
+      const btn = [...document.querySelectorAll('button')].find(b => b.textContent === 'ここから表示')!
+      btn.click(); await sleep(150)
+      const arrow = anns().find(a => a.kind === 'arrow')!
+
+      // Pixel on the arrow shaft, with the selection cleared so only the shape is drawn.
+      await key('Escape'); setSelectedAnn(null); setAnnTool('select')
+      const pixel = async (t: number) => {
+        await playback.seekAndWait(t); await sleep(250)
+        const c = document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]')!
+        const g = c.getContext('2d')!
+        const d = g.getImageData(Math.round(c.width * 0.4), Math.round(c.height * 0.4), 1, 1).data
+        return d[3]
+      }
+      // While editing, hidden annotations are drawn faint (alpha 0.3) so they can still be picked.
+      const alphaBefore = await pixel(range.in + 1)
+      const alphaAfter = await pixel(range.in + 4)
+      await sleep(700)
+      const saved = (await api.listReels()).find(x => x.id === built.id)
+      return {
+        drawn, rect, arrowShowFromRel: arrow.showFrom !== undefined ? +(arrow.showFrom - range.in).toFixed(2) : null,
+        alphaBefore, alphaAfter, savedAnnotations: saved?.clips[ids[0]].annotations.length ?? 0,
+        text: anns().find(a => a.kind === 'text'),
       }
     }
 
@@ -443,7 +529,15 @@ export function App() {
               : <p className="muted pad">読み込み中…</p>}
           </aside>
           <section className="stage">
-            {match && <VideoPane key={match.id} match={match} />}
+            {match && (
+              <VideoPane key={match.id} match={match} overlay={size => active && activeInfo?.range && active.matchId === match.id ? (
+                <AnnotationLayer
+                  size={size} annotations={active.annotations} clip={{ key: active.matchId, ...activeInfo.range }}
+                  editable={!seqPlaying} tool={annTool} style={annStyle}
+                  selectedId={selectedAnn} onSelect={setSelectedAnn} onChange={setAnns}
+                />
+              ) : null} />
+            )}
             {active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
@@ -455,6 +549,13 @@ export function App() {
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
                 onTrim={trim}
+              />
+            )}
+            {active && activeInfo?.range && active.matchId === matchId && (
+              <AnnotationTools
+                tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
+                annotations={active.annotations} selectedId={selectedAnn} onSelect={setSelectedAnn} onChange={setAnns}
+                clip={activeInfo.range} disabled={seqPlaying}
               />
             )}
           </section>
@@ -482,6 +583,7 @@ interface SmokeOpts {
   settings?: boolean
   keys?: string[]
   trim?: boolean
+  ann?: boolean
   reel?: { markers: (Marker | null)[]; groupOrder?: Marker[]; scope?: 'marked' | 'all'; shotAt?: number }
 }
 

@@ -5,11 +5,14 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
-import type { ImportProgress, Match, ParsedDVW, ProjectInfo } from '../shared/types'
+import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
 import { prepare, prepareReason, probe } from './media'
+
+const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'], playerAliases: {} }
 
 export class Project {
   private matches = new Map<string, Match>()
+  private settings: ProjectSettings = DEFAULT_SETTINGS
 
   private constructor(readonly dir: string) {}
 
@@ -17,9 +20,13 @@ export class Project {
     const p = new Project(dir)
     await mkdir(join(dir, 'matches'), { recursive: true })
     await mkdir(join(dir, 'cache'), { recursive: true })
-    if (!existsSync(join(dir, 'project.json'))) {
-      await writeJSON(join(dir, 'project.json'), { version: 1, ourTeamCodes: ['HTH', 'HTA'] })
+    const file = join(dir, 'project.json')
+    const saved = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {}
+    p.settings = {
+      ourTeamCodes: Array.isArray(saved.ourTeamCodes) ? saved.ourTeamCodes : DEFAULT_SETTINGS.ourTeamCodes,
+      playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
     }
+    if (!existsSync(file)) await p.saveSettings(p.settings)
     for (const f of await readdir(join(dir, 'matches'))) {
       if (!f.endsWith('.json')) continue
       const m: Match = JSON.parse(await readFile(join(dir, 'matches', f), 'utf8'))
@@ -30,7 +37,14 @@ export class Project {
 
   info(): ProjectInfo {
     const matches = [...this.matches.values()].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
-    return { path: this.dir, matches }
+    return { path: this.dir, matches, settings: this.settings }
+  }
+
+  async saveSettings(s: ProjectSettings): Promise<void> {
+    const ourTeamCodes = [...new Set(s.ourTeamCodes.map(c => c.trim().toUpperCase()).filter(Boolean))]
+    const playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
+    this.settings = { ourTeamCodes, playerAliases }
+    await writeJSON(join(this.dir, 'project.json'), { version: 1, ...this.settings })
   }
 
   getMatch(id: string): Match | undefined {

@@ -3,6 +3,7 @@ import { stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol } from 'electron'
+import type { ProjectSettings } from '../shared/types'
 import { Project } from './project'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
@@ -56,6 +57,12 @@ function registerIpc(): void {
     return project.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
   })
 
+  ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    await project.saveSettings(s)
+    return project.info()
+  })
+
   ipcMain.handle('match:parse', (_e, id: string) => {
     if (!project) throw new Error('プロジェクトが開かれていません')
     return project.parse(id)
@@ -89,16 +96,21 @@ function readSettings(): { lastProject?: string } {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
 }
 
-// Dev self-check: VR_PROJECT=<dir> VR_IMPORT="<video>|<dvw>" VR_SMOKE=<out.png>
-// imports the match if needed, jumps to a play, and saves a screenshot of the window.
+// Dev self-check: VR_PROJECT=<dir> VR_IMPORT="<video>|<dvw>[;...]" VR_SMOKE=<out.png>
+// [VR_SMOKE_PLAY=<n>] [VR_SMOKE_SCOPE=match|all] [VR_SMOKE_FILTER=<PlayFilter JSON>] [VR_SMOKE_SETTINGS=1]
+// imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
   try {
     if (!project) throw new Error('VR_PROJECT is required for VR_SMOKE')
-    const [video, dvw] = (process.env.VR_IMPORT ?? '').split('|')
-    if (video && dvw && !project.findBySources(video, dvw)) {
-      await project.importMatch(video, dvw, p => console.log(`[import] ${p.message}${p.ratio != null ? ` ${(p.ratio * 100).toFixed(0)}%` : ''}`))
+    // VR_IMPORT may list several matches: "<video>|<dvw>;<video>|<dvw>"
+    for (const pair of (process.env.VR_IMPORT ?? '').split(';').filter(Boolean)) {
+      const [video, dvw] = pair.split('|')
+      if (video && dvw && !project.findBySources(video, dvw)) {
+        await project.importMatch(video, dvw, p => console.log(`[import] ${p.message}${p.ratio != null ? ` ${(p.ratio * 100).toFixed(0)}%` : ''}`))
+      }
     }
-    const result = await w.webContents.executeJavaScript(`window.__smoke(${Number(process.env.VR_SMOKE_PLAY ?? 40)})`)
+    const opts = { play: Number(process.env.VR_SMOKE_PLAY ?? 40), filter: process.env.VR_SMOKE_FILTER ? JSON.parse(process.env.VR_SMOKE_FILTER) : null, scope: process.env.VR_SMOKE_SCOPE ?? 'match', settings: !!process.env.VR_SMOKE_SETTINGS }
+    const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())
     console.log(`[smoke] ${JSON.stringify(result)}`)

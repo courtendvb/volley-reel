@@ -8,7 +8,7 @@ export function VideoPane({ match }: { match: Match }) {
   const [s, setS] = useState<PlaybackState>(playback.current)
 
   useEffect(() => {
-    playback.attach(ref.current, match.fps)
+    playback.attach(ref.current, match.fps, match.id)
     return () => playback.attach(null, 0)
   }, [match.id, match.fps])
   useEffect(() => playback.subscribe(setS), [])

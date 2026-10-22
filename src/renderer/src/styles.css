@@ -53,7 +53,7 @@ button:disabled { opacity: 0.6; cursor: default; }
 .empty { margin: auto; text-align: center; max-width: 460px; }
 .empty h2 { font-size: 18px; font-weight: 600; }
 
-.workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 500px minmax(0, 1fr); }
+.workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 470px minmax(0, 1fr) 360px; }
 
 .sidebar {
   display: flex; flex-direction: column; min-height: 0;
@@ -65,14 +65,14 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
 .play-row {
   position: absolute; left: 0; right: 0;
-  display: grid; grid-template-columns: 26px 44px 38px minmax(0, 1fr) 140px 58px; gap: 6px; align-items: center;
+  display: grid; grid-template-columns: 24px 42px 36px minmax(0, 1fr) 124px 54px 22px; gap: 5px; align-items: center; cursor: pointer;
   width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F1F5F9; border-radius: 0;
   padding: 5px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; background: transparent;
 }
 .play-row:hover { background: #F8FAFC; }
 .play-row.now { box-shadow: inset 3px 0 0 #94A3B8; }
 .play-row.selected { background: var(--primary-light); box-shadow: inset 3px 0 0 var(--primary); }
-.play-list.with-match .play-row { grid-template-columns: 54px 24px 42px 36px minmax(0, 1fr) 120px 56px; gap: 5px; }
+.play-list.with-match .play-row { grid-template-columns: 50px 22px 40px 34px minmax(0, 1fr) 112px 52px 22px; gap: 4px; }
 .play-row .set, .play-row .vtime, .play-row .team, .play-row .match { color: var(--sub); }
 .play-row .match { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .play-row .team.ours { color: var(--primary); font-weight: 600; }
@@ -126,3 +126,35 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--sub); }
 .warning-inline { font-size: 11px; color: var(--danger-text); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.play-row .add { padding: 0; width: 22px; height: 22px; border-radius: 4px; font-size: 12px; line-height: 1; color: var(--sub); }
+.play-row .add:hover { color: var(--primary); border-color: var(--primary); }
+.play-row .in-reel { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--page); color: var(--sub); }
+
+.reel-panel { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); }
+.reel-head { display: flex; gap: 6px; padding: 10px 10px 6px; }
+.reel-head select { flex: 1; min-width: 0; }
+.reel-name { margin: 0 10px; width: auto !important; font-weight: 600; }
+.reel-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 0; }
+.reel-panel .count { padding: 4px 10px 6px; }
+.reel-groups { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
+.group { border-bottom: 1px solid var(--border); }
+.group.drop-into { background: var(--primary-light); }
+.group.excluded .clip-row { opacity: 0.55; }
+.group-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #F8FAFC; cursor: grab; }
+.group-head input { flex: 1; min-width: 0; padding: 2px 6px !important; font-size: 12.5px; }
+.group-head button { padding: 0 6px; font-size: 12px; }
+.none-title { flex: 1; font-size: 12.5px; }
+.swatch { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; color: #fff; font-size: 12px; font-weight: 600; }
+.swatch.none { background: #CBD5E1; }
+.clip-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 16px; font-size: 12px; cursor: pointer; border-top: 1px solid #F1F5F9; }
+.clip-row:hover { background: #F8FAFC; }
+.clip-row.active { background: var(--primary-light); }
+.clip-row.playing { box-shadow: inset 3px 0 0 var(--primary); }
+.clip-row.drop-before { box-shadow: inset 0 2px 0 var(--primary); }
+.clip-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-main.missing { color: var(--danger-text); }
+.clip-dur { flex: none; color: var(--sub); font-variant-numeric: tabular-nums; }
+.clip-actions { flex: none; display: flex; gap: 2px; }
+.clip-actions button { padding: 0 5px; font-size: 11px; }
+.pad-x { padding: 6px 10px 10px; }

@@ -3,6 +3,7 @@ import { stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol } from 'electron'
+import type { Reel } from '../shared/reel'
 import type { ProjectSettings } from '../shared/types'
 import { Project } from './project'
 
@@ -10,6 +11,12 @@ import { Project } from './project'
 protocol.registerSchemesAsPrivileged([
   { scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
 ])
+
+// Chromium pauses muted, video-only media when the window is hidden or covered (and Windows
+// occlusion tracking counts a window behind another app as hidden). This is an editor: a
+// through-play must keep going while the user looks at another window.
+app.commandLine.appendSwitch('disable-background-media-suspend')
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 let project: Project | null = null
 let win: BrowserWindow | null = null
@@ -24,13 +31,17 @@ app.whenReady().then(async () => {
 
   win = new BrowserWindow({
     width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'volley-reel',
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   })
   win.setMenuBarVisibility(false)
   if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else await win.loadFile(join(__dirname, '../renderer/index.html'))
 
-  if (process.env.VR_SMOKE) await smoke(win, process.env.VR_SMOKE)
+  if (process.env.VR_SMOKE) {
+    win.webContents.on('console-message', e => console.log(`[renderer] ${e.message}`))
+    if (process.env.VR_SMOKE_MINIMIZE) win.minimize() // reproduces the hidden-window media pause
+    await smoke(win, process.env.VR_SMOKE)
+  }
 })
 
 app.on('window-all-closed', () => app.quit())
@@ -62,6 +73,10 @@ function registerIpc(): void {
     await project.saveSettings(s)
     return project.info()
   })
+
+  ipcMain.handle('reel:list', () => project?.listReels() ?? [])
+  ipcMain.handle('reel:save', (_e, r: Reel) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveReel(r) })
+  ipcMain.handle('reel:delete', (_e, id: string) => project?.deleteReel(id))
 
   ipcMain.handle('match:parse', (_e, id: string) => {
     if (!project) throw new Error('プロジェクトが開かれていません')
@@ -98,6 +113,8 @@ function readSettings(): { lastProject?: string } {
 
 // Dev self-check: VR_PROJECT=<dir> VR_IMPORT="<video>|<dvw>[;...]" VR_SMOKE=<out.png>
 // [VR_SMOKE_PLAY=<n>] [VR_SMOKE_SCOPE=match|all] [VR_SMOKE_FILTER=<PlayFilter JSON>] [VR_SMOKE_SETTINGS=1]
+// [VR_SMOKE_KEYS=3,3,1: keys pressed after the jump] [VR_SMOKE_MINIMIZE=1]
+// [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
   try {
@@ -109,7 +126,9 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
         await project.importMatch(video, dvw, p => console.log(`[import] ${p.message}${p.ratio != null ? ` ${(p.ratio * 100).toFixed(0)}%` : ''}`))
       }
     }
-    const opts = { play: Number(process.env.VR_SMOKE_PLAY ?? 40), filter: process.env.VR_SMOKE_FILTER ? JSON.parse(process.env.VR_SMOKE_FILTER) : null, scope: process.env.VR_SMOKE_SCOPE ?? 'match', settings: !!process.env.VR_SMOKE_SETTINGS }
+    const opts = { play: Number(process.env.VR_SMOKE_PLAY ?? 40), filter: process.env.VR_SMOKE_FILTER ? JSON.parse(process.env.VR_SMOKE_FILTER) : null, scope: process.env.VR_SMOKE_SCOPE ?? 'match', settings: !!process.env.VR_SMOKE_SETTINGS,
+      reel: process.env.VR_SMOKE_REEL ? JSON.parse(process.env.VR_SMOKE_REEL) : undefined,
+      keys: process.env.VR_SMOKE_KEYS ? process.env.VR_SMOKE_KEYS.split(',') : undefined }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())

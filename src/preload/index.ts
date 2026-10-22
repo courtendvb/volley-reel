@@ -7,6 +7,9 @@ const api: Api = {
   importMatch: () => ipcRenderer.invoke('match:import'),
   parseMatch: id => ipcRenderer.invoke('match:parse', id),
   saveSettings: s => ipcRenderer.invoke('project:saveSettings', s),
+  listReels: () => ipcRenderer.invoke('reel:list'),
+  saveReel: r => ipcRenderer.invoke('reel:save', r),
+  deleteReel: id => ipcRenderer.invoke('reel:delete', id),
   onImportProgress: cb => {
     const h = (_e: unknown, p: ImportProgress) => cb(p)
     ipcRenderer.on('import:progress', h)

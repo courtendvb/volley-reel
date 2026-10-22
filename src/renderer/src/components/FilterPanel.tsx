@@ -12,11 +12,12 @@ interface Props {
   shown: number
   total: number
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
+  onAddAll: () => void
 }
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 
-export function FilterPanel({ filter: f, onChange, people, scope, onScope, shown, total, teamFilterLimited }: Props) {
+export function FilterPanel({ filter: f, onChange, people, scope, onScope, shown, total, teamFilterLimited, onAddAll }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
 
@@ -56,7 +57,12 @@ export function FilterPanel({ filter: f, onChange, people, scope, onScope, shown
         <span className="spacer" />
         <button className="link" onClick={() => onChange(EMPTY_FILTER)} disabled={f === EMPTY_FILTER}>条件をクリア</button>
       </div>
-      <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} プレー</p>
+      <div className="filter-row">
+        <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} プレー</p>
+        <span className="spacer" />
+        <button onClick={onAddAll} disabled={!shown || shown === total}
+          title={shown === total ? '条件で絞り込んでから追加してください' : undefined}>結果をリールに追加</button>
+      </div>
     </div>
   )
 }

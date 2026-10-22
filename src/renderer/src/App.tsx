@@ -990,7 +990,7 @@ export function App() {
         {project && <strong className="project-name" title={project.path}>{project.name}</strong>}
         {project && <button onClick={() => setPicker('edit')} title="倉庫から試合を足す・外す">試合 {project.matches.length}</button>}
         <span className="spacer" />
-        {project && <span className={`save-state ${saveState}`} title="リールは自動で保存されます">{saveState === 'saved' ? '保存済み' : saveState === 'pending' ? '保存中…' : '保存に失敗'}</span>}
+        {project && <span className={`save-state ${saveState}`} title="シーンと動画は自動で保存されます">{saveState === 'saved' ? '保存済み' : saveState === 'pending' ? '保存中…' : '保存に失敗'}</span>}
         <button onClick={() => setShortcutsOpen(true)} title="ショートカット一覧 (?)">ショートカット</button>
         {project && <button onClick={() => setSettingsOpen(true)}>設定</button>}
       </header>

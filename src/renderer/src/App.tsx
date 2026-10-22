@@ -17,6 +17,8 @@ import { captionData, overlaySettings, scoreboardData, type CaptionData, type Ov
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
+import { buildExportJob, planSequence } from './exportRender'
+import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { playback, type SequenceItem } from './playback'
 
@@ -41,6 +43,7 @@ export function App() {
   const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#FACC15', width: 6, size: 36 })
   const [selectedAnn, setSelectedAnn] = useState<string | null>(null)
   const [overlayOpen, setOverlayOpen] = useState(false)
+  const [exportState, setExportState] = useState<{ status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string } | null>(null)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -174,8 +177,8 @@ export function App() {
   }
 
   const overlay = useMemo(() => overlaySettings(reel?.overlay), [reel?.overlay])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null) })
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings }
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string } })
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState }
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -199,24 +202,21 @@ export function App() {
     playback.seekIn(c.matchId, range.in, { play: true })
   }, [])
 
-  // Through-play items: the clips in order, with a title card before each marker group when enabled.
+  // Through-play items: the same plan the export uses (clips, with title cards when enabled).
   // startAt and the reported index count clips, not cards.
   const playThrough = useCallback((startAt = 0) => {
     const { order: o, clipInfo: info, reel: r, overlay: ov, matches: ms, settings: st } = latest.current
+    if (!r) return
     const items: SequenceItem[] = [], clipAt: (Clip | null)[] = []
-    let startItem = 0
-    o.forEach((c, i) => {
-      if (i === startAt) startItem = items.length // a card before this clip plays first
-      const g = r ? groupOf(r, c.id) : null
-      if (r && ov.titleCard.enabled && g !== null && g !== 'none' && (i === 0 || groupOf(r, o[i - 1].id) !== g)) {
-        const groupMatches = new Set(r.groups[g].map(id => r.clips[id]?.matchId))
-        const m = ms[c.matchId]
-        items.push({ card: { marker: g, name: r.markerNames[g], match: groupMatches.size === 1 && m ? cardMatchLabel(m, st?.ourTeamCodes ?? []) : null }, durationSec: ov.titleCard.durationSec })
-        clipAt.push(null)
-      }
-      items.push({ key: c.matchId, ...info(c).range! })
-      clipAt.push(c)
-    })
+    let startItem = 0, clipNo = 0
+    for (const p of planSequence(o, r, ov, ms, st?.ourTeamCodes ?? [])) {
+      // A card right before the start clip plays first, so the start points at the card.
+      if (p.kind === 'card') { if (clipNo === startAt) startItem = items.length; items.push({ card: p.card, durationSec: p.durationSec }); clipAt.push(null); continue }
+      if (clipNo === startAt && clipAt[items.length - 1] !== null) startItem = items.length
+      items.push({ key: p.clip.matchId, ...info(p.clip).range! })
+      clipAt.push(p.clip)
+      clipNo++
+    }
     playback.playSequence(items, i => {
       // On a title card, the clip after it is the one the panels follow.
       const c = i === null ? null : clipAt[i] ?? clipAt[i + 1] ?? null
@@ -314,6 +314,33 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [settingsOpen, markerKey, trim])
 
+  // ---- export (design §3.8) ------------------------------------------------------------------
+  // The job is built here (PNG layers drawn with the preview's functions) and handed to the main
+  // process, which encodes in the background; the app stays usable meanwhile.
+  useEffect(() => api.onExportEvent(ev => {
+    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ev.ratio, message: `${ev.item + 1} / ${ev.items} 本目を書き出し中${eta(ev.ratio, ev.elapsedSec)}` }))
+    else if (ev.type === 'done') setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `書き出しました（${Math.round(ev.footageSec)} 秒分を ${Math.round(ev.elapsedSec)} 秒、${(ev.sizeBytes / 1e6).toFixed(1)} MB）` })
+    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${ev.message}` })
+    else setExportState({ status: 'cancelled', ratio: 0, message: '書き出しをキャンセルしました' })
+  }), [])
+
+  const startExport = useCallback(async (outPathArg?: string) => {
+    const { reel: r, order: o, overlay: ov, matches: ms, settings: st, clipInfo: info } = latest.current
+    if (!r || !o.length) return null
+    const outPath = outPathArg ?? await api.chooseExportPath(r.name)
+    if (!outPath) return null
+    setExportState({ status: 'preparing', ratio: 0, message: 'オーバーレイを準備しています' })
+    try {
+      const job = await buildExportJob(planSequence(o, r, ov, ms, st?.ourTeamCodes ?? []), ov,
+        { range: c => info(c).range, overlayData: c => latest.current.overlayData!(c), matches: ms }, outPath)
+      await api.startExport(job)
+      return job
+    } catch (e) {
+      setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${(e as Error).message}` })
+      return null
+    }
+  }, [])
+
   // ---- dev self-check (VR_SMOKE) ------------------------------------------------------------
   useEffect(() => {
     window.__smoke = async (opts: SmokeOpts) => {
@@ -331,6 +358,7 @@ export function App() {
       if (opts.trim) return smokeTrim(res)
       if (opts.ann) return smokeAnn(res)
       if (opts.ov) return smokeOverlay(res, opts.ov)
+      if (opts.exportTo) return smokeExport(res, opts.exportTo)
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -349,6 +377,66 @@ export function App() {
         perMatch: Object.fromEntries(p.matches.map(m => [m.name, res.filter(x => x.matchId === m.id).length])),
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
+      }
+    }
+
+    // Export: three clips in two marker groups with title cards, a whole-clip and a timed annotation
+    // on the first clip. Measures UI response while encoding, then cancels a second run.
+    const smokeExport = async (res: PlayRef[], outPath: string) => {
+      const picks = [res.find(x => x.play.skill === 'S' && x.play.effect === '#'), res.find(x => x.play.skill === 'R' && x.play.effect === '#'), res.find(x => x.play.skill === 'B' && x.play.effect === '#')]
+        .filter((x): x is PlayRef => !!x)
+      let r = addClips(newReel('export smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
+      const ids = r.groups.none.slice()
+      r = toggleMarker(toggleMarker(toggleMarker(r, ids[0], 1), ids[1], 1), ids[2], 2)
+      r = { ...r, markerNames: { ...r.markerNames, 1: 'Serve and pass', 2: 'Blocks' },
+        overlay: { ...overlaySettings(undefined), titleCard: { enabled: true, durationSec: 1.5, showMarkerName: true, showMatch: true } } }
+      setReels(rs => [...rs, r]); setReelId(r.id)
+      await waitFor(() => latest.current.reel?.id === r.id && latest.current.order.length === 3 ? true : null, 20000, 'export reel')
+      const c0 = latest.current.reel!.clips[ids[0]], r0 = latest.current.clipInfo(c0).range!
+      const anns: Annotation[] = [
+        { id: 'whole', kind: 'rect', color: '#FACC15', x: 0.4, y: 0.45, w: 0.2, h: 0.2, width: 6 },
+        { id: 'timed', kind: 'text', color: '#22C55E', x: 0.62, y: 0.3, text: 'TIMED', size: 52, showFrom: r0.in + 1, showTo: r0.in + 3 },
+      ]
+      updateReel(setAnnotations(latest.current.reel!, ids[0], anns))
+      await waitFor(() => latest.current.reel!.clips[ids[0]].annotations.length === 2 ? true : null, 5000, 'annotations')
+
+      const wait = (pred: () => boolean, ms: number, label: string) => waitFor(() => (pred() ? true : null), ms, label)
+      const t0 = performance.now()
+      const job = await startExport(outPath)
+      if (!job) throw new Error('export did not start')
+      // UI response while ffmpeg runs: an IPC round trip and a frame.
+      await wait(() => latest.current.exportState?.status === 'running', 20000, 'export running')
+      const ipcSamples: number[] = []
+      for (let k = 0; k < 6; k++) { const q = performance.now(); await api.getProject(); ipcSamples.push(Math.round(performance.now() - q)); await sleep(400) }
+      const ipc0 = performance.now(); await api.parseMatch(picks[0].matchId); const ipcMs = Math.round(performance.now() - ipc0)
+      const raf0 = performance.now(); await new Promise(ok => requestAnimationFrame(() => ok(null))); const frameMs = Math.round(performance.now() - raf0)
+      await wait(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? ''), 180000, 'export done')
+      const done = { ...latest.current.exportState, wallMs: Math.round(performance.now() - t0) }
+
+      // Output timeline for frame checks.
+      const starts: number[] = []
+      let acc = 0
+      for (const it of job.items) { starts.push(acc); acc += it.kind === 'clip' ? it.out - it.in : it.durationSec }
+      const clip0At = starts[1]
+      const checks = [
+        { name: 'card1', t: 0.7 },
+        { name: 'clip1-before-timed', t: clip0At + 0.5 },
+        { name: 'clip1-timed', t: clip0At + 2 },
+        { name: 'card2', t: starts[3] + 0.7 },
+      ]
+
+      // Cancel: start a second export and stop it after ~1.5s.
+      const cancelPath = outPath.replace(/\.mp4$/, '-cancelled.mp4')
+      await startExport(cancelPath)
+      await wait(() => latest.current.exportState?.status === 'running', 20000, 'second export running')
+      await sleep(1500)
+      await api.cancelExport()
+      await wait(() => latest.current.exportState?.status === 'cancelled', 20000, 'cancelled')
+      await sleep(800)
+      return {
+        items: job.items.map(it => it.kind === 'clip' ? `clip ${(it.out - it.in).toFixed(2)}s layers=${it.layers.map(l => l.from === undefined ? 'whole' : `${l.from.toFixed(1)}-${l.to!.toFixed(1)}`).join(',')} png=${it.layers.map(l => l.png.length).join('/')}` : `card ${it.durationSec}s png=${it.png.length}`),
+        size: `${job.width}x${job.height}@${job.fpsStr}`, expectedSec: +acc.toFixed(3), done, ipcMs, ipcSamples, frameMs,
+        export: outPath, checks, cancelPath, cancelState: latest.current.exportState?.status,
       }
     }
 
@@ -548,7 +636,7 @@ export function App() {
       await sleep(1500)
       return { plan, timeline, totalMs, expectedMs: Math.round(plan.reduce((s, x) => s + (x.out - x.in) * 1000, 0)) }
     }
-  }, [jump, loadProject, playThrough, activateClip, updateReel, overlayData, setOverlay])
+  }, [jump, loadProject, playThrough, activateClip, updateReel, overlayData, setOverlay, startExport])
 
   // ---- project ------------------------------------------------------------------------------
   const openProject = async () => {
@@ -570,6 +658,7 @@ export function App() {
   }
 
   const saveSettings = async (s: ProjectSettings) => setProject(await api.saveSettings(s))
+
 
   const rawRefs = useMemo(() => settingsOpen && settings
     ? (project?.matches ?? []).flatMap(m => dvws[m.id] ? buildRefs(m.id, dvws[m.id], { ...settings, playerAliases: NO_ALIASES }) : [])
@@ -593,6 +682,20 @@ export function App() {
         </div>
       )}
       {error && <div className="banner error" onClick={() => setError(null)}>{error}</div>}
+      {exportState && (
+        <div className={`banner export ${exportState.status}`} role="status">
+          <span>{exportState.message}</span>
+          {(exportState.status === 'running' || exportState.status === 'preparing') && (
+            <>
+              <progress value={exportState.ratio} max={1} />
+              <span className="muted">{Math.round(exportState.ratio * 100)}%</span>
+              <button onClick={() => void api.cancelExport()}>キャンセル</button>
+            </>
+          )}
+          {exportState.status === 'done' && exportState.outPath && <button onClick={() => void api.showInFolder(exportState.outPath!)}>フォルダを開く</button>}
+          {exportState.status !== 'running' && exportState.status !== 'preparing' && <button className="link" onClick={() => setExportState(null)}>閉じる</button>}
+        </div>
+      )}
 
       {!project ? (
         <Empty title="プロジェクトフォルダを開いてください" body="試合・リールの JSON はこのフォルダに保存されます。動画はコピーせず、元の場所を参照します。" />
@@ -669,6 +772,7 @@ export function App() {
             info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
             onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough(0)} onStop={() => playback.stopSequence()}
             orderCount={order.length} orderSec={orderSec} overlaps={overlaps} onOpenOverlay={() => setOverlayOpen(true)}
+            onExport={() => void startExport()} exporting={exportState?.status === 'running' || exportState?.status === 'preparing'}
           />
         </main>
       )}
@@ -693,14 +797,8 @@ interface SmokeOpts {
   trim?: boolean
   ann?: boolean
   ov?: string
+  exportTo?: string
   reel?: { markers: (Marker | null)[]; groupOrder?: Marker[]; scope?: 'marked' | 'all'; shotAt?: number }
-}
-
-// Title card match line: "VS SMT · 2026-10-11".
-function cardMatchLabel(m: Match, codes: string[]): string {
-  const side = ourSide(m.teams, codes)
-  const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
-  return `VS ${opp}${m.date ? ` · ${m.date}` : ''}`
 }
 
 // Dialog preview data: the active (or first) clip's real data, or a placeholder for an empty reel.
@@ -721,6 +819,12 @@ function labelMatches(ms: Match[], codes: string[]): Record<string, string> {
     const d = m.date ? `${+m.date.slice(5, 7)}/${+m.date.slice(8, 10)}` : ''
     return [m.id, `${d} ${opp}`.trim()]
   }))
+}
+
+function eta(ratio: number, elapsedSec: number): string {
+  if (ratio < 0.03 || elapsedSec < 2) return ''
+  const left = Math.max(0, Math.round(elapsedSec / ratio - elapsedSec))
+  return `・残り約 ${left >= 60 ? `${Math.floor(left / 60)}分${left % 60}秒` : `${left}秒`}`
 }
 
 function Empty({ title, body }: { title: string; body: string }) {

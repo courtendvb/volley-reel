@@ -18,7 +18,9 @@ import { ffmpeg, probe, run, FFPROBE } from './lib/ff.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const labels = JSON.parse(fs.readFileSync(path.join(here, 'labels.json'), 'utf8'));
 const opt = parseArgs(process.argv.slice(2));
-const H = opt.res, W = Math.round(H * 16 / 9), FPS = 30;
+const H = opt.res, W = Math.round(H * 16 / 9);
+// Output follows the source rate (Handycam 720p is 30000/1001); forcing 30 would duplicate a frame every ~33s.
+let FPS = 30, FPS_STR = '30';
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = path.join(here, 'out', stamp), workDir = path.join(here, 'work');
 fs.mkdirSync(outDir, { recursive: true }); fs.mkdirSync(workDir, { recursive: true });
@@ -52,6 +54,10 @@ for (const [i, m] of opt.matches.entries()) {
     teams: dvw.teams.map(t => t.code).join(' vs '), plays: dvw.plays.length, rallies: dvw.rallies.length });
   log(`${id}: ${path.basename(m.dvw)}  ${info.codec}/${info.pixFmt} ${info.width}x${info.height}@${info.fps.toFixed(2)}  audio=[${info.audio}]  → ${playable ? 'remux' : 'reencode'} ${prepSec.toFixed(1)}s`);
 }
+
+const rates = new Set(matches.map(m => m.info.fpsStr));
+if (rates.size === 1) { FPS_STR = [...rates][0]; FPS = matches[0].info.fps; }
+report.settings.fps = FPS_STR;
 
 // ---- 2. pick clips across matches ------------------------------------------------------------
 const clips = pickClips(matches, opt.clips);
@@ -93,7 +99,7 @@ for (const [i, c] of clips.entries()) {
 }
 
 // ---- 4. export: per-clip encode + concat demuxer ---------------------------------------------
-const ENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', String(FPS * 2), '-video_track_timescale', '15360', '-an'];
+const ENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-r', FPS_STR, '-g', String(Math.round(FPS * 2)), '-video_track_timescale', '15360', '-an'];
 const totalDur = clips.reduce((s, c) => s + c.dur, 0);
 log(`\n${clips.length} clips, ${totalDur.toFixed(1)}s of footage → per-clip encode + concat`);
 
@@ -102,7 +108,7 @@ const segFiles = [];
 for (const [i, c] of clips.entries()) {
   const seg = path.join(workDir, `seg${i + 1}.mp4`);
   const inputs = ['-ss', c.in.toFixed(3), '-t', c.dur.toFixed(3), '-i', c.match.video, '-i', c.basePng];
-  let fc = `[0:v]scale=${W}:${H}:flags=lanczos,fps=${FPS},format=yuv420p,setsar=1[v0];[v0][1:v]overlay=0:0[v1]`;
+  let fc = `[0:v]scale=${W}:${H}:flags=lanczos,fps=${FPS_STR},format=yuv420p,setsar=1[v0];[v0][1:v]overlay=0:0[v1]`;
   if (c.timedPng) {
     inputs.push('-i', c.timedPng);
     fc += `;[v1][2:v]overlay=0:0:enable='between(t,${c.timed.from.toFixed(2)},${c.timed.to.toFixed(2)})'[v2]`;
@@ -112,6 +118,7 @@ for (const [i, c] of clips.entries()) {
     onProgress: sec => process.stdout.write(`\r  progress ${Math.min(100, (doneSec + sec) / totalDur * 100).toFixed(0).padStart(3)}%`),
   });
   doneSec += c.dur; segFiles.push(seg);
+  c.seg = seg;
 }
 const listFile = path.join(workDir, 'concat.txt');
 fs.writeFileSync(listFile, segFiles.map(f => `file '${f.replace(/\\/g, '/')}'`).join('\n'));
@@ -128,7 +135,7 @@ if (opt.compare) {
   clips.forEach((c, i) => {
     const vi = n++; inputs.push('-ss', c.in.toFixed(3), '-t', c.dur.toFixed(3), '-i', c.match.video);
     const bi = n++; inputs.push('-i', c.basePng);
-    let chain = `[${vi}:v]scale=${W}:${H}:flags=lanczos,fps=${FPS},format=yuv420p,setsar=1[a${i}];[a${i}][${bi}:v]overlay=0:0[b${i}]`;
+    let chain = `[${vi}:v]scale=${W}:${H}:flags=lanczos,fps=${FPS_STR},format=yuv420p,setsar=1[a${i}];[a${i}][${bi}:v]overlay=0:0[b${i}]`;
     let last = `b${i}`;
     if (c.timedPng) {
       const ti = n++; inputs.push('-i', c.timedPng);
@@ -148,8 +155,10 @@ if (opt.compare) {
 
 // ---- 5. measure ------------------------------------------------------------------------------
 const outInfo = await probe(outMp4);
-const expectedFrames = clips.reduce((s, c) => s + Math.round(c.dur * FPS), 0);
-const { out: cnt } = await run(FFPROBE, ['-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', outMp4]);
+// Expected = sum of the segments' real frame counts (a 29.97fps cut of 11s is 329.67 frames, so rounding drifts).
+for (const c of clips) c.frames = await countFrames(c.seg);
+const expectedFrames = clips.reduce((s, c) => s + c.frames, 0);
+const cnt = String(await countFrames(outMp4));
 const { err: det } = await ffmpeg(['-i', outMp4, '-vf', 'blackdetect=d=0.03:pix_th=0.10,freezedetect=n=0.001:d=0.25', '-an', '-f', 'null', '-']);
 const blacks = [...det.matchAll(/black_start:([\d.]+) black_end:([\d.]+)/g)].map(m => [+m[1], +m[2]]);
 const freezes = [...det.matchAll(/freeze_start: ([\d.]+)/g)].map(m => +m[1]);
@@ -158,7 +167,7 @@ const freezes = [...det.matchAll(/freeze_start: ([\d.]+)/g)].map(m => +m[1]);
 let frame = 0;
 const seams = [];
 for (let k = 0; k < clips.length - 1; k++) {
-  frame += Math.round(clips[k].dur * FPS);
+  frame += clips[k].frames;
   const img = path.join(outDir, `seam${k + 1}.png`);
   await ffmpeg(['-i', outMp4, '-vf', `select='eq(n\\,${frame - 1})+eq(n\\,${frame})',scale=640:-1,tile=2x1`, '-frames:v', '1', '-fps_mode', 'vfr', img]);
   seams.push({ atSec: frame / FPS, image: path.basename(img) });
@@ -185,6 +194,11 @@ log(`\nframes ${cnt.trim()} / expected ${expectedFrames}, black ${blacks.length}
 log(`report: ${path.join(outDir, 'report.md')}`);
 
 // =============================================================================================
+
+async function countFrames(file) {
+  const { out } = await run(FFPROBE, ['-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_packets', '-of', 'csv=p=0', file]);
+  return +out.trim();
+}
 
 function parseArgs(argv) {
   const o = { matches: [], clips: 5, res: 720, our: ['HTH', 'HTA'], compare: false, synthetic: false };
@@ -277,7 +291,7 @@ function renderReport(r) {
     '## Pass criteria', '',
     '| Criterion | Result | |', '|---|---|---|',
     `| ≥ 3x realtime | ${pc.speed.toFixed(1)}x (${o.footageSec.toFixed(1)}s footage in ${pc.wallSec.toFixed(1)}s) | ${pass(pc.speed >= 3)} |`,
-    `| No black frames / freezes at seams | black ${o.blacks.length}, freeze ${o.freezes.length}; frames ${o.frames} / expected ${o.expectedFrames} | ${pass(!o.blacks.length && !o.freezes.length && Math.abs(o.frames - o.expectedFrames) <= r.clips.length)} |`,
+    `| No black frames / freezes at seams | black ${o.blacks.length}, freeze ${o.freezes.length}; frames ${o.frames} / expected ${o.expectedFrames} | ${pass(!o.blacks.length && !o.freezes.length && o.frames === o.expectedFrames)} |`,
     `| Overlays sharp | check \`zoom-caption.png\`, \`zoom-scoreboard.png\`, \`frame-full.png\` by eye | 👀 |`, '',
     `Output size: ${(o.sizeBytes / 1e6).toFixed(2)} MB (${(o.sizeBytes * 8 / o.duration / 1e6).toFixed(2)} Mbps), duration ${o.duration.toFixed(2)}s.`,
     sp ? `Single-pass filter_complex: ${sp.speed.toFixed(1)}x realtime, ${(sp.sizeBytes / 1e6).toFixed(2)} MB.` : '', '',

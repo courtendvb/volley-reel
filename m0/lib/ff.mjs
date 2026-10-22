@@ -32,7 +32,7 @@ export async function probe(file) {
   const [n, d] = (v?.r_frame_rate || '0/1').split('/').map(Number);
   return {
     codec: v?.codec_name, pixFmt: v?.pix_fmt, profile: v?.profile,
-    width: v?.width, height: v?.height, fps: d ? n / d : 0,
+    width: v?.width, height: v?.height, fps: d ? n / d : 0, fpsStr: v?.r_frame_rate,
     duration: parseFloat(j.format.duration),
     audio: j.streams.filter(s => s.codec_type === 'audio').map(s => s.codec_name),
     sizeBytes: +j.format.size,

@@ -19,6 +19,10 @@ import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { buildExportJob, planSequence } from './exportRender'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
+import { Home } from './components/Home'
+import { ScanDialog } from './components/ScanDialog'
+import { MatchPicker } from './components/MatchPicker'
+import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { playback, type SequenceItem } from './playback'
@@ -51,13 +55,19 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [library, setLibrary] = useState<LibraryInfo | null>(null)
+  const [recent, setRecent] = useState<RecentProject[]>([])
+  const [scan, setScan] = useState<ScanResult | null>(null)
+  const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
 
   const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
   const match = matchId ? matches[matchId] ?? null : null
   const reel = reels.find(r => r.id === reelId) ?? null
 
   useEffect(() => {
-    void api.getProject().then(loadProject)
+    void api.getLibrary().then(setLibrary)
+    void api.recentProjects().then(setRecent)
+    void api.getProject().then(p => p && loadProject(p))
     return api.onImportProgress(setProgress)
   }, [])
 
@@ -224,8 +234,8 @@ export function App() {
   }
 
   const overlay = useMemo(() => overlaySettings(reel?.overlay), [reel?.overlay])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW> })
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws }
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null })
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library }
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -398,6 +408,7 @@ export function App() {
   // ---- dev self-check (VR_SMOKE) ------------------------------------------------------------
   useEffect(() => {
     window.__smoke = async (opts: SmokeOpts) => {
+      if (opts.home) return smokeHome(opts)
       const p = await api.getProject()
       if (!p?.matches.length) throw new Error('no match in project')
       await loadProject(p)
@@ -433,6 +444,31 @@ export function App() {
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
       }
+    }
+
+    // v3 home flow. 'scan': scan folders and leave the pairing dialog open. 'import-create': import
+    // the sure pairs, create a project of every HTH/HTA match, open it. 'home' / 'picker': screens.
+    const smokeHome = async (opts: SmokeOpts) => {
+      setLibrary(await api.getLibrary())
+      if (opts.home === 'home') { await sleep(300); return { library: latest.current.library?.matches.length } }
+      if (opts.home === 'picker') { setPicker('create'); await sleep(400); return { library: latest.current.library?.matches.length } }
+      const r = await window.api.smokeScan!(opts.folders ?? [])
+      const summary = {
+        dvws: r.pairs.length, videos: r.videos.length, unreadable: r.unreadable.length,
+        paired: r.pairs.filter(p => p.video).map(p => `${p.date} ${p.home}-${p.away} -> ${p.video?.split(/[\\/]/).pop()} [${p.note}${p.inLibrary ? ', in library' : ''}]`),
+        unpaired: r.pairs.filter(p => !p.video).length,
+      }
+      if (opts.home === 'scan') { setScan(r); await sleep(400); return summary }
+      const sure = r.pairs.filter(p => p.video && p.score >= 3 && !p.inLibrary).map(p => ({ dvwPath: p.dvwPath, video: p.video! }))
+      const imported = await api.importPairs(sure)
+      const lib = await api.getLibrary()
+      setLibrary(lib)
+      const codes = ['HTH', 'HTA']
+      const ids = lib!.matches.filter(m => m.teams.some(t => codes.includes(t.code))).map(m => m.id)
+      const p = await window.api.smokeCreateProject!(opts.newProject!, { name: 'v3 smoke', ourTeamCodes: codes, matchIds: ids })
+      await loadProject(p)
+      await sleep(400)
+      return { ...summary, imported: imported.imported.map(m => m.name), failed: imported.failed, project: { name: p.name, matches: p.matches.map(m => m.name) } }
     }
 
     // M8 checks. 'relink': reel of 5 clips, the DVW copy gets an extra point and loses one play,
@@ -744,23 +780,44 @@ export function App() {
   }, [jump, loadProject, playThrough, activateClip, updateReel, overlayData, setOverlay, startExport])
 
   // ---- project ------------------------------------------------------------------------------
-  const openProject = async () => {
+  // ---- library and projects (v3) -------------------------------------------------------------
+  const guard = async (fn: () => Promise<void>) => {
     setError(null)
-    const p = await api.chooseProject()
-    if (p) { setFilter(EMPTY_FILTER); setSelected(null); setActiveClipId(null); await loadProject(p) }
+    try { await fn() } catch (e) { setError((e as Error).message) } finally { setProgress(null) }
   }
-
-  const importMatch = async () => {
-    setError(null)
-    try {
-      const m = await api.importMatch()
-      if (m) { await loadProject(await api.getProject()); setMatchId(m.id) }
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setProgress(null)
+  const resetView = () => { setFilter(EMPTY_FILTER); setSelected(null); setActiveClipId(null); setMatchId(null) }
+  const openProject = (path?: string) => guard(async () => {
+    const p = await api.openProject(path)
+    if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
+  })
+  const goHome = async () => {
+    await Promise.all(latest.current.reels.map(saveNow)) // nothing pending is lost on the way out
+    playback.stopSequence()
+    await api.closeProject()
+    resetView()
+    setProject(null); setReels([]); setReelId(null); setDvws({})
+    setLibrary(await api.getLibrary()); setRecent(await api.recentProjects())
+  }
+  const chooseLibrary = () => guard(async () => { const l = await api.chooseLibrary(); if (l) { setLibrary(l); setProject(null) } })
+  const scanFolders = () => guard(async () => { const r = await api.scanFolders(); if (r) setScan(r) })
+  const importPairs = (pairs: { dvwPath: string; video: string }[]) => guard(async () => {
+    setScan(null)
+    const r = await api.importPairs(pairs)
+    setLibrary(await api.getLibrary())
+    if (r.failed.length) setError(`取り込めなかった試合があります: ${r.failed.map(f => `${f.dvwPath.split(/[\\/]/).pop()}（${f.message}）`).join(' / ')}`)
+    else setNotice(`${r.imported.length} 試合を倉庫に取り込みました`)
+  })
+  const importOne = () => guard(async () => { const m = await api.importMatch(); if (m) setLibrary(await api.getLibrary()) })
+  const pickerDone = (r: { name: string; codes: string[]; matchIds: string[] }) => guard(async () => {
+    setPicker(null)
+    if (picker === 'create') {
+      const p = await api.createProject({ name: r.name, ourTeamCodes: r.codes, matchIds: r.matchIds })
+      if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
+      return
     }
-  }
+    await api.saveSettings({ ...latest.current.settings!, ourTeamCodes: r.codes })
+    await loadProject(await api.setProjectMatches(r.matchIds))
+  })
 
   const saveSettings = async (s: ProjectSettings) => setProject(await api.saveSettings(s))
 
@@ -773,13 +830,13 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <strong className="brand">volley-reel</strong>
-        <button onClick={openProject}>{project ? 'プロジェクトを変更' : 'プロジェクトを開く'}</button>
-        {project && <span className="muted path">{project.path}</span>}
+        {project && <button onClick={() => void goHome()} title="倉庫とプロジェクトの一覧に戻る">ホーム</button>}
+        {project && <strong className="project-name" title={project.path}>{project.name}</strong>}
+        {project && <button onClick={() => setPicker('edit')} title="倉庫から試合を足す・外す">試合 {project.matches.length}</button>}
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title="リールは自動で保存されます">{saveState === 'saved' ? '保存済み' : saveState === 'pending' ? '保存中…' : '保存に失敗'}</span>}
         <button onClick={() => setShortcutsOpen(true)} title="ショートカット一覧 (?)">ショートカット</button>
         {project && <button onClick={() => setSettingsOpen(true)}>設定</button>}
-        {project && <button className="primary" onClick={importMatch} disabled={!!progress}>試合を取り込む</button>}
       </header>
 
       {progress && (
@@ -806,9 +863,12 @@ export function App() {
       )}
 
       {!project ? (
-        <Empty title="プロジェクトフォルダを開いてください" body="試合・リールの JSON はこのフォルダに保存されます。動画はコピーせず、元の場所を参照します。" />
+        <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
+          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} />
       ) : !project.matches.length ? (
-        <Empty title="最初の試合を取り込みましょう" body="動画ファイルと .dvw を選ぶと、コーデックを確認して試合として登録します。" />
+        <div className="empty"><h2>試合を選びましょう</h2>
+          <p className="muted">倉庫から、このプロジェクトで使う試合を選びます。</p>
+          <button className="primary" onClick={() => setPicker('edit')}>試合を選ぶ</button></div>
       ) : (
         <main className="workspace">
           <aside className="sidebar">
@@ -890,6 +950,13 @@ export function App() {
           sample={overlaySample(overlayData(active ?? order[0] ?? Object.values(reel.clips)[0] ?? null), reel)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+      {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
+      {picker && library && (
+        <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)}
+          initial={picker === 'create'
+            ? { name: '', codes: ['HTH', 'HTA'], selected: [] }
+            : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
+      )}
       {settingsOpen && settings && (
         <SettingsDialog settings={settings} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       )}
@@ -908,6 +975,9 @@ interface SmokeOpts {
   ov?: string
   exportTo?: string
   m8?: string
+  home?: string
+  folders?: string[]
+  newProject?: string
   reel?: { markers: (Marker | null)[]; groupOrder?: Marker[]; scope?: 'marked' | 'all'; shotAt?: number }
 }
 
@@ -935,10 +1005,6 @@ function eta(ratio: number, elapsedSec: number): string {
   if (ratio < 0.03 || elapsedSec < 2) return ''
   const left = Math.max(0, Math.round(elapsedSec / ratio - elapsedSec))
   return `・残り約 ${left >= 60 ? `${Math.floor(left / 60)}分${left % 60}秒` : `${left}秒`}`
-}
-
-function Empty({ title, body }: { title: string; body: string }) {
-  return <div className="empty"><h2>{title}</h2><p className="muted">{body}</p></div>
 }
 
 const sleep = (ms: number) => new Promise(ok => setTimeout(ok, ms))

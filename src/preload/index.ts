@@ -6,6 +6,7 @@ const api: Api = {
   chooseProject: () => ipcRenderer.invoke('project:choose'),
   importMatch: () => ipcRenderer.invoke('match:import'),
   parseMatch: id => ipcRenderer.invoke('match:parse', id),
+  saveSettings: s => ipcRenderer.invoke('project:saveSettings', s),
   onImportProgress: cb => {
     const h = (_e: unknown, p: ImportProgress) => cb(p)
     ipcRenderer.on('import:progress', h)

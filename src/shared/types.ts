@@ -72,9 +72,15 @@ export interface Match {
   importedAt: string
 }
 
+export interface ProjectSettings {
+  ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
+  playerAliases: Record<string, string> // player key -> the key it is the same person as (manual exceptions)
+}
+
 export interface ProjectInfo {
   path: string
   matches: Match[]
+  settings: ProjectSettings
 }
 
 export interface ImportProgress {
@@ -88,5 +94,6 @@ export interface Api {
   chooseProject(): Promise<ProjectInfo | null>
   importMatch(): Promise<Match | null>
   parseMatch(id: string): Promise<ParsedDVW>
+  saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }

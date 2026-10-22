@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  addClips, clipRange, findClip, groupOf, newReel, playOrder, relink, toggleMarker,
+  addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, toggleMarker, trimClip,
   type Clip, type Group, type Marker, type Reel,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -9,6 +9,7 @@ import { FilterPanel, type Scope } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
+import { TrimBar } from './components/TrimBar'
 import { VideoPane } from './components/VideoPane'
 import { playback, type SeqItem } from './playback'
 
@@ -98,21 +99,35 @@ export function App() {
   // ---- reels --------------------------------------------------------------------------------
   const updateReel = useCallback((r: Reel) => setReels(rs => rs.map(x => (x.id === r.id ? r : x))), [])
   const missing = useMemo(() => (reel ? relink(reel, dvws).missing : new Set<string>()), [reel, dvws])
+  const defaults = useMemo(() => (reel ? rangeDefaults(reel) : undefined), [reel])
   const clipInfo = useCallback((c: Clip): ClipInfo => {
-    const m = matches[c.matchId], d = dvws[c.matchId]
+    const m = matches[c.matchId], d = dvws[c.matchId], play = d?.plays[c.playId]
     return {
       ref: refsByMatch[c.matchId]?.[c.playId],
-      range: d && m ? clipRange(c, d, m.offsetSec) : null,
+      range: d && m ? clipRange(c, d, m.offsetSec, defaults) : null,
+      def: d && m && play ? defaultRange(d, play, m.offsetSec, defaults) : null,
       matchLabel: matchLabels[c.matchId] ?? '?',
       date: m?.date ?? '',
     }
-  }, [matches, dvws, refsByMatch, matchLabels])
+  }, [matches, dvws, refsByMatch, matchLabels, defaults])
   const order = useMemo(() => {
     if (!reel) return []
     return playOrder(reel, c => { const i = clipInfo(c); return [i.date, i.range?.in ?? 0] })
       .filter(c => !missing.has(c.id) && clipInfo(c).range)
   }, [reel, clipInfo, missing])
   const orderSec = useMemo(() => order.reduce((s, c) => { const r = clipInfo(c).range!; return s + r.out - r.in }, 0), [order, clipInfo])
+  // Clips of one match whose ranges overlap (e.g. two plays of the same rally): warned, both kept.
+  const overlaps = useMemo(() => {
+    if (!reel) return new Map<string, string[]>()
+    return findOverlaps(Object.values(reel.clips).flatMap(c => {
+      const r = clipInfo(c).range
+      return r ? [{ id: c.id, matchId: c.matchId, ...r }] : []
+    }))
+  }, [reel, clipInfo])
+
+  const overlapsRef = useRef(overlaps)
+  overlapsRef.current = overlaps
+
   const reelGroups = useMemo(() => {
     const out = new Map<string, Group>()
     if (reel) for (const c of Object.values(reel.clips)) out.set(`${c.matchId}:${c.playId}`, groupOf(reel, c.id) ?? 'none')
@@ -201,6 +216,27 @@ export function App() {
   const refsByMatchRef = useRef(refsByMatch)
   refsByMatchRef.current = refsByMatch
 
+
+  const [seqPlaying, setSeqPlaying] = useState(false)
+  useEffect(() => playback.subscribe(s => setSeqPlaying(s.seq !== null)), [])
+
+  // ---- trimming (design §3.5) -----------------------------------------------------------------
+  const active = reel && activeClipId ? reel.clips[activeClipId] ?? null : null
+  const activeInfo = active ? clipInfo(active) : null
+  const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out
+  // The active clip loops while it's being trimmed; a through-play overrides the loop.
+  useEffect(() => {
+    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying ? { key: active.matchId, in: loopIn, out: loopOut } : null)
+  }, [active, loopIn, loopOut, seqPlaying])
+
+  const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
+    const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
+    const c = r && id ? r.clips[id] : null
+    const i = c ? info(c) : null
+    if (!r || !c || !i?.range || !i.def) return
+    updateReel(trimClip(r, c.id, edge, t, i.range, i.def, ms[c.matchId]?.durationSec))
+  }, [updateReel])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
@@ -210,14 +246,15 @@ export function App() {
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
       else if (e.key === 'Escape') playback.stopSequence()
+      else if (e.key === '[' || e.key === ']') {
+        const { reel: r, activeClipId: id } = latest.current
+        if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
+      }
       else if (/^[0-5]$/.test(e.key)) { e.preventDefault(); markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, markerKey])
-
-  const [seqPlaying, setSeqPlaying] = useState(false)
-  useEffect(() => playback.subscribe(s => setSeqPlaying(s.seq !== null)), [])
+  }, [settingsOpen, markerKey, trim])
 
   // ---- dev self-check (VR_SMOKE) ------------------------------------------------------------
   useEffect(() => {
@@ -233,6 +270,7 @@ export function App() {
         return JSON.stringify(l.filter) === JSON.stringify(want) && l.results.length ? l.results : null
       })
       if (opts.reel) return smokeReel(opts.reel, res)
+      if (opts.trim) return smokeTrim(res)
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -251,6 +289,51 @@ export function App() {
         perMatch: Object.fromEntries(p.matches.map(m => [m.name, res.filter(x => x.matchId === m.id).length])),
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
+      }
+    }
+
+    // Trimming: two plays of one rally (must warn as overlapping) plus one more; the first loops
+    // twice, then [ and ] at known playheads set IN/OUT, then the reel default switches mode.
+    const smokeTrim = async (res: PlayRef[]) => {
+      const r0 = res.find(x => x.play.rallyId !== null && res.some(y => y !== x && y.matchId === x.matchId && y.play.rallyId === x.play.rallyId))
+      if (!r0) throw new Error('no rally with two plays in the results')
+      const r1 = res.find(y => y !== r0 && y.matchId === r0.matchId && y.play.rallyId === r0.play.rallyId)!
+      const r2 = res.find(y => y.matchId === r0.matchId && y.play.rallyId !== null && y.play.rallyId > r0.play.rallyId! + 2)!
+      const { reel: built, ids } = addClips(newReel('trim smoke'), [r0, r1, r2].map(x => ({ matchId: x.matchId, play: x.play })))
+      setReels(rs => [...rs, built]); setReelId(built.id)
+      await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'trim reel')
+      const info0 = latest.current.clipInfo(built.clips[ids[0]])
+      const before = info0.range!
+      const overlapsFound = [...overlapsRef.current.keys()].filter(k => ids.includes(k)).length
+
+      activateClip(built.clips[ids[0]])
+      await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready && playback.current.loop ? true : null, 20000, 'loop start')
+      let wraps = 0, last = -1
+      const unsub = playback.subscribe(s => { if (last >= 0 && s.time < last - 1) wraps++; last = s.time })
+      const loopMs = Math.round((before.out - before.in) * 1000)
+      await waitFor(() => (wraps >= 2 ? true : null), loopMs * 3 + 5000, () => `two loops (wraps=${wraps}, t=${playback.current.time}, ${playback.debugVideo})`)
+      unsub()
+
+      const press = async (key: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })); await sleep(200) }
+      await playback.seekAndWait(before.in + 1.0); await press('[')
+      await playback.seekAndWait(before.out - 1.0); await press(']')
+      const c0 = latest.current.reel!.clips[ids[0]]
+      const after = latest.current.clipInfo(c0).range!
+
+      const dur = (id: string) => { const r = latest.current.clipInfo(latest.current.reel!.clips[id]).range!; return +(r.out - r.in).toFixed(2) }
+      const durRally = [dur(ids[0]), dur(ids[2])]
+      updateReel({ ...latest.current.reel!, rangeDefaults: { ...rangeDefaults(latest.current.reel!), mode: 'keyplay' } })
+      await sleep(300)
+      const durKey = [dur(ids[0]), dur(ids[2])]
+
+      playback.toggle()
+      await sleep(800)
+      return {
+        clips: [r0, r1, r2].map(x => `${x.play.code} rally ${x.play.rallyId}`),
+        overlapsFound, loopSec: (before.out - before.in).toFixed(2), wraps,
+        before, inSec: c0.inSec, outSec: c0.outSec, after,
+        expect: { in: +(before.in + 1).toFixed(3), out: +(before.out - 1).toFixed(3) },
+        durationsRallyMode: durRally, durationsKeyplayMode: durKey,
       }
     }
 
@@ -292,7 +375,7 @@ export function App() {
       await sleep(1500)
       return { plan, timeline, totalMs, expectedMs: Math.round(plan.reduce((s, x) => s + (x.out - x.in) * 1000, 0)) }
     }
-  }, [jump, loadProject, playThrough])
+  }, [jump, loadProject, playThrough, activateClip, updateReel])
 
   // ---- project ------------------------------------------------------------------------------
   const openProject = async () => {
@@ -361,13 +444,26 @@ export function App() {
           </aside>
           <section className="stage">
             {match && <VideoPane key={match.id} match={match} />}
+            {active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
+              <TrimBar
+                label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
+                keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
+                range={activeInfo.range} def={activeInfo.def} durationSec={matches[active.matchId]?.durationSec ?? 0}
+                overrides={{ in: active.inSec !== null, out: active.outSec !== null }}
+                overlapLabels={(overlaps.get(active.id) ?? []).map(id => {
+                  const oi = reel!.clips[id] ? clipInfo(reel!.clips[id]) : null
+                  return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
+                })}
+                onTrim={trim}
+              />
+            )}
           </section>
           <ReelPanel
             reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
             onNewReel={createReel} onDeleteReel={deleteReel} onChange={updateReel}
             info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
             onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough(0)} onStop={() => playback.stopSequence()}
-            orderCount={order.length} orderSec={orderSec}
+            orderCount={order.length} orderSec={orderSec} overlaps={overlaps}
           />
         </main>
       )}
@@ -385,6 +481,7 @@ interface SmokeOpts {
   scope: Scope
   settings?: boolean
   keys?: string[]
+  trim?: boolean
   reel?: { markers: (Marker | null)[]; groupOrder?: Marker[]; scope?: 'marked' | 'all'; shotAt?: number }
 }
 

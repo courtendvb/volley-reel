@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  shiftClip, shiftGroup, toggleMarker, type Reel,
+  shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, type Reel,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -122,5 +122,48 @@ describe('clip ranges', () => {
   it('uses per-clip IN/OUT when set', () => {
     const { reel, c } = reelWith([2])
     expect(clipRange({ ...reel.clips[c[0]], outSec: 110 }, d, 0)).toEqual({ in: 98.5, out: 110 })
+  })
+})
+
+describe('range defaults and trimming', () => {
+  const play = d.plays[2] // attack at 104 in the rally served at 100, last contact 104
+
+  it('switches between rally and key-play defaults', () => {
+    expect(defaultRange(d, play, 0, { ...DEFAULT_RANGE, mode: 'keyplay' })).toEqual({ in: 101, out: 108 })
+    expect(defaultRange(d, play, 0, { ...DEFAULT_RANGE, rallyLead: 3, rallyTail: 1 })).toEqual({ in: 97, out: 105 })
+  })
+
+  it('reads reels saved before range defaults existed', () => {
+    const { reel } = reelWith([2])
+    const { rangeDefaults: _, ...old } = reel
+    expect(rangeDefaults(old as Reel)).toEqual(DEFAULT_RANGE)
+  })
+
+  it('sets IN/OUT, clamps to keep a minimum length, and stores the default as null', () => {
+    const { reel, c } = reelWith([2])
+    const def = defaultRange(d, play, 0)
+    const cur = { ...def }
+    let r = trimClip(reel, c[0], 'in', 100.25, cur, def)
+    expect(r.clips[c[0]].inSec).toBe(100.25)
+    r = trimClip(reel, c[0], 'in', 200, cur, def)
+    expect(r.clips[c[0]].inSec).toBe(def.out - MIN_CLIP_SEC)
+    r = trimClip(reel, c[0], 'out', 50, cur, def, 105)
+    expect(r.clips[c[0]].outSec).toBe(def.in + MIN_CLIP_SEC)
+    expect(trimClip(reel, c[0], 'out', 999, cur, def, 105).clips[c[0]].outSec).toBe(105)
+    expect(trimClip(reel, c[0], 'in', def.in, cur, def).clips[c[0]].inSec).toBeNull()
+    expect(trimClip(r, c[0], 'out', null, cur, def).clips[c[0]].outSec).toBeNull()
+  })
+
+  it('finds overlapping clips within a match only', () => {
+    const o = findOverlaps([
+      { id: 'a', matchId: 'M', in: 0, out: 10 },
+      { id: 'b', matchId: 'M', in: 8, out: 12 },
+      { id: 'c', matchId: 'M', in: 12, out: 15 },
+      { id: 'd', matchId: 'N', in: 9, out: 11 },
+    ])
+    expect(o.get('a')).toEqual(['b'])
+    expect(o.get('b')).toEqual(['a'])
+    expect(o.has('c')).toBe(false)
+    expect(o.has('d')).toBe(false)
   })
 })

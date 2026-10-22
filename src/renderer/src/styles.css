@@ -158,3 +158,28 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .clip-actions { flex: none; display: flex; gap: 2px; }
 .clip-actions button { padding: 0 5px; font-size: 11px; }
 .pad-x { padding: 6px 10px 10px; }
+
+.stage { flex-direction: column; gap: 10px; }
+.small { font-size: 11px; }
+.overlap { color: #B45309; font-size: 12px; }
+.clip-dur.trimmed { color: var(--primary); font-weight: 600; }
+
+.reel-defaults { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px 0; font-size: 12px; color: var(--sub); }
+.reel-defaults input[type=number] { width: 46px; padding: 1px 4px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }
+
+.trim { flex: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.trim-head { display: flex; align-items: center; gap: 12px; font-size: 12.5px; }
+.trim-title { font-weight: 600; }
+.trim-track { position: relative; height: 40px; background: #F1F5F9; border-radius: 6px; cursor: pointer; user-select: none; touch-action: none; }
+.trim-track .tick { position: absolute; bottom: 2px; transform: translateX(-50%); font-size: 10px; color: #94A3B8; pointer-events: none; }
+.trim-track .tick::before { content: ''; position: absolute; left: 50%; bottom: 13px; width: 1px; height: 6px; background: #CBD5E1; }
+.trim-track .tick.zero { color: var(--text); font-weight: 600; }
+.trim-default { position: absolute; top: 4px; height: 24px; border: 1px dashed #94A3B8; border-radius: 4px; pointer-events: none; }
+.trim-range { position: absolute; top: 6px; height: 20px; background: rgba(75, 97, 209, 0.25); border-radius: 3px; pointer-events: none; }
+.trim-key { position: absolute; top: 0; bottom: 14px; width: 2px; margin-left: -1px; background: #DC2626; pointer-events: none; }
+.trim-handle { position: absolute; top: 2px; width: 10px; height: 28px; margin-left: -5px; background: var(--primary); border-radius: 3px; cursor: ew-resize; }
+.trim-handle.dragging { background: #1E3A8A; }
+.trim-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
+.trim-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 12.5px; }
+.trim-edge { display: inline-flex; align-items: center; gap: 6px; }
+.trim-edge input { width: 70px; padding: 2px 6px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }

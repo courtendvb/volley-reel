@@ -14,6 +14,7 @@ export interface PlaybackState {
   paused: boolean
   ready: boolean
   seq: { index: number; total: number } | null // through-play position, when a reel is playing
+  loop: SeqItem | null // the clip being trimmed: playback wraps from OUT back to IN
 }
 
 type Listener = (s: PlaybackState) => void
@@ -24,7 +25,7 @@ class Playback {
   private pending: { key: string; t: number; play: boolean } | null = null
   private fps = 30
   private listeners = new Set<Listener>()
-  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null }
+  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null }
   private detachEvents: (() => void) | null = null
   private seq: { items: SeqItem[]; index: number; onIndex: (i: number | null) => void } | null = null
 
@@ -100,6 +101,14 @@ class Playback {
     this.startItem(Math.max(0, Math.min(startAt, items.length - 1)))
   }
 
+  // Loop bounds for trimming (design §3.5). Setting them doesn't move the playhead; while playing,
+  // reaching OUT jumps back to IN. A through-play takes precedence over the loop.
+  setLoop(item: SeqItem | null): void {
+    const l = this.state.loop
+    if (l === item || (l && item && l.key === item.key && l.in === item.in && l.out === item.out)) return
+    this.set({ ...this.state, loop: item })
+  }
+
   stopSequence(): void {
     const s = this.seq
     if (!s) return
@@ -131,6 +140,10 @@ class Playback {
     if (v.paused) void v.play(); else v.pause()
   }
 
+  pause(): void {
+    this.video?.pause()
+  }
+
   nudge(sec: number): void {
     if (this.video) this.seek(this.video.currentTime + sec)
   }
@@ -156,7 +169,12 @@ class Playback {
   // the outgoing video can't skip an item.
   private checkSequence(t: number): void {
     const s = this.seq, v = this.video
-    if (!s || !v || v.seeking || this.pending) return
+    if (!v || v.seeking || this.pending) return
+    if (!s) {
+      const l = this.state.loop
+      if (l && l.key === this.key && !v.paused && t >= l.out) this.rawSeek(l.in, true)
+      return
+    }
     const it = s.items[s.index]
     if (this.key !== it.key || t < it.in - 0.25 || t < it.out) return
     if (s.index + 1 < s.items.length) this.startItem(s.index + 1)

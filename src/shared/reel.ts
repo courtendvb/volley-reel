@@ -1,7 +1,7 @@
 // Reel = the blueprint of one highlight video (design §3.4). Pure functions returning new reels,
 // so the UI can treat a reel as immutable state and every change is unit-testable.
 import { roundCoords, type Annotation } from './annotation'
-import type { ClipOverlayOverride, OverlaySettings } from './overlay'
+import type { ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
 export type Marker = 1 | 2 | 3 | 4 | 5
@@ -29,7 +29,7 @@ export interface Reel {
   clips: Record<string, Clip>
   scope: 'marked' | 'all'
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
-  overlay?: Partial<OverlaySettings> // added in M6; read through overlaySettings()
+  overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string
 }
 

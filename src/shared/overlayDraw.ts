@@ -91,10 +91,12 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
 }
 
 // Full-frame card at the head of a marker group: small match line over "[n] MARKER NAME".
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number; name: string; match: string | null }, s: OverlaySettings['titleCard'], theme: OverlayTheme): void {
+// marker null = a scene card: the scene name, a little larger, behind a narrow accent block.
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null }, s: OverlaySettings['titleCard'], theme: OverlayTheme): void {
   const k = H / 720
   ctx.save()
   fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H)
+  if (d.marker === null) { drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme); ctx.restore(); return }
   const numFont = font(24 * k), nameFont = font(28 * k), matchFont = font(12 * k, 400)
   const name = (s.showMarkerName && d.name ? d.name : `MARKER ${d.marker}`).toUpperCase()
   const numW = measure(ctx, String(d.marker), numFont, 0) + 32 * k
@@ -115,6 +117,25 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
   text(ctx, name, px + slant + 14 * k, y + h / 2, nameFont, TEXT, 0.08 * 28 * k)
   ctx.restore()
+}
+
+function drawSceneCard(ctx: Ctx, W: number, H: number, k: number, name: string, match: string | null, theme: OverlayTheme): void {
+  const nameFont = font(36 * k), matchFont = font(12 * k, 400)
+  const label = (name || 'SCENE').toUpperCase()
+  const blockW = 22 * k, h = 58 * k, slant = 12 * k
+  const plateW = measure(ctx, label, nameFont, 0.08 * 36 * k) + 56 * k
+  const total = blockW + plateW - 6 * k
+  const x = (W - total) / 2, y = H / 2 - h / 2 + (match ? 12 * k : 0)
+  if (match) {
+    const mw = measure(ctx, match, matchFont, 0.4 * 12 * k)
+    ctx.textBaseline = 'middle'
+    text(ctx, match, (W - mw) / 2, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
+  }
+  const px = x + blockW - 6 * k
+  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])
+  fillPoly(ctx, theme.accent, [[x, y], [x + blockW, y], [x + blockW - slant, y + h], [x, y + h]])
+  ctx.textBaseline = 'middle'
+  text(ctx, label, px + slant + 18 * k, y + h / 2, nameFont, TEXT, 0.08 * 36 * k)
 }
 
 // Top / bottom × left / center / right, with a margin of 2.5% of the height.

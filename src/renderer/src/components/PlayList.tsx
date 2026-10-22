@@ -89,9 +89,9 @@ const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime
       <span className={`skill skill-${p.skill}`}>{playLabel(p.skill, p.effect)}</span>
       <span className="vtime">{formatTime(videoTime)}</span>
       {group === null ? (
-        <button className="add" title="リールに追加" onClick={e => { e.stopPropagation(); onAdd(r) }}>＋</button>
+        <button className="add" title="今のシーンに追加" onClick={e => { e.stopPropagation(); onAdd(r) }}>＋</button>
       ) : (
-        <span className="in-reel" title={group === 'none' ? 'リールに入っています（マーカーなし）' : `リールに入っています（マーカー ${group}）`}
+        <span className="in-reel" title={group === 'none' ? '今のシーンに入っています（マーカーなし）' : `今のシーンに入っています（マーカー ${group}）`}
           style={group === 'none' ? undefined : { background: MARKER_COLORS[group], color: '#fff' }}>{group === 'none' ? '✓' : group}</span>
       )}
     </div>

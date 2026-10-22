@@ -33,9 +33,7 @@ interface Props {
   orderCount: number
   orderSec: number
   overlaps: Map<string, string[]>
-  onOpenOverlay: () => void
-  onExport: () => void
-  exporting: boolean
+  usedIn: number // videos that include this scene
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -47,8 +45,8 @@ export function ReelPanel(p: Props) {
   if (!reel) {
     return (
       <aside className="reel-panel">
-        <div className="reel-head"><button className="primary" onClick={p.onNewReel}>リールを作成</button></div>
-        <p className="muted pad">プレー一覧の「＋」か数字キー 1〜5 で、プレーをリールに入れられます。</p>
+        <div className="reel-head"><button className="primary" onClick={p.onNewReel}>シーンを作成</button></div>
+        <p className="muted pad">プレー一覧の「＋」か数字キー 1〜5 で、プレーをシーンに入れられます。</p>
       </aside>
     )
   }
@@ -97,7 +95,7 @@ export function ReelPanel(p: Props) {
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
           {g !== 'none' && <button title="上へ" onClick={() => change(shiftClip(reel, c.id, -1))}>↑</button>}
           {g !== 'none' && <button title="下へ" onClick={() => change(shiftClip(reel, c.id, 1))}>↓</button>}
-          <button title="リールから外す" onClick={() => change(removeClip(reel, c.id))}>×</button>
+          <button title="シーンから外す" onClick={() => change(removeClip(reel, c.id))}>×</button>
         </span>
       </div>
     )
@@ -109,29 +107,26 @@ export function ReelPanel(p: Props) {
   return (
     <aside className="reel-panel">
       <div className="reel-head">
-        <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label="リール">
+        <span className="panel-kicker">シーン</span>
+        <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label="シーン">
           {p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <button onClick={p.onNewReel} title="新しいリール">＋</button>
-        <button onClick={() => { if (confirm(`「${reel.name}」を削除しますか？（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="リールを削除">削除</button>
+        <button onClick={p.onNewReel} title="新しいシーン（今の動画にも入れる）">＋</button>
+        <button onClick={() => { if (confirm(`シーン「${reel.name}」を削除しますか？${p.usedIn ? `
+${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="シーンを削除">削除</button>
       </div>
-      <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label="リール名" />
+      <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label="シーンの名前" />
 
       <div className="reel-controls">
         <div className="segmented" role="radiogroup" aria-label="書き出し範囲">
           <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}>マーカー付き</button>
           <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}>全部</button>
         </div>
-        <button onClick={p.onOpenOverlay} title="スコアボード・テロップ・タイトルカード・配色">オーバーレイ</button>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
-          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount}>▶ 通し再生</button>}
+          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount} title="このシーンだけを再生">▶ シーンを再生</button>}
       </div>
       <Defaults d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
-      <div className="reel-export">
-        <button className="primary" onClick={p.onExport} disabled={!p.orderCount || p.exporting}
-          title={p.exporting ? '書き出し中です' : '書き出し範囲のクリップを MP4 にする'}>⤓ MP4 に書き出す</button>
-      </div>
       <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list">

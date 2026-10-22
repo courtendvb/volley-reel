@@ -61,7 +61,7 @@ export function FilterPanel({ filter: f, onChange, people, scope, onScope, shown
         <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} プレー</p>
         <span className="spacer" />
         <button onClick={onAddAll} disabled={!shown || shown === total}
-          title={shown === total ? '条件で絞り込んでから追加してください' : undefined}>結果をリールに追加</button>
+          title={shown === total ? '条件で絞り込んでから追加してください' : undefined}>結果をシーンに追加</button>
       </div>
     </div>
   )

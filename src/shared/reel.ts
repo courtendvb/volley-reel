@@ -136,20 +136,53 @@ export function chronological(reel: Reel, ids: string[], when: (c: Clip) => [str
   })
 }
 
-// After a DVW is re-read: keep clips whose play still has the same fingerprint, re-point the rest
-// by fingerprint, and report those that can't be found (never drop them silently).
-export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Reel; missing: Set<string>; changed: boolean } {
+// After a DVW is re-read: find each clip's play again and report those that can't be found
+// (never drop them silently). Matching goes from strict to loose, because fixing the scout shifts
+// later fingerprints — a missed point added early changes every later score, a nudged timestamp
+// changes the time. Loose matches must be unambiguous, or the clip is reported instead of guessed.
+export type RelinkHow = 'id' | 'fingerprint' | 'code+time' | 'code+near-time'
+
+export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Reel; missing: Set<string>; changed: boolean; how: Map<string, RelinkHow> } {
   const missing = new Set<string>()
+  const how = new Map<string, RelinkHow>()
   let changed = false
   const clips = { ...reel.clips }
   for (const c of Object.values(reel.clips)) {
     const d = dvws[c.matchId]
     if (!d) { missing.add(c.id); continue }
-    if (d.plays[c.playId]?.fingerprint === c.fingerprint) continue
-    const p = d.plays.find(x => x.fingerprint === c.fingerprint)
-    if (p) { clips[c.id] = { ...c, playId: p.id }; changed = true } else missing.add(c.id)
+    if (d.plays[c.playId]?.fingerprint === c.fingerprint) { how.set(c.id, 'id'); continue }
+    const found = findPlay(d, c.fingerprint)
+    if (!found) { missing.add(c.id); continue }
+    clips[c.id] = { ...c, playId: found.play.id, fingerprint: found.play.fingerprint }
+    how.set(c.id, found.how)
+    changed = true
   }
-  return { reel: changed ? { ...reel, clips } : reel, missing, changed }
+  return { reel: changed ? { ...reel, clips } : reel, missing, changed, how }
+}
+
+export const NEAR_TIME_SEC = 2
+
+function findPlay(d: ParsedDVW, fingerprint: string): { play: Play; how: RelinkHow } | null {
+  const exact = d.plays.find(p => p.fingerprint === fingerprint)
+  if (exact) return { play: exact, how: 'fingerprint' }
+  const f = parseFingerprint(fingerprint)
+  if (!f) return null
+  const same = d.plays.filter(p => p.code === f.code && p.setNum === f.setNum)
+  const atTime = same.filter(p => p.time === f.time)
+  if (atTime.length === 1) return { play: atTime[0], how: 'code+time' }
+  if (atTime.length > 1) return null
+  const near = same.map(p => ({ p, dt: Math.abs(p.time - f.time) })).filter(x => x.dt <= NEAR_TIME_SEC).sort((x, y) => x.dt - y.dt)
+  if (near.length === 1 || (near.length > 1 && near[0].dt < near[1].dt)) return { play: near[0].p, how: 'code+near-time' }
+  return null
+}
+
+// `${setNum}|${home}-${away}|${code}|${time}` (see Play.fingerprint).
+export function parseFingerprint(fp: string): { setNum: number; code: string; time: number } | null {
+  const parts = fp.split('|')
+  if (parts.length < 4) return null
+  const setNum = Number(parts[0]), time = Number(parts[parts.length - 1])
+  const code = parts.slice(2, -1).join('|')
+  return isFinite(setNum) && isFinite(time) && code ? { setNum, code, time } : null
 }
 
 // ---- clip ranges (design §3.5) -----------------------------------------------------------

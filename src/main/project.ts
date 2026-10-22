@@ -2,7 +2,7 @@
 // Videos are referenced by path; only files Chromium can't play get a stripped copy in cache/.
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, open, readdir, readFile, rename } from 'node:fs/promises'
 import type { Reel } from '../shared/reel'
 import { basename, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
@@ -14,6 +14,8 @@ const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'], player
 export class Project {
   private matches = new Map<string, Match>()
   private settings: ProjectSettings = DEFAULT_SETTINGS
+  // Problems found while loading (recovered or unreadable files), shown once by the renderer.
+  notices: string[] = []
 
   private constructor(readonly dir: string) {}
 
@@ -23,7 +25,7 @@ export class Project {
     await mkdir(join(dir, 'cache'), { recursive: true })
     await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
     const file = join(dir, 'project.json')
-    const saved = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {}
+    const saved: Partial<ProjectSettings> = existsSync(file) || existsSync(`${file}.bak`) ? (await readJSON<Partial<ProjectSettings>>(file).catch(() => ({ data: {} }))).data : {}
     p.settings = {
       ourTeamCodes: Array.isArray(saved.ourTeamCodes) ? saved.ourTeamCodes : DEFAULT_SETTINGS.ourTeamCodes,
       playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
@@ -31,8 +33,13 @@ export class Project {
     if (!existsSync(file)) await p.saveSettings(p.settings)
     for (const f of await readdir(join(dir, 'matches'))) {
       if (!f.endsWith('.json')) continue
-      const m: Match = JSON.parse(await readFile(join(dir, 'matches', f), 'utf8'))
-      p.matches.set(m.id, m)
+      try {
+        const { data: m, fromBackup } = await readJSON<Match>(join(dir, 'matches', f))
+        if (fromBackup) p.notices.push(`試合「${m.name}」のファイルが読めなかったため、1つ前の保存から復元しました`)
+        p.matches.set(m.id, m)
+      } catch {
+        p.notices.push(`試合のファイル ${f} が読めませんでした（ファイルはそのまま残しています）`)
+      }
     }
     return p
   }
@@ -47,9 +54,19 @@ export class Project {
     const out: Reel[] = []
     for (const f of await readdir(join(this.dir, 'reels'))) {
       if (!f.endsWith('.json')) continue
-      try { out.push(JSON.parse(await readFile(join(this.dir, 'reels', f), 'utf8'))) } catch { /* skip unreadable file; it stays on disk */ }
+      try {
+        const { data, fromBackup } = await readJSON<Reel>(join(this.dir, 'reels', f))
+        if (fromBackup) this.notices.push(`リール「${data.name}」のファイルが読めなかったため、1つ前の保存から復元しました`)
+        out.push(data)
+      } catch {
+        this.notices.push(`リールのファイル ${f} が読めませんでした（ファイルはそのまま残しています）`)
+      }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  takeNotices(): string[] {
+    return this.notices.splice(0)
   }
 
   async saveReel(r: Reel): Promise<void> {
@@ -140,10 +157,35 @@ function safeId(id: string): string {
 }
 
 // Write to a temp file then rename, so a crash never leaves half a JSON behind.
-async function writeJSON(file: string, data: unknown): Promise<void> {
+// Durable save: write a temp file and flush it to disk, keep the previous version as .bak, then
+// rename into place. A crash or power cut leaves either the old file, the new one, or the .bak.
+export async function writeJSON(file: string, data: unknown): Promise<void> {
   const tmp = `${file}.tmp`
-  await writeFile(tmp, JSON.stringify(data, null, 2), 'utf8')
+  const fh = await open(tmp, 'w')
+  try {
+    await fh.writeFile(JSON.stringify(data, null, 2), 'utf8')
+    await fh.sync()
+  } finally {
+    await fh.close()
+  }
+  if (existsSync(file)) await copyFile(file, `${file}.bak`)
   await rename(tmp, file)
+}
+
+// Reads a JSON file, falling back to its .bak when the file is missing or unreadable.
+// A recovered file is restored from the backup right away; otherwise the next save would copy the
+// broken file over the good backup.
+export async function readJSON<T>(file: string): Promise<{ data: T; fromBackup: boolean }> {
+  try {
+    return { data: JSON.parse(await readFile(file, 'utf8')) as T, fromBackup: false }
+  } catch (e) {
+    const bak = `${file}.bak`
+    if (!existsSync(bak)) throw e
+    const data = JSON.parse(await readFile(bak, 'utf8')) as T
+    if (existsSync(file)) await copyFile(file, `${file}.broken`) // kept for inspection
+    await copyFile(bak, file)
+    return { data, fromBackup: true }
+  }
 }
 
 function fmt(sec: number): string {

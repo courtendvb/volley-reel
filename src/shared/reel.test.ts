@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, type Reel,
+  shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -165,5 +165,66 @@ describe('range defaults and trimming', () => {
     expect(o.get('b')).toEqual(['a'])
     expect(o.has('c')).toBe(false)
     expect(o.has('d')).toBe(false)
+  })
+})
+
+describe('relink after scout fixes', () => {
+  const ids = (r: Reel) => Object.values(r.clips).map(c => c.playId)
+
+  it('follows plays when an added point shifts every later score', () => {
+    const { reel } = reelWith([3, 4]) // a01S= (130) and *02S# in the next rally
+    // A missed point inserted before the second rally: later scores move by one.
+    const fixed = parseDVW(DVW.replace('a01SQ=~~~15B', '*p01:00;;;;;;;;1;1;1;1;125;;\na01SQ=~~~15B'))
+    const r = relink(reel, { A: fixed })
+    expect(r.missing.size).toBe(0)
+    expect([...r.how.values()]).toContain('code+time')
+    expect(ids(r.reel).map(i => fixed.plays[i].code.slice(0, 6))).toEqual(['a01SQ=', '*02SM#'])
+  })
+
+  it('follows a play whose timestamp was nudged, and updates the stored fingerprint', () => {
+    const { reel, c } = reelWith([2])
+    const fixed = parseDVW(DVW.replace(';1;1;1;1;104;;\nap00:01', ';1;1;1;1;105;;\nap00:01'))
+    const r = relink(reel, { A: fixed })
+    expect(r.how.get(c[0])).toBe('code+near-time')
+    expect(r.reel.clips[c[0]].fingerprint).toBe(fixed.plays[r.reel.clips[c[0]].playId].fingerprint)
+    expect(relink(r.reel, { A: fixed }).how.get(c[0])).toBe('id') // exact from now on
+  })
+
+  it('reports plays that were deleted or changed code rather than guessing', () => {
+    const { reel, c } = reelWith([2])
+    expect(relink(reel, { A: parseDVW(DVW.replace('a01AQ#PA~36BH1', 'a01AQ+PA~36BH1')) }).missing.has(c[0])).toBe(true)
+    expect(relink(reel, { A: parseDVW(DVW.replace(';1;1;1;1;104;;\nap00:01', ';1;1;1;1;109;;\nap00:01')) }).missing.has(c[0])).toBe(true)
+  })
+
+  it('parses fingerprints', () => {
+    expect(parseFingerprint('2|10-08|*01SQ#~~~16D|1234.5')).toEqual({ setNum: 2, code: '*01SQ#~~~16D', time: 1234.5 })
+    expect(parseFingerprint('junk')).toBeNull()
+  })
+})
+
+// Real files stay out of git; point VR_DVW_DIR at a folder of .dvw to run this.
+const realDir = process.env.VR_DVW_DIR
+describe.skipIf(!realDir)('relink on real DVW files after an added point', () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const files = realDir ? fs.readdirSync(realDir).filter(f => f.toLowerCase().endsWith('.dvw')) : []
+  it.each(files)('%s', f => {
+    const text = fs.readFileSync(path.join(realDir!, f), 'latin1')
+    const before = parseDVW(text)
+    // Insert a home point right after the first point line of the file: every later score shifts.
+    const lines = text.split(/\r?\n/)
+    const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
+    if (at < 0) return
+    const extra = lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`)
+    const after = parseDVW([...lines.slice(0, at + 1), extra, ...lines.slice(at + 1)].join('\n'))
+    const { reel } = addClips(newReel('r'), before.plays.map(p => ({ matchId: 'M', play: p })))
+    const r = relink(reel, { M: after })
+    const lost = r.missing.size / before.plays.length
+    expect(lost).toBeLessThan(0.01) // ambiguous duplicates (same code, same second) may stay unresolved
+    for (const c of Object.values(r.reel.clips)) {
+      if (r.missing.has(c.id)) continue
+      const was = before.plays[reel.clips[c.id].playId], now = after.plays[c.playId]
+      expect([now.code, now.time]).toEqual([was.code, was.time])
+    }
   })
 })

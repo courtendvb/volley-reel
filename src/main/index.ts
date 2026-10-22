@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Reel } from '../shared/reel'
+import type { Video } from '../shared/video'
 import type { ExportJob, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
 import { Exporter } from './export'
 import { Library } from './library'
@@ -183,6 +184,9 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
 
+  ipcMain.handle('video:list', () => project?.listVideos() ?? [])
+  ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveVideo(v) })
+  ipcMain.handle('video:delete', (_e, id: string) => project?.deleteVideo(id))
   ipcMain.handle('reel:list', () => project?.listReels() ?? [])
   ipcMain.handle('reel:save', (_e, r: Reel) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveReel(r) })
   ipcMain.handle('reel:delete', (_e, id: string) => project?.deleteReel(id))
@@ -228,6 +232,18 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
     console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
   }
   console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'export-work'))}`)
+}
+
+// Smoke only: probe an exported MP4 and save frames at the given times next to it.
+function grabFrames(file: string, checks: { name: string; t: number }[]): void {
+  const bin = process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+  const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-show_entries', 'format=duration,size', '-of', 'json', file], { encoding: 'utf8' })
+  console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
+  for (const c of checks) {
+    const out = file.replace(/\.mp4$/, `-${c.name}.png`)
+    spawnSync(join(bin, 'ffmpeg.exe'), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', file, '-frames:v', '1', out])
+    console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
+  }
 }
 
 function corruptFirstReel(dir: string): void {
@@ -277,6 +293,7 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_ANN=1: draw, move and time annotations through pointer events]
 // [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
 // [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run]
+// [VR_SMOKE_VIDEO=1 [VR_SMOKE_EXPORT=<out.mp4>]: videos of shared scenes, cards, undo, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
@@ -297,9 +314,11 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       trim: !!process.env.VR_SMOKE_TRIM,
       ann: !!process.env.VR_SMOKE_ANN,
       ov: process.env.VR_SMOKE_OV,
-      exportTo: process.env.VR_SMOKE_EXPORT,
+      exportTo: process.env.VR_SMOKE_VIDEO ? undefined : process.env.VR_SMOKE_EXPORT,
+      videoExportTo: process.env.VR_SMOKE_VIDEO ? process.env.VR_SMOKE_EXPORT : undefined,
       m8: process.env.VR_SMOKE_M8,
       home: process.env.VR_SMOKE_HOME,
+      video: !!process.env.VR_SMOKE_VIDEO,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
@@ -307,6 +326,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())
     console.log(`[smoke] ${JSON.stringify(result)}`)
     if (result?.export) checkExport(result)
+    if (result?.videoExport && result.exported) grabFrames(result.videoExport, result.exported.checks)
   } catch (e) {
     console.error(`[smoke] failed: ${(e as Error).message}`)
     process.exitCode = 1

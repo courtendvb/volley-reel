@@ -17,7 +17,9 @@ import { captionData, overlaySettings, scoreboardData, type CaptionData, type Ov
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
-import { buildExportJob, planSequence } from './exportRender'
+import { buildExportJob } from './exportRender'
+import { addScene, dropScene, newVideo, planScene, planVideo, type PlanItem, type Video } from '../../shared/video'
+import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { Home } from './components/Home'
 import { ScanDialog } from './components/ScanDialog'
@@ -43,6 +45,8 @@ export function App() {
   const [selected, setSelected] = useState<PlayKey | null>(null)
   const [reels, setReels] = useState<Reel[]>([])
   const [reelId, setReelId] = useState<string | null>(null)
+  const [videos, setVideos] = useState<Video[]>([])
+  const [videoId, setVideoId] = useState<string | null>(null)
   const [activeClipId, setActiveClipId] = useState<string | null>(null)
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -63,6 +67,7 @@ export function App() {
   const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
   const match = matchId ? matches[matchId] ?? null : null
   const reel = reels.find(r => r.id === reelId) ?? null
+  const video = videos.find(v => v.id === videoId) ?? null
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)
@@ -79,7 +84,7 @@ export function App() {
     const gen = ++loadGen.current
     setProject(p)
     setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
-    if (!p) { setDvws({}); setReels([]); setReelId(null); return }
+    if (!p) { setDvws({}); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
     const parsed: Record<string, ParsedDVW> = {}
     for (const m of p.matches) {
       try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
@@ -88,10 +93,15 @@ export function App() {
     setDvws(parsed)
     const listed = await api.listReels()
     if (gen !== loadGen.current) return
+    const vids = await api.listVideos()
+    if (gen !== loadGen.current) return
     const loaded = listed.map(r => relink(r, parsed).reel)
-    saved.current = new Map(loaded.map(r => [r.id, JSON.stringify(r)]))
-    for (const r of loaded) if (relink(r, parsed).changed) saved.current.delete(r.id)
+    saved.current = new Map([...loaded.map(r => [`scene:${r.id}`, JSON.stringify(r)] as const), ...vids.map(v => [`video:${v.id}`, JSON.stringify(v)] as const)])
+    for (const r of loaded) if (relink(r, parsed).changed) saved.current.delete(`scene:${r.id}`)
+    undoStack.current = []; redoStack.current = []
     setReels(loaded)
+    setVideos(vids)
+    setVideoId(id => (id && vids.some(v => v.id === id) ? id : vids[0]?.id ?? null))
     const notes = await api.takeNotices()
     if (notes.length) setNotice(notes.join(' / '))
     setReelId(id => (id && loaded.some(r => r.id === id) ? id : loaded[0]?.id ?? null))
@@ -101,26 +111,34 @@ export function App() {
   // Closing the window flushes whatever is still pending (see the main process's close handler).
   const saved = useRef(new Map<string, string>())
   const [saveState, setSaveState] = useState<'saved' | 'pending' | 'error'>('saved')
-  const saveNow = useCallback(async (r: Reel) => {
-    const json = JSON.stringify(r)
-    if (saved.current.get(r.id) === json) return
+  const allClean = () => latest.current.reels.every(x => saved.current.get(`scene:${x.id}`) === JSON.stringify(x))
+    && latest.current.videos.every(x => saved.current.get(`video:${x.id}`) === JSON.stringify(x))
+  const saveNow = useCallback(async (kind: 'scene' | 'video', obj: Reel | Video) => {
+    const key = `${kind}:${obj.id}`, json = JSON.stringify(obj)
+    if (saved.current.get(key) === json) return
     try {
-      await api.saveReel(r)
-      saved.current.set(r.id, json)
-      if (latest.current.reels.every(x => saved.current.get(x.id) === JSON.stringify(x))) setSaveState('saved')
+      if (kind === 'scene') await api.saveReel(obj as Reel); else await api.saveVideo(obj as Video)
+      saved.current.set(key, json)
+      if (allClean()) setSaveState('saved')
     } catch (e) {
       setSaveState('error')
-      setError(`リールを保存できませんでした: ${(e as Error).message}`)
+      setError(`${kind === 'scene' ? 'シーン' : '動画'}を保存できませんでした: ${(e as Error).message}`)
     }
   }, [])
+  const flushAll = useCallback(() => Promise.all([
+    ...latest.current.reels.map(r => saveNow('scene', r)), ...latest.current.videos.map(v => saveNow('video', v)),
+  ]), [saveNow])
   useEffect(() => {
-    const dirty = reels.filter(r => saved.current.get(r.id) !== JSON.stringify(r))
+    const dirty = [
+      ...reels.filter(r => saved.current.get(`scene:${r.id}`) !== JSON.stringify(r)).map(r => ['scene', r] as const),
+      ...videos.filter(v => saved.current.get(`video:${v.id}`) !== JSON.stringify(v)).map(v => ['video', v] as const),
+    ]
     if (!dirty.length) return
     setSaveState(s => (s === 'error' ? s : 'pending'))
-    const timers = dirty.map(r => window.setTimeout(() => void saveNow(r), SAVE_DELAY_MS))
+    const timers = dirty.map(([k, o]) => window.setTimeout(() => void saveNow(k, o), SAVE_DELAY_MS))
     return () => timers.forEach(t => clearTimeout(t))
-  }, [reels, saveNow])
-  useEffect(() => api.onFlushRequest(async () => { await Promise.all(latest.current.reels.map(saveNow)) }), [saveNow])
+  }, [reels, videos, saveNow])
+  useEffect(() => api.onFlushRequest(async () => { await flushAll() }), [flushAll])
 
   const settings = project?.settings
   const refsByMatch = useMemo(() => {
@@ -139,39 +157,50 @@ export function App() {
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
   // ---- reels --------------------------------------------------------------------------------
-  // Undo history per reel. Edits within UNDO_MERGE_MS of each other (a handle drag, typing a
-  // name) become one step, so undo goes back to before the gesture, not one pixel.
-  const history = useRef(new Map<string, { past: Reel[]; future: Reel[]; lastAt: number }>())
-  const record = useCallback((prev: Reel) => {
-    const h = history.current.get(prev.id) ?? { past: [], future: [], lastAt: 0 }
-    const now = Date.now()
-    if (now - h.lastAt > UNDO_MERGE_MS) { h.past.push(prev); if (h.past.length > UNDO_LIMIT) h.past.shift() }
-    h.lastAt = now
-    h.future = []
-    history.current.set(prev.id, h)
+  // One undo history for scenes and videos, in the order edits happened. Edits to the same thing
+  // within UNDO_MERGE_MS (a handle drag, typing a name) become one step.
+  type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video }
+  const undoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
+  const redoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
+  const record = useCallback((prev: Snapshot) => {
+    const key = `${prev.kind}:${prev.value.id}`, now = Date.now(), top = undoStack.current[undoStack.current.length - 1]
+    if (top && top.key === key && now - top.at < UNDO_MERGE_MS) top.at = now
+    else { undoStack.current.push({ key, prev, at: now }); if (undoStack.current.length > UNDO_LIMIT) undoStack.current.shift() }
+    redoStack.current = []
   }, [])
-  const updateReel = useCallback((r: Reel) => {
-    const prev = latest.current.reels.find(x => x.id === r.id)
-    if (prev && prev !== r) record(prev)
+  const putScene = (r: Reel) => {
     latest.current = { ...latest.current, reels: latest.current.reels.map(x => (x.id === r.id ? r : x)), reel: latest.current.reel?.id === r.id ? r : latest.current.reel }
     setReels(rs => rs.map(x => (x.id === r.id ? r : x)))
+  }
+  const putVideo = (v: Video) => {
+    latest.current = { ...latest.current, videos: latest.current.videos.map(x => (x.id === v.id ? v : x)), video: latest.current.video?.id === v.id ? v : latest.current.video }
+    setVideos(vs => vs.map(x => (x.id === v.id ? v : x)))
+  }
+  const updateReel = useCallback((r: Reel) => {
+    const prev = latest.current.reels.find(x => x.id === r.id)
+    if (prev && prev !== r) record({ kind: 'scene', value: prev })
+    putScene(r)
+  }, [record])
+  const updateVideo = useCallback((v: Video) => {
+    const prev = latest.current.videos.find(x => x.id === v.id)
+    if (prev && prev !== v) record({ kind: 'video', value: prev })
+    putVideo(v)
   }, [record])
   const undoRedo = useCallback((dir: 'undo' | 'redo') => {
-    const cur = latest.current.reel
-    const h = cur && history.current.get(cur.id)
-    if (!cur || !h) return
-    const [from, to] = dir === 'undo' ? [h.past, h.future] : [h.future, h.past]
-    const next = from.pop()
-    if (!next) return
-    to.push(cur)
-    h.lastAt = 0
-    latest.current = { ...latest.current, reels: latest.current.reels.map(x => (x.id === cur.id ? next : x)), reel: next }
-    setReels(rs => rs.map(x => (x.id === cur.id ? next : x)))
+    const [from, to] = dir === 'undo' ? [undoStack.current, redoStack.current] : [redoStack.current, undoStack.current]
+    for (let e = from.pop(); e; e = from.pop()) {
+      const cur = e.prev.kind === 'scene' ? latest.current.reels.find(x => x.id === e!.prev.value.id) : latest.current.videos.find(x => x.id === e!.prev.value.id)
+      if (!cur) continue // deleted since: skip to the next step
+      to.push({ key: e.key, prev: { kind: e.prev.kind, value: cur } as Snapshot, at: 0 })
+      if (e.prev.kind === 'scene') { putScene(e.prev.value); setReelId(e.prev.value.id) } else { putVideo(e.prev.value); setVideoId(e.prev.value.id) }
+      return
+    }
   }, [])
   const missing = useMemo(() => (reel ? relink(reel, dvws).missing : new Set<string>()), [reel, dvws])
-  const defaults = useMemo(() => (reel ? rangeDefaults(reel) : undefined), [reel])
-  const clipInfo = useCallback((c: Clip): ClipInfo => {
+  // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
+  const infoFor = useCallback((c: Clip, scene: Reel | null): ClipInfo => {
     const m = matches[c.matchId], d = dvws[c.matchId], play = d?.plays[c.playId]
+    const defaults = scene ? rangeDefaults(scene) : undefined
     return {
       ref: refsByMatch[c.matchId]?.[c.playId],
       range: d && m ? clipRange(c, d, m.offsetSec, defaults) : null,
@@ -179,7 +208,17 @@ export function App() {
       matchLabel: matchLabels[c.matchId] ?? '?',
       date: m?.date ?? '',
     }
-  }, [matches, dvws, refsByMatch, matchLabels, defaults])
+  }, [matches, dvws, refsByMatch, matchLabels])
+  const clipInfo = useCallback((c: Clip): ClipInfo => infoFor(c, reel), [infoFor, reel])
+  // A scene's clips in play order (its scope), leaving out clips that can't be played.
+  const orderOf = useCallback((s: Reel): Clip[] => {
+    const miss = relink(s, dvws).missing
+    return playOrder(s, c => { const i = infoFor(c, s); return [i.date, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
+  }, [dvws, infoFor])
+  const sceneStats = useCallback((s: Reel) => {
+    const o = orderOf(s)
+    return { clips: o.length, sec: o.reduce((t, c) => { const r = infoFor(c, s).range!; return t + r.out - r.in }, 0) }
+  }, [orderOf, infoFor])
   const order = useMemo(() => {
     if (!reel) return []
     return playOrder(reel, c => { const i = clipInfo(c); return [i.date, i.range?.in ?? 0] })
@@ -209,33 +248,56 @@ export function App() {
   const withReel = useCallback((fn: (r: Reel) => Reel): Reel => {
     const rs = latest.current.reels
     const cur = rs.find(r => r.id === latest.current.reelId)
-    const next = fn(cur ?? newReel(`リール ${rs.length + 1}`))
-    if (cur) record(cur)
+    const next = fn(cur ?? newReel(`シーン ${rs.length + 1}`))
+    if (cur) record({ kind: 'scene', value: cur })
     const all = cur ? rs.map(r => (r.id === cur.id ? next : r)) : [...rs, next]
     latest.current = { ...latest.current, reels: all, reelId: next.id, reel: next }
     setReels(all)
     setReelId(next.id)
+    if (!cur) placeInVideo(next.id)
     return next
   }, [record])
+  // A new scene goes into the current video; with no video yet, the first one is made for it.
+  const placeInVideo = (sceneId: string) => {
+    const v = latest.current.video
+    if (v) { updateVideo(addScene(v, sceneId)); return }
+    const nv = newVideo(`動画 ${latest.current.videos.length + 1}`, [sceneId])
+    latest.current = { ...latest.current, videos: [...latest.current.videos, nv], video: nv }
+    setVideos(vs => [...vs, nv]); setVideoId(nv.id)
+  }
 
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group).reel)
   }, [withReel])
 
   const createReel = () => {
-    const r = newReel(`リール ${reels.length + 1}`)
+    const r = newReel(`シーン ${reels.length + 1}`)
+    latest.current = { ...latest.current, reels: [...latest.current.reels, r] }
     setReels(rs => [...rs, r]); setReelId(r.id); setActiveClipId(null)
+    placeInVideo(r.id)
   }
+  // Deleting a scene takes it out of every video that used it.
   const deleteReel = async (id: string) => {
     await api.deleteReel(id)
-    saved.current.delete(id)
+    saved.current.delete(`scene:${id}`)
     const rest = reels.filter(r => r.id !== id)
     setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
+    for (const v of latest.current.videos) if (v.sceneIds.includes(id)) updateVideo(dropScene(v, id))
+  }
+  const createVideo = () => {
+    const v = newVideo(`動画 ${videos.length + 1}`, reel ? [reel.id] : [])
+    setVideos(vs => [...vs, v]); setVideoId(v.id)
+  }
+  const deleteVideo = async (id: string) => {
+    await api.deleteVideo(id)
+    saved.current.delete(`video:${id}`)
+    const rest = videos.filter(v => v.id !== id)
+    setVideos(rest); setVideoId(rest[0]?.id ?? null)
   }
 
-  const overlay = useMemo(() => overlaySettings(reel?.overlay), [reel?.overlay])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null })
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library }
+  const overlay = useMemo(() => overlaySettings(video?.overlay), [video?.overlay])
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null })
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library }
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -259,28 +321,38 @@ export function App() {
     playback.seekIn(c.matchId, range.in, { play: true })
   }, [])
 
-  // Through-play items: the same plan the export uses (clips, with title cards when enabled).
-  // startAt and the reported index count clips, not cards.
-  const playThrough = useCallback((startAt = 0) => {
-    const { order: o, clipInfo: info, reel: r, overlay: ov, matches: ms, settings: st } = latest.current
-    if (!r) return
-    const items: SequenceItem[] = [], clipAt: (Clip | null)[] = []
-    let startItem = 0, clipNo = 0
-    for (const p of planSequence(o, r, ov, ms, st?.ourTeamCodes ?? [])) {
-      // A card right before the start clip plays first, so the start points at the card.
-      if (p.kind === 'card') { if (clipNo === startAt) startItem = items.length; items.push({ card: p.card, durationSec: p.durationSec }); clipAt.push(null); continue }
-      if (clipNo === startAt && clipAt[items.length - 1] !== null) startItem = items.length
-      items.push({ key: p.clip.matchId, ...info(p.clip).range! })
-      clipAt.push(p.clip)
+  // The plan both the through-play and the export follow: a whole video (scenes with their cards),
+  // or one scene on its own for previewing it.
+  const currentPlan = useCallback((target: 'video' | 'scene'): PlanItem[] => {
+    const { video: v, reel: r, reels: rs, overlay: ov, matches: ms, settings: st, orderOf: of } = latest.current
+    const codes = st?.ourTeamCodes ?? []
+    if (target === 'scene') return r ? planScene(of(r), r, ov, ms, codes) : []
+    return v ? planVideo(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, codes) : []
+  }, [])
+
+  // startAt and the reported index count clips, not cards. The scene editor follows the scene of
+  // the clip on screen, so number keys tag the clip that is playing.
+  const playThrough = useCallback((target: 'video' | 'scene', startAt = 0) => {
+    const { reels: rs, infoFor: inf } = latest.current
+    const byId = Object.fromEntries(rs.map(s => [s.id, s]))
+    const items: SequenceItem[] = [], clipAt: ({ clip: Clip; sceneId: string } | null)[] = []
+    let startItem = -1, clipNo = 0
+    for (const p of currentPlan(target)) {
+      // The cards right before the start clip (a scene card, then a marker card) play first, so
+      // the start points at the first of them.
+      if (p.kind === 'card') { if (clipNo === startAt && startItem < 0) startItem = items.length; items.push({ card: p.card, durationSec: p.durationSec }); clipAt.push(null); continue }
+      if (clipNo === startAt && startItem < 0) startItem = items.length
+      items.push({ key: p.clip.matchId, ...inf(p.clip, byId[p.sceneId] ?? null).range! })
+      clipAt.push({ clip: p.clip, sceneId: p.sceneId })
       clipNo++
     }
     playback.playSequence(items, i => {
       // On a title card, the clip after it is the one the panels follow.
-      const c = i === null ? null : clipAt[i] ?? clipAt[i + 1] ?? null
-      setPlayingClipId(c?.id ?? null)
-      if (c) { setActiveClipId(c.id); setSelected({ matchId: c.matchId, playId: c.playId }); setMatchId(c.matchId) }
-    }, startItem)
-  }, [])
+      const at = i === null ? null : clipAt[i] ?? clipAt[i + 1] ?? null
+      setPlayingClipId(at?.clip.id ?? null)
+      if (at) { setReelId(at.sceneId); setActiveClipId(at.clip.id); setSelected({ matchId: at.clip.matchId, playId: at.clip.playId }); setMatchId(at.clip.matchId) }
+    }, Math.max(0, startItem))
+  }, [currentPlan])
 
   // Number keys tag the active clip — the one playing in a through-play, or the last clicked.
   // With no clip active, the selected play in the list is added with that marker.
@@ -326,9 +398,9 @@ export function App() {
   const activeOverlay = overlayData(active)
   latest.current.overlayData = overlayData
   const setOverlay = useCallback((s: OverlaySettings) => {
-    const r = latest.current.reel
-    if (r) updateReel({ ...r, overlay: s, updatedAt: new Date().toISOString() })
-  }, [updateReel])
+    const v = latest.current.video
+    if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
+  }, [updateVideo])
 
   const setAnns = useCallback((list: Annotation[]) => {
     const { reel: r, activeClipId: id } = latest.current
@@ -389,21 +461,23 @@ export function App() {
   }), [])
 
   const startExport = useCallback(async (outPathArg?: string) => {
-    const { reel: r, order: o, overlay: ov, matches: ms, settings: st, clipInfo: info } = latest.current
-    if (!r || !o.length) return null
-    const outPath = outPathArg ?? await api.chooseExportPath(r.name)
+    const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf } = latest.current
+    const plan = currentPlan('video')
+    if (!v || !plan.some(p => p.kind === 'clip')) return null
+    const outPath = outPathArg ?? await api.chooseExportPath(v.name)
     if (!outPath) return null
     setExportState({ status: 'preparing', ratio: 0, message: 'オーバーレイを準備しています' })
     try {
-      const job = await buildExportJob(planSequence(o, r, ov, ms, st?.ourTeamCodes ?? []), ov,
-        { range: c => info(c).range, overlayData: c => latest.current.overlayData!(c), matches: ms }, outPath)
+      const byId = Object.fromEntries(rs.map(s => [s.id, s]))
+      const job = await buildExportJob(plan, ov,
+        { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms }, outPath)
       await api.startExport(job)
       return job
     } catch (e) {
       setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${(e as Error).message}` })
       return null
     }
-  }, [])
+  }, [currentPlan])
 
   // ---- dev self-check (VR_SMOKE) ------------------------------------------------------------
   useEffect(() => {
@@ -425,6 +499,7 @@ export function App() {
       if (opts.ov) return smokeOverlay(res, opts.ov)
       if (opts.exportTo) return smokeExport(res, opts.exportTo)
       if (opts.m8) return smokeM8(res, opts.m8)
+      if (opts.video) return smokeVideo(res, opts)
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -444,6 +519,87 @@ export function App() {
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
       }
+    }
+
+    // Videos made of shared scenes: "ハイライト" = attack scene (two marker groups) + serve scene,
+    // "サーブ集" = the same serve scene. Checks the plan with scene and marker cards, that the scene
+    // editor follows a through-play, that editing the shared scene changes both videos, undo across
+    // a video edit and a scene edit, and (with exportTo) the exported file.
+    const smokeVideo = async (res: PlayRef[], opts: SmokeOpts) => {
+      const ours = res.filter(x => x.teamRole === 'our')
+      const kills = ours.filter(x => x.play.skill === 'A' && x.play.effect === '#').slice(0, 3)
+      const serves = ours.filter(x => x.play.skill === 'S' && (x.play.effect === '#' || x.play.effect === '+')).slice(0, 2)
+      let a = addClips(newReel('アタック'), kills.map(x => ({ matchId: x.matchId, play: x.play }))).reel
+      const ai = a.groups.none.slice()
+      a = toggleMarker(toggleMarker(toggleMarker(a, ai[0], 1), ai[1], 2), ai[2], 1)
+      a = { ...a, markerNames: { ...a.markerNames, 1: 'Kills', 2: 'Second look' }, rangeDefaults: { mode: 'keyplay', rallyLead: 1.5, rallyTail: 2.5, keyBefore: 3, keyAfter: 3 } }
+      let s = addClips(newReel('サーブ'), serves.map(x => ({ matchId: x.matchId, play: x.play }))).reel
+      for (const id of s.groups.none.slice()) s = toggleMarker(s, id, 1)
+      const cardsOn = { titleCard: { enabled: true, sceneCards: true, durationSec: 1 } }
+      const v1 = newVideo('ハイライト', [a.id, s.id], cardsOn), v2 = newVideo('サーブ集', [s.id], cardsOn)
+      setReels(rs => [...rs, a, s]); setReelId(a.id)
+      setVideos(vs => [...vs, v1, v2]); setVideoId(v1.id)
+      await waitFor(() => latest.current.video?.id === v1.id && latest.current.reels.some(x => x.id === s.id) || null, 20000, 'videos')
+      const describe = (p: PlanItem[]) => p.map(it => it.kind === 'card' ? (it.card.marker === null ? `[scene ${it.card.name}]` : `[${it.card.marker} ${it.card.name}]`) : `${latest.current.reels.find(x => x.id === it.sceneId)?.name}:${it.clip.playId}`)
+      const planV1 = describe(currentPlan('video'))
+      const lens = { attackKeyplay: kills.length ? +(latest.current.infoFor(a.clips[ai[0]], a).range!.out - latest.current.infoFor(a.clips[ai[0]], a).range!.in).toFixed(2) : null }
+
+      // Through-play: which scene the editor shows a moment after each item starts.
+      const timeline: string[] = []
+      let last = -1
+      const unsub = playback.subscribe(st => {
+        if (!st.seq || st.seq.index === last) return
+        last = st.seq.index
+        const card = st.card
+        setTimeout(() => timeline.push(card ? `card:${card.marker ?? 'scene'}:${card.name}` : `clip, editor=${latest.current.reel?.name}`), 250)
+      })
+      playThrough('video', 0)
+      await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 180000, 'video through-play')
+      unsub()
+      await sleep(300)
+
+      // Shared scene: unmark one serve. Both videos lose that clip.
+      const sNow = latest.current.reels.find(x => x.id === s.id)!
+      updateReel(toggleMarker(sNow, sNow.groups[1][0], null))
+      await sleep(200)
+      const v1After = describe(currentPlan('video'))
+      setVideoId(v2.id); await waitFor(() => latest.current.video?.id === v2.id || null, 5000, 'v2')
+      const v2After = describe(currentPlan('video'))
+      setVideoId(v1.id); await waitFor(() => latest.current.video?.id === v1.id || null, 5000, 'v1')
+
+      // Undo across kinds: rename the video, then edit the attack scene; Ctrl+Z twice.
+      await sleep(700)
+      updateVideo({ ...latest.current.video!, name: 'ハイライト（改）' })
+      await sleep(700)
+      const aNow = latest.current.reels.find(x => x.id === a.id)!
+      updateReel({ ...aNow, name: 'アタック（改）' })
+      await sleep(200)
+      const key = async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(150) }
+      const names = () => `${latest.current.videos.find(x => x.id === v1.id)?.name} / ${latest.current.reels.find(x => x.id === a.id)?.name}`
+      const undo = [names()]
+      await key(); undo.push(names())
+      await key(); undo.push(names())
+
+      let exported: unknown = null
+      if (opts.videoExportTo) {
+        const plan = currentPlan('video')
+        const job = await startExport(opts.videoExportTo)
+        await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'export')
+        const starts: number[] = []; let acc = 0
+        for (const it of job!.items) { starts.push(acc); acc += it.kind === 'clip' ? it.out - it.in : it.durationSec }
+        exported = { status: latest.current.exportState?.status, items: job!.items.map(it => it.kind), expectedSec: +acc.toFixed(2),
+          checks: [{ name: 'scene-card', t: 0.5 }, { name: 'marker-card', t: starts[1] + 0.5 }, { name: 'clip', t: starts[2] + 1 },
+            { name: 'second-scene-card', t: starts[plan.findIndex((it, i) => i > 0 && it.kind === 'card' && it.card.marker === null)] + 0.5 }] }
+      }
+      return { planV1, lens, timeline, v1After, v2After, undo, videoExport: opts.videoExportTo ?? null, exported }
+    }
+
+    // Each smoke scene gets its own video, taking over the overlay the smoke set on the scene
+    // (scene cards off, so timelines match the checks written before videos existed).
+    const smokeUse = (r: Reel) => {
+      const v = newVideo(`${r.name} video`, [r.id], { ...(r.overlay ?? {}), titleCard: { sceneCards: false, ...(r.overlay?.titleCard ?? {}) } })
+      setReels(rs => [...rs, r]); setReelId(r.id)
+      setVideos(vs => [...vs, v]); setVideoId(v.id)
     }
 
     // v3 home flow. 'scan': scan folders and leave the pairing dialog open. 'import-create': import
@@ -531,7 +687,7 @@ export function App() {
       r = toggleMarker(toggleMarker(toggleMarker(r, ids[0], 1), ids[1], 1), ids[2], 2)
       r = { ...r, markerNames: { ...r.markerNames, 1: 'Serve and pass', 2: 'Blocks' },
         overlay: { ...overlaySettings(undefined), titleCard: { enabled: true, durationSec: 1.5, showMarkerName: true, showMatch: true } } }
-      setReels(rs => [...rs, r]); setReelId(r.id)
+      smokeUse(r)
       await waitFor(() => latest.current.reel?.id === r.id && latest.current.order.length === 3 ? true : null, 20000, 'export reel')
       const c0 = latest.current.reel!.clips[ids[0]], r0 = latest.current.clipInfo(c0).range!
       const anns: Annotation[] = [
@@ -592,7 +748,7 @@ export function App() {
       r = toggleMarker(toggleMarker(toggleMarker(r, ids[0], 1), ids[1], 1), ids[2], 2)
       r = { ...r, markerNames: { ...r.markerNames, 1: 'Big serves', 2: 'Perfect passes' },
         overlay: { ...overlaySettings(undefined), theme: { base: '#0B1F3A', accent: '#C9A227' }, titleCard: { enabled: true, durationSec: 1.5, showMarkerName: true, showMatch: true } } }
-      setReels(rs => [...rs, r]); setReelId(r.id)
+      smokeUse(r)
       await waitFor(() => latest.current.reel?.id === r.id || null, 20000, 'overlay reel')
       activateClip(latest.current.reel!.clips[ids[0]])
       await waitFor(() => playback.attachedKey === picks[0].matchId && playback.current.ready ? true : null, 20000, 'video')
@@ -624,11 +780,11 @@ export function App() {
         if (s.card !== lastCard) { lastCard = s.card; if (s.card) timeline.push({ kind: `card ${s.card.marker} ${s.card.name} / ${s.card.match}`, at: Math.round(performance.now() - t0) }) }
         if (s.seq && s.seq.index !== lastIdx) { lastIdx = s.seq.index; if (!s.card) timeline.push({ kind: `clip (item ${s.seq.index})`, at: Math.round(performance.now() - t0) }) }
       })
-      playThrough(0)
+      playThrough('video', 0)
       await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 120000, 'through-play')
       unsub()
       // Screenshot on the first title card.
-      playThrough(0); await sleep(600)
+      playThrough('video', 0); await sleep(600)
       return { shown, hidden, rewritten, theme, data, timeline, totalMs: Math.round(performance.now() - t0) }
     }
 
@@ -754,7 +910,7 @@ export function App() {
       const ids = r.groups.none.slice()
       spec.markers.forEach((m, i) => { if (m) r = toggleMarker(r, ids[i], m) })
       r = { ...r, groupOrder: spec.groupOrder ?? r.groupOrder, scope: spec.scope ?? 'all' }
-      setReels(rs => [...rs, r]); setReelId(r.id)
+      smokeUse(r)
       await waitFor(() => latest.current.reel?.id === r.id && latest.current.order.length ? true : null, 20000, 'reel order')
       const o = latest.current.order, info = latest.current.clipInfo
       const plan = o.map(c => ({ match: latest.current.matches[c.matchId].name, play: c.playId, marker: groupOf(r, c.id), ...info(c).range! }))
@@ -769,15 +925,15 @@ export function App() {
         }
         if (s.seq && s.seq.index !== cur?.i) timeline.push({ i: s.seq.index, match: plan[s.seq.index].match, startedMs: Math.round(performance.now() - t0), onScreenMs: null, firstTime: null })
       })
-      playThrough(0)
+      playThrough('video', 0)
       await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 180000, () => `through-play end (at ${JSON.stringify(timeline.at(-1))}, t=${playback.current.time}, key=${playback.attachedKey}, ${playback.debugVideo})`)
       unsub()
       const totalMs = Math.round(performance.now() - t0)
-      playThrough(Math.min(spec.shotAt ?? 1, o.length - 1))
+      playThrough('video', Math.min(spec.shotAt ?? 1, o.length - 1))
       await sleep(1500)
       return { plan, timeline, totalMs, expectedMs: Math.round(plan.reduce((s, x) => s + (x.out - x.in) * 1000, 0)) }
     }
-  }, [jump, loadProject, playThrough, activateClip, updateReel, overlayData, setOverlay, startExport])
+  }, [jump, loadProject, playThrough, activateClip, updateReel, updateVideo, overlayData, setOverlay, startExport, currentPlan])
 
   // ---- project ------------------------------------------------------------------------------
   // ---- library and projects (v3) -------------------------------------------------------------
@@ -791,11 +947,11 @@ export function App() {
     if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
   })
   const goHome = async () => {
-    await Promise.all(latest.current.reels.map(saveNow)) // nothing pending is lost on the way out
+    await flushAll() // nothing pending is lost on the way out
     playback.stopSequence()
     await api.closeProject()
     resetView()
-    setProject(null); setReels([]); setReelId(null); setDvws({})
+    setProject(null); setReels([]); setReelId(null); setVideos([]); setVideoId(null); setDvws({})
     setLibrary(await api.getLibrary()); setRecent(await api.recentProjects())
   }
   const chooseLibrary = () => guard(async () => { const l = await api.chooseLibrary(); if (l) { setLibrary(l); setProject(null) } })
@@ -934,20 +1090,28 @@ export function App() {
               />
             )}
           </section>
-          <ReelPanel
-            reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
-            onNewReel={createReel} onDeleteReel={deleteReel} onChange={updateReel}
-            info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
-            onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough(0)} onStop={() => playback.stopSequence()}
-            orderCount={order.length} orderSec={orderSec} overlaps={overlaps} onOpenOverlay={() => setOverlayOpen(true)}
-            onExport={() => void startExport()} exporting={exportState?.status === 'running' || exportState?.status === 'preparing'}
-          />
+          <div className="right-col">
+            <VideoPanel
+              videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
+              onSelectVideo={setVideoId} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
+              onSelectScene={id => { setReelId(id); setActiveClipId(null) }} onNewScene={createReel}
+              onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onStop={() => playback.stopSequence()}
+              onExport={() => void startExport()} exporting={exportState?.status === 'running' || exportState?.status === 'preparing'}
+            />
+            <ReelPanel
+              reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
+              onNewReel={createReel} onDeleteReel={id => void deleteReel(id)} onChange={updateReel}
+              info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
+              onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onStop={() => playback.stopSequence()}
+              orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
+            />
+          </div>
         </main>
       )}
 
-      {overlayOpen && reel && (
+      {overlayOpen && video && (
         <OverlayDialog settings={overlay} onChange={setOverlay} onClose={() => setOverlayOpen(false)}
-          sample={overlaySample(overlayData(active ?? order[0] ?? Object.values(reel.clips)[0] ?? null), reel)} />
+          sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
@@ -975,6 +1139,8 @@ interface SmokeOpts {
   ov?: string
   exportTo?: string
   m8?: string
+  video?: boolean
+  videoExportTo?: string
   home?: string
   folders?: string[]
   newProject?: string
@@ -982,12 +1148,12 @@ interface SmokeOpts {
 }
 
 // Dialog preview data: the active (or first) clip's real data, or a placeholder for an empty reel.
-function overlaySample(d: { scoreboard: ScoreboardData; caption: CaptionData } | null, r: Reel) {
-  const m = r.groupOrder.find(g => r.groups[g].length) ?? 1
+function overlaySample(d: { scoreboard: ScoreboardData; caption: CaptionData } | null, r: Reel | null) {
+  const m = r?.groupOrder.find(g => r.groups[g].length) ?? 1
   return {
     scoreboard: d?.scoreboard ?? { left: 'HTH', right: 'OPP', ptsL: 17, ptsR: 9, setsL: 1, setsR: 0, winner: 'L' as const },
     caption: d?.caption ?? { number: 1, name: 'PLAYER', line: 'SERVE · ACE' },
-    card: { marker: m, name: r.markerNames[m], match: null },
+    card: { marker: m, name: r?.markerNames[m] ?? '', match: null },
   }
 }
 

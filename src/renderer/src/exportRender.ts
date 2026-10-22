@@ -1,42 +1,16 @@
-// Turns a reel into an ExportJob: the clip order with title cards, and every overlay drawn to PNG
-// with the same functions as the preview (design §3.8). The main process does the ffmpeg work.
+// Turns a video plan (scenes → marker groups → clips, with title cards) into an ExportJob, with
+// every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
-import { ourSide } from '../../shared/filter'
 import type { CaptionData, OverlaySettings, ScoreboardData } from '../../shared/overlay'
 import { drawCaption, drawScoreboard, drawTitleCard } from '../../shared/overlayDraw'
-import { groupOf, type Clip, type Reel } from '../../shared/reel'
+import type { Clip } from '../../shared/reel'
+import type { PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
-
-export type Card = { marker: number; name: string; match: string | null }
-export type PlanItem = { kind: 'card'; card: Card; durationSec: number } | { kind: 'clip'; clip: Clip }
-
-// Clips in order, with a title card before each marker group when enabled. Used by both the
-// through-play preview and the export, so the two never disagree about where cards go.
-export function planSequence(order: Clip[], reel: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem[] {
-  const out: PlanItem[] = []
-  order.forEach((c, i) => {
-    const g = groupOf(reel, c.id)
-    if (overlay.titleCard.enabled && g !== null && g !== 'none' && (i === 0 || groupOf(reel, order[i - 1].id) !== g)) {
-      const oneMatch = new Set(reel.groups[g].map(id => reel.clips[id]?.matchId)).size === 1
-      const m = matches[c.matchId]
-      out.push({ kind: 'card', card: { marker: g, name: reel.markerNames[g], match: oneMatch && m ? cardMatchLabel(m, ourCodes) : null }, durationSec: overlay.titleCard.durationSec })
-    }
-    out.push({ kind: 'clip', clip: c })
-  })
-  return out
-}
-
-// Title card match line: "VS SMT · 2026-10-11".
-export function cardMatchLabel(m: Match, codes: string[]): string {
-  const side = ourSide(m.teams, codes)
-  const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
-  return `VS ${opp}${m.date ? ` · ${m.date}` : ''}`
-}
 
 export const EXPORT_HEIGHT = 720
 
 interface Deps {
-  range: (c: Clip) => { in: number; out: number } | null
+  range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
   overlayData: (c: Clip) => { scoreboard: ScoreboardData; caption: CaptionData } | null
   matches: Record<string, Match>
 }
@@ -60,7 +34,7 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(W, H, ctx => drawTitleCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme)) })
       continue
     }
-    const c = p.clip, r = d.range(c)
+    const c = p.clip, r = d.range(c, p.sceneId)
     if (!r) continue
     items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, r, overlay, d, W, H) })
   }

@@ -16,7 +16,8 @@ export interface OverlaySettings {
   theme: OverlayTheme
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean; highlightWinner: boolean }
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean }
-  titleCard: { enabled: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean }
+  // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene
+  titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean }
 }
 
 export interface ClipOverlayOverride {
@@ -36,11 +37,14 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   theme: THEME_PRESETS[0].theme,
   scoreboard: { enabled: true, anchor: 'tc', scale: 1, showSets: true, highlightWinner: true },
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true },
-  titleCard: { enabled: false, durationSec: 2, showMarkerName: true, showMatch: true },
+  titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
 }
 
+// What gets saved: any part may be missing, and missing parts fall back to the defaults.
+export type OverlayPatch = { [K in keyof OverlaySettings]?: Partial<OverlaySettings[K]> }
+
 // Reels saved before M6 have no overlay settings; partial objects keep the defaults underneath.
-export function overlaySettings(saved: Partial<OverlaySettings> | undefined): OverlaySettings {
+export function overlaySettings(saved: OverlayPatch | undefined): OverlaySettings {
   const s = saved ?? {}
   return {
     theme: { ...DEFAULT_OVERLAY.theme, ...(s.theme ?? {}) },

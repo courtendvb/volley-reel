@@ -1,5 +1,6 @@
 // Types shared by main, preload and renderer.
 import type { Reel } from './reel'
+import type { Video } from './video'
 
 export type Side = '*' | 'a'
 
@@ -146,6 +147,9 @@ export interface Api {
   listReels(): Promise<Reel[]>
   saveReel(r: Reel): Promise<void>
   deleteReel(id: string): Promise<void>
+  listVideos(): Promise<Video[]>
+  saveVideo(v: Video): Promise<void>
+  deleteVideo(id: string): Promise<void>
   chooseExportPath(defaultName: string): Promise<string | null>
   startExport(job: ExportJob): Promise<void>
   cancelExport(): Promise<void>

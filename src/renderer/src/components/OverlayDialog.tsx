@@ -47,11 +47,11 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal overlay-modal" role="dialog" aria-label="オーバーレイ設定" onClick={e => e.stopPropagation()}>
-        <h2>オーバーレイ設定</h2>
+        <h2>オーバーレイ設定（この動画）</h2>
         <div className="ov-body">
           <div className="ov-preview">
             <canvas ref={frame} width={PREVIEW_W * 2} height={PREVIEW_H * 2} style={{ width: PREVIEW_W, height: PREVIEW_H }} />
-            {s.titleCard.enabled && <canvas ref={card} width={PREVIEW_W} height={PREVIEW_H} style={{ width: PREVIEW_W / 2, height: PREVIEW_H / 2 }} />}
+            {(s.titleCard.enabled || s.titleCard.sceneCards) && <canvas ref={card} width={PREVIEW_W} height={PREVIEW_H} style={{ width: PREVIEW_W / 2, height: PREVIEW_H / 2 }} />}
           </div>
 
           <div className="ov-settings">
@@ -91,7 +91,9 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
             </section>
 
             <section>
-              <div className="filter-row">{check('タイトルカード（マーカーグループの頭）', s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
+              <div className="filter-row"><span className="field-label wide">タイトルカード</span>
+                {check('シーンの頭（シーン名）', s.titleCard.sceneCards, v => set('titleCard', { sceneCards: v }))}
+                {check('マーカーの頭（マーカー名）', s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
                 <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数"
                   onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) set('titleCard', { durationSec: n }) }} /> 秒</label></div>
               <div className="filter-row indent">

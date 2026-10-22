@@ -99,5 +99,37 @@ export interface Api {
   listReels(): Promise<Reel[]>
   saveReel(r: Reel): Promise<void>
   deleteReel(id: string): Promise<void>
+  chooseExportPath(defaultName: string): Promise<string | null>
+  startExport(job: ExportJob): Promise<void>
+  cancelExport(): Promise<void>
+  onExportEvent(cb: (e: ExportEvent) => void): () => void
+  showInFolder(path: string): Promise<void>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
+
+// ---- export (design §3.8) --------------------------------------------------------------------
+// The renderer draws every overlay to PNG with the same functions as the preview; the main
+// process trims, overlays, encodes and concatenates with ffmpeg.
+export interface ExportLayer {
+  png: Uint8Array // full-frame transparent PNG at the output size
+  from?: number // seconds from the clip's IN; omitted = the whole clip
+  to?: number
+}
+
+export type ExportItem =
+  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[] }
+  | { kind: 'card'; png: Uint8Array; durationSec: number }
+
+export interface ExportJob {
+  outPath: string
+  width: number
+  height: number
+  fpsStr: string // e.g. '30000/1001'
+  items: ExportItem[]
+}
+
+export type ExportEvent =
+  | { type: 'progress'; ratio: number; item: number; items: number; elapsedSec: number }
+  | { type: 'done'; outPath: string; elapsedSec: number; footageSec: number; sizeBytes: number }
+  | { type: 'error'; message: string }
+  | { type: 'cancelled' }

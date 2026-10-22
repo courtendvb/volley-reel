@@ -228,3 +228,13 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .clip-overlay .ov-text.wide { width: 210px !important; }
 .clip-overlay { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; flex: none; }
 .clip-overlay .field-label { width: auto; }
+
+.reel-export { padding: 8px 10px 0; }
+.reel-export button { width: 100%; }
+.banner.export { background: #0F172A; color: #F8FAFC; }
+.banner.export .muted { color: #CBD5E1; }
+.banner.export.done { background: #DCFCE7; color: #14532D; }
+.banner.export.error { background: var(--danger-bg); color: var(--danger-text); }
+.banner.export.cancelled { background: var(--warn-bg); color: var(--warn-text); }
+.banner.export button { padding: 2px 10px; }
+.banner.export.running button.link, .banner.export.preparing button.link { color: #fff; }

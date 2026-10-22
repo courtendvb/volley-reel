@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Api, ImportProgress } from '../shared/types'
+import type { Api, ExportEvent, ImportProgress } from '../shared/types'
 
 const api: Api = {
   getProject: () => ipcRenderer.invoke('project:get'),
@@ -10,6 +10,15 @@ const api: Api = {
   listReels: () => ipcRenderer.invoke('reel:list'),
   saveReel: r => ipcRenderer.invoke('reel:save', r),
   deleteReel: id => ipcRenderer.invoke('reel:delete', id),
+  chooseExportPath: name => ipcRenderer.invoke('export:choosePath', name),
+  startExport: job => ipcRenderer.invoke('export:start', job),
+  cancelExport: () => ipcRenderer.invoke('export:cancel'),
+  onExportEvent: cb => {
+    const h = (_e: unknown, ev: ExportEvent) => cb(ev)
+    ipcRenderer.on('export:event', h)
+    return () => ipcRenderer.off('export:event', h)
+  },
+  showInFolder: p => ipcRenderer.invoke('shell:showInFolder', p),
   onImportProgress: cb => {
     const h = (_e: unknown, p: ImportProgress) => cb(p)
     ipcRenderer.on('import:progress', h)

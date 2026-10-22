@@ -1,10 +1,12 @@
+import { spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, readFileSync } from 'node:fs'
-import { stat, writeFile } from 'node:fs/promises'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
-import { BrowserWindow, app, dialog, ipcMain, protocol } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Reel } from '../shared/reel'
-import type { ProjectSettings } from '../shared/types'
+import type { ExportJob, ProjectSettings } from '../shared/types'
+import { Exporter } from './export'
 import { Project } from './project'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
@@ -19,6 +21,7 @@ app.commandLine.appendSwitch('disable-background-media-suspend')
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 let project: Project | null = null
+const exporter = new Exporter()
 let win: BrowserWindow | null = null
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
 
@@ -74,6 +77,27 @@ function registerIpc(): void {
     return project.info()
   })
 
+  ipcMain.handle('export:choosePath', async (_e, name: string) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    const dir = join(project.dir, 'exports')
+    await mkdir(dir, { recursive: true })
+    const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'reel'
+    const r = await dialog.showSaveDialog(win!, { title: 'MP4 に書き出す', defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
+    return r.canceled || !r.filePath ? null : r.filePath
+  })
+
+  // Starts in the background and returns at once; progress and the result arrive as export:event.
+  ipcMain.handle('export:start', (e, job: ExportJob) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (exporter.running) throw new Error('書き出し中です。終わるか、キャンセルしてからもう一度試してください')
+    const p = project
+    void exporter.run(job, join(p.dir, 'cache', 'export'), id => p.getMatch(id)?.videoPath, ev => {
+      if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
+    })
+  })
+  ipcMain.handle('export:cancel', () => exporter.cancel())
+  ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
+
   ipcMain.handle('reel:list', () => project?.listReels() ?? [])
   ipcMain.handle('reel:save', (_e, r: Reel) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveReel(r) })
   ipcMain.handle('reel:delete', (_e, id: string) => project?.deleteReel(id))
@@ -107,6 +131,20 @@ async function serveMedia(req: Request): Promise<Response> {
   })
 }
 
+// Smoke only: probe the exported MP4, save frames at the check times, and confirm the cancelled
+// run left neither its output nor the work folder behind.
+function checkExport(r: { export: string; checks: { name: string; t: number }[]; cancelPath: string }): void {
+  const bin = process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+  const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_name,width,height,r_frame_rate,nb_read_packets:format=duration,size', '-of', 'json', r.export], { encoding: 'utf8' })
+  console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
+  for (const c of r.checks) {
+    const out = r.export.replace(/\.mp4$/, `-${c.name}.png`)
+    spawnSync(join(bin, 'ffmpeg.exe'), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', r.export, '-frames:v', '1', out])
+    console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
+  }
+  console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'cache', 'export'))}`)
+}
+
 function readSettings(): { lastProject?: string } {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
 }
@@ -115,7 +153,8 @@ function readSettings(): { lastProject?: string } {
 // [VR_SMOKE_PLAY=<n>] [VR_SMOKE_SCOPE=match|all] [VR_SMOKE_FILTER=<PlayFilter JSON>] [VR_SMOKE_SETTINGS=1]
 // [VR_SMOKE_KEYS=3,3,1: keys pressed after the jump] [VR_SMOKE_TRIM=1: loop and trim a clip]
 // [VR_SMOKE_ANN=1: draw, move and time annotations through pointer events]
-// [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play] [VR_SMOKE_MINIMIZE=1]
+// [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
+// [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
@@ -133,11 +172,13 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       keys: process.env.VR_SMOKE_KEYS ? process.env.VR_SMOKE_KEYS.split(',') : undefined,
       trim: !!process.env.VR_SMOKE_TRIM,
       ann: !!process.env.VR_SMOKE_ANN,
-      ov: process.env.VR_SMOKE_OV }
+      ov: process.env.VR_SMOKE_OV,
+      exportTo: process.env.VR_SMOKE_EXPORT }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())
     console.log(`[smoke] ${JSON.stringify(result)}`)
+    if (result?.export) checkExport(result)
   } catch (e) {
     console.error(`[smoke] failed: ${(e as Error).message}`)
     process.exitCode = 1

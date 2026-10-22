@@ -34,6 +34,8 @@ interface Props {
   orderSec: number
   overlaps: Map<string, string[]>
   onOpenOverlay: () => void
+  onExport: () => void
+  exporting: boolean
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -126,6 +128,10 @@ export function ReelPanel(p: Props) {
           : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount}>▶ 通し再生</button>}
       </div>
       <Defaults d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
+      <div className="reel-export">
+        <button className="primary" onClick={p.onExport} disabled={!p.orderCount || p.exporting}
+          title={p.exporting ? '書き出し中です' : '書き出し範囲のクリップを MP4 にする'}>⤓ MP4 に書き出す</button>
+      </div>
       <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list">

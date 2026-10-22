@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Reel } from '../shared/reel'
-import type { ExportJob, ProjectSettings } from '../shared/types'
+import type { ExportJob, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
 import { Exporter } from './export'
+import { Library } from './library'
 import { Project } from './project'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
@@ -20,6 +21,7 @@ protocol.registerSchemesAsPrivileged([
 app.commandLine.appendSwitch('disable-background-media-suspend')
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
+let library: Library | null = null
 let project: Project | null = null
 const exporter = new Exporter()
 let win: BrowserWindow | null = null
@@ -29,12 +31,20 @@ app.whenReady().then(async () => {
   protocol.handle('media', serveMedia)
   registerIpc()
 
-  const last = process.env.VR_PROJECT || readSettings().lastProject
+  const libPath = process.env.VR_LIBRARY || (process.env.VR_PROJECT ? join(dirname(process.env.VR_PROJECT), 'vr-smoke-library') : readSettings().libraryPath)
+  if (libPath) library = await Library.open(libPath)
+  const last = process.env.VR_PROJECT
   if (process.env.VR_SMOKE && process.env.VR_SMOKE_CORRUPT && last) corruptFirstReel(last)
   if (process.env.VR_SMOKE) {
+    ipcMain.handle('smoke:scan', (_e, folders: string[]) => library!.scan(folders))
+    ipcMain.handle('smoke:createProject', async (_e, dir: string, init: ProjectInit) => {
+      await mkdir(dir, { recursive: true })
+      project = await Project.create(dir, library!, init)
+      return project.info()
+    })
     // Smoke only: add a point after the first point line and delete one play line in a DVW copy.
     ipcMain.handle('smoke:editDvw', async (_e, matchId: string, code: string, time: number) => {
-      const m = project?.getMatch(matchId)
+      const m = library?.getMatch(matchId)
       if (!m) throw new Error('no match')
       const lines = readFileSync(m.dvwPath, 'latin1').split(/\r?\n/)
       const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
@@ -45,7 +55,8 @@ app.whenReady().then(async () => {
       return `added a point after line ${at + 1}, deleted line ${del + 1} (${code} @ ${time})`
     })
   }
-  if (last && existsSync(last)) project = await Project.open(last)
+  if (last && library && existsSync(join(last, 'project.json'))) project = await Project.open(last, library)
+  else if (last && library && process.env.VR_SMOKE) { await mkdir(last, { recursive: true }); project = await Project.create(last, library, { name: 'smoke', ourTeamCodes: ['HTH', 'HTA'], matchIds: [] }) }
 
   win = new BrowserWindow({
     width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'volley-reel',
@@ -78,24 +89,70 @@ app.on('window-all-closed', () => app.quit())
 
 function registerIpc(): void {
   ipcMain.handle('project:get', () => project?.info() ?? null)
+  ipcMain.handle('library:get', () => library?.info() ?? null)
 
-  ipcMain.handle('project:choose', async () => {
-    const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトフォルダを選択', properties: ['openDirectory', 'createDirectory'] })
+  ipcMain.handle('library:choose', async () => {
+    const r = await dialog.showOpenDialog(win!, { title: '倉庫にするフォルダを選択（空のフォルダか、既存の倉庫）', properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
-    project = await Project.open(r.filePaths[0])
-    await writeFile(settingsFile(), JSON.stringify({ ...readSettings(), lastProject: project.dir }, null, 2))
+    library = await Library.open(r.filePaths[0])
+    project = null
+    saveSettings({ libraryPath: library.dir })
+    return library.info()
+  })
+
+  ipcMain.handle('library:scan', async () => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    const r = await dialog.showOpenDialog(win!, { title: '動画と DVW があるフォルダを選択（複数可）', properties: ['openDirectory', 'multiSelections'] })
+    if (r.canceled || !r.filePaths.length) return null
+    return library.scan(r.filePaths)
+  })
+
+  ipcMain.handle('library:importPairs', async (e, pairs: { dvwPath: string; video: string }[]) => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    return importPairs(library, pairs, p => e.sender.send('import:progress', p))
+  })
+
+  ipcMain.handle('project:recent', () => recentProjects())
+
+  ipcMain.handle('project:create', async (_e, init: ProjectInit) => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトを作るフォルダを選択（空のフォルダ）', properties: ['openDirectory', 'createDirectory'] })
+    if (r.canceled || !r.filePaths[0]) return null
+    project = await Project.create(r.filePaths[0], library, init)
+    rememberProject(project)
+    return project.info()
+  })
+
+  ipcMain.handle('project:open', async (_e, path?: string) => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    let dir = path
+    if (!dir) {
+      const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトのフォルダを選択', properties: ['openDirectory'] })
+      if (r.canceled || !r.filePaths[0]) return null
+      dir = r.filePaths[0]
+    }
+    project = await Project.open(dir, library)
+    rememberProject(project)
+    return project.info()
+  })
+
+  ipcMain.handle('project:close', () => { project = null })
+
+  ipcMain.handle('project:setMatches', async (_e, ids: string[]) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    await project.setMatches(ids)
     return project.info()
   })
 
   ipcMain.handle('match:import', async e => {
-    if (!project) throw new Error('先にプロジェクトフォルダを開いてください')
+    if (!library) throw new Error('先に倉庫を選んでください')
     const v = await dialog.showOpenDialog(win!, { title: '試合の動画を選択', properties: ['openFile'],
       filters: [{ name: '動画', extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] })
     if (v.canceled || !v.filePaths[0]) return null
     const d = await dialog.showOpenDialog(win!, { title: 'スカウトファイル（.dvw）を選択', properties: ['openFile'],
       filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
     if (d.canceled || !d.filePaths[0]) return null
-    return project.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
+    return library.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
   })
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
@@ -118,12 +175,12 @@ function registerIpc(): void {
     if (!project) throw new Error('プロジェクトが開かれていません')
     if (exporter.running) throw new Error('書き出し中です。終わるか、キャンセルしてからもう一度試してください')
     const p = project
-    void exporter.run(job, join(p.dir, 'cache', 'export'), id => p.getMatch(id)?.videoPath, ev => {
+    void exporter.run(job, join(p.dir, 'export-work'), id => p.getMatch(id)?.videoPath, ev => {
       if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
     })
   })
   ipcMain.handle('export:cancel', () => exporter.cancel())
-  ipcMain.handle('project:notices', () => project?.takeNotices() ?? [])
+  ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
 
   ipcMain.handle('reel:list', () => project?.listReels() ?? [])
@@ -138,7 +195,7 @@ function registerIpc(): void {
 
 async function serveMedia(req: Request): Promise<Response> {
   const id = new URL(req.url).hostname
-  const file = project?.getMatch(id)?.videoPath
+  const file = library?.getMatch(id)?.videoPath
   if (!file || !existsSync(file)) return new Response('not found', { status: 404 })
   const size = (await stat(file)).size
   const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') ?? '')
@@ -170,7 +227,7 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
     spawnSync(join(bin, 'ffmpeg.exe'), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', r.export, '-frames:v', '1', out])
     console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
   }
-  console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'cache', 'export'))}`)
+  console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'export-work'))}`)
 }
 
 function corruptFirstReel(dir: string): void {
@@ -181,8 +238,37 @@ function corruptFirstReel(dir: string): void {
   console.log(`[smoke] corrupted ${f}`)
 }
 
-function readSettings(): { lastProject?: string } {
+interface AppSettings { libraryPath?: string; recentProjects?: RecentProject[] }
+
+function readSettings(): AppSettings {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
+}
+
+function saveSettings(patch: Partial<AppSettings>): void {
+  if (process.env.VR_SMOKE) return // smoke runs never touch the user's settings
+  writeFileSync(settingsFile(), JSON.stringify({ ...readSettings(), ...patch }, null, 2))
+}
+
+function recentProjects(): RecentProject[] {
+  return (readSettings().recentProjects ?? []).filter(p => existsSync(join(p.path, 'project.json')))
+}
+
+function rememberProject(p: Project): void {
+  const rest = recentProjects().filter(r => r.path.toLowerCase() !== p.dir.toLowerCase())
+  saveSettings({ recentProjects: [{ path: p.dir, name: p.name, openedAt: new Date().toISOString() }, ...rest].slice(0, 12) })
+}
+
+// Bulk import, step 2: one match at a time (probing is quick; preparing a copy can take minutes).
+async function importPairs(lib: Library, pairs: { dvwPath: string; video: string }[], progress: (p: import('../shared/types').ImportProgress) => void) {
+  const imported: import('../shared/types').Match[] = [], failed: { dvwPath: string; message: string }[] = []
+  for (const [i, p] of pairs.entries()) {
+    try {
+      imported.push(await lib.importMatch(p.video, p.dvwPath, ev => progress({ ...ev, item: i, items: pairs.length, message: `${i + 1} / ${pairs.length}: ${ev.message}` })))
+    } catch (e) {
+      failed.push({ dvwPath: p.dvwPath, message: (e as Error).message })
+    }
+  }
+  return { imported, failed }
 }
 
 // Dev self-check: VR_PROJECT=<dir> VR_IMPORT="<video>|<dvw>[;...]" VR_SMOKE=<out.png>
@@ -191,18 +277,19 @@ function readSettings(): { lastProject?: string } {
 // [VR_SMOKE_ANN=1: draw, move and time annotations through pointer events]
 // [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
 // [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run]
+// [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
   try {
-    if (!project) throw new Error('VR_PROJECT is required for VR_SMOKE')
-    // VR_IMPORT may list several matches: "<video>|<dvw>;<video>|<dvw>"
+    if (!project && !process.env.VR_SMOKE_HOME) throw new Error('VR_PROJECT is required for VR_SMOKE')
+    // VR_IMPORT may list several matches: "<video>|<dvw>;<video>|<dvw>" — into the library, then the project.
     for (const pair of (process.env.VR_IMPORT ?? '').split(';').filter(Boolean)) {
       const [video, dvw] = pair.split('|')
-      if (video && dvw && !project.findBySources(video, dvw)) {
-        await project.importMatch(video, dvw, p => console.log(`[import] ${p.message}${p.ratio != null ? ` ${(p.ratio * 100).toFixed(0)}%` : ''}`))
-      }
+      if (!video || !dvw || !library || !project) continue
+      const m = await library.importMatch(video, dvw, p => console.log(`[import] ${p.message}${p.ratio != null ? ` ${(p.ratio * 100).toFixed(0)}%` : ''}`))
+      if (!project.info().matchIds.includes(m.id)) await project.setMatches([...project.info().matchIds, m.id])
     }
     const opts = { play: Number(process.env.VR_SMOKE_PLAY ?? 40), filter: process.env.VR_SMOKE_FILTER ? JSON.parse(process.env.VR_SMOKE_FILTER) : null, scope: process.env.VR_SMOKE_SCOPE ?? 'match', settings: !!process.env.VR_SMOKE_SETTINGS,
       reel: process.env.VR_SMOKE_REEL ? JSON.parse(process.env.VR_SMOKE_REEL) : undefined,
@@ -211,7 +298,10 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       ann: !!process.env.VR_SMOKE_ANN,
       ov: process.env.VR_SMOKE_OV,
       exportTo: process.env.VR_SMOKE_EXPORT,
-      m8: process.env.VR_SMOKE_M8 }
+      m8: process.env.VR_SMOKE_M8,
+      home: process.env.VR_SMOKE_HOME,
+      folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
+      newProject: process.env.VR_SMOKE_NEWPROJ }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())

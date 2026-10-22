@@ -250,3 +250,34 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .shortcut-groups td { padding: 3px 6px 3px 0; vertical-align: top; }
 .shortcut-groups td:first-child { white-space: nowrap; width: 1%; }
 kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: #F8FAFC; font: 12px/1.4 "Segoe UI", sans-serif; }
+
+/* ---- home (v3) ---- */
+.home { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; padding: 14px; }
+.home section { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; gap: 8px; }
+.home-head { display: flex; align-items: center; gap: 10px; }
+.home-head h2 { margin: 0; font-size: 16px; }
+.home-tools input { flex: 1; }
+.home-actions { display: flex; gap: 8px; }
+.small-head { margin: 8px 0 0; font-size: 12px; font-weight: 600; }
+.recent { display: grid; gap: 2px; text-align: left; padding: 8px 10px; }
+.recent span { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-table { flex: 1; min-height: 0; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.match-row { display: grid; grid-template-columns: 96px 120px minmax(0, 1fr) 64px 18px; gap: 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #F1F5F9; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.match-row .names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-row.pick { grid-template-columns: 20px 96px 120px minmax(0, 1fr) 64px; cursor: pointer; }
+.match-row.pick.on { background: var(--primary-light); }
+.warn-dot { color: #B45309; }
+.project-name { font-size: 14px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.scan-modal, .picker-modal { width: min(1000px, 96vw); }
+.scan-table { overflow-y: auto; max-height: 58vh; border: 1px solid var(--border); border-radius: 6px; }
+.scan-row { display: grid; grid-template-columns: 22px 92px 96px minmax(0, 1fr) minmax(0, 1.2fr) 150px; gap: 8px; align-items: center; padding: 5px 10px; border-bottom: 1px solid #F1F5F9; font-size: 12.5px; }
+.scan-row.head { position: sticky; top: 0; background: #F8FAFC; color: var(--sub); font-size: 11.5px; }
+.scan-row.done { opacity: 0.55; }
+.scan-row select { min-width: 0; }
+.scan-row .note.weak { color: #B45309; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-fields { display: flex; flex-direction: column; gap: 6px; }
+.picker-fields .field { display: flex; align-items: center; gap: 10px; }
+.picker-fields .field-label { width: 72px; }
+.match-table.picker { max-height: 46vh; }

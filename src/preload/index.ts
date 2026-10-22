@@ -3,7 +3,15 @@ import type { Api, ExportEvent, ImportProgress } from '../shared/types'
 
 const api: Api = {
   getProject: () => ipcRenderer.invoke('project:get'),
-  chooseProject: () => ipcRenderer.invoke('project:choose'),
+  getLibrary: () => ipcRenderer.invoke('library:get'),
+  chooseLibrary: () => ipcRenderer.invoke('library:choose'),
+  scanFolders: () => ipcRenderer.invoke('library:scan'),
+  importPairs: pairs => ipcRenderer.invoke('library:importPairs', pairs),
+  recentProjects: () => ipcRenderer.invoke('project:recent'),
+  createProject: init => ipcRenderer.invoke('project:create', init),
+  openProject: path => ipcRenderer.invoke('project:open', path),
+  closeProject: () => ipcRenderer.invoke('project:close'),
+  setProjectMatches: ids => ipcRenderer.invoke('project:setMatches', ids),
   importMatch: () => ipcRenderer.invoke('match:import'),
   parseMatch: id => ipcRenderer.invoke('match:parse', id),
   saveSettings: s => ipcRenderer.invoke('project:saveSettings', s),
@@ -21,6 +29,8 @@ const api: Api = {
   showInFolder: p => ipcRenderer.invoke('shell:showInFolder', p),
   takeNotices: () => ipcRenderer.invoke('project:notices'),
   smokeEditDvw: (id, code, time) => ipcRenderer.invoke('smoke:editDvw', id, code, time),
+  smokeScan: folders => ipcRenderer.invoke('smoke:scan', folders),
+  smokeCreateProject: (dir, init) => ipcRenderer.invoke('smoke:createProject', dir, init),
   onFlushRequest: cb => {
     const h = () => { void cb().finally(() => ipcRenderer.send('app:flushed')) }
     ipcRenderer.on('app:flush', h)

@@ -1,52 +1,125 @@
-// Project folder: project.json, matches/<id>.json, cache/ (design §5).
-// Videos are referenced by path; only files Chromium can't play get a stripped copy in cache/.
-import { randomUUID } from 'node:crypto'
+// Project folder (v3): project.json (name, our team codes, alias table, which library matches it
+// uses) and reels/. Matches live in the library and are referenced by id. A pre-v3 project (with
+// its own matches/) is migrated on open: its matches move into the library under the same ids.
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, open, readdir, readFile, rename } from 'node:fs/promises'
-import type { Reel } from '../shared/reel'
+import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { parseDVW } from '../shared/dvw'
-import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
-import { prepare, prepareReason, probe } from './media'
+import type { Reel } from '../shared/reel'
+import type { Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
+import type { Library } from './library'
+import { readJSON, safeId, writeJSON } from './store'
 
 const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'], playerAliases: {} }
 
+interface ProjectFile {
+  version: 2
+  name: string
+  ourTeamCodes: string[]
+  playerAliases: Record<string, string>
+  matchIds: string[]
+}
+
 export class Project {
-  private matches = new Map<string, Match>()
-  private settings: ProjectSettings = DEFAULT_SETTINGS
+  private file: ProjectFile = { version: 2, name: '', ...DEFAULT_SETTINGS, matchIds: [] }
   // Problems found while loading (recovered or unreadable files), shown once by the renderer.
   notices: string[] = []
 
-  private constructor(readonly dir: string) {}
+  private constructor(readonly dir: string, private library: Library) {}
 
-  static async open(dir: string): Promise<Project> {
-    const p = new Project(dir)
-    await mkdir(join(dir, 'matches'), { recursive: true })
-    await mkdir(join(dir, 'cache'), { recursive: true })
+  static async create(dir: string, library: Library, init: { name: string; ourTeamCodes: string[]; matchIds: string[] }): Promise<Project> {
+    if (existsSync(join(dir, 'project.json'))) throw new Error('このフォルダにはすでにプロジェクトがあります。「開く」で開いてください')
+    const p = new Project(dir, library)
     await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
-    const file = join(dir, 'project.json')
-    const saved: Partial<ProjectSettings> = existsSync(file) || existsSync(`${file}.bak`) ? (await readJSON<Partial<ProjectSettings>>(file).catch(() => ({ data: {} }))).data : {}
-    p.settings = {
-      ourTeamCodes: Array.isArray(saved.ourTeamCodes) ? saved.ourTeamCodes : DEFAULT_SETTINGS.ourTeamCodes,
-      playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
-    }
-    if (!existsSync(file)) await p.saveSettings(p.settings)
-    for (const f of await readdir(join(dir, 'matches'))) {
-      if (!f.endsWith('.json')) continue
-      try {
-        const { data: m, fromBackup } = await readJSON<Match>(join(dir, 'matches', f))
-        if (fromBackup) p.notices.push(`試合「${m.name}」のファイルが読めなかったため、1つ前の保存から復元しました`)
-        p.matches.set(m.id, m)
-      } catch {
-        p.notices.push(`試合のファイル ${f} が読めませんでした（ファイルはそのまま残しています）`)
-      }
-    }
+    p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes), playerAliases: {}, matchIds: [...new Set(init.matchIds)] }
+    await p.save()
     return p
   }
 
+  static async open(dir: string, library: Library): Promise<Project> {
+    const p = new Project(dir, library)
+    const file = join(dir, 'project.json')
+    if (!existsSync(file) && !existsSync(`${file}.bak`)) throw new Error('プロジェクトが見つかりません（project.json がありません）')
+    await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
+    const { data: saved, fromBackup } = await readJSON<Partial<ProjectFile> & { version?: number }>(file)
+    if (fromBackup) p.notices.push('プロジェクトの設定ファイルが読めなかったため、1つ前の保存から復元しました')
+    p.file = {
+      version: 2,
+      name: saved.name || basename(dir),
+      ourTeamCodes: Array.isArray(saved.ourTeamCodes) ? saved.ourTeamCodes : DEFAULT_SETTINGS.ourTeamCodes,
+      playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
+      matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
+    }
+    if ((saved.version ?? 1) < 2) await p.migrateV1()
+    const missing = p.file.matchIds.filter(id => !library.getMatch(id))
+    if (missing.length) p.notices.push(`倉庫に見つからない試合が ${missing.length} 件あります（倉庫を変えた可能性があります）`)
+    return p
+  }
+
+  // v1 projects kept matches/<id>.json themselves. Hand them to the library, keep the old folder
+  // renamed (never deleted), and remember the ids. A match the library already has (same video and
+  // DVW) is not duplicated: the project's reels are re-pointed to the library's id instead.
+  private async migrateV1(): Promise<void> {
+    const old = join(this.dir, 'matches')
+    if (existsSync(old)) {
+      const remap = new Map<string, string>()
+      for (const f of await readdir(old)) {
+        if (!f.endsWith('.json')) continue
+        try {
+          const { data } = await readJSON<Match>(join(old, f))
+          const id = await this.library.adopt(data)
+          if (id !== data.id) remap.set(data.id, id)
+          if (!this.file.matchIds.includes(id)) this.file.matchIds.push(id)
+        } catch {
+          this.notices.push(`古い形式の試合ファイル ${f} を移せませんでした`)
+        }
+      }
+      if (remap.size) {
+        for (const r of await this.listReels()) {
+          let changed = false
+          for (const c of Object.values(r.clips)) { const to = remap.get(c.matchId); if (to) { c.matchId = to; changed = true } }
+          if (changed) await this.saveReel(r)
+        }
+      }
+      await rename(old, join(this.dir, `matches.v1-${Date.now()}`))
+      this.notices.push(`古い形式のプロジェクトでした。試合 ${this.file.matchIds.length} 件を倉庫に移しました`)
+    }
+    await this.save()
+  }
+
+  get name(): string { return this.file.name }
+
   info(): ProjectInfo {
-    const matches = [...this.matches.values()].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
-    return { path: this.dir, matches, settings: this.settings }
+    const matches = this.file.matchIds.map(id => this.library.getMatch(id)).filter((m): m is Match => !!m)
+      .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
+    return {
+      path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
+      settings: { ourTeamCodes: this.file.ourTeamCodes, playerAliases: this.file.playerAliases },
+    }
+  }
+
+  getMatch(id: string): Match | undefined {
+    return this.file.matchIds.includes(id) ? this.library.getMatch(id) : undefined
+  }
+
+  parse(id: string): Promise<ParsedDVW> {
+    if (!this.file.matchIds.includes(id)) throw new Error(`この試合はプロジェクトに入っていません: ${id}`)
+    return this.library.parse(id)
+  }
+
+  async setMatches(ids: string[]): Promise<void> {
+    this.file.matchIds = [...new Set(ids)].filter(id => this.library.getMatch(id))
+    await this.save()
+  }
+
+  async rename(name: string): Promise<void> {
+    this.file.name = name.trim() || this.file.name
+    await this.save()
+  }
+
+  async saveSettings(s: ProjectSettings): Promise<void> {
+    this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes)
+    this.file.playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
+    await this.save()
   }
 
   // One file per reel (design §5), so a bad write can only ever cost one reel.
@@ -66,7 +139,7 @@ export class Project {
   }
 
   takeNotices(): string[] {
-    return this.notices.splice(0)
+    return [...this.library.notices.splice(0), ...this.notices.splice(0)]
   }
 
   async saveReel(r: Reel): Promise<void> {
@@ -79,116 +152,11 @@ export class Project {
     if (existsSync(f)) await rename(f, join(this.dir, 'reels', 'deleted', `${safeId(id)}-${Date.now()}.json`))
   }
 
-  async saveSettings(s: ProjectSettings): Promise<void> {
-    const ourTeamCodes = [...new Set(s.ourTeamCodes.map(c => c.trim().toUpperCase()).filter(Boolean))]
-    const playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
-    this.settings = { ourTeamCodes, playerAliases }
-    await writeJSON(join(this.dir, 'project.json'), { version: 1, ...this.settings })
-  }
-
-  getMatch(id: string): Match | undefined {
-    return this.matches.get(id)
-  }
-
-  findBySources(videoPath: string, dvwPath: string): Match | undefined {
-    return [...this.matches.values()].find(m => m.sourceVideoPath === videoPath && m.dvwPath === dvwPath)
-  }
-
-  // Parsed every time from the DVW; plays are never saved (design §6).
-  async parse(id: string): Promise<ParsedDVW> {
-    const m = this.matches.get(id)
-    if (!m) throw new Error(`試合が見つかりません: ${id}`)
-    return parseDVW(await readFile(m.dvwPath, 'latin1'))
-  }
-
-  async importMatch(videoPath: string, dvwPath: string, progress: (p: ImportProgress) => void): Promise<Match> {
-    const dvw = parseDVW(await readFile(dvwPath, 'latin1'))
-    if (!dvw.plays.length) throw new Error(`${basename(dvwPath)} にプレーがありません`)
-
-    progress({ stage: 'probe', message: '動画を確認しています' })
-    const info = await probe(videoPath)
-    const id = randomUUID()
-    const reason = prepareReason(info)
-    let playable = videoPath
-    if (reason) {
-      playable = join(this.dir, 'cache', `${id}.mp4`)
-      const what = reason === 'reencode' ? '再生できる形式に変換' : '音声トラックを除去'
-      progress({ stage: 'prepare', message: `${what}しています（${info.codec}/${info.pixFmt}, audio=${info.audio.join(',') || 'none'}）`, ratio: 0 })
-      await prepare(videoPath, playable, reason, info.durationSec,
-        ratio => progress({ stage: 'prepare', message: `${what}しています`, ratio }))
-    }
-
-    const warnings: string[] = []
-    const first = dvw.plays[0].time, last = dvw.plays[dvw.plays.length - 1].time
-    if (last > info.durationSec) {
-      warnings.push(`DVW の時刻（${fmt(first)}〜${fmt(last)}）が動画の長さ（${fmt(info.durationSec)}）を超えています。別の動画かオフセットのずれの可能性があります`)
-    }
-    if (dvw.allHome) warnings.push('全プレーがホーム側で入力されています（全部ホーム入力）。チームの区別はできません')
-
-    const [home, away] = dvw.teams
-    const match: Match = {
-      id,
-      name: `${dvw.date ?? basename(dvwPath, '.dvw')} ${home.code}-${away.code}`,
-      date: dvw.date,
-      sourceVideoPath: videoPath,
-      videoPath: playable,
-      dvwPath,
-      offsetSec: 0,
-      fps: info.fps,
-      fpsStr: info.fpsStr,
-      durationSec: info.durationSec,
-      width: info.width,
-      height: info.height,
-      teams: dvw.teams,
-      allHome: dvw.allHome,
-      warnings,
-      importedAt: new Date().toISOString(),
-    }
-    progress({ stage: 'save', message: '保存しています' })
-    await writeJSON(join(this.dir, 'matches', `${id}.json`), match)
-    this.matches.set(id, match)
-    return match
+  private save(): Promise<void> {
+    return writeJSON(join(this.dir, 'project.json'), this.file)
   }
 }
 
-function safeId(id: string): string {
-  if (!/^[A-Za-z0-9-]+$/.test(id)) throw new Error(`invalid id: ${id}`)
-  return id
-}
-
-// Write to a temp file then rename, so a crash never leaves half a JSON behind.
-// Durable save: write a temp file and flush it to disk, keep the previous version as .bak, then
-// rename into place. A crash or power cut leaves either the old file, the new one, or the .bak.
-export async function writeJSON(file: string, data: unknown): Promise<void> {
-  const tmp = `${file}.tmp`
-  const fh = await open(tmp, 'w')
-  try {
-    await fh.writeFile(JSON.stringify(data, null, 2), 'utf8')
-    await fh.sync()
-  } finally {
-    await fh.close()
-  }
-  if (existsSync(file)) await copyFile(file, `${file}.bak`)
-  await rename(tmp, file)
-}
-
-// Reads a JSON file, falling back to its .bak when the file is missing or unreadable.
-// A recovered file is restored from the backup right away; otherwise the next save would copy the
-// broken file over the good backup.
-export async function readJSON<T>(file: string): Promise<{ data: T; fromBackup: boolean }> {
-  try {
-    return { data: JSON.parse(await readFile(file, 'utf8')) as T, fromBackup: false }
-  } catch (e) {
-    const bak = `${file}.bak`
-    if (!existsSync(bak)) throw e
-    const data = JSON.parse(await readFile(bak, 'utf8')) as T
-    if (existsSync(file)) await copyFile(file, `${file}.broken`) // kept for inspection
-    await copyFile(bak, file)
-    return { data, fromBackup: true }
-  }
-}
-
-function fmt(sec: number): string {
-  const s = Math.floor(sec), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
-  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+function cleanCodes(codes: string[]): string[] {
+  return [...new Set(codes.map(c => c.trim().toUpperCase()).filter(Boolean))]
 }

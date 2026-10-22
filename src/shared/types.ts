@@ -80,20 +80,67 @@ export interface ProjectSettings {
 
 export interface ProjectInfo {
   path: string
-  matches: Match[]
+  name: string
+  matches: Match[] // the project's matches found in the library
+  matchIds: string[] // all ids the project refers to, including any missing from the library
   settings: ProjectSettings
+}
+
+// v3: the library holds every match; projects pick from it by id.
+export interface LibraryInfo {
+  path: string
+  matches: Match[]
+}
+
+export interface ScanPair {
+  dvwPath: string
+  date: string | null
+  home: string
+  away: string
+  video: string | null // proposed pairing; the user can change it before importing
+  score: number
+  note: string
+  inLibrary: boolean
+}
+
+export interface ScanResult {
+  pairs: ScanPair[]
+  videos: string[] // every video found, for choosing a different one by hand
+  unreadable: string[]
+}
+
+export interface RecentProject {
+  path: string
+  name: string
+  openedAt: string
+}
+
+export interface ProjectInit {
+  name: string
+  ourTeamCodes: string[]
+  matchIds: string[]
 }
 
 export interface ImportProgress {
   stage: 'probe' | 'prepare' | 'save'
   message: string
   ratio?: number
+  item?: number // bulk import: which pair (0-based) of how many
+  items?: number
 }
 
 export interface Api {
   getProject(): Promise<ProjectInfo | null>
-  chooseProject(): Promise<ProjectInfo | null>
-  importMatch(): Promise<Match | null>
+  getLibrary(): Promise<LibraryInfo | null>
+  chooseLibrary(): Promise<LibraryInfo | null>
+  importMatch(): Promise<Match | null> // into the library, choosing a video and a DVW
+  scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
+  importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
+  recentProjects(): Promise<RecentProject[]>
+  createProject(init: ProjectInit): Promise<ProjectInfo | null> // asks for a folder
+  openProject(path?: string): Promise<ProjectInfo | null> // asks for a folder when no path
+  closeProject(): Promise<void>
+  setProjectMatches(ids: string[]): Promise<ProjectInfo>
   parseMatch(id: string): Promise<ParsedDVW>
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
@@ -109,6 +156,9 @@ export interface Api {
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
   smokeEditDvw?: (matchId: string, deleteCode: string, deleteTime: number) => Promise<string>
+  // Dev smoke check only: the dialog-free versions of scanning folders and creating a project.
+  smokeScan?: (folders: string[]) => Promise<ScanResult>
+  smokeCreateProject?: (dir: string, init: ProjectInit) => Promise<ProjectInfo>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 

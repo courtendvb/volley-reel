@@ -13,19 +13,15 @@ export type BoxHandle = (typeof BOX_HANDLES)[number]
 export const MAX_EDIT_POINTS = 80
 export const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
 
-export function handlesOf(a: Annotation): Handle[] {
+// Point shapes show the 8 box handles (resize the whole shape) unless points are being edited,
+// as in Office's "Edit Points" mode.
+export function handlesOf(a: Annotation, editPoints = false): Handle[] {
   switch (a.kind) {
     case 'arrow': return [{ id: 'p1', kind: 'end', x: a.x1, y: a.y1 }, { id: 'p2', kind: 'end', x: a.x2, y: a.y2 }]
-    case 'rect': case 'circle': {
-      const { x, y, w, h } = a
-      const at: Record<BoxHandle, [number, number]> = {
-        nw: [x, y], n: [x + w / 2, y], ne: [x + w, y], e: [x + w, y + h / 2],
-        se: [x + w, y + h], s: [x + w / 2, y + h], sw: [x, y + h], w: [x, y + h / 2],
-      }
-      return BOX_HANDLES.map(id => ({ id, kind: 'resize' as const, x: at[id][0], y: at[id][1] }))
-    }
+    case 'rect': case 'circle': case 'image': return boxHandles(a)
     case 'text': return []
     default: {
+      if (!editPoints) return boxHandles(pointsBox(a.points))
       if (a.points.length > MAX_EDIT_POINTS) return []
       const pts = a.points, closed = a.kind === 'polygon'
       const out: Handle[] = pts.map((p, i) => ({ id: `v${i}`, kind: 'vertex' as const, x: p[0], y: p[1] }))
@@ -39,12 +35,48 @@ export function handlesOf(a: Annotation): Handle[] {
   }
 }
 
+function boxHandles({ x, y, w, h }: { x: number; y: number; w: number; h: number }): Handle[] {
+  const at: Record<BoxHandle, [number, number]> = {
+    nw: [x, y], n: [x + w / 2, y], ne: [x + w, y], e: [x + w, y + h / 2],
+    se: [x + w, y + h], s: [x + w / 2, y + h], sw: [x, y + h], w: [x, y + h / 2],
+  }
+  return BOX_HANDLES.map(id => ({ id, kind: 'resize' as const, x: at[id][0], y: at[id][1] }))
+}
+
+export function pointsBox(pts: [number, number][]): { x: number; y: number; w: number; h: number } {
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
+  const x = Math.min(...xs), y = Math.min(...ys)
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+
+// An isosceles triangle in the box dragged from `from` to `to` (apex at the top middle).
+export function trianglePoints(from: [number, number], to: [number, number]): [number, number][] {
+  const b = normalizeBox({ x: from[0], y: from[1], w: to[0] - from[0], h: to[1] - from[1] })
+  return [[b.x + b.w / 2, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]
+}
+
+// A rectangle or ellipse as a polygon, so its points can be edited; the format is kept.
+export function toPolygon(a: Annotation): Annotation {
+  if (a.kind !== 'rect' && a.kind !== 'circle') return a
+  const { x, y, w, h, kind: _k, ...rest } = a
+  const points: [number, number][] = a.kind === 'rect'
+    ? [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+    : Array.from({ length: 16 }, (_, i) => {
+      const t = (i / 16) * Math.PI * 2
+      return [x + w / 2 + (Math.cos(t) * w) / 2, y + h / 2 + (Math.sin(t) * h) / 2] as [number, number]
+    })
+  return { ...rest, kind: 'polygon', points } as Annotation
+}
+
 // Drags a handle to (x, y). Dragging a midpoint inserts a vertex there; the result says which
 // handle to keep dragging (the new vertex). keepAspect (Shift) holds a box's proportions.
 export function dragHandle(a: Annotation, id: string, x: number, y: number, opts: { keepAspect?: boolean } = {}): { a: Annotation; id: string } {
   if (a.kind === 'arrow') return { a: id === 'p1' ? { ...a, x1: x, y1: y } : { ...a, x2: x, y2: y }, id }
   if (a.kind === 'rect' || a.kind === 'circle') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !!opts.keepAspect) }, id }
+  // Pictures keep their proportions at the corners unless Shift is held (Office does the same).
+  if (a.kind === 'image') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !opts.keepAspect) }, id }
   if (!isPoints(a)) return { a, id }
+  if ((BOX_HANDLES as readonly string[]).includes(id)) return { a: withPoints(a, resizePoints(a.points, id as BoxHandle, x, y, !!opts.keepAspect)), id }
   const i = Number(id.slice(1))
   if (id[0] === 'v' && a.points[i]) return { a: withPoints(a, a.points.map((p, j) => (j === i ? [x, y] : p))), id }
   if (id[0] === 'm') {
@@ -71,6 +103,13 @@ export function resizeBox(b: { x: number; y: number; w: number; h: number }, h: 
     else { const nw = hh * ratio; if (h.includes('w')) l = r - Math.sign(r - l || 1) * nw; else r = l + Math.sign(r - l || 1) * nw }
   }
   return normalizeBox({ x: l, y: t, w: r - l, h: btm - t })
+}
+
+// Scales every point with the shape's bounding box.
+function resizePoints(pts: [number, number][], h: BoxHandle, x: number, y: number, keepAspect: boolean): [number, number][] {
+  const o = pointsBox(pts), n = resizeBox(o, h, x, y, keepAspect)
+  const map = (v: number, o0: number, ow: number, n0: number, nw: number) => (ow > 0 ? n0 + ((v - o0) / ow) * nw : v)
+  return pts.map(([px, py]) => [map(px, o.x, o.w, n.x, n.w), map(py, o.y, o.h, n.y, n.h)])
 }
 
 // Deletes a vertex, keeping at least 2 points for lines and 3 for polygons.

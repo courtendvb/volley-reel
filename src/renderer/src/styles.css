@@ -65,14 +65,14 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
 .play-row {
   position: absolute; left: 0; right: 0;
-  display: grid; grid-template-columns: 24px 42px 36px minmax(0, 1fr) 124px 54px 22px; gap: 5px; align-items: center; cursor: pointer;
+  display: grid; grid-template-columns: 22px 40px 34px minmax(0, 1fr) 104px 98px; gap: 5px; align-items: center; cursor: pointer;
   width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F1F5F9; border-radius: 0;
   padding: 5px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; background: transparent;
 }
 .play-row:hover { background: #F8FAFC; }
 .play-row.now { box-shadow: inset 3px 0 0 #94A3B8; }
 .play-row.selected { background: var(--primary-light); box-shadow: inset 3px 0 0 var(--primary); }
-.play-list.with-match .play-row { grid-template-columns: 50px 22px 40px 34px minmax(0, 1fr) 112px 52px 22px; gap: 4px; }
+.play-list.with-match .play-row { grid-template-columns: 48px 22px 40px 32px minmax(0, 1fr) 96px 98px; gap: 4px; }
 .play-row .set, .play-row .vtime, .play-row .team, .play-row .match { color: var(--sub); }
 .play-row .match { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .play-row .team.ours { color: var(--primary); font-weight: 600; }
@@ -127,9 +127,11 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .warning-inline { font-size: 11px; color: var(--danger-text); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-.play-row .add { padding: 0; width: 22px; height: 22px; border-radius: 4px; font-size: 12px; line-height: 1; color: var(--sub); }
-.play-row .add:hover { color: var(--primary); border-color: var(--primary); }
-.play-row .in-reel { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--page); color: var(--sub); }
+.play-row .marks { display: flex; gap: 2px; justify-content: flex-end; }
+.play-row .mark { padding: 0; width: 18px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 1; color: var(--sub); }
+.play-row .mark:hover { color: var(--primary); border-color: var(--primary); }
+.play-row .mark.on { color: #fff; font-weight: 600; }
+.play-row.in-scene { box-shadow: inset 3px 0 0 #CBD5E1; }
 
 .reel-panel { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); }
 .reel-head { display: flex; gap: 6px; padding: 10px 10px 6px; }
@@ -313,3 +315,6 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .ann-hint { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 4px; background: rgba(15, 23, 42, 0.75); color: #fff; font-size: 12px; pointer-events: none; }
 /* Fixed height so the video doesn't jump when the selection (and so the panel's content) changes. */
 .ann-tools { height: 156px; overflow-y: auto; }
+.team-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.team-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--primary-light); color: var(--primary); font-weight: 600; font-size: 12.5px; }
+.team-chip .link { padding: 0 4px; }

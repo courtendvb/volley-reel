@@ -6,8 +6,11 @@
 // v3 step 3 adds Office-like formatting (fill and its transparency, dash, arrow heads, bold, a box
 // behind text) and polyline / polygon shapes. Every new field is optional and its default is the
 // old look, so annotations saved before draw exactly as they did.
+//
+// An image annotation shows a picture (or page 1 of a PDF, rendered to PNG) stored in the project's
+// assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 
-export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon'
+export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
 export type Heads = 'end' | 'both' | 'none'
 
@@ -39,7 +42,10 @@ export type Annotation = Base & (
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number } & Fillable)
+  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string }
 )
+
+export type ImageLookup = (assetId: string) => CanvasImageSource | null
 
 export type PointsAnnotation = Extract<Annotation, { points: [number, number][] }>
 export const isPoints = (a: Annotation): a is PointsAnnotation => a.kind === 'freehand' || a.kind === 'polyline' || a.kind === 'polygon'
@@ -63,7 +69,7 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: a.x + dx, y: a.y + dy }
     case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy }
-    case 'circle': case 'rect': return { ...a, x: a.x + dx, y: a.y + dy }
+    case 'circle': case 'rect': case 'image': return { ...a, x: a.x + dx, y: a.y + dy }
     default: return { ...a, points: a.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }
   }
 }
@@ -90,6 +96,7 @@ export interface StylePatch {
 // Applies the parts of a style that make sense for the annotation's kind.
 export function applyStyle(a: Annotation, s: StylePatch): Annotation {
   const common = { ...a, color: s.color ?? a.color, ...(s.opacity !== undefined ? { opacity: s.opacity } : {}) }
+  if (common.kind === 'image') return common
   if (common.kind === 'text') {
     return { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
       ...(s.outline !== undefined ? { outline: s.outline } : {}), ...(s.box !== undefined ? { box: s.box } : {}) }
@@ -115,7 +122,7 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
       return { x: a.x - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2) / REF_HEIGHT + 2 * pad }
     }
     case 'arrow': return box([[a.x1, a.y1], [a.x2, a.y2]])
-    case 'circle': case 'rect': return { x: a.x, y: a.y, w: a.w, h: a.h }
+    case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
     default: return box(a.points)
   }
 }
@@ -143,7 +150,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   return null
 }
 
-export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number): void {
+export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup): void {
   const s = H / REF_HEIGHT
   ctx.save()
   ctx.globalAlpha *= a.opacity ?? 1
@@ -153,6 +160,14 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number): v
   ctx.fillStyle = a.color
   switch (a.kind) {
     case 'text': drawText(ctx, a, W, H, s); break
+    case 'image': {
+      const img = images?.(a.assetId) ?? null
+      if (img) { ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H); break }
+      // Not loaded (yet): a placeholder, so the object can still be seen and picked.
+      ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(148,163,184,0.9)'
+      ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H)
+      break
+    }
     case 'arrow': {
       const x1 = a.x1 * W, y1 = a.y1 * H, x2 = a.x2 * W, y2 = a.y2 * H, lw = a.width * s
       const ang = Math.atan2(y2 - y1, x2 - x1), head = Math.max(lw * 3.2, 10 * s)
@@ -241,7 +256,7 @@ export function roundCoords(a: Annotation): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: r(a.x), y: r(a.y) }
     case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2) }
-    case 'circle': case 'rect': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
+    case 'circle': case 'rect': case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
     default: return { ...a, points: a.points.map(([x, y]) => [r(x), r(y)] as [number, number]) }
   }
 }

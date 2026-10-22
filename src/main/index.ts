@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
-import type { ExportJob, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
+import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
 import { Exporter } from './export'
 import { Library } from './library'
 import { Project } from './project'
@@ -38,6 +39,7 @@ app.whenReady().then(async () => {
   if (process.env.VR_SMOKE && process.env.VR_SMOKE_CORRUPT && last) corruptFirstReel(last)
   if (process.env.VR_SMOKE) {
     ipcMain.handle('smoke:scan', (_e, folders: string[]) => library!.scan(folders))
+    ipcMain.handle('smoke:pickAsset', (_e, path: string) => takeAsset(path))
     ipcMain.handle('smoke:createProject', async (_e, dir: string, init: ProjectInit) => {
       await mkdir(dir, { recursive: true })
       project = await Project.create(dir, library!, init)
@@ -184,6 +186,21 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
 
+  ipcMain.handle('asset:pick', async () => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    const r = await dialog.showOpenDialog(win!, {
+      title: '画像・PDF を挿入', properties: ['openFile'],
+      filters: [{ name: '画像・PDF', extensions: [...IMAGE_EXT, 'pdf'] }],
+    })
+    return r.canceled || !r.filePaths[0] ? null : takeAsset(r.filePaths[0])
+  })
+  ipcMain.handle('asset:save', (_e, png: Uint8Array) => saveAsset(png, 'png'))
+  ipcMain.handle('asset:read', (_e, id: string) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!ASSET_ID.test(id)) throw new Error('bad asset id')
+    return readFile(join(project.dir, 'assets', id))
+  })
+
   ipcMain.handle('video:list', () => project?.listVideos() ?? [])
   ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveVideo(v) })
   ipcMain.handle('video:delete', (_e, id: string) => project?.deleteVideo(id))
@@ -195,6 +212,27 @@ function registerIpc(): void {
     if (!project) throw new Error('プロジェクトが開かれていません')
     return project.parse(id)
   })
+}
+
+const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
+const ASSET_ID = /^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/
+
+async function takeAsset(path: string): Promise<PickedAsset> {
+  const ext = extname(path).slice(1).toLowerCase()
+  const data = await readFile(path)
+  if (ext === 'pdf') return { kind: 'pdf', data: new Uint8Array(data), name: basename(path) }
+  if (!IMAGE_EXT.includes(ext)) throw new Error('画像（PNG・JPEG など）か PDF を選んでください')
+  return { kind: 'image', assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext) }
+}
+
+// A copy in the project, so the project keeps working if the original file moves.
+async function saveAsset(data: Uint8Array, ext: string): Promise<string> {
+  if (!project) throw new Error('プロジェクトが開かれていません')
+  const dir = join(project.dir, 'assets')
+  await mkdir(dir, { recursive: true })
+  const id = `${randomUUID()}.${ext}`
+  await writeFile(join(dir, id), data)
+  return id
 }
 
 async function serveMedia(req: Request): Promise<Response> {
@@ -294,7 +332,8 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
 // [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run]
 // [VR_SMOKE_VIDEO=1 [VR_SMOKE_EXPORT=<out.mp4>]: videos of shared scenes, cards, undo, export]
-// [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>]: object handles, polygon drawing, format panel, export]
+// [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.png;b.pdf>]: object handles, polygon
+//  and triangle drawing, edit points, format panel, inserted pictures, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
@@ -321,6 +360,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
+      assets: process.env.VR_SMOKE_ASSETS?.split(';'),
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)

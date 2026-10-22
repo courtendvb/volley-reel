@@ -27,6 +27,7 @@ import { MatchPicker } from './components/MatchPicker'
 import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
+import { insertAsset } from './assets'
 import { playback, type SequenceItem } from './playback'
 
 const api = window.api
@@ -40,7 +41,7 @@ export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
   const [matchId, setMatchId] = useState<string | null>(null)
-  const [scope, setScope] = useState<Scope>('match')
+  const [scope, setScope] = useState<Scope>('all') // the list shows every match in the project unless one is picked
   const [filter, setFilter] = useState<PlayFilter>(EMPTY_FILTER)
   const [selected, setSelected] = useState<PlayKey | null>(null)
   const [reels, setReels] = useState<Reel[]>([])
@@ -51,8 +52,11 @@ export function App() {
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [annTool, setAnnTool] = useState<Tool>('select')
+  // Edit Points mode belongs to one selection; picking another object leaves it.
+  const [editPoints, setEditPoints] = useState(false)
   const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#FACC15', width: 6, size: 36 })
   const [selectedAnn, setSelectedAnn] = useState<string | null>(null)
+  useEffect(() => setEditPoints(false), [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [exportState, setExportState] = useState<{ status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string } | null>(null)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
@@ -153,7 +157,7 @@ export function App() {
   }, [scope, matchId, refsByMatch, project])
   const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
   const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
-  const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
+  const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.side === null), [scopeRefs])
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
   // ---- reels --------------------------------------------------------------------------------
@@ -268,6 +272,13 @@ export function App() {
 
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group).reel)
+  }, [withReel])
+  // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
+  const markPlay = useCallback((ref: PlayRef, m: Marker) => {
+    withReel(r => {
+      const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }])
+      return toggleMarker(next, ids[0], m)
+    })
   }, [withReel])
 
   const createReel = () => {
@@ -407,6 +418,30 @@ export function App() {
     if (r && id && r.clips[id]) updateReel(setAnnotations(r, id, list))
   }, [updateReel])
 
+  // Puts a picture (or page 1 of a PDF) in the middle of the frame, 30% of its width.
+  const insertImage = useCallback(async (path?: string): Promise<string | null> => {
+    const { reel: r, activeClipId: id, matches: ms } = latest.current
+    const c = r && id ? r.clips[id] : null
+    if (!c) return null
+    try {
+      const img = await insertAsset(path)
+      if (!img) return null
+      const m = ms[c.matchId]
+      const frame = m?.width && m.height ? m.width / m.height : 16 / 9
+      const ratio = (img.height / img.width) * frame // normalized height per normalized width
+      let w = 0.3, h = w * ratio
+      if (h > 0.8) { h = 0.8; w = h / ratio }
+      const a: Annotation = { id: crypto.randomUUID(), kind: 'image', color: '#FFFFFF', x: (1 - w) / 2, y: (1 - h) / 2, w, h, assetId: img.assetId }
+      const now = latest.current.reel?.clips[c.id]
+      if (now) setAnns([...now.annotations, a])
+      setSelectedAnn(a.id); setAnnTool('select')
+      return a.id
+    } catch (e) {
+      setError((e as Error).message)
+      return null
+    }
+  }, [setAnns])
+
   const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
     const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
     const c = r && id ? r.clips[id] : null
@@ -431,8 +466,8 @@ export function App() {
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
       else if (e.key === 'Escape') playback.stopSequence()
-      else if (latest.current.activeClipId && /^[vtacrflp]$/i.test(e.key)) {
-        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand', l: 'polyline', p: 'polygon' }
+      else if (latest.current.activeClipId && /^[vtacrfglp]$/i.test(e.key)) {
+        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand', g: 'triangle', l: 'polyline', p: 'polygon' }
         setAnnTool(tools[e.key.toLowerCase()])
       }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {
@@ -500,7 +535,7 @@ export function App() {
       if (opts.exportTo) return smokeExport(res, opts.exportTo)
       if (opts.m8) return smokeM8(res, opts.m8)
       if (opts.video) return smokeVideo(res, opts)
-      if (opts.obj) return smokeObjects(res, opts)
+      if (opts.obj) return smokeObjects(res, opts).catch(e => { throw new Error(String((e as Error).stack)) }) // keep where it failed in the log
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -555,6 +590,7 @@ export function App() {
         Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value)
         el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await sleep(120)
       }
+      const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('.ann-tools button')].find(b => b.textContent?.startsWith(text))!
       const log: Record<string, unknown> = {}
 
       // Polygon: three clicks, then a double-click (whose two clicks add one duplicate point).
@@ -576,10 +612,12 @@ export function App() {
       await setValue('矢印の先', 'both')
       log.arrowHeads = find('arrow')!.heads
 
-      // Polygon: select by its top edge, drag the top edge's midpoint up (adds a vertex), then
-      // double-click the new vertex to delete it again.
+      // Polygon: select by its top edge, turn on Edit Points, drag the top edge's midpoint up (adds
+      // one vertex however many moves arrive), then double-click the new vertex to delete it again.
       await down(0.3, 0.2)
-      await stroke([[0.3, 0.2], [0.3, 0.15], [0.3, 0.1]])
+      button('頂点の編集').click(); await sleep(120)
+      log.probe = { sel: latest.current.selectedAnn?.slice(0, 4), kind: anns().find(a => a.id === latest.current.selectedAnn)?.kind, pressed: document.querySelector('.ann-tools [aria-pressed]')?.getAttribute('aria-pressed') }
+      await stroke([[0.3, 0.2], [0.3, 0.18], [0.3, 0.16], [0.3, 0.14], [0.3, 0.12], [0.3, 0.1]])
       log.polygonAfterInsert = (find('polygon')!.points as unknown[]).length
       await dbl(0.3, 0.1)
       log.polygonAfterDelete = (find('polygon')!.points as unknown[]).length
@@ -600,6 +638,28 @@ export function App() {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
       ctl<HTMLInputElement>('枠付き').click(); await sleep(150)
       log.text = { box: !!find('text')!.box, padding: (find('text')!.box as { padding?: number } | undefined)?.padding }
+      // Triangle by dragging a box; widened by its right box handle (all points scale), then a
+      // vertex added in Edit Points mode.
+      ;(document.activeElement as HTMLElement | null)?.blur() // the box checkbox has focus, and keys typed there are ignored
+      await key('g'); await stroke([[0.55, 0.55], [0.6, 0.6], [0.65, 0.7]])
+      const triId = latest.current.selectedAnn
+      const tri = () => anns().find(a => a.id === triId) as { kind: string; points: number[][] } | undefined
+      log.triangle = tri()?.points.length ?? 0
+      await key('v'); await stroke([[0.65, 0.625], [0.7, 0.625], [0.75, 0.625]])
+      log.triangleWidened = tri() ? +(Math.max(...tri()!.points.map(p => p[0])) - Math.min(...tri()!.points.map(p => p[0]))).toFixed(3) : null
+      button('頂点の編集').click(); await sleep(120)
+      await stroke([[0.65, 0.7], [0.65, 0.75], [0.65, 0.8]]) // bottom edge's midpoint
+      log.triangleAfterInsert = tri()?.points.length ?? 0
+
+      // Pictures: an image file and page 1 of a PDF, placed in the corners.
+      if (opts.assets?.length) {
+        const ids: string[] = []
+        for (const path of opts.assets) { const id = await insertImage(path); if (id) ids.push(id) }
+        await sleep(300)
+        setAnns(anns().map(a => a.kind !== 'image' ? a : { ...a, x: ids.indexOf(a.id) === 0 ? 0.02 : 0.68, y: 0.05 }))
+        await sleep(300)
+        log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
+      }
       await key('v'); setSelectedAnn(null); await sleep(300)
 
       if (opts.videoExportTo) {
@@ -1118,18 +1178,20 @@ export function App() {
       ) : (
         <main className="workspace">
           <aside className="sidebar">
-            <select className="match-select" value={matchId ?? ''} onChange={e => setMatchId(e.target.value)} aria-label="試合">
+            <select className="match-select" value={scope === 'all' ? '' : matchId ?? ''} aria-label="検索する試合"
+              onChange={e => { if (e.target.value) { setScope('match'); setMatchId(e.target.value) } else setScope('all') }}>
+              <option value="">すべての試合（{project.matches.length}）</option>
               {project.matches.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
-              filter={filter} onChange={setFilter} people={people} scope={scope} onScope={setScope}
+              filter={filter} onChange={setFilter} people={people}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
               onAddAll={() => addPlays(results)}
             />
             {Object.keys(dvws).length
               ? <PlayList refs={results} matches={matches} matchLabels={matchLabels} showMatch={scope === 'all'}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onAdd={r => addPlays([r])} />
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
               : <p className="muted pad">読み込み中…</p>}
           </aside>
           <section className="stage">
@@ -1144,7 +1206,7 @@ export function App() {
                       <AnnotationLayer
                         size={size} annotations={active.annotations} clip={here}
                         editable={!seqPlaying} tool={annTool} style={annStyle}
-                        selectedId={selectedAnn} onSelect={setSelectedAnn} onChange={setAnns}
+                        selectedId={selectedAnn} editPoints={editPoints} onSelect={setSelectedAnn} onChange={setAnns}
                       />
                     )}
                   </>
@@ -1167,8 +1229,8 @@ export function App() {
             {active && activeInfo?.range && active.matchId === matchId && (
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
-                annotations={active.annotations} selectedId={selectedAnn} onSelect={setSelectedAnn} onChange={setAnns}
-                clip={activeInfo.range} disabled={seqPlaying}
+                annotations={active.annotations} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints}
+                onSelect={setSelectedAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
               />
             )}
             {active && activeInfo?.ref && active.matchId === matchId && (
@@ -1208,7 +1270,7 @@ export function App() {
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)}
           initial={picker === 'create'
-            ? { name: '', codes: ['HTH', 'HTA'], selected: [] }
+            ? { name: '', codes: ['HTH', 'HTA'].filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {settingsOpen && settings && (
@@ -1231,6 +1293,7 @@ interface SmokeOpts {
   m8?: string
   video?: boolean
   obj?: boolean
+  assets?: string[] // with obj: image / PDF files to insert
   videoExportTo?: string
   home?: string
   folders?: string[]

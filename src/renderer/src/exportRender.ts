@@ -6,6 +6,7 @@ import { drawCaption, drawScoreboard, drawTitleCard } from '../../shared/overlay
 import type { Clip } from '../../shared/reel'
 import type { PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
+import { assetImage, preloadAssets } from './assets'
 
 export const EXPORT_HEIGHT = 720
 
@@ -28,6 +29,7 @@ export function exportFormat(clips: Clip[], matches: Record<string, Match>): { w
 export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
+  await preloadAssets(clips.flatMap(c => c.annotations.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))))
   const items: ExportItem[] = []
   for (const p of plan) {
     if (p.kind === 'card') {
@@ -58,7 +60,7 @@ async function clipLayers(c: Clip, r: { in: number; out: number }, overlay: Over
       png: await png(W, H, ctx => {
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, overlay.theme)
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, overlay.theme)
-        for (const a of always) drawAnnotation(ctx, a, W, H)
+        for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),
     })
   }
@@ -72,7 +74,7 @@ async function clipLayers(c: Clip, r: { in: number; out: number }, overlay: Over
   }
   for (const [k, list] of timed) {
     const [from, to] = k.split('|').map(Number)
-    layers.push({ from, to, png: await png(W, H, ctx => list.forEach(a => drawAnnotation(ctx, a, W, H))) })
+    layers.push({ from, to, png: await png(W, H, ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage))) })
   }
   return layers
 }

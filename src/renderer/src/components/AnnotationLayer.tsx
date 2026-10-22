@@ -3,10 +3,12 @@ import {
   applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt,
   type Annotation, type AnnotationKind, type StylePatch,
 } from '../../../shared/annotation'
-import { dragHandle, handlesOf, removeVertex, type Handle } from '../../../shared/annotationEdit'
+import { dragHandle, handlesOf, pointsBox, removeVertex, trianglePoints, type Handle } from '../../../shared/annotationEdit'
+import { assetImage, subscribeAssets } from '../assets'
 import { playback } from '../playback'
 
-export type Tool = 'select' | AnnotationKind
+// A triangle is drawn like a box and stored as a polygon.
+export type Tool = 'select' | AnnotationKind | 'triangle'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 export type AnnStyle = StylePatch & { color: string; width: number; size: number }
 
@@ -18,6 +20,7 @@ interface Props {
   tool: Tool
   style: AnnStyle
   selectedId: string | null
+  editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
 }
@@ -38,13 +41,22 @@ const HANDLE_PX = 7 // grab radius around a handle
 // (arrow ends, box resize, vertices), polyline / polygon drawing by clicks, and text editing.
 export function AnnotationLayer(p: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const [drag, setDrag] = useState<Drag | null>(null)
+  const [drag, setDragState] = useState<Drag | null>(null)
+  // Pointer moves can arrive faster than React re-renders, so the drag and the list it edits are
+  // also kept in refs: each move builds on the previous one, not on a stale render.
+  const dragRef = useRef<Drag | null>(null)
+  const setDrag = (d: Drag | null) => { dragRef.current = d; setDragState(d) }
+  const annsRef = useRef(p.annotations)
+  annsRef.current = p.annotations
+  const inputRef = useRef<HTMLInputElement>(null)
   // A polyline / polygon being drawn: fixed points plus the rubber-band point under the cursor.
   const [path, setPathState] = useState<PathDraft | null>(null)
   // Mirrors path so finishing reads the latest points and runs once, outside any state updater.
   const pathRef = useRef<PathDraft | null>(null)
   const setPath = (q: PathDraft | null) => { pathRef.current = q; setPathState(q) }
   const [textEdit, setTextEdit] = useState<{ id: string | null; x: number; y: number; value: string } | null>(null)
+  const [assetTick, setAssetTick] = useState(0) // redraw when an image finishes loading
+  useEffect(() => subscribeAssets(() => setAssetTick(n => n + 1)), [])
   const [time, setTime] = useState(playback.current.time)
   useEffect(() => playback.subscribe(s => setTime(s.time)), [])
 
@@ -54,7 +66,7 @@ export function AnnotationLayer(p: Props) {
     : null
   const shown = drag?.mode === 'draw' ? [...p.annotations, drag.draft] : pathDraft ? [...p.annotations, pathDraft] : p.annotations
   const selected = p.editable && p.selectedId ? p.annotations.find(a => a.id === p.selectedId) ?? null : null
-  const handles = selected ? handlesOf(selected) : []
+  const handles = selected ? handlesOf(selected, p.editPoints) : []
 
   useEffect(() => {
     const c = canvas.current
@@ -70,7 +82,7 @@ export function AnnotationLayer(p: Props) {
       const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'
       if (!vis && !p.editable) continue
       ctx.globalAlpha = vis ? 1 : 0.3
-      drawAnnotation(ctx, a, p.size.w, p.size.h)
+      drawAnnotation(ctx, a, p.size.w, p.size.h, assetImage)
     }
     ctx.globalAlpha = 1
     if (selected) {
@@ -80,7 +92,7 @@ export function AnnotationLayer(p: Props) {
       ctx.setLineDash([])
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit])
+  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {
@@ -105,7 +117,11 @@ export function AnnotationLayer(p: Props) {
     const near = handles.filter(h => Math.hypot((h.x - pt[0]) * p.size.w, (h.y - pt[1]) * p.size.h) <= HANDLE_PX)
     return near.find(h => h.kind !== 'mid') ?? near[0] ?? null
   }
-  const replace = (a: Annotation) => p.onChange(p.annotations.map(x => (x.id === a.id ? a : x)))
+  const replace = (a: Annotation) => {
+    const next = annsRef.current.map(x => (x.id === a.id ? a : x))
+    annsRef.current = next
+    p.onChange(next)
+  }
 
   const finishPath = (points?: [number, number][]) => {
     const cur = pathRef.current
@@ -121,8 +137,13 @@ export function AnnotationLayer(p: Props) {
 
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
-    try { canvas.current!.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
     const pt = at(e)
+    if (p.tool === 'text') {
+      e.preventDefault()
+      setTimeout(() => setTextEdit({ id: null, x: pt[0], y: pt[1], value: '' }), 0)
+      return
+    }
+    try { canvas.current!.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
     if (p.tool === 'polyline' || p.tool === 'polygon') {
       playback.pause()
       const q = pathRef.current
@@ -141,11 +162,11 @@ export function AnnotationLayer(p: Props) {
       if (hit) setDrag({ mode: 'move', id: hit.id, from: pt, orig: hit })
       return
     }
-    if (p.tool === 'text') { setTextEdit({ id: null, x: pt[0], y: pt[1], value: '' }); return }
     playback.pause()
     const base = { id: uid(), color: p.style.color }
     const draft: Annotation = p.tool === 'arrow' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width }
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
+      : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
       : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
     setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
   }
@@ -153,13 +174,14 @@ export function AnnotationLayer(p: Props) {
   const onMove = (e: PointerEvent) => {
     const [x, y] = at(e)
     if (pathRef.current) { setPath({ ...pathRef.current, hover: [x, y] }); return }
+    const drag = dragRef.current
     if (!drag) return
     if (drag.mode === 'move') {
       replace(translate(drag.orig, x - drag.from[0], y - drag.from[1]))
       return
     }
     if (drag.mode === 'handle') {
-      const cur = p.annotations.find(a => a.id === drag.id)
+      const cur = annsRef.current.find(a => a.id === drag.id)
       if (!cur) return
       const r = dragHandle(cur, drag.handle, x, y, { keepAspect: e.shiftKey })
       replace(r.a)
@@ -170,20 +192,23 @@ export function AnnotationLayer(p: Props) {
     const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
+      : d.kind === 'polygon' ? { ...d, points: trianglePoints(drag.from, [x, y]) }
       : d
     setDrag({ ...drag, draft: next })
   }
 
   const onUp = () => {
+    const drag = dragRef.current
     if (drag?.mode === 'draw') {
       const d = drag.draft
       const big = d.kind === 'arrow' ? Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > 0.01
         : d.kind === 'freehand' ? d.points.length > 2
         : d.kind === 'rect' || d.kind === 'circle' ? Math.abs(d.w) > 0.005 && Math.abs(d.h) > 0.005
+        : d.kind === 'polygon' ? pointsBox(d.points).w > 0.005 && pointsBox(d.points).h > 0.005
         : true
       if (big) {
         const done = d.kind === 'circle' || d.kind === 'rect' ? normalizeBox(d) : d
-        p.onChange([...p.annotations, done])
+        p.onChange([...annsRef.current, done])
         p.onSelect(done.id)
       }
     }
@@ -225,6 +250,8 @@ export function AnnotationLayer(p: Props) {
     else if (e.key === 'Escape') setTextEdit(null)
   }
 
+  useEffect(() => { if (textEdit) requestAnimationFrame(() => inputRef.current?.focus()) }, [textEdit?.id, textEdit?.x, textEdit?.y])
+
   const editingText = textEdit?.id ? p.annotations.find(a => a.id === textEdit.id) : null
   const textSize = (editingText?.kind === 'text' ? editingText.size : p.style.size) * (p.size.h / 720)
   const cursor = p.tool === 'select' ? 'default' : 'crosshair'
@@ -236,7 +263,7 @@ export function AnnotationLayer(p: Props) {
       {path && <div className="ann-hint">クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止</div>}
       {textEdit && (
         <input
-          className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト"
+          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト"
           style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? p.style.color }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}
         />

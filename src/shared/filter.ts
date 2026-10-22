@@ -8,6 +8,7 @@ export interface PlayRef {
   matchId: string
   play: Play
   teamRole: TeamRole | null // null: all-home input, or neither team is ours
+  side: Side | null // null: all-home input, where the team can't be known
   teamCode: string
   personKey: string // player key after the alias table
   name: string
@@ -15,7 +16,7 @@ export interface PlayRef {
 }
 
 export interface PlayFilter {
-  team: 'all' | TeamRole
+  team: 'all' | 'home' | 'away'
   person: string | null
   skills: string[] // empty = any
   effects: string[]
@@ -50,6 +51,7 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
     matchId,
     play: p,
     teamRole: dvw.allHome || our === null ? null : p.side === our ? 'our' : 'opp',
+    side: dvw.allHome ? null : p.side,
     teamCode: dvw.allHome ? '—' : (p.side === '*' ? dvw.teams[0] : dvw.teams[1]).code,
     personKey: resolvePerson(p.playerKey, settings.playerAliases),
     name: displayName(dvw.players, p.side, p.jersey),
@@ -61,7 +63,7 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
 export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
   return refs.filter(r => {
     const p = r.play
-    if (f.team !== 'all' && r.teamRole !== null && r.teamRole !== f.team) return false
+    if (f.team !== 'all' && r.side !== null && r.side !== (f.team === 'home' ? '*' : 'a')) return false
     if (f.person && r.personKey !== f.person) return false
     if (f.skills.length && !f.skills.includes(p.skill)) return false
     if (f.effects.length && !f.effects.includes(p.effect)) return false

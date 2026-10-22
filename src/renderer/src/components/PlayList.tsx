@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { playLabel } from '../../../shared/labels'
-import { MARKER_COLORS, type Group } from '../../../shared/reel'
+import { MARKER_COLORS, type Group, type Marker } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
@@ -19,11 +19,11 @@ interface Props {
   selected: PlayKey | null
   onJump: (r: PlayRef) => void
   reelGroups: Map<string, Group> // `${matchId}:${playId}` -> group, for plays already in the reel
-  onAdd: (r: PlayRef) => void
+  onMark: (r: PlayRef, m: Marker) => void
 }
 
 // Only the rows in view are rendered: "all matches" can be tens of thousands of plays.
-export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId, selected, onJump, reelGroups, onAdd }: Props) {
+export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId, selected, onJump, reelGroups, onMark }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(600)
@@ -59,7 +59,7 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
         key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW} showMatch={showMatch} matchLabel={matchLabels[r.matchId]}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
-        group={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onAdd={onAdd}
+        group={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark}
       />,
     )
   }
@@ -73,27 +73,30 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
   )
 }
 
-const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime, selected, now, onJump, group, onAdd }: {
+const MARKERS: Marker[] = [1, 2, 3, 4, 5]
+
+const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime, selected, now, onJump, group, onMark }: {
   r: PlayRef; top: number; showMatch: boolean; matchLabel: string; videoTime: number; selected: boolean; now: boolean
-  onJump: (r: PlayRef) => void; group: Group | null; onAdd: (r: PlayRef) => void
+  onJump: (r: PlayRef) => void; group: Group | null; onMark: (r: PlayRef, m: Marker) => void
 }) {
   const p = r.play
   return (
     <div role="listitem" style={{ top, height: ROW }}
-      className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}`} onClick={() => onJump(r)}>
+      className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${group === 'none' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
+      title={`映像 ${formatTime(videoTime)}${group === 'none' ? '・シーンに入っています（マーカーなし）' : ''}`}>
       {showMatch && <span className="match">{matchLabel}</span>}
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
       <span className={`skill skill-${p.skill}`}>{playLabel(p.skill, p.effect)}</span>
-      <span className="vtime">{formatTime(videoTime)}</span>
-      {group === null ? (
-        <button className="add" title="今のシーンに追加" onClick={e => { e.stopPropagation(); onAdd(r) }}>＋</button>
-      ) : (
-        <span className="in-reel" title={group === 'none' ? '今のシーンに入っています（マーカーなし）' : `今のシーンに入っています（マーカー ${group}）`}
-          style={group === 'none' ? undefined : { background: MARKER_COLORS[group], color: '#fff' }}>{group === 'none' ? '✓' : group}</span>
-      )}
+      <span className="marks">
+        {MARKERS.map(m => (
+          <button key={m} className={`mark${group === m ? ' on' : ''}`} style={group === m ? { background: MARKER_COLORS[m], borderColor: MARKER_COLORS[m] } : undefined}
+            title={group === m ? `マーカー ${m} を外す` : `今のシーンにマーカー ${m} で入れる`}
+            onClick={e => { e.stopPropagation(); onMark(r, m) }}>{m}</button>
+        ))}
+      </span>
     </div>
   )
 })

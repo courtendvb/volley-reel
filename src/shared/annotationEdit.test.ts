@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyStyle, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
-import { dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints } from './annotationEdit'
+import { dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -11,8 +11,22 @@ describe('handles', () => {
   it('gives arrows two ends, boxes eight, and point shapes vertices plus midpoints', () => {
     expect(handlesOf({ id: 'a', kind: 'arrow', color: '#FFF', x1: 0, y1: 0, x2: 1, y2: 1, width: 3 }).map(h => h.id)).toEqual(['p1', 'p2'])
     expect(handlesOf(rect)).toHaveLength(8)
-    expect(handlesOf(poly).map(h => h.id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1', 'm2']) // closed: 3 midpoints
-    expect(handlesOf(line).map(h => h.id)).toEqual(['v0', 'v1', 'm0'])
+    expect(handlesOf(poly, true).map(h => h.id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1', 'm2']) // closed: 3 midpoints
+    expect(handlesOf(line, true).map(h => h.id)).toEqual(['v0', 'v1', 'm0'])
+    expect(handlesOf(poly).map(h => h.id)).toEqual(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) // not editing points
+  })
+
+  it('resizes a point shape as a box, scaling every point', () => {
+    const r = dragHandle(poly, 'e', 0.9, 0.3).a as { points: number[][] }
+    expect(r.points.map(p => +p[0].toFixed(6))).toEqual([0.1, 0.9, 0.5])
+  })
+
+  it('makes triangles and turns boxes into polygons', () => {
+    expect(trianglePoints([0.4, 0.6], [0.2, 0.2])).toEqual([[0.30000000000000004, 0.2], [0.4, 0.6], [0.2, 0.6]])
+    const p = toPolygon({ ...rect, fill: '#000' } as Annotation)
+    expect(p).toMatchObject({ kind: 'polygon', fill: '#000', width: 6 })
+    expect((p as { points: unknown[] }).points).toHaveLength(4)
+    expect((toPolygon({ ...rect, kind: 'circle' } as Annotation) as { points: unknown[] }).points).toHaveLength(16)
   })
 })
 
@@ -58,8 +72,8 @@ describe('editing points', () => {
     const pts: [number, number][] = Array.from({ length: 200 }, (_, i) => [i / 199, 0.5 + (i % 2 ? 0.0001 : 0)])
     expect(simplifyPoints(pts, 2, 1280, 720)).toHaveLength(2) // a jittery straight line
     const free: Annotation = { id: 'f', kind: 'freehand', color: '#FFF', width: 3, points: pts }
-    expect(handlesOf(free)).toHaveLength(0) // too many points to edit
-    expect(handlesOf(simplify(free, 2, 1280, 720)).length).toBeGreaterThan(0)
+    expect(handlesOf(free, true)).toHaveLength(0) // too many points to edit
+    expect(handlesOf(simplify(free, 2, 1280, 720), true).length).toBeGreaterThan(0)
   })
 
   it('closes and opens a path', () => {

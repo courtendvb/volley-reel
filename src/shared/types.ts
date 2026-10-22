@@ -156,6 +156,12 @@ export interface Api {
   onExportEvent(cb: (e: ExportEvent) => void): () => void
   showInFolder(path: string): Promise<void>
   takeNotices(): Promise<string[]>
+  // Images for annotations, kept in the project's assets/ folder. Picking an image copies it there;
+  // picking a PDF returns its bytes, and the renderer saves page 1 as a PNG.
+  pickAsset(): Promise<PickedAsset | null>
+  saveAsset(png: Uint8Array): Promise<string>
+  readAsset(id: string): Promise<Uint8Array>
+  smokePickAsset?: (path: string) => Promise<PickedAsset | null>
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
@@ -165,6 +171,8 @@ export interface Api {
   smokeCreateProject?: (dir: string, init: ProjectInit) => Promise<ProjectInfo>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
+
+export type PickedAsset = { kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array; name: string }
 
 // ---- export (design §3.8) --------------------------------------------------------------------
 // The renderer draws every overlay to PNG with the same functions as the preview; the main

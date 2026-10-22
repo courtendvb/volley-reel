@@ -1,14 +1,12 @@
 import { EFFECTS, SKILLS } from '../../../shared/labels'
 import { EMPTY_FILTER, type Person, type PlayFilter } from '../../../shared/filter'
 
-export type Scope = 'match' | 'all'
+export type Scope = 'match' | 'all' // picked with the match select above the filters
 
 interface Props {
   filter: PlayFilter
   onChange: (f: PlayFilter) => void
   people: Person[]
-  scope: Scope
-  onScope: (s: Scope) => void
   shown: number
   total: number
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
@@ -17,15 +15,15 @@ interface Props {
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 
-export function FilterPanel({ filter: f, onChange, people, scope, onScope, shown, total, teamFilterLimited, onAddAll }: Props) {
+export function FilterPanel({ filter: f, onChange, people, shown, total, teamFilterLimited, onAddAll }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
 
   return (
     <div className="filters">
       <div className="filter-row">
-        <Segmented value={scope} onChange={onScope} options={[['match', 'この試合'], ['all', '全試合']]} />
-        <Segmented value={f.team} onChange={team => set({ team })} options={[['all', 'すべて'], ['our', '自チーム'], ['opp', '相手']]} />
+        <label className="field-label">チーム</label>
+        <Segmented value={f.team} onChange={team => set({ team })} options={[['all', 'すべて'], ['home', 'home'], ['away', 'away']]} />
       </div>
       {teamFilterLimited && f.team !== 'all' && (
         <p className="hint">全部ホーム入力の試合はチームを区別できないため、全プレーを含めています</p>

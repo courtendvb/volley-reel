@@ -64,13 +64,13 @@ describe('the same player across matches', () => {
 
 describe('filters', () => {
   it('combine team, skill and effect', () => {
-    const r = applyFilter(refs(), { ...EMPTY_FILTER, team: 'opp', skills: ['R'], effects: ['#', '+'] })
-    expect(r.map(x => `${x.matchId}${x.play.code.slice(0, 6)}`)).toEqual(['Aa01RQ+', 'B*01RQ#'])
+    const r = applyFilter(refs(), { ...EMPTY_FILTER, team: 'away', skills: ['R'], effects: ['#', '+'] })
+    expect(r.map(x => `${x.matchId}${x.play.code.slice(0, 6)}`)).toEqual(['Aa01RQ+'])
   })
 
   it('use the rotation of the team that made the play', () => {
     expect(applyFilter(refs(), { ...EMPTY_FILTER, rots: [3] }).every(x => x.matchId === 'A' && x.play.side === 'a')).toBe(true)
-    expect(applyFilter(refs(), { ...EMPTY_FILTER, team: 'our', rots: [2] }).map(x => x.matchId)).toEqual(['B'])
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, team: 'away', rots: [2] }).map(x => x.matchId)).toEqual(['B'])
   })
 
   it('keep all-home plays when filtering by team, since their team is unknown', () => {
@@ -79,7 +79,7 @@ describe('filters', () => {
 `))
     const r = buildRefs('C', allHome, settings)
     expect(r[0].teamRole).toBeNull()
-    expect(applyFilter(r, { ...EMPTY_FILTER, team: 'opp' })).toHaveLength(1)
+    expect(applyFilter(r, { ...EMPTY_FILTER, team: 'away' })).toHaveLength(1)
   })
 
   it('match zones', () => {

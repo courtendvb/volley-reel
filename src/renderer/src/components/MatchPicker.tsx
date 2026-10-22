@@ -10,19 +10,30 @@ interface Props {
   onClose: () => void
 }
 
-// Choose a project's matches from the library (v3): type our team's three-letter codes and the
-// library narrows to matches with those teams; tick any number of them.
+// Choose a project's matches from the library (v3): pick our team's three-letter codes from the
+// teams in the library and it narrows to matches with those teams; tick any number of them.
 export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) {
   const [name, setName] = useState(initial.name)
-  const [codesText, setCodesText] = useState(initial.codes.join(', '))
+  const [codes, setCodes] = useState(() => initial.codes.map(c => c.toUpperCase()))
   const [selected, setSelected] = useState(() => new Set(initial.selected))
-  const codes = codesText.toUpperCase().split(/[,\s]+/).filter(Boolean)
+  // Every team in the library, with its name and how many matches it has.
+  const teams = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; n: number }>()
+    for (const m of matches) for (const t of m.teams) {
+      const code = t.code.toUpperCase()
+      const e = map.get(code) ?? { code, name: t.name, n: 0 }
+      e.n++
+      map.set(code, e)
+    }
+    return [...map.values()].sort((a, b) => a.code.localeCompare(b.code))
+  }, [matches])
+  const teamName = (code: string) => teams.find(t => t.code === code)?.name
   const candidates = useMemo(() => {
     const ofTeam = codes.length ? matches.filter(m => m.teams.some(t => codes.includes(t.code.toUpperCase()))) : matches
     // Keep ticked matches visible even if the codes no longer cover them.
     const extra = matches.filter(m => selected.has(m.id) && !ofTeam.includes(m))
     return [...ofTeam, ...extra].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
-  }, [matches, codesText, selected])
+  }, [matches, codes, selected])
 
   const toggle = (id: string) => setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const all = candidates.every(m => selected.has(m.id))
@@ -37,8 +48,17 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
               <input value={name} onChange={e => setName(e.target.value)} placeholder="例: 2026-27 前半ハイライト" /></label>
           )}
           <label className="field"><span className="field-label">対象チーム</span>
-            <input value={codesText} onChange={e => setCodesText(e.target.value)} placeholder="HTH, HTA" aria-label="対象チームのコード" /></label>
-          <p className="hint">スリーレターコード（DVW の [3TEAMS]）。このチームが出ている試合だけを倉庫から抽出し、プロジェクトの「自チーム」になります。</p>
+            <span className="team-chips">
+              {codes.map(c => (
+                <span key={c} className="team-chip" title={teamName(c)}>{c}
+                  <button className="link" aria-label={`${c} を外す`} onClick={() => setCodes(cs => cs.filter(x => x !== c))}>×</button></span>
+              ))}
+              <select aria-label="対象チームを追加" value="" onChange={e => { const c = e.target.value; if (c) setCodes(cs => [...cs, c]) }}>
+                <option value="">{codes.length ? 'チームを追加…' : 'チームを選ぶ…'}</option>
+                {teams.filter(t => !codes.includes(t.code)).map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}（${t.n}試合）`}</option>)}
+              </select>
+            </span></label>
+          <p className="hint">倉庫にある試合のチーム（DVW の [3TEAMS]）から選びます。複数選べます。このチームが出ている試合だけを抽出し、プロジェクトの「自チーム」になります。</p>
         </div>
         <div className="filter-row">
           <span className="count"><b>{selected.size}</b> 試合を選択中（候補 {candidates.length}）</span>

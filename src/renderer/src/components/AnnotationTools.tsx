@@ -3,7 +3,7 @@ import {
   COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
-import { MAX_EDIT_POINTS, setClosed, simplify } from '../../../shared/annotationEdit'
+import { MAX_EDIT_POINTS, setClosed, simplify, toPolygon } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 import type { AnnStyle, Tool } from './AnnotationLayer'
 
@@ -14,19 +14,22 @@ interface Props {
   onStyle: (s: AnnStyle) => void
   annotations: Annotation[]
   selectedId: string | null
+  editPoints: boolean
+  onEditPoints: (on: boolean) => void
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
+  onInsertImage: () => void
   clip: { in: number; out: number }
   disabled: boolean // during through-play
 }
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', '選択', 'V', '選択・移動・頂点の編集'], ['text', 'T', 'T', 'テキスト'], ['arrow', '↗', 'A', '矢印'],
-  ['circle', '○', 'C', '円'], ['rect', '□', 'R', '四角'], ['polyline', '⌇', 'L', '折れ線（クリックで頂点）'],
+  ['circle', '○', 'C', '円'], ['rect', '□', 'R', '四角'], ['triangle', '△', 'G', '三角形'], ['polyline', '⌇', 'L', '折れ線（クリックで頂点）'],
   ['polygon', '⬠', 'P', '多角形（クリックで頂点）'], ['freehand', '✎', 'F', 'フリーハンド'],
 ]
 const KIND_LABEL: Record<Annotation['kind'], string> = {
-  text: 'テキスト', arrow: '矢印', circle: '円', rect: '四角', freehand: 'フリーハンド', polyline: '折れ線', polygon: '多角形',
+  text: 'テキスト', arrow: '矢印', circle: '円', rect: '四角', freehand: 'フリーハンド', polyline: '折れ線', polygon: '多角形', image: '画像',
 }
 
 // Format panel in the spirit of Office's shape format pane: line, fill and text for the selected
@@ -40,7 +43,7 @@ export function AnnotationTools(p: Props) {
   }
 
   // What the controls show: the selection's values with the old-look defaults filled in.
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' ? 'polygon' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
@@ -54,7 +57,7 @@ export function AnnotationTools(p: Props) {
     outline: (sel?.kind === 'text' ? sel.outline : p.style.outline) ?? true,
     box: (sel?.kind === 'text' ? sel.box : p.style.box) ?? null,
   }
-  const lineKinds = kind === null || kind !== 'text'
+  const lineKinds = kind === null || (kind !== 'text' && kind !== 'image')
   const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
   const textKinds = kind === null || kind === 'text'
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
@@ -69,6 +72,15 @@ export function AnnotationTools(p: Props) {
               onClick={() => p.onTool(t)} disabled={p.disabled}>{label}</button>
           ))}
         </div>
+        <button onClick={p.onInsertImage} disabled={p.disabled} title="画像ファイルか PDF（1ページ目）を動画の上に置く">画像・PDF…</button>
+        {sel && sel.kind !== 'text' && sel.kind !== 'arrow' && sel.kind !== 'image' && (
+          <button className={p.editPoints ? 'on' : ''} aria-pressed={p.editPoints} disabled={p.disabled}
+            title="頂点をドラッグして形を変える。辺の中点を引くと頂点が増え、頂点をダブルクリックで消せます。四角・円は多角形になります。"
+            onClick={() => {
+              if (!p.editPoints && (sel.kind === 'rect' || sel.kind === 'circle')) update(toPolygon(sel))
+              p.onEditPoints(!p.editPoints)
+            }}>頂点の編集</button>
+        )}
         <span className="muted small">{sel ? `${KIND_LABEL[sel.kind]}${sel.kind === 'text' ? `「${sel.text}」` : ''} を編集中` : '次に描く図形の書式'}</span>
       </div>
 
@@ -144,7 +156,7 @@ export function AnnotationTools(p: Props) {
           </>
         ) : (
           <span className="hint">
-            {p.annotations.length ? `注釈 ${p.annotations.length} 個。選択ツールでクリックすると選べます。つまみで形を変え、頂点はダブルクリックで消せます（辺の中点を引くと頂点が増えます）。` : '動画の上をドラッグして描きます。折れ線・多角形はクリックで頂点を置きます。'}
+            {p.annotations.length ? `注釈 ${p.annotations.length} 個。選択ツールでクリックすると選べます。つまみで大きさを変え、「頂点の編集」で頂点を動かせます。` : '動画の上をドラッグして描きます。折れ線・多角形はクリックで頂点を置きます。'}
             表示時刻の「秒」はクリップの IN からの値です。
           </span>
         )}

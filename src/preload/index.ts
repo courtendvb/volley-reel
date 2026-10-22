@@ -19,6 +19,13 @@ const api: Api = {
     return () => ipcRenderer.off('export:event', h)
   },
   showInFolder: p => ipcRenderer.invoke('shell:showInFolder', p),
+  takeNotices: () => ipcRenderer.invoke('project:notices'),
+  smokeEditDvw: (id, code, time) => ipcRenderer.invoke('smoke:editDvw', id, code, time),
+  onFlushRequest: cb => {
+    const h = () => { void cb().finally(() => ipcRenderer.send('app:flushed')) }
+    ipcRenderer.on('app:flush', h)
+    return () => ipcRenderer.off('app:flush', h)
+  },
   onImportProgress: cb => {
     const h = (_e: unknown, p: ImportProgress) => cb(p)
     ipcRenderer.on('import:progress', h)

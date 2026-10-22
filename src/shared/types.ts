@@ -104,6 +104,11 @@ export interface Api {
   cancelExport(): Promise<void>
   onExportEvent(cb: (e: ExportEvent) => void): () => void
   showInFolder(path: string): Promise<void>
+  takeNotices(): Promise<string[]>
+  // Closing the window: the main process asks for pending saves to be written, then closes.
+  onFlushRequest(cb: () => Promise<void>): () => void
+  // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
+  smokeEditDvw?: (matchId: string, deleteCode: string, deleteTime: number) => Promise<string>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 

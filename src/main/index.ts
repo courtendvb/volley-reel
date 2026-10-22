@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { createReadStream, existsSync, readFileSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -30,6 +30,21 @@ app.whenReady().then(async () => {
   registerIpc()
 
   const last = process.env.VR_PROJECT || readSettings().lastProject
+  if (process.env.VR_SMOKE && process.env.VR_SMOKE_CORRUPT && last) corruptFirstReel(last)
+  if (process.env.VR_SMOKE) {
+    // Smoke only: add a point after the first point line and delete one play line in a DVW copy.
+    ipcMain.handle('smoke:editDvw', async (_e, matchId: string, code: string, time: number) => {
+      const m = project?.getMatch(matchId)
+      if (!m) throw new Error('no match')
+      const lines = readFileSync(m.dvwPath, 'latin1').split(/\r?\n/)
+      const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
+      lines.splice(at + 1, 0, lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_s, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`))
+      const del = lines.findIndex(l => l.startsWith(code + ';') && l.split(';')[12] === String(time))
+      lines.splice(del, 1)
+      await writeFile(m.dvwPath, lines.join('\r\n'), 'latin1')
+      return `added a point after line ${at + 1}, deleted line ${del + 1} (${code} @ ${time})`
+    })
+  }
   if (last && existsSync(last)) project = await Project.open(last)
 
   win = new BrowserWindow({
@@ -37,6 +52,18 @@ app.whenReady().then(async () => {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   })
   win.setMenuBarVisibility(false)
+  // Closing: let the renderer write pending reel saves first (autosave runs on a short delay),
+  // with a timeout so a stuck renderer can't keep the window open. A running export is cancelled.
+  let flushed = false
+  win.on('close', e => {
+    if (flushed || !win || win.webContents.isDestroyed()) return
+    e.preventDefault()
+    exporter.cancel()
+    const done = () => { if (flushed) return; flushed = true; clearTimeout(timer); win?.close() }
+    const timer = setTimeout(done, 3000)
+    ipcMain.once('app:flushed', done)
+    win.webContents.send('app:flush')
+  })
   if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else await win.loadFile(join(__dirname, '../renderer/index.html'))
 
@@ -96,6 +123,7 @@ function registerIpc(): void {
     })
   })
   ipcMain.handle('export:cancel', () => exporter.cancel())
+  ipcMain.handle('project:notices', () => project?.takeNotices() ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
 
   ipcMain.handle('reel:list', () => project?.listReels() ?? [])
@@ -145,6 +173,14 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
   console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'cache', 'export'))}`)
 }
 
+function corruptFirstReel(dir: string): void {
+  const reels = join(dir, 'reels')
+  const f = existsSync(reels) ? readdirSync(reels).find(x => x.endsWith('.json')) : undefined
+  if (!f) return
+  writeFileSync(join(reels, f), '{ this is not json')
+  console.log(`[smoke] corrupted ${f}`)
+}
+
 function readSettings(): { lastProject?: string } {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
 }
@@ -154,7 +190,8 @@ function readSettings(): { lastProject?: string } {
 // [VR_SMOKE_KEYS=3,3,1: keys pressed after the jump] [VR_SMOKE_TRIM=1: loop and trim a clip]
 // [VR_SMOKE_ANN=1: draw, move and time annotations through pointer events]
 // [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
-// [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run] [VR_SMOKE_MINIMIZE=1]
+// [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run]
+// [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
@@ -173,7 +210,8 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       trim: !!process.env.VR_SMOKE_TRIM,
       ann: !!process.env.VR_SMOKE_ANN,
       ov: process.env.VR_SMOKE_OV,
-      exportTo: process.env.VR_SMOKE_EXPORT }
+      exportTo: process.env.VR_SMOKE_EXPORT,
+      m8: process.env.VR_SMOKE_M8 }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())

@@ -13,6 +13,7 @@ interface Props {
   onDeleteVideo: (id: string) => void
   onChange: (v: Video) => void
   onSelectScene: (id: string) => void
+  onRenameScene: (id: string, name: string) => void
   onNewScene: () => void
   onOpenOverlay: () => void
   playing: boolean
@@ -28,6 +29,12 @@ const DT_SCENE = 'application/x-vr-scene-index'
 // videos, and editing it changes all of them. The overlay look, through-play and export are per video.
 export function VideoPanel(p: Props) {
   const v = p.video
+  // The scene being renamed in place (its position in the list) and the text so far.
+  const [renaming, setRenaming] = useState<{ i: number; text: string } | null>(null)
+  const finishRename = (id: string) => {
+    if (renaming && renaming.text.trim()) p.onRenameScene(id, renaming.text.trim())
+    setRenaming(null)
+  }
   const [dragOver, setDragOver] = useState<number | null>(null)
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
@@ -65,10 +72,19 @@ export function VideoPanel(p: Props) {
               onDragOver={e => { e.preventDefault(); setDragOver(i) }} onDragLeave={() => setDragOver(null)}
               onDrop={e => { const from = Number(e.dataTransfer.getData(DT_SCENE)); setDragOver(null); if (!isNaN(from) && from !== i) p.onChange(moveSceneAt(v, from, i)) }}>
               <span className="scene-no">{i + 1}</span>
-              <span className="scene-name">{s ? s.name : '（削除されたシーン）'}</span>
+              {s && renaming?.i === i ? (
+                <input className="scene-rename" autoFocus value={renaming.text} aria-label="シーンの名前"
+                  onClick={e => e.stopPropagation()} onChange={e => setRenaming({ i, text: e.target.value })}
+                  onBlur={() => finishRename(id)}
+                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') finishRename(id); else if (e.key === 'Escape') setRenaming(null) }} />
+              ) : (
+                <span className="scene-name" title={s ? 'ダブルクリックで名前を変える（タイトルカードに出る名前）' : undefined}
+                  onDoubleClick={e => { e.stopPropagation(); if (s) setRenaming({ i, text: s.name }) }}>{s ? s.name : '（削除されたシーン）'}</span>
+              )}
               {s && usedIn(id) > 1 && <span className="shared" title={`${usedIn(id)} 本の動画で使っています。直すとすべてに反映されます`}>共有 {usedIn(id)}</span>}
               <span className="muted">{st.clips} 本・{fmtSec(st.sec)}</span>
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
+                {s && <button title="名前を変える（タイトルカードに出る名前）" onClick={() => setRenaming({ i, text: s.name })}>✎</button>}
                 <button title="上へ" disabled={i === 0} onClick={() => p.onChange(moveSceneAt(v, i, i - 1))}>↑</button>
                 <button title="下へ" disabled={i === v.sceneIds.length - 1} onClick={() => p.onChange(moveSceneAt(v, i, i + 1))}>↓</button>
                 <button title="動画から外す（シーンは残ります）" onClick={() => p.onChange(removeSceneAt(v, i))}>×</button>

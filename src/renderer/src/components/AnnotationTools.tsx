@@ -97,6 +97,11 @@ export function AnnotationTools(p: Props) {
                 <option value="end">矢印: 終点</option><option value="both">矢印: 両端</option><option value="none">矢印: なし</option>
               </select>
             )}
+            {(kind === 'rect' || kind === 'circle' || kind === 'polygon') && (
+              // Fill only: no outline (turns the fill on, so the shape doesn't vanish).
+              <label className="check"><input type="checkbox" checked={v.width === 0} aria-label="線なし" disabled={p.disabled}
+                onChange={e => set(e.target.checked ? { width: 0, ...(v.fill ? {} : { fill: v.color }) } : { width: 6 })} /> 線なし</label>
+            )}
           </Group>
         )}
         {fillKinds && (

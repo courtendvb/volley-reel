@@ -116,7 +116,9 @@ export function ReelPanel(p: Props) {
         <button onClick={() => { if (confirm(`シーン「${reel.name}」を削除しますか？${p.usedIn ? `
 ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="シーンを削除">削除</button>
       </div>
-      <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label="シーンの名前" />
+      <label className="reel-name-row"><span className="field-label">名前</span>
+        <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label="シーンの名前"
+          title="シーンの名前。シーンのタイトルカードに出ます" /></label>
 
       <div className="reel-controls">
         <div className="segmented" role="radiogroup" aria-label="書き出し範囲">
@@ -132,9 +134,14 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
 
       <div className="reel-groups" role="list">
         {reel.groupOrder.map((m, gi) => (
-          <section key={m} className={`group${dragOver === `g${m}` ? ' drop-into' : ''}`}
+          <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver === `g${m}` ? ' drop-into' : ''}`}
             onDragOver={allow(`g${m}`)} onDragLeave={() => setDragOver(null)} onDrop={e => onDropGroup(e, m)}>
             <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}>
+              <button className={`group-switch${reel.markerOff?.[m] ? '' : ' on'}`} role="switch" aria-checked={!reel.markerOff?.[m]}
+                aria-label={`マーカー ${m} を使う`}
+                title={reel.markerOff?.[m] ? 'オフ: 再生・書き出しに使わない（クリックでオン）' : 'オン: 再生・書き出しに使う（クリックでオフ）'}
+                onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>
+                <span /></button>
               <span className="swatch" style={{ background: MARKER_COLORS[m] }}>{m}</span>
               <input value={reel.markerNames[m]} placeholder={`マーカー ${m} の名前`} aria-label={`マーカー ${m} の名前`}
                 onChange={e => change(renameMarker(reel, m, e.target.value))} />

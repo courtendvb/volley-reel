@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { THEME_PRESETS, type Anchor, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
+import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
 
 interface Props {
@@ -57,19 +57,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
           <div className="ov-settings">
             <section>
               <span className="field-label">配色</span>
-              <div className="ov-presets">
-                {THEME_PRESETS.map(p => (
-                  <button key={p.name} title={p.name} aria-label={p.name}
-                    className={`ov-preset${p.theme.base === s.theme.base && p.theme.accent === s.theme.accent ? ' on' : ''}`}
-                    onClick={() => onChange({ ...s, theme: p.theme })}>
-                    <span style={{ background: p.theme.base }} /><span style={{ background: p.theme.accent }} />
-                  </button>
-                ))}
-              </div>
-              <div className="filter-row">
-                <label className="check">ベース <input type="color" value={s.theme.base} onChange={e => set('theme', { base: e.target.value.toUpperCase() })} /></label>
-                <label className="check">アクセント <input type="color" value={s.theme.accent} onChange={e => set('theme', { accent: e.target.value.toUpperCase() })} /></label>
-              </div>
+              <p className="hint">配色はプロジェクト全体の設定です。上部の「設定」で変えます。</p>
             </section>
 
             <section>

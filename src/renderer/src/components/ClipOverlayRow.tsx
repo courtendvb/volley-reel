@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { THEME_PRESETS, type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
+import { type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
 
 interface Props {
   override: ClipOverlayOverride | undefined
@@ -45,25 +45,13 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
         onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit() }} />
       <span className="spacer" />
       <span className="ov-gear-wrap">
-        <button className="ov-gear" aria-label="色とタイトルカードの秒数" aria-expanded={gear} title="色とタイトルカードの秒数（動画全体）" onClick={() => setGear(g => !g)}>⚙</button>
+        <button className="ov-gear" aria-label="タイトルカードの秒数" aria-expanded={gear} title="タイトルカードの秒数（動画全体）。配色は上部の「設定」" onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
-          <div className="ov-gear-pop" role="dialog" aria-label="色とタイトルカード">
-            <div className="ov-presets">
-              {THEME_PRESETS.map(p => (
-                <button key={p.name} title={p.name} aria-label={p.name}
-                  className={`ov-preset${p.theme.base === s.theme.base && p.theme.accent === s.theme.accent ? ' on' : ''}`}
-                  onClick={() => onOverlay({ ...s, theme: p.theme })}>
-                  <span style={{ background: p.theme.base }} /><span style={{ background: p.theme.accent }} />
-                </button>
-              ))}
-            </div>
-            <div className="filter-row">
-              <label className="check">ベース <input type="color" value={s.theme.base} onChange={e => onOverlay({ ...s, theme: { ...s.theme, base: e.target.value.toUpperCase() } })} /></label>
-              <label className="check">アクセント <input type="color" value={s.theme.accent} onChange={e => onOverlay({ ...s, theme: { ...s.theme, accent: e.target.value.toUpperCase() } })} /></label>
-            </div>
+          <div className="ov-gear-pop" role="dialog" aria-label="タイトルカード">
             <label className="check">タイトルカード（シーン・マーカー）
               <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数（一括）"
                 onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> 秒</label>
+            <span className="hint">配色はプロジェクト全体の設定です（上部の「設定」）</span>
           </div>
         )}
       </span>

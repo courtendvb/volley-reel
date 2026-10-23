@@ -34,6 +34,7 @@ export interface Reel {
   scope: 'marked' | 'all'
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
   markerCards?: Partial<Record<Marker, boolean>> // title card per marker; missing = the video's setting
+  markerOff?: Partial<Record<Marker, boolean>> // a marker group switched off: kept, but not played or exported
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string
 }
@@ -134,7 +135,7 @@ export function renameMarker(reel: Reel, m: Marker, name: string): Reel {
 // Playback / export order: marker groups in groupOrder, then (scope 'all') unmarked clips by
 // match date and time. `when` gives a clip's [match date, video time].
 export function playOrder(reel: Reel, when: (c: Clip) => [string, number], scope = reel.scope): Clip[] {
-  const marked = reel.groupOrder.flatMap(m => reel.groups[m].map(id => reel.clips[id]))
+  const marked = reel.groupOrder.filter(m => !reel.markerOff?.[m]).flatMap(m => reel.groups[m].map(id => reel.clips[id]))
   if (scope === 'marked') return marked
   return [...marked, ...chronological(reel, reel.groups.none, when)]
 }

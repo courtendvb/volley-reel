@@ -315,7 +315,11 @@ export function App() {
     setVideos(rest); setVideoId(rest[0]?.id ?? null)
   }
 
-  const overlay = useMemo(() => overlaySettings(video?.overlay), [video?.overlay])
+  // The project's colors win over the video's (videos made before project colors keep their own).
+  const overlay = useMemo(() => {
+    const o = overlaySettings(video?.overlay)
+    return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
+  }, [video?.overlay, project?.settings.theme])
   const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null })
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library }
 
@@ -755,7 +759,11 @@ export function App() {
           checks: [{ name: 'scene-card', t: 0.5 }, { name: 'marker-card', t: starts[1] + 0.5 }, { name: 'clip', t: starts[2] + 1 },
             { name: 'second-scene-card', t: starts[plan.findIndex((it, i) => i > 0 && it.kind === 'card' && it.card.marker === null)] + 0.5 }] }
       }
-      return { planV1, lens, timeline, v1After, v2After, undo, videoExport: opts.videoExportTo ?? null, exported }
+      // Marker 2 of the attack scene switched off: out of the plan, greyed in the scene editor.
+      const aLast = latest.current.reels.find(x => x.id === a.id)!
+      setReelId(a.id); updateReel({ ...aLast, markerOff: { 2: true } }); await sleep(400)
+      const planOff = describe(currentPlan('video'))
+      return { planV1, lens, timeline, v1After, v2After, undo, planOff, videoExport: opts.videoExportTo ?? null, exported }
     }
 
     // Each smoke scene gets its own video, taking over the overlay the smoke set on the scene
@@ -1268,6 +1276,7 @@ export function App() {
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
               onSelectVideo={setVideoId} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
               onSelectScene={id => { setReelId(id); setActiveClipId(null) }} onNewScene={createReel}
+              onRenameScene={(id, name) => { const r = latest.current.reels.find(x => x.id === id); if (r && r.name !== name) updateReel({ ...r, name, updatedAt: new Date().toISOString() }) }}
               onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onStop={() => playback.stopSequence()}
               onExport={() => void startExport()} exporting={exportState?.status === 'running' || exportState?.status === 'preparing'}
             />
@@ -1296,7 +1305,7 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} theme={overlay.theme} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   )

@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
 import { listPeople, type PlayRef } from '../../../shared/filter'
+import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
+import { ThemePicker } from './ThemePicker'
 
 interface Props {
   settings: ProjectSettings
+  theme: OverlayTheme // the colors in use now
   rawRefs: PlayRef[] // all matches, built without the alias table so every original key shows
   onSave: (s: ProjectSettings) => Promise<void>
   onClose: () => void
@@ -11,8 +14,9 @@ interface Props {
 
 // 自チームのチームコードと名寄せ表 (design §3.2).
 // Player IDs already merge home/away and the scrimmage "-a" suffix; this table is for what's left.
-export function SettingsDialog({ settings, rawRefs, onSave, onClose }: Props) {
+export function SettingsDialog({ settings, theme: themeNow, rawRefs, onSave, onClose }: Props) {
   const [codes, setCodes] = useState(settings.ourTeamCodes.join(', '))
+  const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
   const [aliases, setAliases] = useState<Record<string, string>>(settings.playerAliases)
   const [showOpp, setShowOpp] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -27,7 +31,7 @@ export function SettingsDialog({ settings, rawRefs, onSave, onClose }: Props) {
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ourTeamCodes: codes.split(/[,\s]+/).filter(Boolean), playerAliases: aliases })
+      await onSave({ ourTeamCodes: codes.split(/[,\s]+/).filter(Boolean), playerAliases: aliases, theme })
       onClose()
     } finally {
       setSaving(false)
@@ -43,6 +47,12 @@ export function SettingsDialog({ settings, rawRefs, onSave, onClose }: Props) {
           <label className="field-label" htmlFor="our-codes">自チームのチームコード</label>
           <input id="our-codes" value={codes} onChange={e => setCodes(e.target.value)} placeholder="HTH, HTA" />
           <p className="hint">DVW の [3TEAMS] のコード。ここにあるチームが「自チーム」になり、スコアボードでは左に置かれます。</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">配色（プロジェクト全体）</span>
+          <ThemePicker value={theme} onChange={setTheme} />
+          <p className="hint">スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。</p>
         </section>
 
         <section className="alias-section">

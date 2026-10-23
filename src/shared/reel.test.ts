@@ -101,6 +101,16 @@ describe('play order', () => {
   })
 })
 
+describe('marker groups switched off', () => {
+  it('are left out of the play order but keep their clips', () => {
+    const { reel, c } = reelWith([2, 4])
+    let r = toggleMarker(toggleMarker(reel, c[0], 1), c[1], 2)
+    r = { ...r, markerOff: { 1: true } }
+    expect(playOrder(r, cl => ['2026-10-11', d.plays[cl.playId].time], 'all').map(x => x.playId)).toEqual([4])
+    expect(r.groups[1]).toEqual([c[0]])
+  })
+})
+
 describe('relink', () => {
   it('re-points clips by fingerprint when ids shift and reports the ones that vanished', () => {
     const { reel, c } = reelWith([2, 4])

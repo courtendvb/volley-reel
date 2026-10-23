@@ -45,7 +45,8 @@ export function dropScene(v: Video, sceneId: string): Video {
   return v.sceneIds.includes(sceneId) ? touch({ ...v, sceneIds: v.sceneIds.filter(id => id !== sceneId) }) : v
 }
 
-export type Card = { marker: number | null; name: string; match: string | null } // marker null = scene card
+// marker null = scene card. opp: the opponent's team code when every clip is from one match (for its logo).
+export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
   | { kind: 'clip'; clip: Clip; sceneId: string }
@@ -56,7 +57,7 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
   order.forEach((c, i) => {
     const g = groupOf(scene, c.id)
     if (g !== null && g !== 'none' && markerCardOn(scene, g, overlay.titleCard.enabled) && (i === 0 || groupOf(scene, order[i - 1].id) !== g)) {
-      out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], match: groupMatch(scene, scene.groups[g], matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
+      out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], ...groupMatch(scene, scene.groups[g], matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ kind: 'clip', clip: c, sceneId: scene.id })
   })
@@ -76,7 +77,7 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
     if (!order.length) continue
     if (overlay.titleCard.sceneCards) {
       const ids = order.map(c => c.id)
-      out.push({ kind: 'card', card: { marker: null, name: s.name, match: groupMatch(s, ids, matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
+      out.push({ kind: 'card', card: { marker: null, name: s.name, ...groupMatch(s, ids, matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push(...planScene(order, s, overlay, matches, ourCodes))
   }
@@ -84,11 +85,17 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
 }
 
 // The card's match line, when every clip it introduces comes from one match.
-function groupMatch(scene: Reel, clipIds: string[], matches: Record<string, Match>, ourCodes: string[]): string | null {
+function groupMatch(scene: Reel, clipIds: string[], matches: Record<string, Match>, ourCodes: string[]): { match: string | null; opp: string | null } {
   const ids = new Set(clipIds.map(id => scene.clips[id]?.matchId).filter(Boolean))
-  if (ids.size !== 1) return null
-  const m = matches[[...ids][0]!]
-  return m ? cardMatchLabel(m, ourCodes) : null
+  const m = ids.size === 1 ? matches[[...ids][0]!] : undefined
+  return m ? { match: cardMatchLabel(m, ourCodes), opp: cardOpponent(m, ourCodes) } : { match: null, opp: null }
+}
+
+// The other team's code, or null when neither or both teams are ours.
+export function cardOpponent(m: Match, codes: string[]): string | null {
+  const side = ourSide(m.teams, codes)
+  if (side === null || codes.includes(m.teams[0].code) && codes.includes(m.teams[1].code)) return null
+  return side === '*' ? m.teams[1].code : m.teams[0].code
 }
 
 // Title card match line: "VS SMT · 2026-10-11".

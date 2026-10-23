@@ -6,7 +6,7 @@ import { drawCaption, drawScoreboard, drawTitleCard } from '../../shared/overlay
 import type { Clip } from '../../shared/reel'
 import type { PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
-import { assetImage, preloadAssets } from './assets'
+import { assetImage, logoImage, preloadAssets, preloadLogos } from './assets'
 
 export const EXPORT_HEIGHT = 720
 
@@ -30,10 +30,11 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
   await preloadAssets(clips.flatMap(c => c.annotations.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))))
+  await preloadLogos(plan.map(p => (p.kind === 'card' ? p.card.opp : null)))
   const items: ExportItem[] = []
   for (const p of plan) {
     if (p.kind === 'card') {
-      items.push({ kind: 'card', durationSec: p.durationSec, png: await png(W, H, ctx => drawTitleCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme)) })
+      items.push({ kind: 'card', durationSec: p.durationSec, png: await png(W, H, ctx => drawTitleCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp))) })
       continue
     }
     const c = p.clip, r = d.range(c, p.sceneId)

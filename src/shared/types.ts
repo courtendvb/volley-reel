@@ -165,6 +165,12 @@ export interface Api {
   saveAsset(png: Uint8Array): Promise<string>
   readAsset(id: string): Promise<Uint8Array>
   smokePickAsset?: (path: string) => Promise<PickedAsset | null>
+  // Team logos (library, by team code) for title cards. Each returns the codes that have one -> file.
+  listLogos(): Promise<Record<string, string>>
+  pickLogo(code: string): Promise<Record<string, string>>
+  removeLogo(code: string): Promise<Record<string, string>>
+  readLogo(code: string): Promise<Uint8Array | null>
+  smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).

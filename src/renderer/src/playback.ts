@@ -10,7 +10,7 @@ export interface SeqItem {
 
 // A title card in a through-play: shown over the paused video for durationSec, then the next item.
 export interface CardItem {
-  card: { marker: number | null; name: string; match: string | null } // marker null = scene card
+  card: { marker: number | null; name: string; match: string | null; opp?: string | null } // marker null = scene card
   durationSec: number
 }
 

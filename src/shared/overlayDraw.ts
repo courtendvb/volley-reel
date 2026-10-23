@@ -90,25 +90,30 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
 
 // Full-frame card at the head of a marker group: small match line over "[n] MARKER NAME".
 // marker null = a scene card: the scene name, a little larger, behind a narrow accent block.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null }, s: OverlaySettings['titleCard'], theme: OverlayTheme): void {
+// logo: the opponent's logo, drawn beside the marker title or above the scene title.
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): void {
   const k = H / 720
   ctx.save()
   fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H)
-  if (d.marker === null) { drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme); ctx.restore(); return }
+  if (d.marker === null) { drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo ?? null); ctx.restore(); return }
   // Marker cards: 3× the base size, the title's top-left at 10% from the left and 30% from the top
   // (shrunk to stay inside the frame when the name is long).
   const name = (s.showMarkerName && d.name ? d.name : `MARKER ${d.marker}`).toUpperCase()
   const match = s.showMatch && d.match ? d.match : null
   const x = W * 0.1, top = H * 0.3
+  const lr = logo ? logoRatio(logo) : 0 // width / height
   const layout = (q: number) => {
     const numW = measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q
     const plateW = measure(ctx, name, font(28 * q), 0.08 * 28 * q) + 46 * q
-    return { numW, plateW, total: numW + plateW - 6 * q }
+    const logoH = (match ? 22 * q : 0) + 46 * q
+    const matchW = match ? measure(ctx, match, font(12 * q, 400), 0.4 * 12 * q) : 0
+    const total = Math.max(numW + plateW - 6 * q, matchW) // the logo goes after the plate or the match line, whichever is wider
+    return { numW, plateW, logoH, total: total + (logo ? 28 * q + logoH * lr : 0) }
   }
   let q = k * 3
   const first = layout(q)
   if (x + first.total > W * 0.95) q *= (W * 0.95 - x) / first.total
-  const { numW, plateW } = layout(q)
+  const { numW, plateW, logoH, total } = layout(q)
   const numFont = font(24 * q), nameFont = font(28 * q), matchFont = font(12 * q, 400)
   const h = 46 * q, slant = 10 * q
   ctx.textBaseline = 'middle'
@@ -120,10 +125,16 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   const nw = measure(ctx, String(d.marker), numFont, 0)
   text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
   text(ctx, name, px + slant + 14 * q, y + h / 2, nameFont, TEXT, 0.08 * 28 * q)
+  if (logo) ctx.drawImage(logo, x + total - logoH * lr, top, logoH * lr, logoH) // as tall as the whole title
   ctx.restore()
 }
 
-function drawSceneCard(ctx: Ctx, W: number, H: number, k: number, name: string, match: string | null, theme: OverlayTheme): void {
+function logoRatio(img: CanvasImageSource): number {
+  const w = (img as { width: number }).width, h = (img as { height: number }).height
+  return w > 0 && h > 0 ? w / h : 1
+}
+
+function drawSceneCard(ctx: Ctx, W: number, H: number, k: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null): void {
   const nameFont = font(36 * k), matchFont = font(12 * k, 400)
   const label = (name || 'SCENE').toUpperCase()
   const blockW = 22 * k, h = 58 * k, slant = 12 * k
@@ -134,6 +145,12 @@ function drawSceneCard(ctx: Ctx, W: number, H: number, k: number, name: string, 
     const mw = measure(ctx, match, matchFont, 0.4 * 12 * k)
     ctx.textBaseline = 'middle'
     text(ctx, match, (W - mw) / 2, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
+  }
+  if (logo) {
+    // Centered above the title (and its match line), at most 120 px tall at 720p and half the width.
+    let lh = 120 * k, lw = lh * logoRatio(logo)
+    if (lw > W * 0.5) { lw = W * 0.5; lh = lw / logoRatio(logo) }
+    ctx.drawImage(logo, (W - lw) / 2, y - (match ? 44 : 20) * k - lh, lw, lh)
   }
   const px = x + blockW - 6 * k
   fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])

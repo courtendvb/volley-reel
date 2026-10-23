@@ -40,7 +40,7 @@ describe('videos made of scenes', () => {
   it('puts a scene card before each scene and marker cards inside, when on', () => {
     const plan = planVideo(video, scenes, order, cards({ sceneCards: true, enabled: true }), matches, ['HTH'])
     expect(describePlan(plan)).toEqual(['[scene:7番のアタック]', '[1:Kills]', '*07AQ#', '*07AQ-', '[2:Others]', '*07AQ+', '[scene:サーブ]', '[1:]', '*01SQ#'])
-    expect(plan[0]).toMatchObject({ kind: 'card', card: { match: 'VS SMT · 2026-10-11' } })
+    expect(plan[0]).toMatchObject({ kind: 'card', card: { match: 'VS SMT · 2026-10-11', opp: 'SMT' } })
   })
 
   it('lets each marker of a scene turn its own card on or off', () => {

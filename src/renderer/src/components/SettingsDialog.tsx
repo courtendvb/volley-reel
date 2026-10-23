@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { listPeople, type PlayRef } from '../../../shared/filter'
 import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
+import { TeamLogos } from './TeamLogos'
 import { ThemePicker } from './ThemePicker'
 
 interface Props {
   settings: ProjectSettings
   theme: OverlayTheme // the colors in use now
+  teams: { code: string; name: string }[] // the teams in the project's matches, opponents first
   rawRefs: PlayRef[] // all matches, built without the alias table so every original key shows
   onSave: (s: ProjectSettings) => Promise<void>
   onClose: () => void
@@ -14,7 +16,7 @@ interface Props {
 
 // 自チームのチームコードと名寄せ表 (design §3.2).
 // Player IDs already merge home/away and the scrimmage "-a" suffix; this table is for what's left.
-export function SettingsDialog({ settings, theme: themeNow, rawRefs, onSave, onClose }: Props) {
+export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSave, onClose }: Props) {
   const [codes, setCodes] = useState(settings.ourTeamCodes.join(', '))
   const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
   const [aliases, setAliases] = useState<Record<string, string>>(settings.playerAliases)
@@ -53,6 +55,12 @@ export function SettingsDialog({ settings, theme: themeNow, rawRefs, onSave, onC
           <span className="field-label wide">配色（プロジェクト全体）</span>
           <ThemePicker value={theme} onChange={setTheme} />
           <p className="hint">スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">チームのロゴ（タイトルカード）</span>
+          <TeamLogos teams={teams} />
+          <p className="hint">1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。</p>
         </section>
 
         <section className="alias-section">

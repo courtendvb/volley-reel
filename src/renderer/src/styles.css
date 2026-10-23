@@ -348,3 +348,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .filter-detail { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; margin: 0 -2px; border-radius: 6px; background: var(--page); }
 .play-row .skill .combo { color: var(--sub); font-size: 11px; }
 .play-row .skill { overflow: hidden; text-overflow: ellipsis; }
+.logo-table { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+.logo-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.logo-row .logo-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logo-thumb { width: 64px; height: 40px; border-radius: 4px; background: #1E293B; flex: none; }

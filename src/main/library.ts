@@ -3,7 +3,7 @@
 // scout fix in the DVW shows up on the next read. Projects pick matches from here by id.
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
@@ -11,11 +11,48 @@ import type { ImportProgress, LibraryInfo, Match, ParsedDVW, ScanResult } from '
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 
+const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
+const cleanCode = (code: string) => {
+  const c = code.trim().toUpperCase()
+  if (!/^[A-Z0-9]{1,8}$/.test(c)) throw new Error(`チームコードが不正です: ${code}`)
+  return c
+}
+
 export class Library {
   private matches = new Map<string, Match>()
   notices: string[] = []
 
   private constructor(readonly dir: string) {}
+
+  // Team logos for title cards: logos/<CODE>.<ext>, one per three-letter code, shared by every project.
+  async logos(): Promise<Record<string, string>> {
+    const dir = join(this.dir, 'logos')
+    if (!existsSync(dir)) return {}
+    const out: Record<string, string> = {}
+    for (const f of await readdir(dir)) {
+      const m = /^([A-Z0-9]{1,8})\.(png|jpg|webp|gif|bmp)$/i.exec(f)
+      if (m) out[m[1].toUpperCase()] = f
+    }
+    return out
+  }
+
+  async setLogo(code: string, file: string): Promise<void> {
+    const ext = extname(file).slice(1).toLowerCase().replace('jpeg', 'jpg')
+    if (!LOGO_EXT.includes(ext)) throw new Error('ロゴは画像（PNG・JPEG・WebP など）を選んでください')
+    await this.removeLogo(code)
+    await mkdir(join(this.dir, 'logos'), { recursive: true })
+    await copyFile(file, join(this.dir, 'logos', `${cleanCode(code)}.${ext}`))
+  }
+
+  async removeLogo(code: string): Promise<void> {
+    const f = (await this.logos())[cleanCode(code)]
+    if (f) await rm(join(this.dir, 'logos', f), { force: true })
+  }
+
+  async readLogo(code: string): Promise<Uint8Array | null> {
+    const f = (await this.logos())[cleanCode(code)]
+    return f ? new Uint8Array(await readFile(join(this.dir, 'logos', f))) : null
+  }
 
   static async open(dir: string): Promise<Library> {
     const lib = new Library(dir)

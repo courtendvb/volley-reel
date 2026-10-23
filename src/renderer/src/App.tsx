@@ -27,7 +27,7 @@ import { MatchPicker } from './components/MatchPicker'
 import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
-import { insertAsset } from './assets'
+import { forgetLogo, insertAsset } from './assets'
 import { playback, type SequenceItem } from './playback'
 
 const api = window.api
@@ -696,6 +696,7 @@ export function App() {
     // editor follows a through-play, that editing the shared scene changes both videos, undo across
     // a video edit and a scene edit, and (with exportTo) the exported file.
     const smokeVideo = async (res: PlayRef[], opts: SmokeOpts) => {
+      if (opts.logo) { const [code, path] = opts.logo.split('|'); await window.api.smokeSetLogo!(code, path); forgetLogo(code) } // a logo for the title cards
       const ours = res.filter(x => x.teamRole === 'our')
       const kills = ours.filter(x => x.play.skill === 'A' && x.play.effect === '#').slice(0, 3)
       const serves = ours.filter(x => x.play.skill === 'S' && (x.play.effect === '#' || x.play.effect === '+')).slice(0, 2)
@@ -1149,6 +1150,13 @@ export function App() {
     await loadProject(await api.setProjectMatches(r.matchIds))
   })
 
+  // The teams in the project's matches for the logo list: opponents first, then ours.
+  const projectTeams = useMemo(() => {
+    const map = new Map<string, { code: string; name: string }>()
+    for (const m of project?.matches ?? []) for (const t of m.teams) if (!map.has(t.code)) map.set(t.code, { code: t.code, name: t.name })
+    const ours = settings?.ourTeamCodes ?? []
+    return [...map.values()].sort((a, b) => Number(ours.includes(a.code)) - Number(ours.includes(b.code)) || a.code.localeCompare(b.code))
+  }, [project, settings])
   const saveSettings = async (s: ProjectSettings) => setProject(await api.saveSettings(s))
 
 
@@ -1307,7 +1315,7 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   )
@@ -1327,6 +1335,7 @@ interface SmokeOpts {
   video?: boolean
   obj?: boolean
   assets?: string[] // with obj: image / PDF files to insert
+  logo?: string // with video: "<code>|<image>" set as that team's logo first
   videoExportTo?: string
   home?: string
   folders?: string[]

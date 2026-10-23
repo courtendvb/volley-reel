@@ -37,6 +37,37 @@ export async function preloadAssets(ids: string[]): Promise<void> {
   await Promise.all([...new Set(ids)].map(load))
 }
 
+// Team logos (library, by code), decoded once; forgetLogo after one is replaced or removed.
+const logos = new Map<string, Promise<ImageBitmap | null>>()
+const logoReady = new Map<string, ImageBitmap | null>()
+
+function loadLogo(code: string): Promise<ImageBitmap | null> {
+  let p = logos.get(code)
+  if (!p) {
+    p = api.readLogo(code)
+      .then(data => (data ? createImageBitmap(new Blob([data as BlobPart])) : null))
+      .catch(() => null)
+      .then(bmp => { logoReady.set(code, bmp); listeners.forEach(f => f()); return bmp })
+    logos.set(code, p)
+  }
+  return p
+}
+
+export function logoImage(code: string | null | undefined): ImageBitmap | null {
+  if (!code) return null
+  if (!logoReady.has(code)) { void loadLogo(code); return null }
+  return logoReady.get(code) ?? null
+}
+
+export async function preloadLogos(codes: (string | null | undefined)[]): Promise<void> {
+  await Promise.all([...new Set(codes.filter((c): c is string => !!c))].map(loadLogo))
+}
+
+export function forgetLogo(code: string): void {
+  logos.delete(code); logoReady.delete(code)
+  void loadLogo(code)
+}
+
 // Asks for an image or PDF and stores it in the project. Returns the asset and its pixel size.
 export async function insertAsset(path?: string): Promise<{ assetId: string; width: number; height: number } | null> {
   const picked = path && api.smokePickAsset ? await api.smokePickAsset(path) : await api.pickAsset()

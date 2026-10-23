@@ -40,6 +40,7 @@ app.whenReady().then(async () => {
   if (process.env.VR_SMOKE) {
     ipcMain.handle('smoke:scan', (_e, folders: string[]) => library!.scan(folders))
     ipcMain.handle('smoke:pickAsset', (_e, path: string) => takeAsset(path))
+    ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     ipcMain.handle('smoke:createProject', async (_e, dir: string, init: ProjectInit) => {
       await mkdir(dir, { recursive: true })
       project = await Project.create(dir, library!, init)
@@ -185,6 +186,19 @@ function registerIpc(): void {
   ipcMain.handle('export:cancel', () => exporter.cancel())
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
+
+  ipcMain.handle('logo:list', () => library?.logos() ?? {})
+  ipcMain.handle('logo:pick', async (_e, code: string) => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    const r = await dialog.showOpenDialog(win!, {
+      title: `${code} のロゴを選ぶ`, properties: ['openFile'],
+      filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+    })
+    if (!r.canceled && r.filePaths[0]) await library.setLogo(code, r.filePaths[0])
+    return library.logos()
+  })
+  ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
+  ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
 
   ipcMain.handle('asset:pick', async () => {
     if (!project) throw new Error('プロジェクトが開かれていません')
@@ -361,6 +375,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
       assets: process.env.VR_SMOKE_ASSETS?.split(';'),
+      logo: process.env.VR_SMOKE_LOGO,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)

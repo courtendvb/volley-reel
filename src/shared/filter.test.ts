@@ -65,7 +65,7 @@ describe('the same player across matches', () => {
 describe('filters', () => {
   it('combine team, skill and effect', () => {
     const r = applyFilter(refs(), { ...EMPTY_FILTER, team: 'opp', skills: ['R'], effects: ['#', '+'] })
-    expect(r.map(x => `${x.matchId}${x.play.code.slice(0, 6)}`)).toEqual(['Aa01RQ+', 'B*01RQ#'])
+    expect(r.map(x => `${x.matchId}${x.play.code.slice(0, 6)}`)).toEqual(['Aa01RQ+', 'B*01RQ#']) // opponents at home and away
   })
 
   it('use the rotation of the team that made the play', () => {
@@ -80,6 +80,14 @@ describe('filters', () => {
     const r = buildRefs('C', allHome, settings)
     expect(r[0].teamRole).toBeNull()
     expect(applyFilter(r, { ...EMPTY_FILTER, team: 'opp' })).toHaveLength(1)
+  })
+
+  it('search by tempo, attack combination and hit type', () => {
+    const r = refs()
+    expect(r.find(x => x.play.code.startsWith('a01AQ#'))).toMatchObject({ tempo: 'Q', combo: 'PA', hit: 'H' })
+    expect(applyFilter(r, { ...EMPTY_FILTER, combos: ['PA'] }).map(x => x.play.code.slice(0, 6))).toEqual(['a01AQ#'])
+    expect(applyFilter(r, { ...EMPTY_FILTER, tempos: ['Q'], skills: ['S'] })).toHaveLength(3)
+    expect(applyFilter(r, { ...EMPTY_FILTER, hits: ['T'] })).toHaveLength(0)
   })
 
   it('match zones', () => {

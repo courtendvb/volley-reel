@@ -4,19 +4,21 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import type { OverlayTheme } from '../shared/overlay'
 import type { Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
 import type { Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
 import type { Library } from './library'
 import { readJSON, safeId, writeJSON } from './store'
 
-const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'], playerAliases: {} }
+const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH'], playerAliases: {} }
 
 interface ProjectFile {
   version: 2
   name: string
   ourTeamCodes: string[]
   playerAliases: Record<string, string>
+  theme?: OverlayTheme
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
@@ -33,7 +35,7 @@ export class Project {
     const p = new Project(dir, library)
     await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
     await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
-    p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes), playerAliases: {}, matchIds: [...new Set(init.matchIds)], scenesVersion: 1 }
+    p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes).slice(0, 1), playerAliases: {}, matchIds: [...new Set(init.matchIds)], scenesVersion: 1 }
     await p.save()
     return p
   }
@@ -49,8 +51,10 @@ export class Project {
     p.file = {
       version: 2,
       name: saved.name || basename(dir),
-      ourTeamCodes: Array.isArray(saved.ourTeamCodes) ? saved.ourTeamCodes : DEFAULT_SETTINGS.ourTeamCodes,
+      // One target team per project: older projects with several codes keep the first.
+      ourTeamCodes: Array.isArray(saved.ourTeamCodes) && saved.ourTeamCodes.length ? saved.ourTeamCodes.slice(0, 1) : DEFAULT_SETTINGS.ourTeamCodes,
       playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
+      ...(validTheme(saved.theme) ? { theme: saved.theme } : {}),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
       scenesVersion: saved.scenesVersion,
     }
@@ -136,7 +140,8 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, playerAliases: this.file.playerAliases },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, playerAliases: this.file.playerAliases, ...(this.file.theme ? { theme: this.file.theme } : {}) },
+      missing: this.library.missing(matches),
     }
   }
 
@@ -160,8 +165,9 @@ export class Project {
   }
 
   async saveSettings(s: ProjectSettings): Promise<void> {
-    this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes)
+    this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes).slice(0, 1)
     this.file.playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
+    if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }
     await this.save()
   }
 
@@ -198,6 +204,11 @@ export class Project {
   private save(): Promise<void> {
     return writeJSON(join(this.dir, 'project.json'), this.file)
   }
+}
+
+function validTheme(t: unknown): t is OverlayTheme {
+  const hex = (v: unknown) => typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v)
+  return !!t && typeof t === 'object' && hex((t as OverlayTheme).base) && hex((t as OverlayTheme).accent)
 }
 
 function cleanCodes(codes: string[]): string[] {

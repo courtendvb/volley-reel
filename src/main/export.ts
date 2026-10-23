@@ -6,10 +6,10 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { app } from 'electron'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
+import { ffmpegDir } from './ffmpegPath'
 
-const binDir = () => process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+const binDir = ffmpegDir
 
 export class ExportCancelled extends Error {
   constructor() { super('cancelled') }
@@ -44,7 +44,7 @@ export class Exporter {
           const png = join(workDir, `card${i}.png`)
           await writeFile(png, it.png)
           await this.ffmpeg(['-loop', '1', '-framerate', job.fpsStr, '-t', it.durationSec.toFixed(3), '-i', png,
-            '-vf', `scale=${job.width}:${job.height},format=yuv420p,setsar=1`, ...enc, seg], report)
+            '-vf', `scale=${job.width}:${job.height},format=yuv420p,setsar=1${fades(job.fadeSec, it.durationSec)}`, ...enc, seg], report)
         } else {
           const video = videoOf(it.matchId)
           if (!video || !existsSync(video)) throw new Error(`動画が見つかりません（試合 ${it.matchId}）`)
@@ -115,11 +115,28 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
   for (const [j, l] of it.layers.entries()) {
     const png = join(dir, `clip${i}-layer${j}.png`)
     await writeFile(png, l.png)
-    args.push('-i', png)
-    const enable = l.from !== undefined || l.to !== undefined
-      ? `:enable='between(t,${(l.from ?? 0).toFixed(3)},${(l.to ?? it.out - it.in).toFixed(3)})'` : ''
-    fc += `;[${last}][${j + 1}:v]overlay=0:0${enable}[v${j + 1}]`
+    const dur = it.out - it.in, from = l.from ?? 0, to = l.to ?? dur
+    const enable = l.from !== undefined || l.to !== undefined ? `:enable='between(t,${from.toFixed(3)},${to.toFixed(3)})'` : ''
+    if (l.fadeIn || l.fadeOut) {
+      // A fading layer is the picture looped over the clip, its alpha faded at its window's ends.
+      args.push('-loop', '1', '-framerate', job.fpsStr, '-t', dur.toFixed(3), '-i', png)
+      const fi = Math.min(l.fadeIn ?? 0, (to - from) / 2), fo = Math.min(l.fadeOut ?? 0, (to - from) / 2)
+      const f = [fi > 0 ? `fade=t=in:st=${from.toFixed(3)}:d=${fi.toFixed(3)}:alpha=1` : '', fo > 0 ? `fade=t=out:st=${(to - fo).toFixed(3)}:d=${fo.toFixed(3)}:alpha=1` : ''].filter(Boolean).join(',')
+      fc += `;[${j + 1}:v]format=rgba,${f}[f${j + 1}];[${last}][f${j + 1}]overlay=0:0${enable}[v${j + 1}]`
+    } else {
+      args.push('-i', png)
+      fc += `;[${last}][${j + 1}:v]overlay=0:0${enable}[v${j + 1}]`
+    }
     last = `v${j + 1}`
   }
+  const f = fades(job.fadeSec, it.out - it.in)
+  if (f) { fc += `;[${last}]${f.slice(1)}[vf]`; last = 'vf' }
   return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, join(dir, `seg${String(i).padStart(4, '0')}.mp4`)]
+}
+
+// ",fade=in…,fade=out…" for an item of dur seconds (at most a third of it each), or ''.
+function fades(sec: number | undefined, dur: number): string {
+  const d = Math.min(sec ?? 0, dur / 3)
+  if (!(d > 0.01)) return ''
+  return `,fade=t=in:st=0:d=${d.toFixed(3)},fade=t=out:st=${(dur - d).toFixed(3)}:d=${d.toFixed(3)}`
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
-import { dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints } from './annotationEdit'
+import { applyStyle, bounds, fadeAlpha, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
+import { snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -11,8 +11,22 @@ describe('handles', () => {
   it('gives arrows two ends, boxes eight, and point shapes vertices plus midpoints', () => {
     expect(handlesOf({ id: 'a', kind: 'arrow', color: '#FFF', x1: 0, y1: 0, x2: 1, y2: 1, width: 3 }).map(h => h.id)).toEqual(['p1', 'p2'])
     expect(handlesOf(rect)).toHaveLength(8)
-    expect(handlesOf(poly).map(h => h.id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1', 'm2']) // closed: 3 midpoints
-    expect(handlesOf(line).map(h => h.id)).toEqual(['v0', 'v1', 'm0'])
+    expect(handlesOf(poly, true).map(h => h.id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1', 'm2']) // closed: 3 midpoints
+    expect(handlesOf(line, true).map(h => h.id)).toEqual(['v0', 'v1', 'm0'])
+    expect(handlesOf(poly).map(h => h.id)).toEqual(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) // not editing points
+  })
+
+  it('resizes a point shape as a box, scaling every point', () => {
+    const r = dragHandle(poly, 'e', 0.9, 0.3).a as { points: number[][] }
+    expect(r.points.map(p => +p[0].toFixed(6))).toEqual([0.1, 0.9, 0.5])
+  })
+
+  it('makes triangles and turns boxes into polygons', () => {
+    expect(trianglePoints([0.4, 0.6], [0.2, 0.2])).toEqual([[0.30000000000000004, 0.2], [0.4, 0.6], [0.2, 0.6]])
+    const p = toPolygon({ ...rect, fill: '#000' } as Annotation)
+    expect(p).toMatchObject({ kind: 'polygon', fill: '#000', width: 6 })
+    expect((p as { points: unknown[] }).points).toHaveLength(4)
+    expect((toPolygon({ ...rect, kind: 'circle' } as Annotation) as { points: unknown[] }).points).toHaveLength(16)
   })
 })
 
@@ -36,6 +50,21 @@ describe('resizing boxes', () => {
 })
 
 describe('editing points', () => {
+  it('lines a dragged vertex up with a neighbor while Shift is held', () => {
+    // poly: (0.1,0.1) (0.5,0.1) (0.3,0.5). Dragging v2 near x 0.5: it takes the neighbor's x (upright edge).
+    expect(snapToNeighbors(poly, 'v2', 0.48, 0.6, 1000, 1000)).toEqual([0.5, 0.6])
+    // Close to both: both snap.
+    expect(snapToNeighbors(poly, 'v2', 0.505, 0.105, 1000, 1000)).toEqual([0.5, 0.1])
+    // An arrow end levels with the other end.
+    const ar: Annotation = { id: 'a', kind: 'arrow', color: '#FFF', x1: 0.1, y1: 0.5, x2: 0.6, y2: 0.55, width: 3 }
+    expect(snapToNeighbors(ar, 'p2', 0.6, 0.55, 1000, 1000)).toEqual([0.6, 0.5])
+  })
+
+  it('sticks a dragged show / hide time to the nearest time within reach', () => {
+    expect(snapTime(10.08, [10, 10.1, 12], 0.15)).toEqual({ t: 10.1, snapped: 10.1 })
+    expect(snapTime(11, [10, 12], 0.15)).toEqual({ t: 11, snapped: null })
+  })
+
   it('drags a vertex', () => {
     const r = dragHandle(poly, 'v2', 0.3, 0.7)
     expect((r.a as { points: number[][] }).points[2]).toEqual([0.3, 0.7])
@@ -58,8 +87,8 @@ describe('editing points', () => {
     const pts: [number, number][] = Array.from({ length: 200 }, (_, i) => [i / 199, 0.5 + (i % 2 ? 0.0001 : 0)])
     expect(simplifyPoints(pts, 2, 1280, 720)).toHaveLength(2) // a jittery straight line
     const free: Annotation = { id: 'f', kind: 'freehand', color: '#FFF', width: 3, points: pts }
-    expect(handlesOf(free)).toHaveLength(0) // too many points to edit
-    expect(handlesOf(simplify(free, 2, 1280, 720)).length).toBeGreaterThan(0)
+    expect(handlesOf(free, true)).toHaveLength(0) // too many points to edit
+    expect(handlesOf(simplify(free, 2, 1280, 720), true).length).toBeGreaterThan(0)
   })
 
   it('closes and opens a path', () => {
@@ -70,6 +99,26 @@ describe('editing points', () => {
   })
 })
 
+describe('cropping pictures', () => {
+  const img = { id: 'i', kind: 'image', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.4, assetId: 'a.png' } as Extract<Annotation, { kind: 'image' }>
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
+
+  it('narrows the frame by a handle and keeps the picture in place', () => {
+    const c = cropHandle(img, fullRect(img), 'e', 0.4, 0.3)
+    expect(near(c.w, 0.2) && near(c.crop!.w, 0.5) && near(c.crop!.x, 0)).toBe(true)
+    const f0 = fullRect(img), f1 = fullRect(c)
+    expect(near(f0.x, f1.x) && near(f0.y, f1.y) && near(f0.w, f1.w) && near(f0.h, f1.h)).toBe(true)
+  })
+
+  it('zooms the picture around the frame center and pans it under the frame', () => {
+    const z = zoomCrop(img, 2)
+    expect(near(z.crop!.w, 0.5) && near(z.crop!.x, 0.25)).toBe(true)
+    expect(zoomCrop(img, 0.5)).not.toHaveProperty('crop') // never smaller than the frame
+    const p = panCrop(z, fullRect(z), 1, 0) // too far right: stops with the picture's left edge at the frame's
+    expect(near(p.crop!.x, 0)).toBe(true)
+  })
+})
+
 describe('formats and polygons', () => {
   it('applies fill only to fillable shapes, heads only to arrows, box only to text', () => {
     expect(applyStyle(rect, { fill: '#123456', fillOpacity: 0.4, dash: 'dash' })).toMatchObject({ fill: '#123456', fillOpacity: 0.4, dash: 'dash' })
@@ -77,6 +126,29 @@ describe('formats and polygons', () => {
     expect(applyStyle({ id: 'a', kind: 'arrow', color: '#FFF', x1: 0, y1: 0, x2: 1, y2: 1, width: 3 }, { heads: 'both' })).toMatchObject({ heads: 'both' })
     const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.1, y: 0.1, text: 'x', size: 36 }
     expect(applyStyle(text, { bold: false, box: { fill: '#000', fillOpacity: 0.5, stroke: null, strokeWidth: 2, padding: 8 } })).toMatchObject({ bold: false, box: { fillOpacity: 0.5 } })
+  })
+
+  it('centers a text on its x when asked', () => {
+    const ctx = { font: '', measureText: () => ({ width: 128 }) } as unknown as CanvasRenderingContext2D
+    const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.5, y: 0.1, text: 'x', size: 36, align: 'center' }
+    expect(bounds(ctx, text, 1280, 720).x).toBeCloseTo(0.45)
+  })
+
+  it('fades an object in and out at its own show window', () => {
+    const a: Annotation = { ...rect, showFrom: 10, showTo: 20, fadeIn: 2, fadeOut: 1 } as Annotation
+    const clip = { in: 5, out: 25 }
+    expect(fadeAlpha(a, 11, clip)).toBeCloseTo(0.5)
+    expect(fadeAlpha(a, 15, clip)).toBe(1)
+    expect(fadeAlpha(a, 19.5, clip)).toBeCloseTo(0.5)
+    expect(fadeAlpha({ ...rect, fadeIn: 1 } as Annotation, 5.5, clip)).toBeCloseTo(0.5) // no show time: the clip's IN
+  })
+
+  it('measures text of several lines', () => {
+    const ctx = { font: '', measureText: (t: string) => ({ width: t.length * 10 }) } as unknown as CanvasRenderingContext2D
+    const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.1, y: 0.1, text: 'ab\nabcd', size: 36 }
+    const b = bounds(ctx, text, 1280, 720)
+    expect(b.w).toBeCloseTo(40 / 1280)
+    expect(b.h).toBeCloseTo((36 * 1.2 * 2) / 720)
   })
 
   it('moves and rounds point shapes', () => {

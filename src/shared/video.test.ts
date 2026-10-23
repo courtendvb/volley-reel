@@ -40,7 +40,16 @@ describe('videos made of scenes', () => {
   it('puts a scene card before each scene and marker cards inside, when on', () => {
     const plan = planVideo(video, scenes, order, cards({ sceneCards: true, enabled: true }), matches, ['HTH'])
     expect(describePlan(plan)).toEqual(['[scene:7番のアタック]', '[1:Kills]', '*07AQ#', '*07AQ-', '[2:Others]', '*07AQ+', '[scene:サーブ]', '[1:]', '*01SQ#'])
-    expect(plan[0]).toMatchObject({ kind: 'card', card: { match: 'VS SMT · 2026-10-11' } })
+    expect(plan[0]).toMatchObject({ kind: 'card', card: { match: 'VS SMT · 2026-10-11', opp: 'SMT' } })
+  })
+
+  it('lets each marker of a scene turn its own card on or off', () => {
+    const only2 = { ...attack, markerCards: { 2: true } }
+    const plan = planVideo(newVideo('v', [only2.id]), { [only2.id]: only2 }, order, cards({ sceneCards: false, enabled: false }), matches, ['HTH'])
+    expect(describePlan(plan)).toEqual(['*07AQ#', '*07AQ-', '[2:Others]', '*07AQ+'])
+    const not1 = { ...attack, markerCards: { 1: false } }
+    expect(describePlan(planVideo(newVideo('v', [not1.id]), { [not1.id]: not1 }, order, cards({ sceneCards: false, enabled: true }), matches, ['HTH'])))
+      .toEqual(['*07AQ#', '*07AQ-', '[2:Others]', '*07AQ+'])
   })
 
   it('shares scenes: a change to a scene shows in every video that uses it', () => {

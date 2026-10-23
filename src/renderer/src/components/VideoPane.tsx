@@ -8,14 +8,12 @@ import { formatTime } from '../format'
 export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: { w: number; h: number }) => ReactNode }) {
   const ref = useRef<HTMLVideoElement>(null)
   const frame = useRef<HTMLDivElement>(null)
-  const [s, setS] = useState<PlaybackState>(playback.current)
   const [box, setBox] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
     playback.attach(ref.current, match.fps, match.id)
     return () => playback.attach(null, 0)
   }, [match.id, match.fps])
-  useEffect(() => playback.subscribe(setS), [])
 
   useLayoutEffect(() => {
     const el = frame.current
@@ -39,6 +37,17 @@ export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: {
           {overlay && box.w > 0 && overlay(box)}
         </div>
       </div>
+      <Transport />
+    </div>
+  )
+}
+
+// Play / step buttons, the seek bar and the time. The only part that changes every frame, so it
+// subscribes on its own: the video box and the layers over it don't re-render as the video plays.
+function Transport() {
+  const [s, setS] = useState<PlaybackState>(playback.current)
+  useEffect(() => playback.subscribe(setS), [])
+  return (
       <div className="transport">
         <button onClick={() => playback.toggle()} title="再生 / 一時停止 (Space)">{s.paused ? '▶' : '❚❚'}</button>
         <button onClick={() => playback.stepFrames(-1)} title="1フレーム戻る (Shift+←)">◀|</button>
@@ -50,6 +59,5 @@ export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: {
         />
         <span className="time">{formatTime(s.time, true)} / {formatTime(s.duration)}</span>
       </div>
-    </div>
   )
 }

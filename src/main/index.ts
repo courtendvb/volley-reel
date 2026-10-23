@@ -1,15 +1,19 @@
 import { spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, join, resolve, sep } from 'node:path'
+import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
+import type { Annotation } from '../shared/annotation'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
-import type { ExportJob, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
+import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
 import { Exporter } from './export'
 import { Library } from './library'
 import { Project } from './project'
+import { ffmpegDir } from './ffmpegPath'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
 protocol.registerSchemesAsPrivileged([
@@ -20,6 +24,8 @@ protocol.registerSchemesAsPrivileged([
 // occlusion tracking counts a window behind another app as hidden). This is an editor: a
 // through-play must keep going while the user looks at another window.
 app.commandLine.appendSwitch('disable-background-media-suspend')
+// The memory smoke check forces a GC before each heap sample.
+if (process.env.VR_SMOKE_MEM) app.commandLine.appendSwitch('js-flags', '--expose-gc')
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 let library: Library | null = null
@@ -38,6 +44,12 @@ app.whenReady().then(async () => {
   if (process.env.VR_SMOKE && process.env.VR_SMOKE_CORRUPT && last) corruptFirstReel(last)
   if (process.env.VR_SMOKE) {
     ipcMain.handle('smoke:scan', (_e, folders: string[]) => library!.scan(folders))
+    ipcMain.handle('smoke:pickAsset', (_e, path: string) => takeAsset(path))
+    ipcMain.handle('smoke:relocate', async (_e, id: string, part: 'video' | 'dvw', path: string) => {
+      const note = await library!.relocate(id, part, path, () => {})
+      return { library: library!.info(), project: project?.info() ?? null, note }
+    })
+    ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     ipcMain.handle('smoke:createProject', async (_e, dir: string, init: ProjectInit) => {
       await mkdir(dir, { recursive: true })
       project = await Project.create(dir, library!, init)
@@ -47,6 +59,9 @@ app.whenReady().then(async () => {
     ipcMain.handle('smoke:editDvw', async (_e, matchId: string, code: string, time: number) => {
       const m = library?.getMatch(matchId)
       if (!m) throw new Error('no match')
+      // Only ever a copy in the temp folder: a smoke run must not change a real scout file.
+      const tmp = resolve(tmpdir()) + sep
+      if (!resolve(m.dvwPath).toLowerCase().startsWith(tmp.toLowerCase())) throw new Error(`smoke:editDvw edits DVW copies in ${tmp} only (got ${m.dvwPath})`)
       const lines = readFileSync(m.dvwPath, 'latin1').split(/\r?\n/)
       const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
       lines.splice(at + 1, 0, lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_s, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`))
@@ -76,8 +91,10 @@ app.whenReady().then(async () => {
     ipcMain.once('app:flushed', done)
     win.webContents.send('app:flush')
   })
-  if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else await win.loadFile(join(__dirname, '../renderer/index.html'))
+  // ?smoke makes the renderer load its self-check code (smoke.ts); a normal start never does.
+  const query = process.env.VR_SMOKE ? '?smoke' : ''
+  if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL + query)
+  else await win.loadFile(join(__dirname, '../renderer/index.html'), query ? { search: 'smoke' } : {})
 
   if (process.env.VR_SMOKE) {
     win.webContents.on('console-message', e => console.log(`[renderer] ${e.message}`))
@@ -156,6 +173,18 @@ function registerIpc(): void {
     return library.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
   })
 
+  ipcMain.handle('match:relocate', async (e, id: string, part: 'video' | 'dvw') => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    const m = library.getMatch(id)
+    if (!m) throw new Error(`試合が見つかりません: ${id}`)
+    const r = await dialog.showOpenDialog(win!, part === 'video'
+      ? { title: `${m.name} の動画を選択（元: ${basename(m.sourceVideoPath)}）`, properties: ['openFile'], filters: [{ name: '動画', extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] }
+      : { title: `${m.name} の DVW を選択（元: ${basename(m.dvwPath)}）`, properties: ['openFile'], filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
+    if (r.canceled || !r.filePaths[0]) return null
+    const note = await library.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p))
+    return { library: library.info(), project: project?.info() ?? null, note }
+  })
+
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
     if (!project) throw new Error('プロジェクトが開かれていません')
     await project.saveSettings(s)
@@ -184,6 +213,41 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
 
+  const lib = () => { if (!library) throw new Error('先に倉庫を選んでください'); return library }
+  const assetsDir = () => { if (!project) throw new Error('プロジェクトが開かれていません'); return join(project.dir, 'assets') }
+  ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
+  ipcMain.handle('palette:setColors', (_e, colors: string[]) => lib().setPaletteColors(colors))
+  ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[]) => lib().savePaletteItem(name, anns, assetsDir()))
+  ipcMain.handle('palette:remove', (_e, id: string) => lib().removePaletteItem(id))
+  ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
+  ipcMain.handle('logo:list', () => library?.logos() ?? {})
+  ipcMain.handle('logo:pick', async (_e, code: string) => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    const r = await dialog.showOpenDialog(win!, {
+      title: `${code} のロゴを選ぶ`, properties: ['openFile'],
+      filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+    })
+    if (!r.canceled && r.filePaths[0]) await library.setLogo(code, r.filePaths[0])
+    return library.logos()
+  })
+  ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
+  ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
+
+  ipcMain.handle('asset:pick', async () => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    const r = await dialog.showOpenDialog(win!, {
+      title: '画像・PDF を挿入', properties: ['openFile'],
+      filters: [{ name: '画像・PDF', extensions: [...IMAGE_EXT, 'pdf'] }],
+    })
+    return r.canceled || !r.filePaths[0] ? null : takeAsset(r.filePaths[0])
+  })
+  ipcMain.handle('asset:save', (_e, png: Uint8Array) => saveAsset(png, 'png'))
+  ipcMain.handle('asset:read', (_e, id: string) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!ASSET_ID.test(id)) throw new Error('bad asset id')
+    return readFile(join(project.dir, 'assets', id))
+  })
+
   ipcMain.handle('video:list', () => project?.listVideos() ?? [])
   ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveVideo(v) })
   ipcMain.handle('video:delete', (_e, id: string) => project?.deleteVideo(id))
@@ -195,6 +259,27 @@ function registerIpc(): void {
     if (!project) throw new Error('プロジェクトが開かれていません')
     return project.parse(id)
   })
+}
+
+const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
+const ASSET_ID = /^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/
+
+async function takeAsset(path: string): Promise<PickedAsset> {
+  const ext = extname(path).slice(1).toLowerCase()
+  const data = await readFile(path)
+  if (ext === 'pdf') return { kind: 'pdf', data: new Uint8Array(data), name: basename(path) }
+  if (!IMAGE_EXT.includes(ext)) throw new Error('画像（PNG・JPEG など）か PDF を選んでください')
+  return { kind: 'image', assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext) }
+}
+
+// A copy in the project, so the project keeps working if the original file moves.
+async function saveAsset(data: Uint8Array, ext: string): Promise<string> {
+  if (!project) throw new Error('プロジェクトが開かれていません')
+  const dir = join(project.dir, 'assets')
+  await mkdir(dir, { recursive: true })
+  const id = `${randomUUID()}.${ext}`
+  await writeFile(join(dir, id), data)
+  return id
 }
 
 async function serveMedia(req: Request): Promise<Response> {
@@ -223,7 +308,7 @@ async function serveMedia(req: Request): Promise<Response> {
 // Smoke only: probe the exported MP4, save frames at the check times, and confirm the cancelled
 // run left neither its output nor the work folder behind.
 function checkExport(r: { export: string; checks: { name: string; t: number }[]; cancelPath: string }): void {
-  const bin = process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+  const bin = ffmpegDir()
   const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_name,width,height,r_frame_rate,nb_read_packets:format=duration,size', '-of', 'json', r.export], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
   for (const c of r.checks) {
@@ -236,7 +321,7 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
 
 // Smoke only: probe an exported MP4 and save frames at the given times next to it.
 function grabFrames(file: string, checks: { name: string; t: number }[]): void {
-  const bin = process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+  const bin = ffmpegDir()
   const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-show_entries', 'format=duration,size', '-of', 'json', file], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
   for (const c of checks) {
@@ -294,7 +379,8 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_OV=1|dialog: auto overlays, per-clip override, theme, title cards in through-play]
 // [VR_SMOKE_EXPORT=<out.mp4>: export a 3-clip reel, probe it, grab frames, then cancel a second run]
 // [VR_SMOKE_VIDEO=1 [VR_SMOKE_EXPORT=<out.mp4>]: videos of shared scenes, cards, undo, export]
-// [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>]: object handles, polygon drawing, format panel, export]
+// [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.png;b.pdf>]: object handles, polygon
+//  and triangle drawing, edit points, format panel, inserted pictures, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
@@ -321,9 +407,35 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
+      mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,
+      assets: process.env.VR_SMOKE_ASSETS?.split(';'),
+      logo: process.env.VR_SMOKE_LOGO,
+      listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }
-    const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
+    // With VR_SMOKE_MEM: each second, the renderer's and the GPU process's memory and CPU (the
+    // last samples cover the playback window the renderer measures).
+    const procSamples: { renderer: number; gpu: number; main: number; rendererCpu: number; gpuCpu: number }[] = []
+    const pid = w.webContents.getOSProcessId()
+    const sampler = process.env.VR_SMOKE_MEM ? setInterval(() => {
+      const ms = app.getAppMetrics()
+      const r = ms.find(m => m.pid === pid), g = ms.find(m => m.type === 'GPU')
+      const b = ms.find(m => m.type === 'Browser')
+      procSamples.push({ renderer: r?.memory.workingSetSize ?? 0, gpu: g?.memory.workingSetSize ?? 0, main: b?.memory.workingSetSize ?? 0, rendererCpu: r?.cpu.cumulativeCPUUsage ?? 0, gpuCpu: g?.cpu.cumulativeCPUUsage ?? 0 })
+    }, 1000) : null
+    const result = await w.webContents.executeJavaScript(`(async () => { while (!window.__smoke) await new Promise(r => setTimeout(r, 50)); return window.__smoke(${JSON.stringify(opts)}) })()`)
+    if (sampler) {
+      clearInterval(sampler)
+      const last = procSamples.slice(-Number(process.env.VR_SMOKE_MEM))
+      const mb = (kb: number) => +(kb / 1024).toFixed(1)
+      console.log(`[mem] ${JSON.stringify({
+        rendererMB: { first: mb(last[0]?.renderer ?? 0), last: mb(last[last.length - 1]?.renderer ?? 0), max: mb(Math.max(...last.map(x => x.renderer))) },
+        gpuMB: { first: mb(last[0]?.gpu ?? 0), last: mb(last[last.length - 1]?.gpu ?? 0), max: mb(Math.max(...last.map(x => x.gpu))) },
+        mainMB: { first: mb(last[0]?.main ?? 0), last: mb(last[last.length - 1]?.main ?? 0) },
+        // CPU seconds used per second of the window (1.0 = one core busy).
+        cpuCores: { renderer: +((last[last.length - 1].rendererCpu - last[0].rendererCpu) / Math.max(1, last.length - 1)).toFixed(3), gpu: +((last[last.length - 1].gpuCpu - last[0].gpuCpu) / Math.max(1, last.length - 1)).toFixed(3) },
+      })}`)
+    }
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())
     console.log(`[smoke] ${JSON.stringify(result)}`)

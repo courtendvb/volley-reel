@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { THEME_PRESETS, type Anchor, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
+import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
 
 interface Props {
@@ -46,8 +46,8 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal overlay-modal" role="dialog" aria-label="オーバーレイ設定" onClick={e => e.stopPropagation()}>
-        <h2>オーバーレイ設定（この動画）</h2>
+      <div className="modal overlay-modal" role="dialog" aria-label="動画の設定" onClick={e => e.stopPropagation()}>
+        <h2>動画の設定（スコアボード・テロップ・タイトルカード・フェード）</h2>
         <div className="ov-body">
           <div className="ov-preview">
             <canvas ref={frame} width={PREVIEW_W * 2} height={PREVIEW_H * 2} style={{ width: PREVIEW_W, height: PREVIEW_H }} />
@@ -57,26 +57,13 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
           <div className="ov-settings">
             <section>
               <span className="field-label">配色</span>
-              <div className="ov-presets">
-                {THEME_PRESETS.map(p => (
-                  <button key={p.name} title={p.name} aria-label={p.name}
-                    className={`ov-preset${p.theme.base === s.theme.base && p.theme.accent === s.theme.accent ? ' on' : ''}`}
-                    onClick={() => onChange({ ...s, theme: p.theme })}>
-                    <span style={{ background: p.theme.base }} /><span style={{ background: p.theme.accent }} />
-                  </button>
-                ))}
-              </div>
-              <div className="filter-row">
-                <label className="check">ベース <input type="color" value={s.theme.base} onChange={e => set('theme', { base: e.target.value.toUpperCase() })} /></label>
-                <label className="check">アクセント <input type="color" value={s.theme.accent} onChange={e => set('theme', { accent: e.target.value.toUpperCase() })} /></label>
-              </div>
+              <p className="hint">配色はプロジェクト全体の設定です。上部の「設定」で変えます。</p>
             </section>
 
             <section>
               <div className="filter-row">{check('スコアボード', s.scoreboard.enabled, v => set('scoreboard', { enabled: v }))}<span className="spacer" />
                 {anchor(s.scoreboard.anchor, v => set('scoreboard', { anchor: v }), 'スコアボードの位置')}{scale(s.scoreboard.scale, v => set('scoreboard', { scale: v }), 'スコアボードのサイズ')}</div>
-              <div className="filter-row indent">{check('セット数', s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}
-                {check('ラリーを取った側に下線', s.scoreboard.highlightWinner, v => set('scoreboard', { highlightWinner: v }))}</div>
+              <div className="filter-row indent">{check('セット数', s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}</div>
             </section>
 
             <section>
@@ -92,10 +79,15 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
 
             <section>
               <div className="filter-row"><span className="field-label wide">タイトルカード</span>
-                {check('シーンの頭（シーン名）', s.titleCard.sceneCards, v => set('titleCard', { sceneCards: v }))}
-                {check('マーカーの頭（マーカー名）', s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
-                <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数"
+                {check('動画の頭（動画名）', !!s.titleCard.videoCard, v => set('titleCard', { videoCard: v }))}
+                {check('シーンの頭（シーン名。動画のシーン一覧の「カード」でシーンごとに変えられる）', s.titleCard.sceneCards, v => set('titleCard', { sceneCards: v }))}
+                {check('マーカーの頭（マーカー名。シーンの「カード」でマーカーごとに変えられる）', s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
+                <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数" title="シーンとマーカーのカードの秒数（一括）"
                   onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) set('titleCard', { durationSec: n }) }} /> 秒</label></div>
+              <div className="filter-row">
+                {check('切り替えでフェード（イン・アウト。クリップとカードの頭と終わり）', s.transition.fade, v => set('transition', { fade: v }))}<span className="spacer" />
+                {s.transition.fade && <label className="check"><input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label="フェードの秒数"
+                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) set('transition', { durationSec: n }) }} /> 秒</label>}</div>
               <div className="filter-row indent">
                 {check('マーカー名', s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
                 {check('試合名', s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}

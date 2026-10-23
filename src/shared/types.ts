@@ -1,4 +1,6 @@
+import type { Annotation } from './annotation'
 // Types shared by main, preload and renderer.
+import type { OverlayTheme } from './overlay'
 import type { Reel } from './reel'
 import type { Video } from './video'
 
@@ -53,6 +55,7 @@ export interface ParsedDVW {
   plays: Play[]
   rallies: Rally[]
   allHome: boolean // every play coded as '*': side can't tell the teams apart
+  codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
 }
 
 export interface Match {
@@ -77,6 +80,7 @@ export interface Match {
 export interface ProjectSettings {
   ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
   playerAliases: Record<string, string> // player key -> the key it is the same person as (manual exceptions)
+  theme?: OverlayTheme // overlay colors for the whole project (scoreboard, captions, title cards); missing = each video's own
 }
 
 export interface ProjectInfo {
@@ -85,12 +89,18 @@ export interface ProjectInfo {
   matches: Match[] // the project's matches found in the library
   matchIds: string[] // all ids the project refers to, including any missing from the library
   settings: ProjectSettings
+  missing: MissingFiles
 }
+
+// Matches whose playable video or DVW is no longer where the library points (moved or deleted).
+export type MissingPart = 'video' | 'dvw'
+export type MissingFiles = Record<string, MissingPart[]>
 
 // v3: the library holds every match; projects pick from it by id.
 export interface LibraryInfo {
   path: string
   matches: Match[]
+  missing: MissingFiles
 }
 
 export interface ScanPair {
@@ -135,6 +145,7 @@ export interface Api {
   getLibrary(): Promise<LibraryInfo | null>
   chooseLibrary(): Promise<LibraryInfo | null>
   importMatch(): Promise<Match | null> // into the library, choosing a video and a DVW
+  relocateMatch(id: string, part: MissingPart): Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string } | null> // choose where the moved file is now
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
@@ -156,6 +167,26 @@ export interface Api {
   onExportEvent(cb: (e: ExportEvent) => void): () => void
   showInFolder(path: string): Promise<void>
   takeNotices(): Promise<string[]>
+  // Images for annotations, kept in the project's assets/ folder. Picking an image copies it there;
+  // picking a PDF returns its bytes, and the renderer saves page 1 as a PNG.
+  pickAsset(): Promise<PickedAsset | null>
+  saveAsset(png: Uint8Array): Promise<string>
+  readAsset(id: string): Promise<Uint8Array>
+  smokePickAsset?: (path: string) => Promise<PickedAsset | null>
+  // Team logos (library, by team code) for title cards. Each returns the codes that have one -> file.
+  // The palette (library, every project): my colors and saved objects. Pictures in saved objects
+  // are copied into the library, and into the project again when the object is used.
+  getPalette(): Promise<Palette>
+  setPaletteColors(colors: string[]): Promise<Palette>
+  savePaletteItem(name: string, annotations: Annotation[]): Promise<Palette>
+  removePaletteItem(id: string): Promise<Palette>
+  usePaletteItem(id: string): Promise<Annotation[]> // its objects, with their pictures now in the project
+  listLogos(): Promise<Record<string, string>>
+  pickLogo(code: string): Promise<Record<string, string>>
+  removeLogo(code: string): Promise<Record<string, string>>
+  readLogo(code: string): Promise<Uint8Array | null>
+  smokeRelocate?: (id: string, part: MissingPart, path: string) => Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string }>
+  smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
@@ -166,6 +197,11 @@ export interface Api {
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 
+export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[] }
+export interface Palette { colors: string[]; items: PaletteItem[] }
+
+export type PickedAsset = { kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array; name: string }
+
 // ---- export (design §3.8) --------------------------------------------------------------------
 // The renderer draws every overlay to PNG with the same functions as the preview; the main
 // process trims, overlays, encodes and concatenates with ffmpeg.
@@ -173,6 +209,8 @@ export interface ExportLayer {
   png: Uint8Array // full-frame transparent PNG at the output size
   from?: number // seconds from the clip's IN; omitted = the whole clip
   to?: number
+  fadeIn?: number // seconds the layer fades in from `from` (0 / missing: none)
+  fadeOut?: number // seconds the layer fades out before `to`
 }
 
 export type ExportItem =
@@ -185,6 +223,7 @@ export interface ExportJob {
   height: number
   fpsStr: string // e.g. '30000/1001'
   items: ExportItem[]
+  fadeSec?: number // fade in and out of black on every item (clips and cards)
 }
 
 export type ExportEvent =

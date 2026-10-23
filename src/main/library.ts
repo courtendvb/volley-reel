@@ -3,19 +3,107 @@
 // scout fix in the DVW shows up on the next read. Projects pick matches from here by id.
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
-import type { ImportProgress, LibraryInfo, Match, ParsedDVW, ScanResult } from '../shared/types'
+import type { Annotation } from '../shared/annotation'
+import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Palette, ParsedDVW, ScanResult } from '../shared/types'
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
+
+const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
+const cleanCode = (code: string) => {
+  const c = code.trim().toUpperCase()
+  if (!/^[A-Z0-9]{1,8}$/.test(c)) throw new Error(`チームコードが不正です: ${code}`)
+  return c
+}
 
 export class Library {
   private matches = new Map<string, Match>()
   notices: string[] = []
 
   private constructor(readonly dir: string) {}
+
+  // The palette: palette.json (my colors, saved objects) and palette-assets/ (their pictures).
+  async palette(): Promise<Palette> {
+    const f = join(this.dir, 'palette.json')
+    if (!existsSync(f)) return { colors: [], items: [] }
+    const { data } = await readJSON<Partial<Palette>>(f)
+    return { colors: Array.isArray(data.colors) ? data.colors : [], items: Array.isArray(data.items) ? data.items : [] }
+  }
+
+  private async savePalette(p: Palette): Promise<Palette> {
+    await writeJSON(join(this.dir, 'palette.json'), p)
+    return p
+  }
+
+  async setPaletteColors(colors: string[]): Promise<Palette> {
+    const clean = [...new Set(colors.filter(c => /^#[0-9A-F]{6}$/i.test(c)).map(c => c.toUpperCase()))].slice(0, 16)
+    return this.savePalette({ ...(await this.palette()), colors: clean })
+  }
+
+  // Saves objects; pictures are copied from the project's assets so other projects can use them.
+  async savePaletteItem(name: string, annotations: Annotation[], projectAssets: string): Promise<Palette> {
+    const dir = join(this.dir, 'palette-assets')
+    await mkdir(dir, { recursive: true })
+    for (const a of annotations) {
+      if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
+      const from = join(projectAssets, a.assetId), to = join(dir, a.assetId)
+      if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
+    }
+    const p = await this.palette()
+    const item = { id: randomUUID(), name: name.trim() || 'オブジェクト', createdAt: new Date().toISOString(), annotations }
+    return this.savePalette({ ...p, items: [item, ...p.items] })
+  }
+
+  async removePaletteItem(id: string): Promise<Palette> {
+    const p = await this.palette()
+    return this.savePalette({ ...p, items: p.items.filter(i => i.id !== id) })
+  }
+
+  // The item's objects for a project: their pictures copied into its assets/ when missing.
+  async usePaletteItem(id: string, projectAssets: string): Promise<Annotation[]> {
+    const item = (await this.palette()).items.find(i => i.id === id)
+    if (!item) throw new Error('パレットに見つかりません')
+    await mkdir(projectAssets, { recursive: true })
+    for (const a of item.annotations) {
+      if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
+      const from = join(this.dir, 'palette-assets', a.assetId), to = join(projectAssets, a.assetId)
+      if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
+    }
+    return item.annotations
+  }
+
+  // Team logos for title cards: logos/<CODE>.<ext>, one per three-letter code, shared by every project.
+  async logos(): Promise<Record<string, string>> {
+    const dir = join(this.dir, 'logos')
+    if (!existsSync(dir)) return {}
+    const out: Record<string, string> = {}
+    for (const f of await readdir(dir)) {
+      const m = /^([A-Z0-9]{1,8})\.(png|jpg|webp|gif|bmp)$/i.exec(f)
+      if (m) out[m[1].toUpperCase()] = f
+    }
+    return out
+  }
+
+  async setLogo(code: string, file: string): Promise<void> {
+    const ext = extname(file).slice(1).toLowerCase().replace('jpeg', 'jpg')
+    if (!LOGO_EXT.includes(ext)) throw new Error('ロゴは画像（PNG・JPEG・WebP など）を選んでください')
+    await this.removeLogo(code)
+    await mkdir(join(this.dir, 'logos'), { recursive: true })
+    await copyFile(file, join(this.dir, 'logos', `${cleanCode(code)}.${ext}`))
+  }
+
+  async removeLogo(code: string): Promise<void> {
+    const f = (await this.logos())[cleanCode(code)]
+    if (f) await rm(join(this.dir, 'logos', f), { force: true })
+  }
+
+  async readLogo(code: string): Promise<Uint8Array | null> {
+    const f = (await this.logos())[cleanCode(code)]
+    return f ? new Uint8Array(await readFile(join(this.dir, 'logos', f))) : null
+  }
 
   static async open(dir: string): Promise<Library> {
     const lib = new Library(dir)
@@ -36,7 +124,52 @@ export class Library {
   }
 
   info(): LibraryInfo {
-    return { path: this.dir, matches: this.list() }
+    return { path: this.dir, matches: this.list(), missing: this.missing(this.list()) }
+  }
+
+  missing(ms: Match[]): MissingFiles {
+    const out: MissingFiles = {}
+    for (const m of ms) {
+      const parts: MissingPart[] = []
+      if (!existsSync(m.videoPath)) parts.push('video')
+      if (!existsSync(m.dvwPath)) parts.push('dvw')
+      if (parts.length) out[m.id] = parts
+    }
+    return out
+  }
+
+  // Points a match at its video or DVW after the file moved. A video is checked like on import
+  // (and prepared again when it needs it); a DVW must parse and have plays. Returns a note for the user.
+  async relocate(id: string, part: MissingPart, path: string, progress: (p: ImportProgress) => void): Promise<string> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(`試合が見つかりません: ${id}`)
+    let next: Match, note: string
+    if (part === 'dvw') {
+      const dvw = parseDVW(await readFile(path, 'latin1'))
+      if (!dvw.plays.length) throw new Error(`${basename(path)} にプレーがありません`)
+      const codes = dvw.teams.map(t => t.code).join('-'), was = m.teams.map(t => t.code).join('-')
+      next = { ...m, dvwPath: path }
+      note = codes === was ? `${m.name}: DVW の場所を更新しました` : `${m.name}: DVW の場所を更新しました（チームが ${was} から ${codes} に変わっています。別の試合でないか確認してください）`
+    } else {
+      progress({ stage: 'probe', message: `${basename(path)} を確認しています` })
+      const info = await probe(path)
+      const reason = prepareReason(info)
+      let playable = path
+      if (reason) {
+        playable = join(this.dir, 'cache', `${safeId(id)}.mp4`)
+        const what = reason === 'reencode' ? '再生できる形式に変換' : '音声トラックを除去'
+        progress({ stage: 'prepare', message: `${what}しています`, ratio: 0 })
+        await prepare(path, playable, reason, info.durationSec, ratio => progress({ stage: 'prepare', message: `${what}しています`, ratio }))
+      }
+      next = { ...m, sourceVideoPath: path, videoPath: playable, fps: info.fps, fpsStr: info.fpsStr, durationSec: info.durationSec, width: info.width, height: info.height }
+      note = Math.abs(info.durationSec - m.durationSec) > 2
+        ? `${m.name}: 動画の場所を更新しました（長さが ${fmt(m.durationSec)} から ${fmt(info.durationSec)} に変わっています。別の動画でないか確認してください）`
+        : `${m.name}: 動画の場所を更新しました`
+    }
+    progress({ stage: 'save', message: '保存しています' })
+    await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
+    this.matches.set(id, next)
+    return note
   }
 
   list(): Match[] {

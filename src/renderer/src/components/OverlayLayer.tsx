@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CaptionData, ClipOverlayOverride, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
+import { drawAnnotation } from '../../../shared/annotation'
+import { assetImage, logoImage, subscribeAssets } from '../assets'
+import { prepareCanvas } from '../canvas'
 import { playback, type PlaybackState } from '../playback'
 
 interface Props {
@@ -16,23 +19,32 @@ interface Props {
 // Drawn with the same functions the export will use. Sits under the annotation layer.
 export function OverlayLayer({ size, settings, clip, scoreboard, caption, override }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const [st, setSt] = useState<Pick<PlaybackState, 'time' | 'card'>>({ time: playback.current.time, card: playback.current.card })
-  useEffect(() => playback.subscribe(s => setSt(p => (p.time === s.time && p.card === s.card ? p : { time: s.time, card: s.card }))), [])
+  // Redrawn when the playhead enters or leaves the clip or a card shows, not on every frame.
+  const clipRef = useRef(clip)
+  clipRef.current = clip
+  const inClipAt = (t: number) => { const c = clipRef.current; return !!c && playback.attachedKey === c.key && t >= c.in - 0.05 && t <= c.out + 0.05 }
+  const [st, setSt] = useState<{ inClip: boolean; card: PlaybackState['card'] }>({ inClip: inClipAt(playback.current.time), card: playback.current.card })
+  useEffect(() => playback.subscribe(s => {
+    const inClip = inClipAt(s.time)
+    setSt(p => (p.inClip === inClip && p.card === s.card ? p : { inClip, card: s.card }))
+  }), [])
+  const [logoTick, setLogoTick] = useState(0) // redraw when a logo finishes loading
+  useEffect(() => subscribeAssets(() => setLogoTick(n => n + 1)), [])
 
-  const inClip = !!clip && playback.attachedKey === clip.key && st.time >= clip.in - 0.05 && st.time <= clip.out + 0.05
+  const inClip = inClipAt(playback.current.time) || st.inClip
   useEffect(() => {
     const c = canvas.current
     if (!c) return
-    const dpr = window.devicePixelRatio || 1
-    c.width = Math.round(size.w * dpr); c.height = Math.round(size.h * dpr)
-    const ctx = c.getContext('2d')!
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, size.w, size.h)
-    if (st.card) { drawTitleCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme); return }
+    const ctx = prepareCanvas(c, size.w, size.h)
+    if (st.card) {
+      drawTitleCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp))
+      for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
+      return
+    }
     if (!inClip) return
     if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, settings.theme)
     if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, settings.theme)
-  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, st.card])
+  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, st.card, logoTick])
 
   return <canvas ref={canvas} className="overlay-layer" data-testid="overlay-canvas" style={{ width: size.w, height: size.h }} />
 }

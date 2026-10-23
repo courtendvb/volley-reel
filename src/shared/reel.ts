@@ -18,7 +18,11 @@ export interface Clip {
   outSec: number | null
   annotations: Annotation[] // design §3.6; times are absolute video times
   overlayOverride?: ClipOverlayOverride // design §3.7: hide an auto element or rewrite the caption
+  mode?: ClipMode // how it was cut when added from the search; missing = the scene's default
 }
+
+// "keyplay": key play ± seconds. "toEnd": from just before the key play to the end of its rally.
+export type ClipMode = 'keyplay' | 'toEnd'
 
 export interface Reel {
   id: string
@@ -29,6 +33,13 @@ export interface Reel {
   clips: Record<string, Clip>
   scope: 'marked' | 'all'
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
+  markerCards?: Partial<Record<Marker, boolean>> // title card per marker; missing = the video's setting
+  sceneCard?: boolean // this scene's title card; missing = the video's setting
+  markerOff?: Partial<Record<Marker, boolean>> // a marker group switched off: kept, but not played or exported
+  annotations?: Annotation[] // objects shown on every clip of the scene (表示範囲: シーン全体)
+  markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
+  cardAnnotations?: Annotation[] // objects on the scene's title card
+  markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string
 }
@@ -47,9 +58,15 @@ export function newReel(name: string): Reel {
 
 const touch = (r: Reel): Reel => ({ ...r, updatedAt: new Date().toISOString() })
 
+// A clip can carry several markers (it is then in each of those groups, and plays once per group);
+// a clip with none is in 'none'. groupOf gives the first one, for single-group displays.
 export function groupOf(reel: Reel, clipId: string): Group | null {
   for (const g of [...MARKERS, 'none'] as Group[]) if (reel.groups[g].includes(clipId)) return g
   return null
+}
+
+export function markersOf(reel: Reel, clipId: string): Marker[] {
+  return MARKERS.filter(m => reel.groups[m].includes(clipId))
 }
 
 export function findClip(reel: Reel, matchId: string, playId: number): Clip | undefined {
@@ -57,14 +74,14 @@ export function findClip(reel: Reel, matchId: string, playId: number): Clip | un
 }
 
 // Adds plays not already in the reel; returns the ids of the clips (new or existing) in input order.
-export function addClips(reel: Reel, items: { matchId: string; play: Play }[], group: Group = 'none'): { reel: Reel; ids: string[] } {
+export function addClips(reel: Reel, items: { matchId: string; play: Play }[], group: Group = 'none', mode?: ClipMode): { reel: Reel; ids: string[] } {
   const clips = { ...reel.clips }
   const groups = { ...reel.groups, [group]: [...reel.groups[group]] }
   const ids: string[] = []
   for (const { matchId, play } of items) {
     const existing = Object.values(clips).find(c => c.matchId === matchId && c.playId === play.id)
     if (existing) { ids.push(existing.id); continue }
-    const c: Clip = { id: uid(), matchId, playId: play.id, fingerprint: play.fingerprint, inSec: null, outSec: null, annotations: [] }
+    const c: Clip = { id: uid(), matchId, playId: play.id, fingerprint: play.fingerprint, inSec: null, outSec: null, annotations: [], ...(mode ? { mode } : {}) }
     clips[c.id] = c
     groups[group].push(c.id)
     ids.push(c.id)
@@ -72,22 +89,50 @@ export function addClips(reel: Reel, items: { matchId: string; play: Play }[], g
   return { reel: touch({ ...reel, clips, groups }), ids }
 }
 
-// Moves a clip to a group (appending by default). Moving into its own group with no index is a no-op.
-export function moveClip(reel: Reel, clipId: string, to: Group, index?: number): Reel {
-  const from = groupOf(reel, clipId)
+// Moves a clip from one of its groups (`from`, by default its first) to another, appending by
+// default; its other markers stay. Moving into its own group with no index is a no-op. Moving to
+// 'none' takes every marker off.
+export function moveClip(reel: Reel, clipId: string, to: Group, index?: number, from: Group | null = groupOf(reel, clipId)): Reel {
   if (!from || (from === to && index === undefined)) return reel
   const groups = { ...reel.groups }
-  for (const g of [from, to]) groups[g] = groups[g].filter(id => id !== clipId)
+  const leave: Group[] = to === 'none' ? [...MARKERS, 'none'] : [from, to]
+  for (const g of leave) groups[g] = groups[g].filter(id => id !== clipId)
+  if (to !== 'none') groups.none = groups.none.filter(id => id !== clipId)
   const target = [...groups[to]]
   target.splice(index === undefined ? target.length : Math.max(0, Math.min(index, target.length)), 0, clipId)
   groups[to] = target
   return touch({ ...reel, groups })
 }
 
-// Number keys: the same marker again (or 0 → null) clears it.
-export function toggleMarker(reel: Reel, clipId: string, m: Marker | null): Reel {
-  const g = groupOf(reel, clipId)
-  return moveClip(reel, clipId, m === null || g === m ? 'none' : m)
+// Title card before a marker group: the scene's choice for that marker, else the video's setting.
+export function markerCardOn(reel: Reel, m: Marker, videoDefault: boolean): boolean {
+  return reel.markerCards?.[m] ?? videoDefault
+}
+
+// Number keys and the list's 1–5: adds that marker (keeping any others), or takes it off when the
+// clip has it; null (0) takes every marker off. With `when` (a clip's [match date, video time]) the
+// clip goes into the group in time order — before the first clip that comes later — so a group
+// stays chronological unless it was reordered by hand; without it, at the end.
+export function toggleMarker(reel: Reel, clipId: string, m: Marker | null, when?: (c: Clip) => [string, number]): Reel {
+  if (!reel.clips[clipId]) return reel
+  if (m === null) return moveClip(reel, clipId, 'none')
+  const groups = { ...reel.groups }
+  if (groups[m].includes(clipId)) {
+    groups[m] = groups[m].filter(id => id !== clipId)
+    if (!MARKERS.some(x => groups[x].includes(clipId))) groups.none = [...groups.none, clipId]
+  } else {
+    const list = [...groups[m]]
+    let at = list.length
+    if (when) {
+      const [d, t] = when(reel.clips[clipId])
+      const later = list.findIndex(id => { const [d2, t2] = when(reel.clips[id]); return d2.localeCompare(d) > 0 || (d2 === d && t2 > t) })
+      if (later >= 0) at = later
+    }
+    list.splice(at, 0, clipId)
+    groups[m] = list
+    groups.none = groups.none.filter(id => id !== clipId)
+  }
+  return touch({ ...reel, groups })
 }
 
 export function shiftClip(reel: Reel, clipId: string, delta: number): Reel {
@@ -124,7 +169,7 @@ export function renameMarker(reel: Reel, m: Marker, name: string): Reel {
 // Playback / export order: marker groups in groupOrder, then (scope 'all') unmarked clips by
 // match date and time. `when` gives a clip's [match date, video time].
 export function playOrder(reel: Reel, when: (c: Clip) => [string, number], scope = reel.scope): Clip[] {
-  const marked = reel.groupOrder.flatMap(m => reel.groups[m].map(id => reel.clips[id]))
+  const marked = reel.groupOrder.filter(m => !reel.markerOff?.[m]).flatMap(m => reel.groups[m].map(id => reel.clips[id]))
   if (scope === 'marked') return marked
   return [...marked, ...chronological(reel, reel.groups.none, when)]
 }
@@ -204,10 +249,11 @@ export function rangeDefaults(r: Reel): RangeDefaults {
   return { ...DEFAULT_RANGE, ...(r.rangeDefaults ?? {}) }
 }
 
-export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE): { in: number; out: number } {
+export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE, mode?: ClipMode): { in: number; out: number } {
   const r = play.rallyId !== null ? dvw.rallies[play.rallyId] : null
-  const [a, b] = d.mode === 'rally' && r
-    ? [r.serveTime - d.rallyLead, r.lastActionTime + d.rallyTail]
+  const m = mode ?? d.mode
+  const [a, b] = m === 'rally' && r ? [r.serveTime - d.rallyLead, r.lastActionTime + d.rallyTail]
+    : m === 'toEnd' && r ? [play.time - d.keyBefore, Math.max(play.time + d.keyAfter, r.lastActionTime + d.rallyTail)]
     : [play.time - d.keyBefore, play.time + d.keyAfter]
   return { in: Math.max(0, a + offsetSec), out: b + offsetSec }
 }
@@ -215,7 +261,7 @@ export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: R
 export function clipRange(c: Clip, dvw: ParsedDVW, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE): { in: number; out: number } | null {
   const play = dvw.plays[c.playId]
   if (!play) return null
-  const def = defaultRange(dvw, play, offsetSec, d)
+  const def = defaultRange(dvw, play, offsetSec, d, c.mode)
   return { in: c.inSec ?? def.in, out: c.outSec ?? def.out }
 }
 

@@ -6,8 +6,11 @@
 // v3 step 3 adds Office-like formatting (fill and its transparency, dash, arrow heads, bold, a box
 // behind text) and polyline / polygon shapes. Every new field is optional and its default is the
 // old look, so annotations saved before draw exactly as they did.
+//
+// An image annotation shows a picture (or page 1 of a PDF, rendered to PNG) stored in the project's
+// assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 
-export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon'
+export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
 export type Heads = 'end' | 'both' | 'none'
 
@@ -18,6 +21,9 @@ interface Base {
   showTo?: number
   dash?: Dash // default solid
   opacity?: number // whole object, 0..1; default 1
+  groupId?: string // objects with the same group id are selected and moved together
+  fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
+  fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
 }
 
 export interface Fillable {
@@ -34,19 +40,25 @@ export interface TextBox {
 }
 
 export type Annotation = Base & (
-  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null }
+  // align center: x is the middle of the text. quick: the clip's headline from the text field in the tools.
+  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean }
   | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number } & Fillable)
+  // crop: the part of the picture shown (fractions of its width / height); missing = all of it.
+  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop }
 )
+
+export type ImageLookup = (assetId: string) => CanvasImageSource | null
+export interface Crop { x: number; y: number; w: number; h: number }
 
 export type PointsAnnotation = Extract<Annotation, { points: [number, number][] }>
 export const isPoints = (a: Annotation): a is PointsAnnotation => a.kind === 'freehand' || a.kind === 'polyline' || a.kind === 'polygon'
 
 export const REF_HEIGHT = 720
 export const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", sans-serif'
-export const COLORS = ['#FFFFFF', '#FACC15', '#EF4444', '#3B82F6', '#22C55E', '#0F172A']
+export const COLORS = ['#EF4444', '#FFFFFF', '#3B82F6', '#22C55E', '#0F172A']
 export const WIDTHS = [3, 6, 10]
 export const TEXT_SIZES = [24, 36, 52]
 export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, stroke: null, strokeWidth: 2, padding: 8 }
@@ -54,6 +66,21 @@ export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, st
 export interface Rect { x: number; y: number; w: number; h: number } // normalized
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
+// The objects that move together with these: the ids themselves and every member of their groups.
+export function withGroups(list: Annotation[], ids: string[]): string[] {
+  const groups = new Set(list.filter(a => ids.includes(a.id) && a.groupId).map(a => a.groupId))
+  return list.filter(a => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map(a => a.id)
+}
+
+// How opaque an object is at time t from its own fades (1 when it has none or is past them).
+export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: number }): number {
+  if (!a.fadeIn && !a.fadeOut) return 1
+  const from = a.showFrom ?? clip.in, to = a.showTo ?? clip.out
+  const fin = a.fadeIn ? Math.min(1, Math.max(0, (t - from) / a.fadeIn)) : 1
+  const fout = a.fadeOut ? Math.min(1, Math.max(0, (to - t) / a.fadeOut)) : 1
+  return Math.min(fin, fout)
+}
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {
   return t >= (a.showFrom ?? clip.in) - 1e-3 && t <= (a.showTo ?? clip.out) + 1e-3
@@ -63,7 +90,7 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: a.x + dx, y: a.y + dy }
     case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy }
-    case 'circle': case 'rect': return { ...a, x: a.x + dx, y: a.y + dy }
+    case 'circle': case 'rect': case 'image': return { ...a, x: a.x + dx, y: a.y + dy }
     default: return { ...a, points: a.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }
   }
 }
@@ -90,6 +117,7 @@ export interface StylePatch {
 // Applies the parts of a style that make sense for the annotation's kind.
 export function applyStyle(a: Annotation, s: StylePatch): Annotation {
   const common = { ...a, color: s.color ?? a.color, ...(s.opacity !== undefined ? { opacity: s.opacity } : {}) }
+  if (common.kind === 'image') return common
   if (common.kind === 'text') {
     return { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
       ...(s.outline !== undefined ? { outline: s.outline } : {}), ...(s.box !== undefined ? { box: s.box } : {}) }
@@ -110,12 +138,14 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
     case 'text': {
       const s = H / REF_HEIGHT
       setTextFont(ctx, a.size * s, a.bold !== false)
-      const w = ctx.measureText(a.text || ' ').width / W
+      const lines = textLines(a.text)
+      const w = Math.max(...lines.map(l => ctx.measureText(l || ' ').width)) / W
       const pad = a.box ? a.box.padding / REF_HEIGHT : 0
-      return { x: a.x - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2) / REF_HEIGHT + 2 * pad }
+      const left = a.align === 'center' ? a.x - w / 2 : a.x
+      return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
     case 'arrow': return box([[a.x1, a.y1], [a.x2, a.y2]])
-    case 'circle': case 'rect': return { x: a.x, y: a.y, w: a.w, h: a.h }
+    case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
     default: return box(a.points)
   }
 }
@@ -143,7 +173,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   return null
 }
 
-export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number): void {
+export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup): void {
   const s = H / REF_HEIGHT
   ctx.save()
   ctx.globalAlpha *= a.opacity ?? 1
@@ -153,6 +183,19 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number): v
   ctx.fillStyle = a.color
   switch (a.kind) {
     case 'text': drawText(ctx, a, W, H, s); break
+    case 'image': {
+      const img = images?.(a.assetId) ?? null
+      if (img) {
+        const c = a.crop, iw = (img as { width: number }).width, ih = (img as { height: number }).height
+        if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
+        else ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H)
+        break
+      }
+      // Not loaded (yet): a placeholder, so the object can still be seen and picked.
+      ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(148,163,184,0.9)'
+      ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H)
+      break
+    }
     case 'arrow': {
       const x1 = a.x1 * W, y1 = a.y1 * H, x2 = a.x2 * W, y2 = a.y2 * H, lw = a.width * s
       const ang = Math.atan2(y2 - y1, x2 - x1), head = Math.max(lw * 3.2, 10 * s)
@@ -187,13 +230,19 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number): v
   ctx.restore()
 }
 
+// Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
+export const textLines = (t: string): string[] => t.split('\n')
+
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
-  const px = a.size * s
+  const px = a.size * s, lh = px * 1.2
   setTextFont(ctx, px, a.bold !== false)
   ctx.textBaseline = 'top'
-  const x = a.x * W, y = a.y * H
+  const lines = textLines(a.text)
+  const widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
+  const x = a.align === 'center' ? a.x * W - wMax / 2 : a.x * W, y = a.y * H
+  const lineX = (i: number) => (a.align === 'center' ? a.x * W - widths[i] / 2 : x)
   if (a.box) {
-    const pad = a.box.padding * s, w = ctx.measureText(a.text).width, h = px * 1.2
+    const pad = a.box.padding * s, w = wMax, h = lh * lines.length
     if (a.box.fill) {
       ctx.save(); ctx.globalAlpha *= a.box.fillOpacity; ctx.fillStyle = a.box.fill
       ctx.fillRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
@@ -203,12 +252,13 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
       ctx.strokeRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
     }
   }
-  // A thin dark outline keeps light text readable on a bright court (on by default, as before).
+  // A black outline keeps light text readable on a bright court (on by default).
   if (a.outline !== false && a.color.toUpperCase() !== '#0F172A') {
-    ctx.save(); ctx.lineWidth = Math.max(2, px * 0.16); ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(a.text, x, y); ctx.restore()
+    ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'
+    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), y + i * lh)); ctx.restore()
   }
   ctx.fillStyle = a.color
-  ctx.fillText(a.text, x, y)
+  lines.forEach((l, i) => ctx.fillText(l, lineX(i), y + i * lh))
 }
 
 function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash }, lw: number): void {
@@ -241,7 +291,7 @@ export function roundCoords(a: Annotation): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: r(a.x), y: r(a.y) }
     case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2) }
-    case 'circle': case 'rect': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
+    case 'circle': case 'rect': case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
     default: return { ...a, points: a.points.map(([x, y]) => [r(x), r(y)] as [number, number]) }
   }
 }

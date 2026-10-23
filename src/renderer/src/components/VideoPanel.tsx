@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
+import { InlineTitle } from './InlineTitle'
 
 interface Props {
   videos: Video[]
@@ -13,13 +14,18 @@ interface Props {
   onDeleteVideo: (id: string) => void
   onChange: (v: Video) => void
   onSelectScene: (id: string) => void
+  onRenameScene: (id: string, name: string) => void
+  onEditCard: (sceneId: string) => void // the gear: edit how scene title cards look, in the video window
+  onEditVideoCard: () => void // the gear by the video's name: its opening card
+  videoCardOn: boolean
+  onVideoCard: (on: boolean) => void
+  sceneCardOn: (s: Reel) => boolean // the scene's card: its own choice, else the video's
+  onSceneCard: (s: Reel, on: boolean) => void
   onNewScene: () => void
   onOpenOverlay: () => void
   playing: boolean
   onPlay: () => void
   onStop: () => void
-  exporting: boolean
-  onExport: () => void
 }
 
 const DT_SCENE = 'application/x-vr-scene-index'
@@ -28,7 +34,8 @@ const DT_SCENE = 'application/x-vr-scene-index'
 // videos, and editing it changes all of them. The overlay look, through-play and export are per video.
 export function VideoPanel(p: Props) {
   const v = p.video
-  const [dragOver, setDragOver] = useState<number | null>(null)
+  // Where a dragged scene will land: above or below the row under the pointer (shown as a line).
+  const [dragOver, setDragOver] = useState<{ i: number; after: boolean } | null>(null)
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
   const total = v ? v.sceneIds.reduce((acc, id) => { const s = byId[id]; if (!s) return acc; const st = p.sceneStats(s); return { clips: acc.clips + st.clips, sec: acc.sec + st.sec } }, { clips: 0, sec: 0 }) : { clips: 0, sec: 0 }
@@ -52,25 +59,50 @@ export function VideoPanel(p: Props) {
         <button onClick={p.onNewVideo} title="新しい動画">＋</button>
         <button onClick={() => { if (confirm(`動画「${v.name}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）`)) p.onDeleteVideo(v.id) }} title="動画を削除">削除</button>
       </div>
-      <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
+      <div className="reel-name-row">
+        <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
+        <button className={`card-toggle${p.videoCardOn ? ' on' : ''}`} aria-pressed={p.videoCardOn}
+          title={p.videoCardOn ? '動画の頭に動画名のカードを出す（クリックで出さない）' : '動画の頭に動画名のカードを出さない（クリックで出す）'}
+          onClick={() => p.onVideoCard(!p.videoCardOn)}>カード</button>
+        <button className="gear" aria-label="動画のタイトルカード" title="動画の頭のタイトルカード（動画名）を動画の画面で編集" onClick={p.onEditVideoCard}>⚙</button>
+      </div>
 
       <ol className="video-scenes" role="list">
         {v.sceneIds.map((id, i) => {
           const s = byId[id]
           const st = s ? p.sceneStats(s) : { clips: 0, sec: 0 }
           return (
-            <li key={`${id}-${i}`} draggable className={`video-scene${id === p.currentSceneId ? ' current' : ''}${dragOver === i ? ' drop-before' : ''}`}
+            <li key={`${id}-${i}`} draggable className={`video-scene${id === p.currentSceneId ? ' current' : ''}${dragOver?.i === i ? (dragOver.after ? ' drop-after' : ' drop-before') : ''}`}
               onClick={() => s && p.onSelectScene(id)}
               onDragStart={e => e.dataTransfer.setData(DT_SCENE, String(i))}
-              onDragOver={e => { e.preventDefault(); setDragOver(i) }} onDragLeave={() => setDragOver(null)}
-              onDrop={e => { const from = Number(e.dataTransfer.getData(DT_SCENE)); setDragOver(null); if (!isNaN(from) && from !== i) p.onChange(moveSceneAt(v, from, i)) }}>
+              onDragOver={e => {
+                if (!e.dataTransfer.types.includes(DT_SCENE)) return
+                e.preventDefault()
+                const b = e.currentTarget.getBoundingClientRect()
+                setDragOver({ i, after: e.clientY > b.top + b.height / 2 })
+              }}
+              onDragEnd={() => setDragOver(null)}
+              onDrop={e => {
+                const from = Number(e.dataTransfer.getData(DT_SCENE)), slot = i + (dragOver?.i === i && dragOver.after ? 1 : 0)
+                setDragOver(null)
+                if (isNaN(from)) return
+                const to = from < slot ? slot - 1 : slot // moveSceneAt counts the rows without the moved one
+                if (to !== from) p.onChange(moveSceneAt(v, from, to))
+              }}>
+              <span className="grip" aria-hidden title="ドラッグで順番を変える">⠿</span>
               <span className="scene-no">{i + 1}</span>
-              <span className="scene-name">{s ? s.name : '（削除されたシーン）'}</span>
+              {s ? <InlineTitle className="scene-name" value={s.name} placeholder="（名前なし）" label="シーンの名前" onChange={name => p.onRenameScene(id, name)} />
+                : <span className="scene-name">（削除されたシーン）</span>}
               {s && usedIn(id) > 1 && <span className="shared" title={`${usedIn(id)} 本の動画で使っています。直すとすべてに反映されます`}>共有 {usedIn(id)}</span>}
               <span className="muted">{st.clips} 本・{fmtSec(st.sec)}</span>
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
-                <button title="上へ" disabled={i === 0} onClick={() => p.onChange(moveSceneAt(v, i, i - 1))}>↑</button>
-                <button title="下へ" disabled={i === v.sceneIds.length - 1} onClick={() => p.onChange(moveSceneAt(v, i, i + 1))}>↓</button>
+                {s && (
+                  <button className={`card-toggle${p.sceneCardOn(s) ? ' on' : ''}`} aria-pressed={p.sceneCardOn(s)}
+                    title={p.sceneCardOn(s) ? 'このシーンの前にタイトルカードを出す（クリックで出さない）' : 'このシーンの前にタイトルカードを出さない（クリックで出す）'}
+                    onClick={() => p.onSceneCard(s, !p.sceneCardOn(s))}>カード</button>
+                )}
+                {s && <button className="gear" aria-label="シーンのタイトルカードの見た目" title="シーンのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
+                  onClick={() => p.onEditCard(id)}>⚙</button>}
                 <button title="動画から外す（シーンは残ります）" onClick={() => p.onChange(removeSceneAt(v, i))}>×</button>
               </span>
             </li>
@@ -88,14 +120,10 @@ export function VideoPanel(p: Props) {
       </div>
 
       <div className="reel-controls">
-        <button onClick={p.onOpenOverlay} title="スコアボード・テロップ・タイトルカード・配色（この動画の設定）">オーバーレイ</button>
+        <button onClick={p.onOpenOverlay} title="この動画の設定: スコアボード・テロップ・タイトルカード・フェード">⚙ 設定</button>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlay} disabled={!total.clips}>▶ 動画を再生</button>}
-      </div>
-      <div className="reel-export">
-        <button className="primary" onClick={p.onExport} disabled={!total.clips || p.exporting}
-          title={p.exporting ? '書き出し中です' : 'この動画を MP4 にする'}>⤓ MP4 に書き出す</button>
       </div>
       <p className="count">{v.sceneIds.length} シーン・{total.clips} クリップ・{fmtSec(total.sec)}（タイトルカードを除く）</p>
     </section>

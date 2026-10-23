@@ -1,11 +1,12 @@
 // Drawing for the automatic overlays — the design picked in the M6 review: black plates with
 // slanted ends, an accent block for the number, Bahnschrift bold. One renderer for the preview and
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
-import type { Anchor, CaptionData, OverlaySettings, OverlayTheme, ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
-export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif'
+// Bahnschrift has no Japanese: names and titles in Japanese fall through to Yu Gothic / Meiryo.
+export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif'
 const TEXT = '#FFFFFF'
 const SUB = '#BDBDBD'
 const MUTED = '#8F8F8F'
@@ -38,14 +39,12 @@ export function drawScoreboard(ctx: Ctx, W: number, H: number, d: ScoreboardData
 
   const cy = s.showSets ? y + h * 0.4 : y + h / 2
   let px = x + wL + (centerW - (pW + dW + qW + gap * 2)) / 2
-  const winL = s.highlightWinner && d.winner === 'L', winR = s.highlightWinner && d.winner === 'R'
-  text(ctx, ptsL, px, cy, ptsFont, winR ? SUB : TEXT, 0)
-  if (winL) fillRect(ctx, theme.accent, px - 2 * k, cy + 13 * k, pW + 4 * k, 3 * k)
+  // No mark for who took the rally: an underline read as "serving".
+  text(ctx, ptsL, px, cy, ptsFont, TEXT, 0)
   px += pW + gap
   text(ctx, dash, px, cy, ptsFont, '#6B6B6B', 0)
   px += dW + gap
-  text(ctx, ptsR, px, cy, ptsFont, winL ? SUB : TEXT, 0)
-  if (winR) fillRect(ctx, theme.accent, px - 2 * k, cy + 13 * k, qW + 4 * k, 3 * k)
+  text(ctx, ptsR, px, cy, ptsFont, TEXT, 0)
   if (s.showSets) {
     const sw = measure(ctx, setsText, setsFont, 0.3 * 10 * k)
     text(ctx, setsText, x + wL + (centerW - sw) / 2, y + h * 0.8, setsFont, MUTED, 0.3 * 10 * k)
@@ -92,50 +91,90 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
 
 // Full-frame card at the head of a marker group: small match line over "[n] MARKER NAME".
 // marker null = a scene card: the scene name, a little larger, behind a narrow accent block.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null }, s: OverlaySettings['titleCard'], theme: OverlayTheme): void {
+// logo: the opponent's logo, drawn beside the marker title or above the scene title.
+// Returns the title's box in pixels (for the card editor to grab). Position and size come from
+// s.markerLayout / s.sceneLayout, which the editor changes.
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
   const k = H / 720
   ctx.save()
   fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H)
-  if (d.marker === null) { drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme); ctx.restore(); return }
-  const numFont = font(24 * k), nameFont = font(28 * k), matchFont = font(12 * k, 400)
-  const name = (s.showMarkerName && d.name ? d.name : `MARKER ${d.marker}`).toUpperCase()
-  const numW = measure(ctx, String(d.marker), numFont, 0) + 32 * k
-  const plateW = measure(ctx, name, nameFont, 0.08 * 28 * k) + 46 * k
-  const h = 46 * k, slant = 10 * k
-  const total = numW + plateW - 6 * k
-  const x = (W - total) / 2, y = H / 2 - h / 2 + (s.showMatch && d.match ? 10 * k : 0)
-  if (s.showMatch && d.match) {
-    const mw = measure(ctx, d.match, matchFont, 0.4 * 12 * k)
-    ctx.textBaseline = 'middle'
-    text(ctx, d.match, (W - mw) / 2, y - 22 * k, matchFont, MUTED, 0.4 * 12 * k)
+  if (d.marker === null) {
+    // The video's opening card is drawn like a scene card, larger by default, with its own layout.
+    const L = d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT
+    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo ?? null, L)
+    ctx.restore()
+    return box
   }
-  const px = x + numW - 6 * k
-  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 14 * k, y + h], [px, y + h]])
-  fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
+  // Marker cards: 3× the base size times the layout's scale, the title's top-left at the layout's
+  // point (10% / 30% by default); shrunk to stay inside the frame when the name is long.
+  const L = s.markerLayout ?? DEFAULT_MARKER_LAYOUT
+  const name = (s.showMarkerName && d.name ? d.name : `MARKER ${d.marker}`).toUpperCase()
+  const match = s.showMatch && d.match ? d.match : null
+  const x = W * L.x, top = H * L.y
+  const lr = logo ? logoRatio(logo) : 0 // width / height
+  const layout = (q: number) => {
+    const numW = measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q
+    const plateW = measure(ctx, name, font(28 * q), 0.08 * 28 * q) + 46 * q
+    const logoH = (match ? 22 * q : 0) + 46 * q
+    const matchW = match ? measure(ctx, match, font(12 * q, 400), 0.4 * 12 * q) : 0
+    const total = Math.max(numW + plateW - 6 * q, matchW) // the logo goes after the plate or the match line, whichever is wider
+    return { numW, plateW, logoH, total: total + (logo ? 28 * q + logoH * lr : 0) }
+  }
+  let q = k * 3 * L.scale
+  const first = layout(q)
+  if (x + first.total > W * 0.98) q *= Math.max(0.2, (W * 0.98 - x) / first.total)
+  const { numW, plateW, logoH, total } = layout(q)
+  const numFont = font(24 * q), nameFont = font(28 * q), matchFont = font(12 * q, 400)
+  const h = 46 * q, slant = 10 * q
   ctx.textBaseline = 'middle'
+  if (match) text(ctx, match, x, top + 8 * q, matchFont, MUTED, 0.4 * 12 * q)
+  const y = top + (match ? 22 * q : 0)
+  const px = x + numW - 6 * q
+  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 14 * q, y + h], [px, y + h]])
+  fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
   const nw = measure(ctx, String(d.marker), numFont, 0)
   text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
-  text(ctx, name, px + slant + 14 * k, y + h / 2, nameFont, TEXT, 0.08 * 28 * k)
+  text(ctx, name, px + slant + 14 * q, y + h / 2, nameFont, TEXT, 0.08 * 28 * q)
+  if (logo) ctx.drawImage(logo, x + total - logoH * lr, top, logoH * lr, logoH) // as tall as the whole title
   ctx.restore()
+  return { x, y: top, w: total, h: logoH }
 }
 
-function drawSceneCard(ctx: Ctx, W: number, H: number, k: number, name: string, match: string | null, theme: OverlayTheme): void {
+export interface Box { x: number; y: number; w: number; h: number }
+
+function logoRatio(img: CanvasImageSource): number {
+  const w = (img as { width: number }).width, h = (img as { height: number }).height
+  return w > 0 && h > 0 ? w / h : 1
+}
+
+// The scene title (with its match line and the logo above), centered on the layout's point.
+function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null, L: CardLayout): Box {
+  const k = k0 * L.scale
   const nameFont = font(36 * k), matchFont = font(12 * k, 400)
   const label = (name || 'SCENE').toUpperCase()
   const blockW = 22 * k, h = 58 * k, slant = 12 * k
   const plateW = measure(ctx, label, nameFont, 0.08 * 36 * k) + 56 * k
   const total = blockW + plateW - 6 * k
-  const x = (W - total) / 2, y = H / 2 - h / 2 + (match ? 12 * k : 0)
+  const mw = match ? measure(ctx, match, matchFont, 0.4 * 12 * k) : 0
+  // Logo: at most 120 px tall at 720p and half the width.
+  let lh = logo ? 120 * k : 0, lw = logo ? lh * logoRatio(logo) : 0
+  if (logo && lw > W * 0.5) { lw = W * 0.5; lh = lw / logoRatio(logo) }
+  // Heights above the plate's top: the match line, then the logo.
+  const above = logo ? (match ? 44 : 20) * k + lh : match ? 32 * k : 0
+  const cx = W * L.x, y = H * L.y - (above + h) / 2 + above
+  const x = cx - total / 2
   if (match) {
-    const mw = measure(ctx, match, matchFont, 0.4 * 12 * k)
     ctx.textBaseline = 'middle'
-    text(ctx, match, (W - mw) / 2, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
+    text(ctx, match, cx - mw / 2, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
   }
+  if (logo) ctx.drawImage(logo, cx - lw / 2, y - (match ? 44 : 20) * k - lh, lw, lh)
   const px = x + blockW - 6 * k
   fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])
   fillPoly(ctx, theme.accent, [[x, y], [x + blockW, y], [x + blockW - slant, y + h], [x, y + h]])
   ctx.textBaseline = 'middle'
   text(ctx, label, px + slant + 18 * k, y + h / 2, nameFont, TEXT, 0.08 * 36 * k)
+  const w = Math.max(total, mw, lw)
+  return { x: cx - w / 2, y: y - above, w, h: above + h }
 }
 
 // Top / bottom × left / center / right, with a margin of 2.5% of the height.

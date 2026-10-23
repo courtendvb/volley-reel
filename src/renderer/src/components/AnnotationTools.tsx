@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
 import {
-  COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints,
+  COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints, withGroups,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
-import { MAX_EDIT_POINTS, setClosed, simplify } from '../../../shared/annotationEdit'
+import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
+import { forgetColor, rememberColor, usePalette } from '../palette'
 import { playback } from '../playback'
-import type { AnnStyle, Tool } from './AnnotationLayer'
+import type { AnnScope } from '../../../shared/annotationScope'
+import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
 
 interface Props {
   tool: Tool
@@ -14,19 +16,30 @@ interface Props {
   onStyle: (s: AnnStyle) => void
   annotations: Annotation[]
   selectedId: string | null
+  scopeOf: (id: string) => AnnScope | null
+  onScope: (id: string, to: AnnScope) => void
+  canVideo: boolean // a video is open, so objects can be put on all of it
+  marker?: number | null // the marker group the clip is open in (objects can be put on all of its clips)
+  cardMode?: boolean // objects on a title card: no clip timing, no display scope
+  extraIds?: string[] // objects picked with Shift+click besides the selected one
+  editPoints: boolean
+  onEditPoints: (on: boolean) => void
+  cropping: boolean
+  onCropping: (on: boolean) => void
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
+  onInsertImage: () => void
   clip: { in: number; out: number }
   disabled: boolean // during through-play
 }
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', '選択', 'V', '選択・移動・頂点の編集'], ['text', 'T', 'T', 'テキスト'], ['arrow', '↗', 'A', '矢印'],
-  ['circle', '○', 'C', '円'], ['rect', '□', 'R', '四角'], ['polyline', '⌇', 'L', '折れ線（クリックで頂点）'],
+  ['circle', '○', 'C', '円'], ['rect', '□', 'R', '四角'], ['triangle', '△', 'G', '三角形'], ['polyline', '⌇', 'L', '折れ線（クリックで頂点）'],
   ['polygon', '⬠', 'P', '多角形（クリックで頂点）'], ['freehand', '✎', 'F', 'フリーハンド'],
 ]
-const KIND_LABEL: Record<Annotation['kind'], string> = {
-  text: 'テキスト', arrow: '矢印', circle: '円', rect: '四角', freehand: 'フリーハンド', polyline: '折れ線', polygon: '多角形',
+export const KIND_LABEL: Record<Annotation['kind'], string> = {
+  text: 'テキスト', arrow: '矢印', circle: '円', rect: '四角', freehand: 'フリーハンド', polyline: '折れ線', polygon: '多角形', image: '画像',
 }
 
 // Format panel in the spirit of Office's shape format pane: line, fill and text for the selected
@@ -40,13 +53,13 @@ export function AnnotationTools(p: Props) {
   }
 
   // What the controls show: the selection's values with the old-look defaults filled in.
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool)
+  const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' ? 'polygon' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
     size: sel?.kind === 'text' ? sel.size : p.style.size,
     dash: (sel ? sel.dash : p.style.dash) ?? 'solid',
-    opacity: (sel ? sel.opacity : p.style.opacity) ?? 1,
     fill: sel && hasFill(sel) ? (sel as { fill?: string | null }).fill ?? null : p.style.fill ?? null,
     fillOpacity: sel && hasFill(sel) ? (sel as { fillOpacity?: number }).fillOpacity ?? 1 : p.style.fillOpacity ?? 1,
     heads: (sel?.kind === 'arrow' ? sel.heads : p.style.heads) ?? 'end',
@@ -54,7 +67,7 @@ export function AnnotationTools(p: Props) {
     outline: (sel?.kind === 'text' ? sel.outline : p.style.outline) ?? true,
     box: (sel?.kind === 'text' ? sel.box : p.style.box) ?? null,
   }
-  const lineKinds = kind === null || kind !== 'text'
+  const lineKinds = kind === null || (kind !== 'text' && kind !== 'image')
   const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
   const textKinds = kind === null || kind === 'text'
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
@@ -69,6 +82,43 @@ export function AnnotationTools(p: Props) {
               onClick={() => p.onTool(t)} disabled={p.disabled}>{label}</button>
           ))}
         </div>
+        <button onClick={p.onInsertImage} disabled={p.disabled} title="画像ファイルか PDF（1ページ目）を動画の上に置く">画像・PDF…</button>
+        {sel && sel.kind !== 'text' && sel.kind !== 'arrow' && sel.kind !== 'image' && (
+          <button className={p.editPoints ? 'on' : ''} aria-pressed={p.editPoints} disabled={p.disabled}
+            title="頂点をドラッグして形を変える。辺の中点を引くと頂点が増え、頂点をダブルクリックで消せます。四角・円は多角形になります。"
+            onClick={() => {
+              if (!p.editPoints && (sel.kind === 'rect' || sel.kind === 'circle')) update(toPolygon(sel))
+              p.onEditPoints(!p.editPoints)
+            }}>頂点の編集</button>
+        )}
+        {sel && (p.extraIds?.length ?? 0) > 0 && (
+          <button title="選んだ図形をまとめて、一緒に選択・移動できるようにする（Shift+クリックで選び足す）" disabled={p.disabled}
+            onClick={() => {
+              const ids = withGroups(p.annotations, [sel.id, ...p.extraIds!]), g = crypto.randomUUID()
+              p.onChange(p.annotations.map(a => (ids.includes(a.id) ? { ...a, groupId: g } : a)))
+            }}>グループ化</button>
+        )}
+        {sel?.groupId && !(p.extraIds?.length) && (
+          <button title="グループを解いて、図形を一つずつ扱う" disabled={p.disabled}
+            onClick={() => p.onChange(p.annotations.map(a => {
+              if (a.groupId !== sel.groupId) return a
+              const { groupId: _g, ...rest } = a
+              return rest as Annotation
+            }))}>グループ解除</button>
+        )}
+        {sel?.kind === 'image' && (
+          <button className={p.cropping ? 'on' : ''} aria-pressed={p.cropping} disabled={p.disabled}
+            title="枠のつまみで切り取る範囲、画像のドラッグで位置、ホイールか ＋／− で拡大・縮小"
+            onClick={() => p.onCropping(!p.cropping)}>トリミング</button>
+        )}
+        {sel?.kind === 'image' && p.cropping && (
+          <>
+            <button aria-label="画像を拡大" title="画像を拡大（枠はそのまま）" onClick={() => update(zoomCrop(sel, 1.15))}>＋</button>
+            <button aria-label="画像を縮小" title="画像を縮小（枠より小さくはならない）" onClick={() => update(zoomCrop(sel, 1 / 1.15))}>−</button>
+            {sel.crop && <button className="link" title="切り取りをやめて、画像全体を表示する"
+              onClick={() => { const { crop: _c, ...rest } = sel; update({ ...rest, ...fullRect(sel) }) }}>元の画像に戻す</button>}
+          </>
+        )}
         <span className="muted small">{sel ? `${KIND_LABEL[sel.kind]}${sel.kind === 'text' ? `「${sel.text}」` : ''} を編集中` : '次に描く図形の書式'}</span>
       </div>
 
@@ -85,19 +135,25 @@ export function AnnotationTools(p: Props) {
                 <option value="end">矢印: 終点</option><option value="both">矢印: 両端</option><option value="none">矢印: なし</option>
               </select>
             )}
+            {(kind === 'rect' || kind === 'circle' || kind === 'polygon') && (
+              // Fill only: no outline (turns the fill on, so the shape doesn't vanish).
+              <label className="check"><input type="checkbox" checked={v.width === 0} aria-label="線なし" disabled={p.disabled}
+                onChange={e => set(e.target.checked ? { width: 0, ...(v.fill ? {} : { fill: v.color }) } : { width: 6 })} /> 線なし</label>
+            )}
           </Group>
         )}
         {fillKinds && (
           <Group title="塗り">
             <label className="check"><input type="checkbox" checked={!!v.fill} aria-label="塗りつぶす" disabled={p.disabled}
-              onChange={e => set({ fill: e.target.checked ? v.fill ?? '#FACC15' : null })} /> 塗る</label>
+              onChange={e => set({ fill: e.target.checked ? v.fill ?? '#EF4444' : null })} /> 塗る</label>
             {v.fill && <ColorPick label="塗りの色" value={v.fill} onChange={fill => set({ fill })} disabled={p.disabled} />}
             {v.fill && <Pct label="塗りの透明度" value={1 - v.fillOpacity} onChange={t => set({ fillOpacity: 1 - t })} disabled={p.disabled} />}
           </Group>
         )}
         {textKinds && (
           <Group title="テキスト">
-            <ColorPick label="文字の色" value={v.color} onChange={color => set({ color })} disabled={p.disabled} />
+            <ColorPick label="文字の色" value={sel ? v.color : textStyle(p.style).color} disabled={p.disabled}
+              onChange={color => (sel ? set({ color }) : p.onStyle({ ...p.style, textColor: color }))} />
             <Num label="サイズ" value={v.size} min={10} max={160} step={2} onChange={size => set({ size })} disabled={p.disabled} />
             <label className="check"><input type="checkbox" checked={v.bold} onChange={e => set({ bold: e.target.checked })} disabled={p.disabled} /> 太字</label>
             <label className="check"><input type="checkbox" checked={v.outline} onChange={e => set({ outline: e.target.checked })} disabled={p.disabled} /> 縁取り</label>
@@ -119,7 +175,25 @@ export function AnnotationTools(p: Props) {
           </Group>
         )}
         <Group title="全体">
-          <Pct label="透明度" value={1 - v.opacity} onChange={t => set({ opacity: 1 - t })} disabled={p.disabled} />
+          {sel && !p.cardMode && (
+            <span className="fade-fields" title="出るときに透明から、消えるときに透明へ（秒）。0 でなし">
+              <Num label="フェードイン" value={sel.fadeIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
+                onChange={v => { const { fadeIn: _f, ...rest } = sel; update((v > 0 ? { ...rest, fadeIn: v } : rest) as Annotation) }} />
+              <Num label="アウト" value={sel.fadeOut ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
+                onChange={v => { const { fadeOut: _f, ...rest } = sel; update((v > 0 ? { ...rest, fadeOut: v } : rest) as Annotation) }} />
+              <span className="muted">秒</span>
+            </span>
+          )}
+          {sel && !p.cardMode && (
+            <select aria-label="表示範囲" value={scope} disabled={p.disabled} className={`scope-${scope}`}
+              title="このクリップだけ／このマーカーのグループのすべてのクリップ／このシーンのすべてのクリップ／この動画のすべてのクリップ"
+              onChange={e => p.onScope(sel.id, e.target.value as AnnScope)}>
+              <option value="clip">表示: このクリップ</option>
+              {(p.marker || scope === 'marker') && <option value="marker">{`表示: マーカー全体${p.marker ? `（${p.marker}）` : ''}`}</option>}
+              <option value="scene">表示: シーン全体</option>
+              {(p.canVideo || scope === 'video') && <option value="video">表示: 動画全体</option>}
+            </select>
+          )}
           {sel && isPoints(sel) && sel.points.length > MAX_EDIT_POINTS && (
             <button onClick={() => update(simplify(sel, 2, 1280, 720))} title="形を保ったまま点を減らし、頂点を編集できるようにする">点を減らす（{sel.points.length}点）</button>
           )}
@@ -131,7 +205,19 @@ export function AnnotationTools(p: Props) {
       </div>
 
       <div className="ann-row">
-        {sel ? (
+        {sel && p.cardMode ? (
+          <>
+            <span className="muted">タイトルカードの上の図形です</span>
+            <span className="spacer" />
+            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title="削除 (Delete)">削除</button>
+          </>
+        ) : sel && scope !== 'clip' ? (
+          <>
+            <span className="muted">{scope === 'marker' ? `マーカー ${p.marker ?? ''} のすべてのクリップ` : scope === 'scene' ? 'このシーンのすべてのクリップ' : 'この動画のすべてのクリップ'}で、最初から最後まで表示します</span>
+            <span className="spacer" />
+            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title="削除 (Delete)">削除</button>
+          </>
+        ) : sel ? (
           <>
             <span className="muted">表示 {rel(sel.showFrom, '最初')} 〜 {rel(sel.showTo, '最後')}</span>
             <button onClick={() => update({ ...sel, showFrom: playback.current.time })} title="今の再生位置から表示する">ここから表示</button>
@@ -144,7 +230,7 @@ export function AnnotationTools(p: Props) {
           </>
         ) : (
           <span className="hint">
-            {p.annotations.length ? `注釈 ${p.annotations.length} 個。選択ツールでクリックすると選べます。つまみで形を変え、頂点はダブルクリックで消せます（辺の中点を引くと頂点が増えます）。` : '動画の上をドラッグして描きます。折れ線・多角形はクリックで頂点を置きます。'}
+            {p.annotations.length ? `注釈 ${p.annotations.length} 個。選択ツールでクリックすると選べます。つまみで大きさを変え、「頂点の編集」で頂点を動かせます。` : '動画の上をドラッグして描きます。折れ線・多角形はクリックで頂点を置きます。'}
             表示時刻の「秒」はクリップの IN からの値です。
           </span>
         )}
@@ -157,14 +243,31 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   return <div className="fmt-group"><span className="fmt-title">{title}</span><div className="fmt-body">{children}</div></div>
 }
 
+let colorTimer = 0
+
+// The base colors, then my colors (colors picked freely are remembered there, in the library, so
+// every project has them; right-click one to drop it), then the free picker.
 function ColorPick({ label, value, onChange, disabled }: { label: string; value: string; onChange: (c: string) => void; disabled: boolean }) {
+  const mine = usePalette().colors.filter(c => !COLORS.includes(c))
+  const swatch = (c: string, own: boolean) => (
+    <button key={c} role="radio" aria-checked={value.toUpperCase() === c} aria-label={`${label} ${c}`} className={`ann-swatch${value.toUpperCase() === c ? ' on' : ''}${own ? ' mine' : ''}`}
+      style={{ background: c }} onClick={() => onChange(c)} disabled={disabled} title={own ? `${c}（マイカラー。右クリックで外す）` : c}
+      onContextMenu={own ? e => { e.preventDefault(); void forgetColor(c) } : undefined} />
+  )
   return (
     <span className="ann-swatches" role="radiogroup" aria-label={label}>
-      {COLORS.map(c => (
-        <button key={c} role="radio" aria-checked={value.toUpperCase() === c} aria-label={`${label} ${c}`} className={`ann-swatch${value.toUpperCase() === c ? ' on' : ''}`}
-          style={{ background: c }} onClick={() => onChange(c)} disabled={disabled} />
-      ))}
-      <input type="color" aria-label={`${label}（自由に選ぶ）`} value={value.length === 7 ? value : '#FFFFFF'} onChange={e => onChange(e.target.value.toUpperCase())} disabled={disabled} />
+      {COLORS.map(c => swatch(c, false))}
+      {mine.length > 0 && <span className="swatch-sep" aria-hidden />}
+      {mine.map(c => swatch(c, true))}
+      <input type="color" aria-label={`${label}（自由に選ぶ）`} value={value.length === 7 ? value : '#FFFFFF'} disabled={disabled}
+        title="自由に選んだ色はマイカラーに残ります"
+        onChange={e => {
+          const c = e.target.value.toUpperCase()
+          onChange(c)
+          // Remembered once the picker settles (it reports every step while dragging).
+          clearTimeout(colorTimer)
+          if (!COLORS.includes(c)) colorTimer = window.setTimeout(() => void rememberColor(c), 800)
+        }} />
     </span>
   )
 }

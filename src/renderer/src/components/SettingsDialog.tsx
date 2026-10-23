@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
 import { listPeople, type PlayRef } from '../../../shared/filter'
+import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
+import { TeamLogos } from './TeamLogos'
+import { ThemePicker } from './ThemePicker'
 
 interface Props {
   settings: ProjectSettings
+  theme: OverlayTheme // the colors in use now
+  teams: { code: string; name: string }[] // the teams in the project's matches, opponents first
   rawRefs: PlayRef[] // all matches, built without the alias table so every original key shows
   onSave: (s: ProjectSettings) => Promise<void>
   onClose: () => void
@@ -11,8 +16,9 @@ interface Props {
 
 // 自チームのチームコードと名寄せ表 (design §3.2).
 // Player IDs already merge home/away and the scrimmage "-a" suffix; this table is for what's left.
-export function SettingsDialog({ settings, rawRefs, onSave, onClose }: Props) {
-  const [codes, setCodes] = useState(settings.ourTeamCodes.join(', '))
+export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSave, onClose }: Props) {
+  const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
+  const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
   const [aliases, setAliases] = useState<Record<string, string>>(settings.playerAliases)
   const [showOpp, setShowOpp] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -27,7 +33,7 @@ export function SettingsDialog({ settings, rawRefs, onSave, onClose }: Props) {
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ourTeamCodes: codes.split(/[,\s]+/).filter(Boolean), playerAliases: aliases })
+      await onSave({ ourTeamCodes: code ? [code] : [], playerAliases: aliases, theme })
       onClose()
     } finally {
       setSaving(false)
@@ -40,9 +46,24 @@ export function SettingsDialog({ settings, rawRefs, onSave, onClose }: Props) {
         <h2>設定</h2>
 
         <section>
-          <label className="field-label" htmlFor="our-codes">自チームのチームコード</label>
-          <input id="our-codes" value={codes} onChange={e => setCodes(e.target.value)} placeholder="HTH, HTA" />
-          <p className="hint">DVW の [3TEAMS] のコード。ここにあるチームが「自チーム」になり、スコアボードでは左に置かれます。</p>
+          <label className="field-label wide" htmlFor="our-code">対象チーム（自チーム）</label>
+          <select id="our-code" value={code} onChange={e => setCode(e.target.value)}>
+            {!teams.some(t => t.code === code) && <option value={code}>{code || '（なし）'}</option>}
+            {teams.map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}`}</option>)}
+          </select>
+          <p className="hint">プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">配色（プロジェクト全体）</span>
+          <ThemePicker value={theme} onChange={setTheme} />
+          <p className="hint">スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">チームのロゴ（タイトルカード）</span>
+          <TeamLogos teams={teams} />
+          <p className="hint">1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。</p>
         </section>
 
         <section className="alias-section">

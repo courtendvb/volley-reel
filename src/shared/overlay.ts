@@ -14,11 +14,22 @@ export interface OverlayTheme {
 
 export interface OverlaySettings {
   theme: OverlayTheme
-  scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean; highlightWinner: boolean }
+  scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean }
-  // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene
-  titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean }
+  // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
+  // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
+  titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
+    markerLayout?: CardLayout; sceneLayout?: CardLayout
+    videoCard?: boolean; videoLayout?: CardLayout } // videoCard: an opening card with the video's name
+  // Fade from and to black at the start and end of every clip and card.
+  transition: { fade: boolean; durationSec: number }
 }
+
+// x / y: the marker title's top-left, or the scene title's center (0..1 of the frame); scale: 1 = default size.
+export interface CardLayout { x: number; y: number; scale: number }
+export const DEFAULT_MARKER_LAYOUT: CardLayout = { x: 0.1, y: 0.3, scale: 1 }
+export const DEFAULT_SCENE_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1 }
+export const DEFAULT_VIDEO_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1.4 }
 
 export interface ClipOverlayOverride {
   scoreboard?: { hidden?: boolean }
@@ -35,9 +46,10 @@ export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
   theme: THEME_PRESETS[0].theme,
-  scoreboard: { enabled: true, anchor: 'tc', scale: 1, showSets: true, highlightWinner: true },
+  scoreboard: { enabled: true, anchor: 'tl', scale: 1, showSets: true }, // top left: the headline sits at the top middle
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
+  transition: { fade: false, durationSec: 0.3 },
 }
 
 // What gets saved: any part may be missing, and missing parts fall back to the defaults.
@@ -51,6 +63,7 @@ export function overlaySettings(saved: OverlayPatch | undefined): OverlaySetting
     scoreboard: { ...DEFAULT_OVERLAY.scoreboard, ...(s.scoreboard ?? {}) },
     playerCaption: { ...DEFAULT_OVERLAY.playerCaption, ...(s.playerCaption ?? {}) },
     titleCard: { ...DEFAULT_OVERLAY.titleCard, ...(s.titleCard ?? {}) },
+    transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
   }
 }
 

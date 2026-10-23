@@ -133,6 +133,12 @@ describe('range defaults and trimming', () => {
     expect(defaultRange(d, play, 0, { ...DEFAULT_RANGE, rallyLead: 3, rallyTail: 1 })).toEqual({ in: 97, out: 105 })
   })
 
+  it('cuts a clip by its own mode when it has one', () => {
+    expect(defaultRange(d, d.plays[0], 0, DEFAULT_RANGE, 'toEnd')).toEqual({ in: 97, out: 106.5 }) // serve at 100 → rally end
+    const { reel, c } = reelWith([2])
+    expect(clipRange({ ...reel.clips[c[0]], mode: 'keyplay' }, d, 0)).toEqual({ in: 101, out: 108 })
+  })
+
   it('reads reels saved before range defaults existed', () => {
     const { reel } = reelWith([2])
     const { rangeDefaults: _, ...old } = reel

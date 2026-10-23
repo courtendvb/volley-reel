@@ -18,7 +18,11 @@ export interface Clip {
   outSec: number | null
   annotations: Annotation[] // design §3.6; times are absolute video times
   overlayOverride?: ClipOverlayOverride // design §3.7: hide an auto element or rewrite the caption
+  mode?: ClipMode // how it was cut when added from the search; missing = the scene's default
 }
+
+// "keyplay": key play ± seconds. "toEnd": from just before the key play to the end of its rally.
+export type ClipMode = 'keyplay' | 'toEnd'
 
 export interface Reel {
   id: string
@@ -29,6 +33,7 @@ export interface Reel {
   clips: Record<string, Clip>
   scope: 'marked' | 'all'
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
+  markerCards?: Partial<Record<Marker, boolean>> // title card per marker; missing = the video's setting
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string
 }
@@ -57,14 +62,14 @@ export function findClip(reel: Reel, matchId: string, playId: number): Clip | un
 }
 
 // Adds plays not already in the reel; returns the ids of the clips (new or existing) in input order.
-export function addClips(reel: Reel, items: { matchId: string; play: Play }[], group: Group = 'none'): { reel: Reel; ids: string[] } {
+export function addClips(reel: Reel, items: { matchId: string; play: Play }[], group: Group = 'none', mode?: ClipMode): { reel: Reel; ids: string[] } {
   const clips = { ...reel.clips }
   const groups = { ...reel.groups, [group]: [...reel.groups[group]] }
   const ids: string[] = []
   for (const { matchId, play } of items) {
     const existing = Object.values(clips).find(c => c.matchId === matchId && c.playId === play.id)
     if (existing) { ids.push(existing.id); continue }
-    const c: Clip = { id: uid(), matchId, playId: play.id, fingerprint: play.fingerprint, inSec: null, outSec: null, annotations: [] }
+    const c: Clip = { id: uid(), matchId, playId: play.id, fingerprint: play.fingerprint, inSec: null, outSec: null, annotations: [], ...(mode ? { mode } : {}) }
     clips[c.id] = c
     groups[group].push(c.id)
     ids.push(c.id)
@@ -82,6 +87,11 @@ export function moveClip(reel: Reel, clipId: string, to: Group, index?: number):
   target.splice(index === undefined ? target.length : Math.max(0, Math.min(index, target.length)), 0, clipId)
   groups[to] = target
   return touch({ ...reel, groups })
+}
+
+// Title card before a marker group: the scene's choice for that marker, else the video's setting.
+export function markerCardOn(reel: Reel, m: Marker, videoDefault: boolean): boolean {
+  return reel.markerCards?.[m] ?? videoDefault
 }
 
 // Number keys: the same marker again (or 0 → null) clears it.
@@ -204,10 +214,11 @@ export function rangeDefaults(r: Reel): RangeDefaults {
   return { ...DEFAULT_RANGE, ...(r.rangeDefaults ?? {}) }
 }
 
-export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE): { in: number; out: number } {
+export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE, mode?: ClipMode): { in: number; out: number } {
   const r = play.rallyId !== null ? dvw.rallies[play.rallyId] : null
-  const [a, b] = d.mode === 'rally' && r
-    ? [r.serveTime - d.rallyLead, r.lastActionTime + d.rallyTail]
+  const m = mode ?? d.mode
+  const [a, b] = m === 'rally' && r ? [r.serveTime - d.rallyLead, r.lastActionTime + d.rallyTail]
+    : m === 'toEnd' && r ? [play.time - d.keyBefore, Math.max(play.time + d.keyAfter, r.lastActionTime + d.rallyTail)]
     : [play.time - d.keyBefore, play.time + d.keyAfter]
   return { in: Math.max(0, a + offsetSec), out: b + offsetSec }
 }
@@ -215,7 +226,7 @@ export function defaultRange(dvw: ParsedDVW, play: Play, offsetSec: number, d: R
 export function clipRange(c: Clip, dvw: ParsedDVW, offsetSec: number, d: RangeDefaults = DEFAULT_RANGE): { in: number; out: number } | null {
   const play = dvw.plays[c.playId]
   if (!play) return null
-  const def = defaultRange(dvw, play, offsetSec, d)
+  const def = defaultRange(dvw, play, offsetSec, d, c.mode)
   return { in: c.inSec ?? def.in, out: c.outSec ?? def.out }
 }
 

@@ -72,7 +72,10 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-row:hover { background: #F8FAFC; }
 .play-row.now { box-shadow: inset 3px 0 0 #94A3B8; }
 .play-row.selected { background: var(--primary-light); box-shadow: inset 3px 0 0 var(--primary); }
-.play-list.with-match .play-row { grid-template-columns: 48px 22px 40px 32px minmax(0, 1fr) 96px 98px; gap: 4px; }
+.play-match-head {
+  position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px;
+  background: var(--page); border-bottom: 1px solid var(--border); font-size: 12.5px;
+}
 .play-row .set, .play-row .vtime, .play-row .team, .play-row .match { color: var(--sub); }
 .play-row .match { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .play-row .team.ours { color: var(--primary); font-weight: 600; }
@@ -226,8 +229,8 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .ov-scale input { width: 90px; accent-color: var(--primary); }
 .ov-settings input[type=number] { width: 54px; padding: 1px 4px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }
 .ov-settings input[type=color] { width: 34px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 4px; }
-.clip-overlay .ov-text { width: 150px !important; padding: 2px 6px !important; font-size: 12px; }
-.clip-overlay .ov-text.wide { width: 210px !important; }
+.clip-overlay .ov-text { width: auto !important; padding: 2px 6px !important; font-size: 12px; }
+.clip-overlay .ov-text.wide { flex-basis: 120px; }
 .clip-overlay { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; flex: none; }
 .clip-overlay .field-label { width: auto; }
 
@@ -318,3 +321,20 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .team-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .team-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--primary-light); color: var(--primary); font-weight: 600; font-size: 12.5px; }
 .team-chip .link { padding: 0 4px; }
+.match-order { margin: 0 10px 6px; align-self: flex-start; }
+.clip-overlay .ov-pos { padding: 1px 4px; font-size: 12px; }
+.ov-gear-wrap { position: relative; }
+.ov-gear { padding: 0 6px; border: 0; background: transparent; color: var(--sub); font-size: 15px; line-height: 1; }
+.ov-gear:hover, .ov-gear[aria-expanded="true"] { color: var(--text); }
+.ov-gear-pop {
+  position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 20; display: flex; flex-direction: column; gap: 8px;
+  width: 280px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+.ov-gear-pop .ov-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.ov-gear-pop input[type="number"] { width: 56px; }
+.group-head .card-toggle { padding: 1px 6px; font-size: 11px; color: var(--sub); }
+.group-head .card-toggle.on { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+.clip-overlay { gap: 8px; flex-wrap: nowrap; }
+.clip-overlay .check { white-space: nowrap; }
+.clip-overlay .ov-text { flex: 1 1 80px; min-width: 60px; }

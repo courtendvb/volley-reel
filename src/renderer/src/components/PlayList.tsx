@@ -13,8 +13,7 @@ export interface PlayKey { matchId: string; playId: number }
 interface Props {
   refs: PlayRef[]
   matches: Record<string, Match>
-  matchLabels: Record<string, string>
-  showMatch: boolean
+  showMatch: boolean // several matches: a header row starts each one
   currentMatchId: string | null
   selected: PlayKey | null
   onJump: (r: PlayRef) => void
@@ -23,7 +22,7 @@ interface Props {
 }
 
 // Only the rows in view are rendered: "all matches" can be tens of thousands of plays.
-export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId, selected, onJump, reelGroups, onMark }: Props) {
+export function PlayList({ refs, matches, showMatch, currentMatchId, selected, onJump, reelGroups, onMark }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(600)
@@ -37,10 +36,22 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
     return () => ro.disconnect()
   }, [])
 
+  // Rows: the plays, with a header before each match's run when several matches are listed.
+  const items = useMemo(() => {
+    const out: ({ kind: 'match'; matchId: string; count: number } | { kind: 'play'; r: PlayRef })[] = []
+    let head = null as { kind: 'match'; matchId: string; count: number } | null
+    for (const r of refs) {
+      if (showMatch && head?.matchId !== r.matchId) { head = { kind: 'match', matchId: r.matchId, count: 0 }; out.push(head) }
+      if (head) head.count++
+      out.push({ kind: 'play', r })
+    }
+    return out
+  }, [refs, showMatch])
+
   // Keep the selected play visible (also when it was chosen by the smoke check or from elsewhere).
   const selIndex = useMemo(
-    () => selected ? refs.findIndex(r => r.matchId === selected.matchId && r.play.id === selected.playId) : -1,
-    [refs, selected],
+    () => selected ? items.findIndex(it => it.kind === 'play' && it.r.matchId === selected.matchId && it.r.play.id === selected.playId) : -1,
+    [items, selected],
   )
   useEffect(() => {
     const el = box.current
@@ -50,13 +61,22 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
   }, [selIndex])
 
   const first = Math.max(0, Math.floor(scrollTop / ROW) - 10)
-  const last = Math.min(refs.length, Math.ceil((scrollTop + height) / ROW) + 10)
+  const last = Math.min(items.length, Math.ceil((scrollTop + height) / ROW) + 10)
   const rows = []
   for (let i = first; i < last; i++) {
-    const r = refs[i]
+    const it = items[i]
+    if (it.kind === 'match') {
+      rows.push(
+        <div key={`m:${it.matchId}`} className="play-match-head" style={{ top: i * ROW, height: ROW }} role="listitem">
+          <b>{matches[it.matchId]?.name ?? it.matchId}</b><span className="muted">{it.count.toLocaleString()} プレー</span>
+        </div>,
+      )
+      continue
+    }
+    const r = it.r
     rows.push(
       <PlayRow
-        key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW} showMatch={showMatch} matchLabel={matchLabels[r.matchId]}
+        key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
         group={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark}
@@ -65,18 +85,18 @@ export function PlayList({ refs, matches, matchLabels, showMatch, currentMatchId
   }
 
   return (
-    <div className={`play-list${showMatch ? ' with-match' : ''}`} ref={box} role="list" onScroll={e => setScrollTop(e.currentTarget.scrollTop)}>
+    <div className="play-list" ref={box} role="list" onScroll={e => setScrollTop(e.currentTarget.scrollTop)}>
       {refs.length === 0
         ? <p className="muted pad">条件に合うプレーがありません</p>
-        : <div style={{ height: refs.length * ROW, position: 'relative' }}>{rows}</div>}
+        : <div style={{ height: items.length * ROW, position: 'relative' }}>{rows}</div>}
     </div>
   )
 }
 
 const MARKERS: Marker[] = [1, 2, 3, 4, 5]
 
-const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime, selected, now, onJump, group, onMark }: {
-  r: PlayRef; top: number; showMatch: boolean; matchLabel: string; videoTime: number; selected: boolean; now: boolean
+const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump, group, onMark }: {
+  r: PlayRef; top: number; videoTime: number; selected: boolean; now: boolean
   onJump: (r: PlayRef) => void; group: Group | null; onMark: (r: PlayRef, m: Marker) => void
 }) {
   const p = r.play
@@ -84,7 +104,6 @@ const PlayRow = memo(function PlayRow({ r, top, showMatch, matchLabel, videoTime
     <div role="listitem" style={{ top, height: ROW }}
       className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${group === 'none' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
       title={`映像 ${formatTime(videoTime)}${group === 'none' ? '・シーンに入っています（マーカーなし）' : ''}`}>
-      {showMatch && <span className="match">{matchLabel}</span>}
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
   addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
-  type Clip, type Group, type Marker, type Reel,
+  type Clip, type ClipMode, type Group, type Marker, type Reel,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
 import { FilterPanel, type Scope } from './components/FilterPanel'
@@ -42,6 +42,14 @@ export function App() {
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
   const [matchId, setMatchId] = useState<string | null>(null)
   const [scope, setScope] = useState<Scope>('all') // the list shows every match in the project unless one is picked
+  // How plays added from the search are cut: around the key play, or from it to the end of the rally.
+  const [extract, setExtract] = useState<ClipMode>(() => { try { return localStorage.getItem('vr.extract') === 'toEnd' ? 'toEnd' : 'keyplay' } catch { return 'keyplay' } })
+  useEffect(() => { try { localStorage.setItem('vr.extract', extract) } catch { /* not kept */ } }, [extract])
+  const extractRef = useRef(extract)
+  extractRef.current = extract
+  // With all matches listed: the order of the matches (each keeps its plays in time order).
+  const [matchOrder, setMatchOrder] = useState<'old' | 'new'>(() => { try { return localStorage.getItem('vr.matchOrder') === 'new' ? 'new' : 'old' } catch { return 'old' } })
+  useEffect(() => { try { localStorage.setItem('vr.matchOrder', matchOrder) } catch { /* not kept */ } }, [matchOrder])
   const [filter, setFilter] = useState<PlayFilter>(EMPTY_FILTER)
   const [selected, setSelected] = useState<PlayKey | null>(null)
   const [reels, setReels] = useState<Reel[]>([])
@@ -54,7 +62,7 @@ export function App() {
   const [annTool, setAnnTool] = useState<Tool>('select')
   // Edit Points mode belongs to one selection; picking another object leaves it.
   const [editPoints, setEditPoints] = useState(false)
-  const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#FACC15', width: 6, size: 36 })
+  const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#EF4444', width: 6, size: 36 }) // red by default
   const [selectedAnn, setSelectedAnn] = useState<string | null>(null)
   useEffect(() => setEditPoints(false), [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
@@ -153,8 +161,9 @@ export function App() {
 
   const scopeRefs = useMemo(() => {
     if (scope === 'match') return matchId ? refsByMatch[matchId] ?? [] : []
-    return (project?.matches ?? []).flatMap(m => refsByMatch[m.id] ?? [])
-  }, [scope, matchId, refsByMatch, project])
+    const ms = project?.matches ?? [] // oldest first
+    return (matchOrder === 'new' ? [...ms].reverse() : ms).flatMap(m => refsByMatch[m.id] ?? [])
+  }, [scope, matchId, refsByMatch, project, matchOrder])
   const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
   const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
   const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.side === null), [scopeRefs])
@@ -208,7 +217,7 @@ export function App() {
     return {
       ref: refsByMatch[c.matchId]?.[c.playId],
       range: d && m ? clipRange(c, d, m.offsetSec, defaults) : null,
-      def: d && m && play ? defaultRange(d, play, m.offsetSec, defaults) : null,
+      def: d && m && play ? defaultRange(d, play, m.offsetSec, defaults, c.mode) : null,
       matchLabel: matchLabels[c.matchId] ?? '?',
       date: m?.date ?? '',
     }
@@ -271,12 +280,12 @@ export function App() {
   }
 
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
-    withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group).reel)
+    withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group, extractRef.current).reel)
   }, [withReel])
   // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
     withReel(r => {
-      const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }])
+      const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }], 'none', extractRef.current)
       return toggleMarker(next, ids[0], m)
     })
   }, [withReel])
@@ -375,7 +384,7 @@ export function App() {
     if (!ref) return
     let added = ''
     withReel(cur => {
-      const { reel: next, ids } = addClips(cur, [{ matchId: s.matchId, play: ref.play }])
+      const { reel: next, ids } = addClips(cur, [{ matchId: s.matchId, play: ref.play }], 'none', extractRef.current)
       added = ids[0]
       return toggleMarker(next, added, m)
     })
@@ -552,6 +561,8 @@ export function App() {
       return {
         matches: p.matches.map(m => m.name), scope: opts.scope, results: res.length,
         perMatch: Object.fromEntries(p.matches.map(m => [m.name, res.filter(x => x.matchId === m.id).length])),
+        // How the list runs through the matches: one entry per stretch of the same match.
+        matchRuns: latest.current.results.reduce<string[]>((o, x) => { const n = p.matches.find(m => m.id === x.matchId)?.name ?? '?'; if (o[o.length - 1] !== n) o.push(n); return o }, []).slice(0, 12),
         jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
         keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
       }
@@ -661,6 +672,9 @@ export function App() {
         log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
       }
       await key('v'); setSelectedAnn(null); await sleep(300)
+      // The overlay quick settings (gear in the auto-display row) open over the video.
+      document.querySelector<HTMLButtonElement>('.ov-gear')?.click(); await sleep(150)
+      log.gearPopup = !!document.querySelector('.ov-gear-pop')
 
       if (opts.videoExportTo) {
         const job = await startExport(opts.videoExportTo)
@@ -1183,14 +1197,21 @@ export function App() {
               <option value="">すべての試合（{project.matches.length}）</option>
               {project.matches.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
+            {scope === 'all' && project.matches.length > 1 && (
+              <div className="segmented match-order" role="radiogroup" aria-label="試合の並び">
+                {([['old', '古い試合から'], ['new', '新しい試合から']] as const).map(([v, l]) => (
+                  <button key={v} role="radio" aria-checked={matchOrder === v} className={matchOrder === v ? 'on' : ''} onClick={() => setMatchOrder(v)}>{l}</button>
+                ))}
+              </div>
+            )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
-              filter={filter} onChange={setFilter} people={people}
+              filter={filter} onChange={setFilter} people={people} extract={extract} onExtract={setExtract}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
               onAddAll={() => addPlays(results)}
             />
             {Object.keys(dvws).length
-              ? <PlayList refs={results} matches={matches} matchLabels={matchLabels} showMatch={scope === 'all'}
+              ? <PlayList refs={results} matches={matches} showMatch={scope === 'all' && (project?.matches.length ?? 0) > 1}
                   currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
               : <p className="muted pad">読み込み中…</p>}
           </aside>
@@ -1235,7 +1256,7 @@ export function App() {
             )}
             {active && activeInfo?.ref && active.matchId === matchId && (
               <ClipOverlayRow
-                override={active.overlayOverride}
+                override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
                 autoLine={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showSkill: true, showEvaluation: true }).line ?? '' : ''}
                 onChange={o => { const r = latest.current.reel; if (r) updateReel(setOverlayOverride(r, active.id, o)) }}
@@ -1256,6 +1277,7 @@ export function App() {
               info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
               onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
+              markerCardDefault={overlay.titleCard.enabled}
             />
           </div>
         </main>

@@ -1,5 +1,6 @@
 import { EFFECTS, SKILLS } from '../../../shared/labels'
 import { EMPTY_FILTER, type Person, type PlayFilter } from '../../../shared/filter'
+import type { ClipMode } from '../../../shared/reel'
 
 export type Scope = 'match' | 'all' // picked with the match select above the filters
 
@@ -7,6 +8,8 @@ interface Props {
   filter: PlayFilter
   onChange: (f: PlayFilter) => void
   people: Person[]
+  extract: ClipMode // how plays added from here are cut
+  onExtract: (m: ClipMode) => void
   shown: number
   total: number
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
@@ -15,7 +18,7 @@ interface Props {
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 
-export function FilterPanel({ filter: f, onChange, people, shown, total, teamFilterLimited, onAddAll }: Props) {
+export function FilterPanel({ filter: f, onChange, people, extract, onExtract, shown, total, teamFilterLimited, onAddAll }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
 
@@ -24,6 +27,10 @@ export function FilterPanel({ filter: f, onChange, people, shown, total, teamFil
       <div className="filter-row">
         <label className="field-label">チーム</label>
         <Segmented value={f.team} onChange={team => set({ team })} options={[['all', 'すべて'], ['home', 'home'], ['away', 'away']]} />
+      </div>
+      <div className="filter-row" title="シーンに入れるときの長さ。秒数はシーンの設定（キープレーの前後、ラリーの最後のプレーの後）">
+        <label className="field-label">切り出し</label>
+        <Segmented value={extract} onChange={onExtract} options={[['keyplay', 'プレー前後'], ['toEnd', 'ラリー終わりまで']]} />
       </div>
       {teamFilterLimited && f.team !== 'all' && (
         <p className="hint">全部ホーム入力の試合はチームを区別できないため、全プレーを含めています</p>

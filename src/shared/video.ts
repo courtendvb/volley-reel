@@ -3,7 +3,7 @@
 // every video that uses it (design §0). The overlay look belongs to the video.
 import { ourSide } from './filter'
 import type { OverlayPatch, OverlaySettings } from './overlay'
-import { groupOf, type Clip, type Reel } from './reel'
+import { groupOf, markerCardOn, type Clip, type Reel } from './reel'
 import type { Match } from './types'
 
 export interface Video {
@@ -55,7 +55,7 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
   const out: PlanItem[] = []
   order.forEach((c, i) => {
     const g = groupOf(scene, c.id)
-    if (overlay.titleCard.enabled && g !== null && g !== 'none' && (i === 0 || groupOf(scene, order[i - 1].id) !== g)) {
+    if (g !== null && g !== 'none' && markerCardOn(scene, g, overlay.titleCard.enabled) && (i === 0 || groupOf(scene, order[i - 1].id) !== g)) {
       out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], match: groupMatch(scene, scene.groups[g], matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ kind: 'clip', clip: c, sceneId: scene.id })

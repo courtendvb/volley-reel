@@ -102,7 +102,7 @@ export function AnnotationTools(p: Props) {
         {fillKinds && (
           <Group title="塗り">
             <label className="check"><input type="checkbox" checked={!!v.fill} aria-label="塗りつぶす" disabled={p.disabled}
-              onChange={e => set({ fill: e.target.checked ? v.fill ?? '#FACC15' : null })} /> 塗る</label>
+              onChange={e => set({ fill: e.target.checked ? v.fill ?? '#EF4444' : null })} /> 塗る</label>
             {v.fill && <ColorPick label="塗りの色" value={v.fill} onChange={fill => set({ fill })} disabled={p.disabled} />}
             {v.fill && <Pct label="塗りの透明度" value={1 - v.fillOpacity} onChange={t => set({ fillOpacity: 1 - t })} disabled={p.disabled} />}
           </Group>

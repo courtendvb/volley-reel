@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker, shiftClip, shiftGroup,
+  MARKERS, MARKER_COLORS, chronological, markerCardOn, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker, shiftClip, shiftGroup,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
@@ -34,6 +34,7 @@ interface Props {
   orderSec: number
   overlaps: Map<string, string[]>
   usedIn: number // videos that include this scene
+  markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -46,7 +47,7 @@ export function ReelPanel(p: Props) {
     return (
       <aside className="reel-panel">
         <div className="reel-head"><button className="primary" onClick={p.onNewReel}>シーンを作成</button></div>
-        <p className="muted pad">プレー一覧の「＋」か数字キー 1〜5 で、プレーをシーンに入れられます。</p>
+        <p className="muted pad">プレー一覧の 1〜5 ボタンか数字キー 1〜5 で、プレーをシーンに入れられます。</p>
       </aside>
     )
   }
@@ -126,7 +127,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount} title="このシーンだけを再生">▶ シーンを再生</button>}
       </div>
-      <Defaults d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
+      <Defaults d={rangeDefaults(reel)} legacy={Object.values(reel.clips).some(c => !c.mode)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
       <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list">
@@ -138,6 +139,14 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
               <input value={reel.markerNames[m]} placeholder={`マーカー ${m} の名前`} aria-label={`マーカー ${m} の名前`}
                 onChange={e => change(renameMarker(reel, m, e.target.value))} />
               <span className="muted">{reel.groups[m].length}</span>
+              {(() => {
+                const on = markerCardOn(reel, m, p.markerCardDefault)
+                return (
+                  <button className={`card-toggle${on ? ' on' : ''}`} aria-pressed={on}
+                    title={on ? 'このマーカーの前にタイトルカードを出す（クリックで出さない）' : 'このマーカーの前にタイトルカードを出さない（クリックで出す）'}
+                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
+                )
+              })()}
               <button title="グループを上へ" disabled={gi === 0} onClick={() => change(shiftGroup(reel, m, -1))}>↑</button>
               <button title="グループを下へ" disabled={gi === reel.groupOrder.length - 1} onClick={() => change(shiftGroup(reel, m, 1))}>↓</button>
             </header>
@@ -160,21 +169,25 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
 }
 
 // Default clip length for clips without their own IN/OUT (design §3.5).
-function Defaults({ d, onChange }: { d: RangeDefaults; onChange: (d: RangeDefaults) => void }) {
+// The seconds clips are cut with. Clips added from the search carry their own cut (around the key
+// play, or to the end of the rally); clips added before that follow the scene's mode select.
+function Defaults({ d, legacy, onChange }: { d: RangeDefaults; legacy: boolean; onChange: (d: RangeDefaults) => void }) {
   const num = (v: number, set: (n: number) => RangeDefaults, label: string) => (
     <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label}
       onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(set(n)) }} />
   )
   return (
     <div className="reel-defaults">
-      <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
-        <option value="rally">ラリー全体</option>
-        <option value="keyplay">キープレー中心</option>
-      </select>
-      {d.mode === 'rally' ? (
-        <span>サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒 〜 最後 +{num(d.rallyTail, n => ({ ...d, rallyTail: n }), '最後のプレーの何秒後まで')}秒</span>
-      ) : (
-        <span>キープレー −{num(d.keyBefore, n => ({ ...d, keyBefore: n }), 'キープレーの何秒前から')}秒 〜 +{num(d.keyAfter, n => ({ ...d, keyAfter: n }), 'キープレーの何秒後まで')}秒</span>
+      <span>キープレー −{num(d.keyBefore, n => ({ ...d, keyBefore: n }), 'キープレーの何秒前から')}秒 〜 +{num(d.keyAfter, n => ({ ...d, keyAfter: n }), 'キープレーの何秒後まで')}秒</span>
+      <span>ラリー終わり +{num(d.rallyTail, n => ({ ...d, rallyTail: n }), '最後のプレーの何秒後まで')}秒</span>
+      {legacy && (
+        <span title="切り出しの指定がない（以前に入れた）クリップの長さ">
+          以前のクリップ <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
+            <option value="rally">ラリー全体</option>
+            <option value="keyplay">キープレー中心</option>
+          </select>
+          {d.mode === 'rally' && <> サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒</>}
+        </span>
       )}
     </div>
   )

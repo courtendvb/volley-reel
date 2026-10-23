@@ -431,3 +431,8 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .export-progress { background: var(--surface); padding: 6px 0; }
 .trim-snap { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed #0EA5E9; pointer-events: none; }
 .ann-tools select.scope-marker { border-color: #7C3AED; color: #6D28D9; }
+.excluded-note { color: #B45309; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.group.off > .group-head > .excluded-note { opacity: 1; filter: none; }
+.headline-times { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fade-fields { display: inline-flex; align-items: center; gap: 4px; }
+.fade-fields input[type="number"] { width: 48px; }

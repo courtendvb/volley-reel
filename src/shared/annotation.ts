@@ -22,6 +22,8 @@ interface Base {
   dash?: Dash // default solid
   opacity?: number // whole object, 0..1; default 1
   groupId?: string // objects with the same group id are selected and moved together
+  fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
+  fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
 }
 
 export interface Fillable {
@@ -69,6 +71,15 @@ type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 export function withGroups(list: Annotation[], ids: string[]): string[] {
   const groups = new Set(list.filter(a => ids.includes(a.id) && a.groupId).map(a => a.groupId))
   return list.filter(a => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map(a => a.id)
+}
+
+// How opaque an object is at time t from its own fades (1 when it has none or is past them).
+export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: number }): number {
+  if (!a.fadeIn && !a.fadeOut) return 1
+  const from = a.showFrom ?? clip.in, to = a.showTo ?? clip.out
+  const fin = a.fadeIn ? Math.min(1, Math.max(0, (t - from) / a.fadeIn)) : 1
+  const fout = a.fadeOut ? Math.min(1, Math.max(0, (to - t) / a.fadeOut)) : 1
+  return Math.min(fin, fout)
 }
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {

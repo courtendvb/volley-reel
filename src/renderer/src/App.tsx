@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, markerCardOn, markersOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, groupOf, markerCardOn, markersOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -276,6 +276,8 @@ export function App() {
   // A scene's play order and stats are asked for many times per render (the scene editor, the
   // video's scene list, the plan, the export choices); scenes are immutable, so each result is kept
   // per scene object (and dropped with it) until the DVWs or the matches change.
+  // A clip's [match date, IN time] in a scene: where a newly marked clip goes in its group.
+  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.date, i.range?.in ?? 0] }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
     const hit = orderMemo.get(s)
@@ -349,7 +351,7 @@ export function App() {
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
     withReel(r => {
       const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }], 'none', extractRef.current)
-      return toggleMarker(next, ids[0], m)
+      return toggleMarker(next, ids[0], m, whenIn(next))
     })
   }, [withReel])
 
@@ -400,6 +402,8 @@ export function App() {
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
   const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number } | null>(null)
   const [listRun, setListRun] = useState(false)
+  // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
+  const focusPane = useRef<'list' | 'scene'>('list')
   const [loopOn, setLoopOn] = useState(true) // the trim bar's ループ再生 box: off lets the clip play on past OUT
   const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false) }, [])
   const jump = useCallback((r: PlayRef) => {
@@ -483,7 +487,7 @@ export function App() {
   // With no clip active, the selected play in the list is added with that marker.
   const markerKey = useCallback((m: Marker | null) => {
     const { reel: r, activeClipId: a, selected: s } = latest.current
-    if (r && a && r.clips[a]) { updateReel(toggleMarker(r, a, m)); return }
+    if (r && a && r.clips[a]) { updateReel(toggleMarker(r, a, m, whenIn(r))); return }
     if (m === null || !s) return
     const ref = refsByMatchRef.current[s.matchId]?.[s.playId]
     if (!ref) return
@@ -491,7 +495,7 @@ export function App() {
     withReel(cur => {
       const { reel: next, ids } = addClips(cur, [{ matchId: s.matchId, play: ref.play }], 'none', extractRef.current)
       added = ids[0]
-      return toggleMarker(next, added, m)
+      return toggleMarker(next, added, m, whenIn(next))
     })
     setActiveClipId(added)
   }, [updateReel, withReel])
@@ -727,6 +731,19 @@ export function App() {
       if (e.altKey) return
       if (e.key === '?') { setShortcutsOpen(o => !o); return }
       if (e.code === 'Space') { e.preventDefault(); playback.toggle() }
+      else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && focusPane.current === 'scene') {
+        // Up / Down in the scene editor (last clicked): the clip above / below, opened like a click on it.
+        e.preventDefault()
+        const r = latest.current.reel
+        if (!r) return
+        const rows = [...r.groupOrder.flatMap(g => r.groups[g].map(id => ({ id, g: g as Group }))),
+          ...chronological(r, r.groups.none, whenIn(r)).map(c => ({ id: c.id, g: 'none' as Group }))]
+        const a = latest.current.activeClipId, ag = latest.current.activeGroup
+        let i = rows.findIndex(x => x.id === a && (ag === null || x.g === ag))
+        if (i < 0) i = rows.findIndex(x => x.id === a)
+        const next = rows[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
+        if (next) activateClip(r.clips[next.id], next.g)
+      }
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         // Up / Down: the previous / next play in the left list (played like a click on it).
         e.preventDefault()
@@ -961,7 +978,8 @@ export function App() {
         const ids: string[] = []
         for (const path of opts.assets) { const id = await insertImage(path); if (id) ids.push(id) }
         await sleep(300)
-        setAnns(anns().map(a => a.kind !== 'image' ? a : { ...a, x: ids.indexOf(a.id) === 0 ? 0.02 : 0.68, y: 0.05 }))
+        // The PDF page fades in over 2 s (checked in the export: half at 1 s, whole at 2.5 s).
+        setAnns(anns().map(a => a.kind !== 'image' ? a : { ...a, x: ids.indexOf(a.id) === 0 ? 0.02 : 0.68, y: 0.05, ...(ids.indexOf(a.id) === 1 ? { fadeIn: 2 } : {}) }))
         await sleep(300)
         log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
 
@@ -1105,7 +1123,8 @@ export function App() {
         const job = await startExport(opts.videoExportTo)
         await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 120000, 'export')
         log.exportStatus = latest.current.exportState?.status
-        return { ...log, videoExport: opts.videoExportTo, exported: { checks: [{ name: 'objects', t: (job?.items[0]?.kind === 'card' ? (job.items[0] as { durationSec: number }).durationSec : 0) + 2.5 }] } }
+        const t0 = job?.items[0]?.kind === 'card' ? (job.items[0] as { durationSec: number }).durationSec : 0
+        return { ...log, videoExport: opts.videoExportTo, exported: { checks: [{ name: 'objects', t: t0 + 2.5 }, { name: 'fade-half', t: t0 + 1.0 }] } }
       }
       return log
     }
@@ -1247,7 +1266,16 @@ export function App() {
         activateClip(aR.clips[g2[0]], 2); await sleep(600)
         const onMarker2 = mergeScoped(scopedNow()!).some(x => x.id === rid)
         const plan = currentPlan('video').filter(it => it.kind === 'clip' && it.sceneId === a.id)
-        markerScope = { stored, onOtherClip, onMarker2, planGroups: plan.map(it => (it.kind === 'clip' ? it.group : null)) }
+        // Up / Down after a click in the scene editor walks its rows, not the left list.
+        activateClip(aR.clips[g1[0]], 1); await sleep(400)
+        document.querySelector('.right-col')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+        const listSel = latest.current.selected
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await sleep(400)
+        const sceneDown = { clip: latest.current.activeClipId === g1[1], group: latest.current.activeGroup }
+        document.querySelector('.sidebar')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await sleep(400)
+        const listMoved = latest.current.selected?.playId !== listSel?.playId
+        markerScope = { stored, onOtherClip, onMarker2, planGroups: plan.map(it => (it.kind === 'clip' ? it.group : null)), sceneDown, listMoved }
       }
 
       // The export accordion lists what can be exported.
@@ -1702,7 +1730,7 @@ export function App() {
           <button className="primary" onClick={() => setPicker('edit')}>試合を選ぶ</button></div>
       ) : (
         <main className="workspace">
-          <aside className="sidebar">
+          <aside className="sidebar" onPointerDownCapture={() => { focusPane.current = 'list' }}>
             <select className="match-select" value={scope === 'all' ? '' : matchId ?? ''} aria-label="検索する試合"
               onChange={e => { if (e.target.value) { setScope('match'); setMatchId(e.target.value) } else setScope('all') }}>
               <option value="">すべての試合（{project.matches.length}）</option>
@@ -1771,7 +1799,7 @@ export function App() {
               />
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying}
+              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
                 onFormat={id => { setAnnTool('select'); setSelectedAnn(id) }} />
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
@@ -1818,7 +1846,7 @@ export function App() {
               />
             )}
           </section>
-          <div className="right-col">
+          <div className="right-col" onPointerDownCapture={() => { focusPane.current = 'scene' }}>
             <VideoPanel
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
               onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}

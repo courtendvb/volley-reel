@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useEffect, useState, type DragEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
   MARKERS, MARKER_COLORS, chronological, markerCardOn, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker,
@@ -47,6 +47,8 @@ const DT_GROUP = 'application/x-vr-group'
 export function ReelPanel(p: Props) {
   const { reel } = p
   const [dragOver, setDragOver] = useState<{ key: string; after: boolean } | null>(null)
+  // The open clip stays in view (it can change with the Up / Down keys).
+  useEffect(() => { document.querySelector('.reel-groups .clip-row.active')?.scrollIntoView({ block: 'nearest' }) }, [p.activeClipId])
   if (!reel) {
     return (
       <aside className="reel-panel">
@@ -162,9 +164,12 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           title="シーンの名前。シーンのタイトルカードに出ます" /></label>
 
       <div className="reel-controls">
-        <div className="segmented" role="radiogroup" aria-label="書き出し範囲">
-          <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}>マーカー付き</button>
-          <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}>全部</button>
+        <span className="field-label">再生・書き出し</span>
+        <div className="segmented" role="radiogroup" aria-label="再生・書き出しに使うクリップ">
+          <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}
+            title="マーカーの付いたクリップだけを使う（マーカーなしは使わない）">マーカー付きだけ</button>
+          <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}
+            title="マーカーなしのクリップも、マーカーのあとに時系列で使う">全部</button>
         </div>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
@@ -187,6 +192,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                 onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>{m}</button>
               <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={`マーカー ${m}`} label={`マーカー ${m} の名前`}
                 onChange={v => change(renameMarker(reel, m, v))} />
+              {reel.markerOff?.[m] && <span className="excluded-note" title="番号をクリックするとオンに戻ります">オフ（使わない）</span>}
               <span className="muted">{reel.groups[m].length}</span>
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
@@ -207,7 +213,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           onDrop={e => onDropClip(e, 'none')}>
           <header className="group-head">
             <span className="swatch none">–</span>
-            <span className="none-title">マーカーなし（時系列）{reel.scope === 'marked' && <span className="muted"> — 書き出し対象外</span>}</span>
+            <span className="none-title">マーカーなし（時系列）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
             <span className="muted">{none.length}</span>
           </header>
           {none.map((c, i) => clipRow(c, 'none', i))}

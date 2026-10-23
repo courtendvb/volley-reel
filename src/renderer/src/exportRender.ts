@@ -74,7 +74,9 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
   const window = (a: Annotation) => ({ from: Math.max(0, (a.showFrom ?? r.in) - r.in), to: Math.min(r.out, a.showTo ?? r.out) - r.in })
-  const whole = (a: Annotation) => { const w = window(a); return w.from <= 0.001 && w.to >= r.out - r.in - 0.001 }
+  const fades = (a: Annotation) => !!(a.fadeIn || a.fadeOut)
+  // Objects shown for the whole clip without a fade share one layer; the rest go by window (and fade).
+  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && w.from <= 0.001 && w.to >= r.out - r.in - 0.001 }
 
   // The video's objects at the bottom, then the scene's, the marker group's, the clip's (as in the editor).
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
@@ -94,12 +96,12 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
     if (whole(a)) continue
     const w = window(a)
     if (w.to <= w.from) continue // window falls outside the trimmed clip
-    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}`
+    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.fadeIn ?? 0}|${a.fadeOut ?? 0}`
     timed.set(k, [...(timed.get(k) ?? []), a])
   }
   for (const [k, list] of timed) {
-    const [from, to] = k.split('|').map(Number)
-    layers.push({ from, to, png: await png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage))) })
+    const [from, to, fadeIn, fadeOut] = k.split('|').map(Number)
+    layers.push({ from, to, ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}), png: await png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage))) })
   }
   return layers
 }

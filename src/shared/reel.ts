@@ -110,8 +110,10 @@ export function markerCardOn(reel: Reel, m: Marker, videoDefault: boolean): bool
 }
 
 // Number keys and the list's 1–5: adds that marker (keeping any others), or takes it off when the
-// clip has it; null (0) takes every marker off.
-export function toggleMarker(reel: Reel, clipId: string, m: Marker | null): Reel {
+// clip has it; null (0) takes every marker off. With `when` (a clip's [match date, video time]) the
+// clip goes into the group in time order — before the first clip that comes later — so a group
+// stays chronological unless it was reordered by hand; without it, at the end.
+export function toggleMarker(reel: Reel, clipId: string, m: Marker | null, when?: (c: Clip) => [string, number]): Reel {
   if (!reel.clips[clipId]) return reel
   if (m === null) return moveClip(reel, clipId, 'none')
   const groups = { ...reel.groups }
@@ -119,7 +121,15 @@ export function toggleMarker(reel: Reel, clipId: string, m: Marker | null): Reel
     groups[m] = groups[m].filter(id => id !== clipId)
     if (!MARKERS.some(x => groups[x].includes(clipId))) groups.none = [...groups.none, clipId]
   } else {
-    groups[m] = [...groups[m], clipId]
+    const list = [...groups[m]]
+    let at = list.length
+    if (when) {
+      const [d, t] = when(reel.clips[clipId])
+      const later = list.findIndex(id => { const [d2, t2] = when(reel.clips[id]); return d2.localeCompare(d) > 0 || (d2 === d && t2 > t) })
+      if (later >= 0) at = later
+    }
+    list.splice(at, 0, clipId)
+    groups[m] = list
     groups.none = groups.none.filter(id => id !== clipId)
   }
   return touch({ ...reel, groups })

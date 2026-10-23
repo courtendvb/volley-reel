@@ -37,7 +37,7 @@ export function ExportPanel({ targets, info, state, onExport, onCancel, onShowFi
             </label>
           ))}
         </div>
-        <p className="export-info">{info} <button className="link" onClick={onOpenOverlay}>オーバーレイの設定</button></p>
+        <p className="export-info">{info} <button className="link" onClick={onOpenOverlay}>動画の設定</button></p>
         {busy ? (
           <div className="export-progress">
             <progress value={state!.ratio} max={1} />

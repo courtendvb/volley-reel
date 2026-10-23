@@ -201,6 +201,8 @@ export interface ExportLayer {
   png: Uint8Array // full-frame transparent PNG at the output size
   from?: number // seconds from the clip's IN; omitted = the whole clip
   to?: number
+  fadeIn?: number // seconds the layer fades in from `from` (0 / missing: none)
+  fadeOut?: number // seconds the layer fades out before `to`
 }
 
 export type ExportItem =

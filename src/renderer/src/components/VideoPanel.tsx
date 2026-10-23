@@ -120,7 +120,7 @@ export function VideoPanel(p: Props) {
       </div>
 
       <div className="reel-controls">
-        <button onClick={p.onOpenOverlay} title="スコアボード・テロップ・タイトルカード・配色（この動画の設定）">オーバーレイ</button>
+        <button onClick={p.onOpenOverlay} title="この動画の設定: スコアボード・テロップ・タイトルカード・フェード">⚙ 設定</button>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlay} disabled={!total.clips}>▶ 動画を再生</button>}

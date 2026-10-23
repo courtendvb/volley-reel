@@ -46,8 +46,8 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal overlay-modal" role="dialog" aria-label="オーバーレイ設定" onClick={e => e.stopPropagation()}>
-        <h2>オーバーレイ設定（この動画）</h2>
+      <div className="modal overlay-modal" role="dialog" aria-label="動画の設定" onClick={e => e.stopPropagation()}>
+        <h2>動画の設定（スコアボード・テロップ・タイトルカード・フェード）</h2>
         <div className="ov-body">
           <div className="ov-preview">
             <canvas ref={frame} width={PREVIEW_W * 2} height={PREVIEW_H * 2} style={{ width: PREVIEW_W, height: PREVIEW_H }} />

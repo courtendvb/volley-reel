@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, bounds, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
+import { applyStyle, bounds, fadeAlpha, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
 import { snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
@@ -132,6 +132,15 @@ describe('formats and polygons', () => {
     const ctx = { font: '', measureText: () => ({ width: 128 }) } as unknown as CanvasRenderingContext2D
     const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.5, y: 0.1, text: 'x', size: 36, align: 'center' }
     expect(bounds(ctx, text, 1280, 720).x).toBeCloseTo(0.45)
+  })
+
+  it('fades an object in and out at its own show window', () => {
+    const a: Annotation = { ...rect, showFrom: 10, showTo: 20, fadeIn: 2, fadeOut: 1 } as Annotation
+    const clip = { in: 5, out: 25 }
+    expect(fadeAlpha(a, 11, clip)).toBeCloseTo(0.5)
+    expect(fadeAlpha(a, 15, clip)).toBe(1)
+    expect(fadeAlpha(a, 19.5, clip)).toBeCloseTo(0.5)
+    expect(fadeAlpha({ ...rect, fadeIn: 1 } as Annotation, 5.5, clip)).toBeCloseTo(0.5) // no show time: the clip's IN
   })
 
   it('measures text of several lines', () => {

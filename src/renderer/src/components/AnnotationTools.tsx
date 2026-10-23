@@ -176,6 +176,15 @@ export function AnnotationTools(p: Props) {
         )}
         <Group title="全体">
           {sel && !p.cardMode && (
+            <span className="fade-fields" title="出るときに透明から、消えるときに透明へ（秒）。0 でなし">
+              <Num label="フェードイン" value={sel.fadeIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
+                onChange={v => { const { fadeIn: _f, ...rest } = sel; update((v > 0 ? { ...rest, fadeIn: v } : rest) as Annotation) }} />
+              <Num label="アウト" value={sel.fadeOut ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
+                onChange={v => { const { fadeOut: _f, ...rest } = sel; update((v > 0 ? { ...rest, fadeOut: v } : rest) as Annotation) }} />
+              <span className="muted">秒</span>
+            </span>
+          )}
+          {sel && !p.cardMode && (
             <select aria-label="表示範囲" value={scope} disabled={p.disabled} className={`scope-${scope}`}
               title="このクリップだけ／このマーカーのグループのすべてのクリップ／このシーンのすべてのクリップ／この動画のすべてのクリップ"
               onChange={e => p.onScope(sel.id, e.target.value as AnnScope)}>

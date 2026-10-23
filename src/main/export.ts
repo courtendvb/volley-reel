@@ -115,10 +115,18 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
   for (const [j, l] of it.layers.entries()) {
     const png = join(dir, `clip${i}-layer${j}.png`)
     await writeFile(png, l.png)
-    args.push('-i', png)
-    const enable = l.from !== undefined || l.to !== undefined
-      ? `:enable='between(t,${(l.from ?? 0).toFixed(3)},${(l.to ?? it.out - it.in).toFixed(3)})'` : ''
-    fc += `;[${last}][${j + 1}:v]overlay=0:0${enable}[v${j + 1}]`
+    const dur = it.out - it.in, from = l.from ?? 0, to = l.to ?? dur
+    const enable = l.from !== undefined || l.to !== undefined ? `:enable='between(t,${from.toFixed(3)},${to.toFixed(3)})'` : ''
+    if (l.fadeIn || l.fadeOut) {
+      // A fading layer is the picture looped over the clip, its alpha faded at its window's ends.
+      args.push('-loop', '1', '-framerate', job.fpsStr, '-t', dur.toFixed(3), '-i', png)
+      const fi = Math.min(l.fadeIn ?? 0, (to - from) / 2), fo = Math.min(l.fadeOut ?? 0, (to - from) / 2)
+      const f = [fi > 0 ? `fade=t=in:st=${from.toFixed(3)}:d=${fi.toFixed(3)}:alpha=1` : '', fo > 0 ? `fade=t=out:st=${(to - fo).toFixed(3)}:d=${fo.toFixed(3)}:alpha=1` : ''].filter(Boolean).join(',')
+      fc += `;[${j + 1}:v]format=rgba,${f}[f${j + 1}];[${last}][f${j + 1}]overlay=0:0${enable}[v${j + 1}]`
+    } else {
+      args.push('-i', png)
+      fc += `;[${last}][${j + 1}:v]overlay=0:0${enable}[v${j + 1}]`
+    }
     last = `v${j + 1}`
   }
   const f = fades(job.fadeSec, it.out - it.in)

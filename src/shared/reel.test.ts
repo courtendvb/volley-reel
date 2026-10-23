@@ -60,6 +60,14 @@ describe('markers', () => {
     expect(reel.groups.none).toEqual([])
   })
 
+  it('puts a newly marked clip into the group in time order', () => {
+    let { reel, c } = reelWith([0, 2, 4])
+    const when = (cl: { playId: number }): [string, number] => ['2026-10-11', d.plays[cl.playId].time]
+    reel = toggleMarker(toggleMarker(reel, c[0], 1, when), c[2], 1, when)
+    reel = toggleMarker(reel, c[1], 1, when) // between the two in time
+    expect(reel.groups[1]).toEqual([c[0], c[1], c[2]])
+  })
+
   it('takes one marker off and keeps the other; with none left the clip is unmarked', () => {
     let { reel, c } = reelWith([0])
     reel = toggleMarker(toggleMarker(reel, c[0], 1), c[0], 3)

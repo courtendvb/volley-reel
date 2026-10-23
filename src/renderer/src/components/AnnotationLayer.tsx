@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import {
-  applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt, withGroups,
+  applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type StylePatch,
 } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
@@ -78,7 +78,9 @@ export function AnnotationLayer(p: Props) {
   // every frame of the video.
   // A title card covers the frame during a through-play: the clip's objects are not on it.
   const [onCard, setOnCard] = useState(!!playback.current.card)
-  const visibleKey = (t: number) => `${playback.attachedKey}|${annsRef.current.filter(a => visibleAt(a, t, clipRef.current)).map(a => a.id).join(',')}`
+  // Fading objects add their opacity in twentieths, so the layer redraws as they fade.
+  const visibleKey = (t: number) => `${playback.attachedKey}|${annsRef.current.filter(a => visibleAt(a, t, clipRef.current))
+    .map(a => (a.fadeIn || a.fadeOut ? `${a.id}:${Math.round(fadeAlpha(a, t, clipRef.current) * 20)}` : a.id)).join(',')}`
   const [visKey, setVisKey] = useState('')
   const clipRef = useRef(p.clip)
   clipRef.current = p.clip
@@ -103,7 +105,7 @@ export function AnnotationLayer(p: Props) {
       if (textEdit?.id === a.id) continue
       const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'
       if (!vis && !p.editable) continue
-      ctx.globalAlpha = vis ? 1 : 0.3
+      ctx.globalAlpha = vis ? (p.always ? 1 : fadeAlpha(a, time, p.clip)) : 0.3
       if (cropImg && a.id === cropImg.id) {
         // While cropping, the whole picture shows faintly around the frame.
         const img = assetImage(cropImg.assetId), f = fullRect(cropImg)

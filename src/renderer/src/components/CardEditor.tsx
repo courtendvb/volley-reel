@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
 import { drawTitleCard, type Box } from '../../../shared/overlayDraw'
 import type { Card } from '../../../shared/video'
 import { logoImage, subscribeAssets } from '../assets'
@@ -9,6 +9,7 @@ interface Props {
   card: Card
   settings: OverlaySettings
   onChange: (s: OverlaySettings) => void
+  active: boolean // the title can be grabbed (else the objects on the card are being edited)
 }
 
 type Drag = { mode: 'move' | 'scale'; from: [number, number]; start: CardLayout; box: Box }
@@ -17,14 +18,14 @@ const HANDLE = 9 // px, the resize corner
 
 // The title card drawn over the video window, with its title in a frame: drag it to move, drag the
 // corner to resize. Changes the video's layout for that kind of card (all scene cards, or all marker cards).
-export function CardEditor({ size, card, settings, onChange }: Props) {
+export function CardEditor({ size, card, settings, onChange, active }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<Box | null>(null)
   const drag = useRef<Drag | null>(null)
   const [tick, setTick] = useState(0)
   useEffect(() => subscribeAssets(() => setTick(n => n + 1)), [])
-  const kind = card.marker === null ? 'sceneLayout' : 'markerLayout'
-  const layout = settings.titleCard[kind] ?? (card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
+  const kind = layoutKey(card)
+  const layout = settings.titleCard[kind] ?? defaultLayout(card)
 
   useEffect(() => {
     const c = canvas.current
@@ -35,13 +36,14 @@ export function CardEditor({ size, card, settings, onChange }: Props) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const b = drawTitleCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp))
     boxRef.current = b
+    if (!active) return
     ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#FACC15'
     ctx.strokeRect(b.x - 6, b.y - 6, b.w + 12, b.h + 12)
     ctx.setLineDash([])
     ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#FACC15'
     ctx.fillRect(b.x + b.w + 6 - HANDLE / 2, b.y + b.h + 6 - HANDLE / 2, HANDLE, HANDLE)
     ctx.strokeRect(b.x + b.w + 6 - HANDLE / 2, b.y + b.h + 6 - HANDLE / 2, HANDLE, HANDLE)
-  }, [size.w, size.h, card, settings, tick])
+  }, [size.w, size.h, card, settings, tick, active])
 
   const at = (e: PointerEvent): [number, number] => {
     const r = canvas.current!.getBoundingClientRect()
@@ -75,27 +77,46 @@ export function CardEditor({ size, card, settings, onChange }: Props) {
   const onUp = () => { drag.current = null }
 
   return (
-    <canvas ref={canvas} className="card-editor" data-testid="card-editor" style={{ width: size.w, height: size.h, cursor: 'move' }}
+    <canvas ref={canvas} className="card-editor" data-testid="card-editor" style={{ width: size.w, height: size.h, cursor: active ? 'move' : 'default', pointerEvents: active ? 'auto' : 'none' }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} />
   )
 }
 
-// Below the video while a card is being edited: what is being edited, its size, reset and done.
-export function CardEditBar({ card, settings, onChange, onDone }: { card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onDone: () => void }) {
-  const kind = card.marker === null ? 'sceneLayout' : 'markerLayout'
-  const def = card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT
+const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' => (card.video ? 'videoLayout' : card.marker === null ? 'sceneLayout' : 'markerLayout')
+const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
+const cardKindName = (card: Card) => (card.video ? '動画' : card.marker === null ? 'シーン' : 'マーカー')
+
+// Below the video while a card is being edited: whether it is shown, what the pointer edits (the
+// objects on this card, or the title's place and size for every card of this kind), reset and done.
+export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, shown, onShown }: {
+  card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onDone: () => void
+  tool: 'objects' | 'title'; onTool: (t: 'objects' | 'title') => void; shown: boolean; onShown: (on: boolean) => void
+}) {
+  const kind = layoutKey(card), def = defaultLayout(card)
   const layout = settings.titleCard[kind] ?? def
   const set = (l: CardLayout) => onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } })
+  const what = cardKindName(card)
   return (
     <div className="card-edit-bar">
-      <b>{card.marker === null ? 'シーン' : 'マーカー'}のタイトルカードの見た目</b>
-      <span className="muted">この動画のすべての{card.marker === null ? 'シーン' : 'マーカー'}のカードに使います。タイトルをドラッグで移動、右下の角で大きさ</span>
+      <b>{what}のタイトルカード{card.name ? `「${card.name}」` : ''}</b>
+      <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> このカードを出す</label>
+      <div className="segmented" role="radiogroup" aria-label="カードの編集">
+        <button role="radio" aria-checked={tool === 'objects'} className={tool === 'objects' ? 'on' : ''} onClick={() => onTool('objects')}
+          title="このカードに文字・画像・図形を置く">図形・文字</button>
+        <button role="radio" aria-checked={tool === 'title'} className={tool === 'title' ? 'on' : ''} onClick={() => onTool('title')}
+          title={`タイトルの位置と大きさ（この動画のすべての${what}のカード）`}>タイトルの位置</button>
+      </div>
+      {tool === 'title' && (
+        <>
+          <span className="muted">ドラッグで移動、右下の角で大きさ（すべての{what}のカード）</span>
+          <label className="check">大きさ
+            <input type="range" aria-label="タイトルの大きさ" min={30} max={300} step={5} value={Math.round(layout.scale * 100)}
+              onChange={e => set({ ...layout, scale: +e.target.value / 100 })} />
+            <span>{Math.round(layout.scale * 100)}%</span></label>
+          <button onClick={() => set(def)}>元に戻す</button>
+        </>
+      )}
       <span className="spacer" />
-      <label className="check">大きさ
-        <input type="range" aria-label="タイトルの大きさ" min={30} max={300} step={5} value={Math.round(layout.scale * 100)}
-          onChange={e => set({ ...layout, scale: +e.target.value / 100 })} />
-        <span>{Math.round(layout.scale * 100)}%</span></label>
-      <button onClick={() => set(def)}>元に戻す</button>
       <button className="primary" onClick={onDone}>完了</button>
     </div>
   )

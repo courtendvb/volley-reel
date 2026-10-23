@@ -16,6 +16,7 @@ interface Props {
   onSelectScene: (id: string) => void
   onRenameScene: (id: string, name: string) => void
   onEditCard: (sceneId: string) => void // the gear: edit how scene title cards look, in the video window
+  onEditVideoCard: () => void // the gear by the video's name: its opening card
   onNewScene: () => void
   onOpenOverlay: () => void
   playing: boolean
@@ -56,7 +57,10 @@ export function VideoPanel(p: Props) {
         <button onClick={p.onNewVideo} title="新しい動画">＋</button>
         <button onClick={() => { if (confirm(`動画「${v.name}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）`)) p.onDeleteVideo(v.id) }} title="動画を削除">削除</button>
       </div>
-      <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
+      <div className="reel-name-row">
+        <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
+        <button className="gear" aria-label="動画のタイトルカード" title="動画の頭のタイトルカード（動画名）を動画の画面で編集" onClick={p.onEditVideoCard}>⚙</button>
+      </div>
 
       <ol className="video-scenes" role="list">
         {v.sceneIds.map((id, i) => {

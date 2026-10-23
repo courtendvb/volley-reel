@@ -49,12 +49,19 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
         onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit() }} />
       <span className="spacer" />
       <span className="ov-gear-wrap">
-        <button className="ov-gear" aria-label="タイトルカードの秒数" aria-expanded={gear} title="タイトルカードの秒数（動画全体）。配色は上部の「設定」" onClick={() => setGear(g => !g)}>⚙</button>
+        <button className="ov-gear" aria-label="タイトルカードとフェード" aria-expanded={gear} title="タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」" onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
           <div className="ov-gear-pop" role="dialog" aria-label="タイトルカード">
             <label className="check">タイトルカード（シーン・マーカー）
               <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数（一括）"
                 onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> 秒</label>
+            <label className="check"><input type="checkbox" checked={s.transition.fade} aria-label="フェード"
+              onChange={e => onOverlay({ ...s, transition: { ...s.transition, fade: e.target.checked } })} /> クリップとカードの切り替えでフェード（イン・アウト）</label>
+            {s.transition.fade && (
+              <label className="check">フェードの秒数
+                <input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label="フェードの秒数"
+                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) onOverlay({ ...s, transition: { ...s.transition, durationSec: n } }) }} /> 秒</label>
+            )}
             <span className="hint">配色はプロジェクト全体の設定です（上部の「設定」）</span>
           </div>
         )}

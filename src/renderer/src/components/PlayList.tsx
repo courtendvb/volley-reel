@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { playLabel } from '../../../shared/labels'
-import { MARKER_COLORS, type Group, type Marker } from '../../../shared/reel'
+import { MARKER_COLORS, type Marker } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
@@ -17,7 +17,7 @@ interface Props {
   currentMatchId: string | null
   selected: PlayKey | null
   onJump: (r: PlayRef) => void
-  reelGroups: Map<string, Group> // `${matchId}:${playId}` -> group, for plays already in the reel
+  reelGroups: Map<string, string> // `${matchId}:${playId}` -> its markers "1,3" ('' = no marker), for plays in the scene
   onMark: (r: PlayRef, m: Marker) => void
 }
 
@@ -79,7 +79,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
         key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
-        group={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark}
+        marks={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark}
       />,
     )
   }
@@ -95,26 +95,29 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
 
 const MARKERS: Marker[] = [1, 2, 3, 4, 5]
 
-const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump, group, onMark }: {
+const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump, marks, onMark }: {
   r: PlayRef; top: number; videoTime: number; selected: boolean; now: boolean
-  onJump: (r: PlayRef) => void; group: Group | null; onMark: (r: PlayRef, m: Marker) => void
+  onJump: (r: PlayRef) => void; marks: string | null; onMark: (r: PlayRef, m: Marker) => void
 }) {
   const p = r.play
   return (
     <div role="listitem" style={{ top, height: ROW }}
-      className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${group === 'none' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
-      title={`映像 ${formatTime(videoTime)}${group === 'none' ? '・シーンに入っています（マーカーなし）' : ''}`}>
+      className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${marks === '' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
+      title={`映像 ${formatTime(videoTime)}${marks === '' ? '・シーンに入っています（マーカーなし）' : ''}`}>
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
       <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{playLabel(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}</span>
       <span className="marks">
-        {MARKERS.map(m => (
-          <button key={m} className={`mark${group === m ? ' on' : ''}`} style={group === m ? { background: MARKER_COLORS[m], borderColor: MARKER_COLORS[m] } : undefined}
-            title={group === m ? `マーカー ${m} を外す` : `今のシーンにマーカー ${m} で入れる`}
-            onClick={e => { e.stopPropagation(); onMark(r, m) }}>{m}</button>
-        ))}
+        {MARKERS.map(m => {
+          const on = !!marks && marks.split(',').includes(String(m))
+          return (
+            <button key={m} className={`mark${on ? ' on' : ''}`} style={on ? { background: MARKER_COLORS[m], borderColor: MARKER_COLORS[m] } : undefined}
+              title={on ? `マーカー ${m} を外す` : `今のシーンにマーカー ${m} で入れる（ほかのマーカーと同時にも付けられます）`}
+              onClick={e => { e.stopPropagation(); onMark(r, m) }}>{m}</button>
+          )
+        })}
       </span>
     </div>
   )

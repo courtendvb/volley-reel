@@ -1,7 +1,7 @@
 // Drawing for the automatic overlays — the design picked in the M6 review: black plates with
 // slanted ends, an accent block for the number, Bahnschrift bold. One renderer for the preview and
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
@@ -93,12 +93,14 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
 // logo: the opponent's logo, drawn beside the marker title or above the scene title.
 // Returns the title's box in pixels (for the card editor to grab). Position and size come from
 // s.markerLayout / s.sceneLayout, which the editor changes.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
   const k = H / 720
   ctx.save()
   fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H)
   if (d.marker === null) {
-    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo ?? null, s.sceneLayout ?? DEFAULT_SCENE_LAYOUT)
+    // The video's opening card is drawn like a scene card, larger by default, with its own layout.
+    const L = d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT
+    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo ?? null, L)
     ctx.restore()
     return box
   }

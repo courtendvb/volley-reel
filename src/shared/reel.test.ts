@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
-  addClips, clipRange, defaultRange, groupOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
+  addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
 } from './reel'
 
@@ -49,13 +49,36 @@ describe('markers', () => {
     expect(groupOf(toggleMarker(r1, c[0], null), c[0])).toBe('none')
   })
 
-  it('switching markers appends to the end of the new group', () => {
+  it('adds a second marker at the end of that group and keeps the first', () => {
     let { reel, c } = reelWith([0, 2, 4])
     reel = toggleMarker(toggleMarker(reel, c[0], 1), c[1], 2)
     reel = toggleMarker(reel, c[2], 1)
     reel = toggleMarker(reel, c[1], 1)
     expect(reel.groups[1]).toEqual([c[0], c[2], c[1]])
-    expect(reel.groups[2]).toEqual([])
+    expect(reel.groups[2]).toEqual([c[1]])
+    expect(markersOf(reel, c[1])).toEqual([1, 2])
+    expect(reel.groups.none).toEqual([])
+  })
+
+  it('takes one marker off and keeps the other; with none left the clip is unmarked', () => {
+    let { reel, c } = reelWith([0])
+    reel = toggleMarker(toggleMarker(reel, c[0], 1), c[0], 3)
+    expect(markersOf(toggleMarker(reel, c[0], 1), c[0])).toEqual([3])
+    expect(toggleMarker(toggleMarker(reel, c[0], 1), c[0], 3).groups.none).toEqual([c[0]])
+    expect(toggleMarker(reel, c[0], null).groups.none).toEqual([c[0]])
+  })
+
+  it('plays a clip once in each of its groups', () => {
+    let { reel, c } = reelWith([0, 2])
+    reel = toggleMarker(toggleMarker(toggleMarker(reel, c[0], 1), c[0], 2), c[1], 1)
+    expect(playOrder(reel, cl => ['2026-10-11', d.plays[cl.playId].time], 'marked').map(x => x.playId)).toEqual([0, 2, 0])
+  })
+
+  it('moves a clip out of one group by dragging, keeping its other marker', () => {
+    let { reel, c } = reelWith([0])
+    reel = toggleMarker(toggleMarker(reel, c[0], 1), c[0], 2)
+    const r = moveClip(reel, c[0], 4, undefined, 2)
+    expect(markersOf(r, c[0])).toEqual([1, 4])
   })
 })
 

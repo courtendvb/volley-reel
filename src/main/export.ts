@@ -44,7 +44,7 @@ export class Exporter {
           const png = join(workDir, `card${i}.png`)
           await writeFile(png, it.png)
           await this.ffmpeg(['-loop', '1', '-framerate', job.fpsStr, '-t', it.durationSec.toFixed(3), '-i', png,
-            '-vf', `scale=${job.width}:${job.height},format=yuv420p,setsar=1`, ...enc, seg], report)
+            '-vf', `scale=${job.width}:${job.height},format=yuv420p,setsar=1${fades(job.fadeSec, it.durationSec)}`, ...enc, seg], report)
         } else {
           const video = videoOf(it.matchId)
           if (!video || !existsSync(video)) throw new Error(`動画が見つかりません（試合 ${it.matchId}）`)
@@ -121,5 +121,14 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
     fc += `;[${last}][${j + 1}:v]overlay=0:0${enable}[v${j + 1}]`
     last = `v${j + 1}`
   }
+  const f = fades(job.fadeSec, it.out - it.in)
+  if (f) { fc += `;[${last}]${f.slice(1)}[vf]`; last = 'vf' }
   return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, join(dir, `seg${String(i).padStart(4, '0')}.mp4`)]
+}
+
+// ",fade=in…,fade=out…" for an item of dur seconds (at most a third of it each), or ''.
+function fades(sec: number | undefined, dur: number): string {
+  const d = Math.min(sec ?? 0, dur / 3)
+  if (!(d > 0.01)) return ''
+  return `,fade=t=in:st=0:d=${d.toFixed(3)},fade=t=out:st=${(dur - d).toFixed(3)}:d=${d.toFixed(3)}`
 }

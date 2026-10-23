@@ -202,6 +202,7 @@ export interface ExportJob {
   height: number
   fpsStr: string // e.g. '30000/1001'
   items: ExportItem[]
+  fadeSec?: number // fade in and out of black on every item (clips and cards)
 }
 
 export type ExportEvent =

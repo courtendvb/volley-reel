@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CaptionData, ClipOverlayOverride, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
-import { logoImage, subscribeAssets } from '../assets'
+import { drawAnnotation } from '../../../shared/annotation'
+import { assetImage, logoImage, subscribeAssets } from '../assets'
 import { playback, type PlaybackState } from '../playback'
 
 interface Props {
@@ -31,7 +32,11 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     const ctx = c.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, size.w, size.h)
-    if (st.card) { drawTitleCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp)); return }
+    if (st.card) {
+      drawTitleCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp))
+      for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
+      return
+    }
     if (!inClip) return
     if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, settings.theme)
     if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, settings.theme)

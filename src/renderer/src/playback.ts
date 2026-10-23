@@ -1,6 +1,7 @@
 // The one place that moves the playhead (design §11). Components call these methods and
 // subscribe to state; nothing else writes video.currentTime, so jumps can't overwrite each other.
 // All times here are video times (DVW time + Match.offsetSec).
+import type { Card } from '../../shared/video'
 
 export interface SeqItem {
   key: string // match id
@@ -10,7 +11,7 @@ export interface SeqItem {
 
 // A title card in a through-play: shown over the paused video for durationSec, then the next item.
 export interface CardItem {
-  card: { marker: number | null; name: string; match: string | null; opp?: string | null } // marker null = scene card
+  card: Card // marker null = scene card (or the video's opening card)
   durationSec: number
 }
 

@@ -29,6 +29,7 @@ interface Props {
   scopeOf?: (id: string) => AnnScope | null // where each object lives (frame color and tag)
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
   cropping: boolean // the selected picture is being cropped: handles move the frame, dragging moves the picture
+  always?: boolean // a title card's objects: shown whatever the video is doing
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
 }
@@ -75,7 +76,7 @@ export function AnnotationLayer(p: Props) {
   const [onCard, setOnCard] = useState(!!playback.current.card)
   useEffect(() => playback.subscribe(s => { setTime(s.time); setOnCard(!!s.card) }), [])
 
-  const onScreen = playback.attachedKey === p.clip.key
+  const onScreen = p.always || playback.attachedKey === p.clip.key
   const pathDraft: Annotation | null = path && path.points.length
     ? applyStyle({ id: 'path-draft', kind: path.kind, color: p.style.color, width: p.style.width, points: path.hover ? [...path.points, path.hover] : path.points } as Annotation, p.style)
     : null
@@ -92,7 +93,7 @@ export function AnnotationLayer(p: Props) {
     const ctx = c.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, p.size.w, p.size.h)
-    if (!onScreen || onCard) return
+    if (!onScreen || (onCard && !p.always)) return
     for (const a of shown) {
       if (textEdit?.id === a.id) continue
       const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'

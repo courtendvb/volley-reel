@@ -32,20 +32,24 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
-  const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations)]
+  const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations),
+    ...plan.flatMap(p => (p.kind === 'card' ? p.card.annotations ?? [] : []))]
   await preloadAssets(all.flatMap(a => (a.kind === 'image' ? [a.assetId] : [])))
   await preloadLogos(plan.map(p => (p.kind === 'card' ? p.card.opp : null)))
   const items: ExportItem[] = []
   for (const p of plan) {
     if (p.kind === 'card') {
-      items.push({ kind: 'card', durationSec: p.durationSec, png: await png(W, H, ctx => drawTitleCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp))) })
+      items.push({ kind: 'card', durationSec: p.durationSec, png: await png(W, H, ctx => {
+        drawTitleCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp))
+        for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
+      }) })
       continue
     }
     const c = p.clip, r = d.range(c, p.sceneId)
     if (!r) continue
     items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, r, overlay, d, W, H) })
   }
-  return { outPath, width: W, height: H, fpsStr, items }
+  return { outPath, width: W, height: H, fpsStr, items, ...(overlay.transition.fade ? { fadeSec: overlay.transition.durationSec } : {}) }
 }
 
 // One layer for everything shown for the whole clip (auto overlays first, annotations on top),

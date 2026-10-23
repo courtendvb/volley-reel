@@ -66,14 +66,17 @@ export function ReelPanel(p: Props) {
   const lineClass = (key: string) => (dragOver?.key === key ? (dragOver.after ? ' drop-after' : ' drop-before') : '')
 
   // A clip dropped on a row of a marker group lands before or after it; on a group, at its end.
+  // The drag carries the clip and the group it was dragged from ("id|group"): a clip with two
+  // markers leaves only that group.
   const onDropClip = (e: DragEvent, to: Group, slot?: number) => {
-    const id = e.dataTransfer.getData(DT_CLIP)
+    const [id, fromGroup] = e.dataTransfer.getData(DT_CLIP).split('|')
     setDragOver(null)
     if (!id) return
     e.preventDefault(); e.stopPropagation()
+    const src = (fromGroup === 'none' ? 'none' : Number(fromGroup)) as Group
     const from = to === 'none' ? -1 : reel.groups[to].indexOf(id)
     // slot counts the rows as they are; moveClip counts them without the moved clip.
-    change(moveClip(reel, id, to, slot === undefined ? undefined : from >= 0 && from < slot ? slot - 1 : slot))
+    change(moveClip(reel, id, to, slot === undefined ? undefined : from >= 0 && from < slot ? slot - 1 : slot, src))
   }
   // A group dropped on another goes above or below it.
   const onDropGroup = (e: DragEvent, at: Marker) => {
@@ -99,7 +102,7 @@ export function ReelPanel(p: Props) {
       <div
         key={c.id} role="listitem" draggable
         className={`clip-row${c.id === p.activeClipId ? ' active' : ''}${c.id === p.playingClipId ? ' playing' : ''}${lineClass(c.id)}`}
-        onDragStart={e => { e.dataTransfer.setData(DT_CLIP, c.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragStart={e => { e.dataTransfer.setData(DT_CLIP, `${c.id}|${g}`); e.dataTransfer.effectAllowed = 'move' }}
         onDragOver={g === 'none' ? undefined : e => {
           if (!dragging(e, DT_CLIP)) return
           e.preventDefault(); e.stopPropagation()
@@ -129,7 +132,7 @@ export function ReelPanel(p: Props) {
   }
 
   const none = chronological(reel, reel.groups.none, when)
-  const marked = MARKERS.reduce((n, m) => n + reel.groups[m].length, 0)
+  const marked = new Set(MARKERS.flatMap(m => reel.groups[m])).size // clips with any marker
 
   return (
     <aside className="reel-panel">
@@ -200,7 +203,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           {none.map((c, i) => clipRow(c, 'none', i))}
         </section>
       </div>
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（同じ数字か 0 で解除）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。</p>
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。</p>
     </aside>
   )
 }

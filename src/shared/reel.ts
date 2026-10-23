@@ -36,6 +36,8 @@ export interface Reel {
   markerCards?: Partial<Record<Marker, boolean>> // title card per marker; missing = the video's setting
   markerOff?: Partial<Record<Marker, boolean>> // a marker group switched off: kept, but not played or exported
   annotations?: Annotation[] // objects shown on every clip of the scene (表示範囲: シーン全体)
+  cardAnnotations?: Annotation[] // objects on the scene's title card
+  markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string
 }
@@ -54,9 +56,15 @@ export function newReel(name: string): Reel {
 
 const touch = (r: Reel): Reel => ({ ...r, updatedAt: new Date().toISOString() })
 
+// A clip can carry several markers (it is then in each of those groups, and plays once per group);
+// a clip with none is in 'none'. groupOf gives the first one, for single-group displays.
 export function groupOf(reel: Reel, clipId: string): Group | null {
   for (const g of [...MARKERS, 'none'] as Group[]) if (reel.groups[g].includes(clipId)) return g
   return null
+}
+
+export function markersOf(reel: Reel, clipId: string): Marker[] {
+  return MARKERS.filter(m => reel.groups[m].includes(clipId))
 }
 
 export function findClip(reel: Reel, matchId: string, playId: number): Clip | undefined {
@@ -79,12 +87,15 @@ export function addClips(reel: Reel, items: { matchId: string; play: Play }[], g
   return { reel: touch({ ...reel, clips, groups }), ids }
 }
 
-// Moves a clip to a group (appending by default). Moving into its own group with no index is a no-op.
-export function moveClip(reel: Reel, clipId: string, to: Group, index?: number): Reel {
-  const from = groupOf(reel, clipId)
+// Moves a clip from one of its groups (`from`, by default its first) to another, appending by
+// default; its other markers stay. Moving into its own group with no index is a no-op. Moving to
+// 'none' takes every marker off.
+export function moveClip(reel: Reel, clipId: string, to: Group, index?: number, from: Group | null = groupOf(reel, clipId)): Reel {
   if (!from || (from === to && index === undefined)) return reel
   const groups = { ...reel.groups }
-  for (const g of [from, to]) groups[g] = groups[g].filter(id => id !== clipId)
+  const leave: Group[] = to === 'none' ? [...MARKERS, 'none'] : [from, to]
+  for (const g of leave) groups[g] = groups[g].filter(id => id !== clipId)
+  if (to !== 'none') groups.none = groups.none.filter(id => id !== clipId)
   const target = [...groups[to]]
   target.splice(index === undefined ? target.length : Math.max(0, Math.min(index, target.length)), 0, clipId)
   groups[to] = target
@@ -96,10 +107,20 @@ export function markerCardOn(reel: Reel, m: Marker, videoDefault: boolean): bool
   return reel.markerCards?.[m] ?? videoDefault
 }
 
-// Number keys: the same marker again (or 0 → null) clears it.
+// Number keys and the list's 1–5: adds that marker (keeping any others), or takes it off when the
+// clip has it; null (0) takes every marker off.
 export function toggleMarker(reel: Reel, clipId: string, m: Marker | null): Reel {
-  const g = groupOf(reel, clipId)
-  return moveClip(reel, clipId, m === null || g === m ? 'none' : m)
+  if (!reel.clips[clipId]) return reel
+  if (m === null) return moveClip(reel, clipId, 'none')
+  const groups = { ...reel.groups }
+  if (groups[m].includes(clipId)) {
+    groups[m] = groups[m].filter(id => id !== clipId)
+    if (!MARKERS.some(x => groups[x].includes(clipId))) groups.none = [...groups.none, clipId]
+  } else {
+    groups[m] = [...groups[m], clipId]
+    groups.none = groups.none.filter(id => id !== clipId)
+  }
+  return touch({ ...reel, groups })
 }
 
 export function shiftClip(reel: Reel, clipId: string, delta: number): Reel {

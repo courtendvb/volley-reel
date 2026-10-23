@@ -18,6 +18,7 @@ interface Props {
   scopeOf: (id: string) => AnnScope | null
   onScope: (id: string, to: AnnScope) => void
   canVideo: boolean // a video is open, so objects can be put on all of it
+  cardMode?: boolean // objects on a title card: no clip timing, no display scope
   editPoints: boolean
   onEditPoints: (on: boolean) => void
   cropping: boolean
@@ -156,7 +157,7 @@ export function AnnotationTools(p: Props) {
           </Group>
         )}
         <Group title="全体">
-          {sel && (
+          {sel && !p.cardMode && (
             <select aria-label="表示範囲" value={scope} disabled={p.disabled} className={`scope-${scope}`}
               title="このクリップだけ／このシーンのすべてのクリップ／この動画のすべてのクリップ"
               onChange={e => p.onScope(sel.id, e.target.value as AnnScope)}>
@@ -176,7 +177,13 @@ export function AnnotationTools(p: Props) {
       </div>
 
       <div className="ann-row">
-        {sel && scope !== 'clip' ? (
+        {sel && p.cardMode ? (
+          <>
+            <span className="muted">タイトルカードの上の図形です</span>
+            <span className="spacer" />
+            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title="削除 (Delete)">削除</button>
+          </>
+        ) : sel && scope !== 'clip' ? (
           <>
             <span className="muted">{scope === 'scene' ? 'このシーンのすべてのクリップ' : 'この動画のすべてのクリップ'}で、最初から最後まで表示します</span>
             <span className="spacer" />

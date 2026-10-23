@@ -58,7 +58,9 @@ export function AnnotationLayer(p: Props) {
   const [assetTick, setAssetTick] = useState(0) // redraw when an image finishes loading
   useEffect(() => subscribeAssets(() => setAssetTick(n => n + 1)), [])
   const [time, setTime] = useState(playback.current.time)
-  useEffect(() => playback.subscribe(s => setTime(s.time)), [])
+  // A title card covers the frame during a through-play: the clip's objects are not on it.
+  const [onCard, setOnCard] = useState(!!playback.current.card)
+  useEffect(() => playback.subscribe(s => { setTime(s.time); setOnCard(!!s.card) }), [])
 
   const onScreen = playback.attachedKey === p.clip.key
   const pathDraft: Annotation | null = path && path.points.length
@@ -76,7 +78,7 @@ export function AnnotationLayer(p: Props) {
     const ctx = c.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, p.size.w, p.size.h)
-    if (!onScreen) return
+    if (!onScreen || onCard) return
     for (const a of shown) {
       if (textEdit?.id === a.id) continue
       const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'
@@ -92,7 +94,7 @@ export function AnnotationLayer(p: Props) {
       ctx.setLineDash([])
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick])
+  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {

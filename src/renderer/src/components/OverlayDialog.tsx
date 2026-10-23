@@ -75,8 +75,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
             <section>
               <div className="filter-row">{check('スコアボード', s.scoreboard.enabled, v => set('scoreboard', { enabled: v }))}<span className="spacer" />
                 {anchor(s.scoreboard.anchor, v => set('scoreboard', { anchor: v }), 'スコアボードの位置')}{scale(s.scoreboard.scale, v => set('scoreboard', { scale: v }), 'スコアボードのサイズ')}</div>
-              <div className="filter-row indent">{check('セット数', s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}
-                {check('ラリーを取った側に下線', s.scoreboard.highlightWinner, v => set('scoreboard', { highlightWinner: v }))}</div>
+              <div className="filter-row indent">{check('セット数', s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}</div>
             </section>
 
             <section>

@@ -14,7 +14,7 @@ export interface OverlayTheme {
 
 export interface OverlaySettings {
   theme: OverlayTheme
-  scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean; highlightWinner: boolean }
+  scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean }
@@ -35,7 +35,7 @@ export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
   theme: THEME_PRESETS[0].theme,
-  scoreboard: { enabled: true, anchor: 'tc', scale: 1, showSets: true, highlightWinner: true },
+  scoreboard: { enabled: true, anchor: 'tc', scale: 1, showSets: true },
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
 }

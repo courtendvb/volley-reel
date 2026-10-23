@@ -38,14 +38,12 @@ export function drawScoreboard(ctx: Ctx, W: number, H: number, d: ScoreboardData
 
   const cy = s.showSets ? y + h * 0.4 : y + h / 2
   let px = x + wL + (centerW - (pW + dW + qW + gap * 2)) / 2
-  const winL = s.highlightWinner && d.winner === 'L', winR = s.highlightWinner && d.winner === 'R'
-  text(ctx, ptsL, px, cy, ptsFont, winR ? SUB : TEXT, 0)
-  if (winL) fillRect(ctx, theme.accent, px - 2 * k, cy + 13 * k, pW + 4 * k, 3 * k)
+  // No mark for who took the rally: an underline read as "serving".
+  text(ctx, ptsL, px, cy, ptsFont, TEXT, 0)
   px += pW + gap
   text(ctx, dash, px, cy, ptsFont, '#6B6B6B', 0)
   px += dW + gap
-  text(ctx, ptsR, px, cy, ptsFont, winL ? SUB : TEXT, 0)
-  if (winR) fillRect(ctx, theme.accent, px - 2 * k, cy + 13 * k, qW + 4 * k, 3 * k)
+  text(ctx, ptsR, px, cy, ptsFont, TEXT, 0)
   if (s.showSets) {
     const sw = measure(ctx, setsText, setsFont, 0.3 * 10 * k)
     text(ctx, setsText, x + wL + (centerW - sw) / 2, y + h * 0.8, setsFont, MUTED, 0.3 * 10 * k)
@@ -97,25 +95,31 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   ctx.save()
   fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H)
   if (d.marker === null) { drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme); ctx.restore(); return }
-  const numFont = font(24 * k), nameFont = font(28 * k), matchFont = font(12 * k, 400)
+  // Marker cards: 3× the base size, the title's top-left at 10% from the left and 30% from the top
+  // (shrunk to stay inside the frame when the name is long).
   const name = (s.showMarkerName && d.name ? d.name : `MARKER ${d.marker}`).toUpperCase()
-  const numW = measure(ctx, String(d.marker), numFont, 0) + 32 * k
-  const plateW = measure(ctx, name, nameFont, 0.08 * 28 * k) + 46 * k
-  const h = 46 * k, slant = 10 * k
-  const total = numW + plateW - 6 * k
-  const x = (W - total) / 2, y = H / 2 - h / 2 + (s.showMatch && d.match ? 10 * k : 0)
-  if (s.showMatch && d.match) {
-    const mw = measure(ctx, d.match, matchFont, 0.4 * 12 * k)
-    ctx.textBaseline = 'middle'
-    text(ctx, d.match, (W - mw) / 2, y - 22 * k, matchFont, MUTED, 0.4 * 12 * k)
+  const match = s.showMatch && d.match ? d.match : null
+  const x = W * 0.1, top = H * 0.3
+  const layout = (q: number) => {
+    const numW = measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q
+    const plateW = measure(ctx, name, font(28 * q), 0.08 * 28 * q) + 46 * q
+    return { numW, plateW, total: numW + plateW - 6 * q }
   }
-  const px = x + numW - 6 * k
-  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 14 * k, y + h], [px, y + h]])
-  fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
+  let q = k * 3
+  const first = layout(q)
+  if (x + first.total > W * 0.95) q *= (W * 0.95 - x) / first.total
+  const { numW, plateW } = layout(q)
+  const numFont = font(24 * q), nameFont = font(28 * q), matchFont = font(12 * q, 400)
+  const h = 46 * q, slant = 10 * q
   ctx.textBaseline = 'middle'
+  if (match) text(ctx, match, x, top + 8 * q, matchFont, MUTED, 0.4 * 12 * q)
+  const y = top + (match ? 22 * q : 0)
+  const px = x + numW - 6 * q
+  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 14 * q, y + h], [px, y + h]])
+  fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
   const nw = measure(ctx, String(d.marker), numFont, 0)
   text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
-  text(ctx, name, px + slant + 14 * k, y + h / 2, nameFont, TEXT, 0.08 * 28 * k)
+  text(ctx, name, px + slant + 14 * q, y + h / 2, nameFont, TEXT, 0.08 * 28 * q)
   ctx.restore()
 }
 

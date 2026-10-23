@@ -20,7 +20,7 @@ export interface PlayRef {
 }
 
 export interface PlayFilter {
-  team: 'all' | 'home' | 'away'
+  team: 'all' | TeamRole // the project's target team or its opponents, whichever side they played
   person: string | null
   skills: string[] // empty = any
   effects: string[]
@@ -99,11 +99,12 @@ export function detailOptions(refs: PlayRef[]): { tempos: string[]; hits: string
   return { tempos: [...tempos], hits: [...hits], combos: [...combos.values()].sort((a, b) => b.n - a.n || a.code.localeCompare(b.code)) }
 }
 
-// Plays whose team can't be known (all-home input) stay in for a team filter rather than vanish.
+// Plays whose team can't be known (all-home input, or neither team is the target) stay in for a
+// team filter rather than vanish.
 export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
   return refs.filter(r => {
     const p = r.play
-    if (f.team !== 'all' && r.side !== null && r.side !== (f.team === 'home' ? '*' : 'a')) return false
+    if (f.team !== 'all' && r.teamRole !== null && r.teamRole !== f.team) return false
     if (f.person && r.personKey !== f.person) return false
     if (f.skills.length && !f.skills.includes(p.skill)) return false
     if (f.effects.length && !f.effects.includes(p.effect)) return false

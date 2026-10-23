@@ -17,7 +17,7 @@ interface Props {
 // 自チームのチームコードと名寄せ表 (design §3.2).
 // Player IDs already merge home/away and the scrimmage "-a" suffix; this table is for what's left.
 export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSave, onClose }: Props) {
-  const [codes, setCodes] = useState(settings.ourTeamCodes.join(', '))
+  const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
   const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
   const [aliases, setAliases] = useState<Record<string, string>>(settings.playerAliases)
   const [showOpp, setShowOpp] = useState(false)
@@ -33,7 +33,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSa
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ourTeamCodes: codes.split(/[,\s]+/).filter(Boolean), playerAliases: aliases, theme })
+      await onSave({ ourTeamCodes: code ? [code] : [], playerAliases: aliases, theme })
       onClose()
     } finally {
       setSaving(false)
@@ -46,9 +46,12 @@ export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSa
         <h2>設定</h2>
 
         <section>
-          <label className="field-label" htmlFor="our-codes">自チームのチームコード</label>
-          <input id="our-codes" value={codes} onChange={e => setCodes(e.target.value)} placeholder="HTH, HTA" />
-          <p className="hint">DVW の [3TEAMS] のコード。ここにあるチームが「自チーム」になり、スコアボードでは左に置かれます。</p>
+          <label className="field-label wide" htmlFor="our-code">対象チーム（自チーム）</label>
+          <select id="our-code" value={code} onChange={e => setCode(e.target.value)}>
+            {!teams.some(t => t.code === code) && <option value={code}>{code || '（なし）'}</option>}
+            {teams.map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}`}</option>)}
+          </select>
+          <p className="hint">プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。</p>
         </section>
 
         <section>

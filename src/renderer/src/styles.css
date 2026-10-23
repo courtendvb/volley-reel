@@ -318,9 +318,6 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .ann-hint { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 4px; background: rgba(15, 23, 42, 0.75); color: #fff; font-size: 12px; pointer-events: none; }
 /* Fixed height so the video doesn't jump when the selection (and so the panel's content) changes. */
 .ann-tools { height: 156px; overflow-y: auto; }
-.team-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.team-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--primary-light); color: var(--primary); font-weight: 600; font-size: 12.5px; }
-.team-chip .link { padding: 0 4px; }
 .match-order { margin: 0 10px 6px; align-self: flex-start; }
 .clip-overlay .ov-pos { padding: 1px 4px; font-size: 12px; }
 .ov-gear-wrap { position: relative; }

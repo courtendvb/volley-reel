@@ -11,7 +11,7 @@ import type { Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/t
 import type { Library } from './library'
 import { readJSON, safeId, writeJSON } from './store'
 
-const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'], playerAliases: {} }
+const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH'], playerAliases: {} }
 
 interface ProjectFile {
   version: 2
@@ -35,7 +35,7 @@ export class Project {
     const p = new Project(dir, library)
     await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
     await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
-    p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes), playerAliases: {}, matchIds: [...new Set(init.matchIds)], scenesVersion: 1 }
+    p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes).slice(0, 1), playerAliases: {}, matchIds: [...new Set(init.matchIds)], scenesVersion: 1 }
     await p.save()
     return p
   }
@@ -51,7 +51,8 @@ export class Project {
     p.file = {
       version: 2,
       name: saved.name || basename(dir),
-      ourTeamCodes: Array.isArray(saved.ourTeamCodes) ? saved.ourTeamCodes : DEFAULT_SETTINGS.ourTeamCodes,
+      // One target team per project: older projects with several codes keep the first.
+      ourTeamCodes: Array.isArray(saved.ourTeamCodes) && saved.ourTeamCodes.length ? saved.ourTeamCodes.slice(0, 1) : DEFAULT_SETTINGS.ourTeamCodes,
       playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
       ...(validTheme(saved.theme) ? { theme: saved.theme } : {}),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
@@ -163,7 +164,7 @@ export class Project {
   }
 
   async saveSettings(s: ProjectSettings): Promise<void> {
-    this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes)
+    this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes).slice(0, 1)
     this.file.playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
     if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }
     await this.save()

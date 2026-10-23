@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
+import { TitleEdit } from './ReelPanel'
 
 interface Props {
   videos: Video[]
@@ -29,12 +30,7 @@ const DT_SCENE = 'application/x-vr-scene-index'
 // videos, and editing it changes all of them. The overlay look, through-play and export are per video.
 export function VideoPanel(p: Props) {
   const v = p.video
-  // The scene being renamed in place (its position in the list) and the text so far.
-  const [renaming, setRenaming] = useState<{ i: number; text: string } | null>(null)
-  const finishRename = (id: string) => {
-    if (renaming && renaming.text.trim()) p.onRenameScene(id, renaming.text.trim())
-    setRenaming(null)
-  }
+  const [editing, setEditing] = useState<number | null>(null) // the scene (position) whose title is open
   const [dragOver, setDragOver] = useState<number | null>(null)
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
@@ -71,24 +67,20 @@ export function VideoPanel(p: Props) {
               onDragStart={e => e.dataTransfer.setData(DT_SCENE, String(i))}
               onDragOver={e => { e.preventDefault(); setDragOver(i) }} onDragLeave={() => setDragOver(null)}
               onDrop={e => { const from = Number(e.dataTransfer.getData(DT_SCENE)); setDragOver(null); if (!isNaN(from) && from !== i) p.onChange(moveSceneAt(v, from, i)) }}>
+              <span className="grip" aria-hidden title="ドラッグで順番を変える">⠿</span>
               <span className="scene-no">{i + 1}</span>
-              {s && renaming?.i === i ? (
-                <input className="scene-rename" autoFocus value={renaming.text} aria-label="シーンの名前"
-                  onClick={e => e.stopPropagation()} onChange={e => setRenaming({ i, text: e.target.value })}
-                  onBlur={() => finishRename(id)}
-                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') finishRename(id); else if (e.key === 'Escape') setRenaming(null) }} />
-              ) : (
-                <span className="scene-name" title={s ? 'ダブルクリックで名前を変える（タイトルカードに出る名前）' : undefined}
-                  onDoubleClick={e => { e.stopPropagation(); if (s) setRenaming({ i, text: s.name }) }}>{s ? s.name : '（削除されたシーン）'}</span>
-              )}
+              <span className="scene-name">{s ? s.name : '（削除されたシーン）'}</span>
               {s && usedIn(id) > 1 && <span className="shared" title={`${usedIn(id)} 本の動画で使っています。直すとすべてに反映されます`}>共有 {usedIn(id)}</span>}
               <span className="muted">{st.clips} 本・{fmtSec(st.sec)}</span>
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
-                {s && <button title="名前を変える（タイトルカードに出る名前）" onClick={() => setRenaming({ i, text: s.name })}>✎</button>}
-                <button title="上へ" disabled={i === 0} onClick={() => p.onChange(moveSceneAt(v, i, i - 1))}>↑</button>
-                <button title="下へ" disabled={i === v.sceneIds.length - 1} onClick={() => p.onChange(moveSceneAt(v, i, i + 1))}>↓</button>
+                {s && <button className="gear" aria-label="シーンのタイトル" aria-expanded={editing === i} title="タイトル（シーンのカードに出る名前）を編集"
+                  onClick={() => setEditing(e => (e === i ? null : i))}>⚙</button>}
                 <button title="動画から外す（シーンは残ります）" onClick={() => p.onChange(removeSceneAt(v, i))}>×</button>
               </span>
+              {s && editing === i && (
+                <TitleEdit label="シーンの名前" value={s.name} placeholder="シーンの名前（カードのタイトル）"
+                  onChange={name => p.onRenameScene(id, name)} onClose={() => setEditing(null)} />
+              )}
             </li>
           )
         })}

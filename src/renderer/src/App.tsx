@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -12,6 +12,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { TrimBar } from './components/TrimBar'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools } from './components/AnnotationTools'
+import { HeadlineBar } from './components/HeadlineBar'
 import type { Annotation } from '../../shared/annotation'
 import { changed, mergeScoped, moveToScope, scopeOf, splitScoped, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
@@ -329,6 +330,11 @@ export function App() {
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
   // first; playback.seekIn holds the seek until that match's video is ready.
+  // With 切り出し = プレー前後, a play picked in the list plays its key-play window and then the
+  // next play in the list follows on its own (listRun), until the list ends or something else is played.
+  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number } | null>(null)
+  const [listRun, setListRun] = useState(false)
+  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false) }, [])
   const jump = useCallback((r: PlayRef) => {
     const m = latest.current.matches[r.matchId]
     if (!m) return
@@ -336,10 +342,33 @@ export function App() {
     const c = latest.current.reel && findClip(latest.current.reel, r.matchId, r.play.id)
     setActiveClipId(c ? c.id : null)
     setMatchId(r.matchId)
-    playback.seekIn(r.matchId, r.play.time + m.offsetSec - PREROLL_SEC, { play: true })
-  }, [])
+    const t = r.play.time + m.offsetSec
+    if (extractRef.current === 'keyplay') {
+      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      listRunRef.current = { matchId: r.matchId, playId: r.play.id, start: t - d.keyBefore, end: t + d.keyAfter }
+      setListRun(true)
+      playback.seekIn(r.matchId, Math.max(0, t - d.keyBefore), { play: true })
+      return
+    }
+    stopListRun()
+    playback.seekIn(r.matchId, t - PREROLL_SEC, { play: true })
+  }, [stopListRun])
+  const jumpRef = useRef(jump)
+  jumpRef.current = jump
+  useEffect(() => playback.subscribe(s => {
+    const run = listRunRef.current
+    // Only inside this play's window: right after a jump the time can still be the old one.
+    if (!run || s.paused || playback.attachedKey !== run.matchId || s.time < run.end || s.time > run.end + 3 || s.time < run.start) return
+    const res = latest.current.results
+    const i = res.findIndex(x => x.matchId === run.matchId && x.play.id === run.playId)
+    const next = i >= 0 ? res[i + 1] : undefined
+    listRunRef.current = null
+    if (next) jumpRef.current(next)
+    else { setListRun(false); playback.pause() }
+  }), [])
 
   const activateClip = useCallback((c: Clip) => {
+    stopListRun()
     const range = latest.current.clipInfo(c).range
     setActiveClipId(c.id)
     setSelected({ matchId: c.matchId, playId: c.playId })
@@ -360,6 +389,7 @@ export function App() {
   // startAt and the reported index count clips, not cards. The scene editor follows the scene of
   // the clip on screen, so number keys tag the clip that is playing.
   const playThrough = useCallback((target: 'video' | 'scene', startAt = 0) => {
+    stopListRun()
     const { reels: rs, infoFor: inf } = latest.current
     const byId = Object.fromEntries(rs.map(s => [s.id, s]))
     const items: SequenceItem[] = [], clipAt: ({ clip: Clip; sceneId: string } | null)[] = []
@@ -410,7 +440,7 @@ export function App() {
   const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out
   // The active clip loops while it's being trimmed; a through-play overrides the loop.
   useEffect(() => {
-    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying ? { key: active.matchId, in: loopIn, out: loopOut } : null)
+    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun ? { key: active.matchId, in: loopIn, out: loopOut } : null)
   }, [active, loopIn, loopOut, seqPlaying])
 
   useEffect(() => setSelectedAnn(null), [activeClipId])
@@ -579,6 +609,20 @@ export function App() {
       if (opts.m8) return smokeM8(res, opts.m8)
       if (opts.video) return smokeVideo(res, opts)
       if (opts.obj) return smokeObjects(res, opts).catch(e => { throw new Error(String((e as Error).stack)) }) // keep where it failed in the log
+      if (opts.listRun) {
+        // プレー前後: a play picked in the list is followed by the next ones on their own.
+        setExtract('keyplay'); await sleep(100)
+        const start = Math.min(opts.play, res.length - 3)
+        jump(res[start])
+        const seen = [res[start].play.id]
+        const t0 = performance.now()
+        while (seen.length < 3 && performance.now() - t0 < 40000) {
+          await sleep(200)
+          const s = latest.current.selected
+          if (s && s.playId !== seen[seen.length - 1]) seen.push(s.playId)
+        }
+        return { listRun: seen, expected: res.slice(start, start + 3).map(x => x.play.id), ms: Math.round(performance.now() - t0) }
+      }
       const r = res[Math.min(opts.play, res.length - 1)]
       jump(r)
       await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
@@ -1302,6 +1346,10 @@ export function App() {
                 )
               }} />
             )}
+            {active && activeInfo?.range && active.matchId === matchId && (
+              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying}
+                onFormat={id => { setAnnTool('select'); setSelectedAnn(id) }} />
+            )}
             {active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
@@ -1386,6 +1434,7 @@ interface SmokeOpts {
   obj?: boolean
   assets?: string[] // with obj: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
+  listRun?: boolean // the list follows on to the next plays (プレー前後)
   videoExportTo?: string
   home?: string
   folders?: string[]

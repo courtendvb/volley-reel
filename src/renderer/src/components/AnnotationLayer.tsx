@@ -14,7 +14,9 @@ const SCOPE_TAG: Record<AnnScope, string> = { clip: '', scene: 'シーン全体'
 // A triangle is drawn like a box and stored as a polygon.
 export type Tool = 'select' | AnnotationKind | 'triangle'
 // The style for the next shape; also what the format panel shows when nothing is selected.
-export type AnnStyle = StylePatch & { color: string; width: number; size: number }
+// textColor: new text is white by default while shapes are red, so text has its own color.
+export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string }
+export const textStyle = (s: AnnStyle): AnnStyle => ({ ...s, color: s.textColor ?? '#FFFFFF' })
 
 interface Props {
   size: { w: number; h: number }
@@ -254,7 +256,8 @@ export function AnnotationLayer(p: Props) {
       return
     }
     if (!value) return
-    const a = applyStyle({ id: uid(), kind: 'text', color: p.style.color, x: t.x, y: t.y, text: value, size: p.style.size }, p.style)
+    const ts = textStyle(p.style)
+    const a = applyStyle({ id: uid(), kind: 'text', color: ts.color, x: t.x, y: t.y, text: value, size: ts.size }, ts)
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
   }
@@ -278,7 +281,7 @@ export function AnnotationLayer(p: Props) {
       {textEdit && (
         <input
           ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト"
-          style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? p.style.color }}
+          style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? textStyle(p.style).color }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}
         />
       )}

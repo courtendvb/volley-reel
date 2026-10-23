@@ -220,9 +220,9 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
       ctx.strokeRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
     }
   }
-  // A thin dark outline keeps light text readable on a bright court (on by default, as before).
+  // A black outline keeps light text readable on a bright court (on by default).
   if (a.outline !== false && a.color.toUpperCase() !== '#0F172A') {
-    ctx.save(); ctx.lineWidth = Math.max(2, px * 0.16); ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(a.text, x, y); ctx.restore()
+    ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'; ctx.strokeText(a.text, x, y); ctx.restore()
   }
   ctx.fillStyle = a.color
   ctx.fillText(a.text, x, y)

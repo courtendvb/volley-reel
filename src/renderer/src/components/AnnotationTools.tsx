@@ -6,7 +6,7 @@ import {
 import { MAX_EDIT_POINTS, setClosed, simplify, toPolygon } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
-import type { AnnStyle, Tool } from './AnnotationLayer'
+import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
 
 interface Props {
   tool: Tool
@@ -54,7 +54,6 @@ export function AnnotationTools(p: Props) {
     width: sel && 'width' in sel ? sel.width : p.style.width,
     size: sel?.kind === 'text' ? sel.size : p.style.size,
     dash: (sel ? sel.dash : p.style.dash) ?? 'solid',
-    opacity: (sel ? sel.opacity : p.style.opacity) ?? 1,
     fill: sel && hasFill(sel) ? (sel as { fill?: string | null }).fill ?? null : p.style.fill ?? null,
     fillOpacity: sel && hasFill(sel) ? (sel as { fillOpacity?: number }).fillOpacity ?? 1 : p.style.fillOpacity ?? 1,
     heads: (sel?.kind === 'arrow' ? sel.heads : p.style.heads) ?? 'end',
@@ -66,25 +65,10 @@ export function AnnotationTools(p: Props) {
   const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
   const textKinds = kind === null || kind === 'text'
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
-  // The headline field: one centered text at the top middle, 48 px at 720p, kept
-  // in step with the field. Typing creates it, clearing the field removes it.
-  const quick = p.annotations.find(a => a.kind === 'text' && a.quick) as Extract<Annotation, { kind: 'text' }> | undefined
-  const setQuick = (text: string) => {
-    if (!text) { if (quick) p.onChange(p.annotations.filter(a => a.id !== quick.id)); return }
-    if (quick) { update({ ...quick, text }); return }
-    const a = applyStyle({ id: crypto.randomUUID(), kind: 'text', color: p.style.color, x: 0.5, y: 0.05, text, size: 48, align: 'center', quick: true }, { ...p.style, size: 48 })
-    p.onChange([...p.annotations, a])
-  }
   const rel = (t: number | undefined, fallback: string) => (t === undefined ? fallback : `${(t - p.clip.in).toFixed(1)}秒`)
 
   return (
     <div className={`ann-tools${p.disabled ? ' disabled' : ''}`}>
-      <div className="ann-row ann-quick">
-        <label className="field-label" htmlFor="ann-quick">見出し</label>
-        <input id="ann-quick" aria-label="見出し" value={quick?.text ?? ''} placeholder="ここに入力すると、動画の中央上部に表示します" disabled={p.disabled}
-          onChange={e => setQuick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur() }} />
-        {quick && <button className="link" onClick={() => p.onSelect(quick.id)} title="書式（色・サイズ・枠）を変える">書式</button>}
-      </div>
       <div className="ann-row">
         <div className="segmented" role="radiogroup" aria-label="注釈ツール">
           {TOOLS.map(([t, label, key, title]) => (
@@ -134,7 +118,8 @@ export function AnnotationTools(p: Props) {
         )}
         {textKinds && (
           <Group title="テキスト">
-            <ColorPick label="文字の色" value={v.color} onChange={color => set({ color })} disabled={p.disabled} />
+            <ColorPick label="文字の色" value={sel ? v.color : textStyle(p.style).color} disabled={p.disabled}
+              onChange={color => (sel ? set({ color }) : p.onStyle({ ...p.style, textColor: color }))} />
             <Num label="サイズ" value={v.size} min={10} max={160} step={2} onChange={size => set({ size })} disabled={p.disabled} />
             <label className="check"><input type="checkbox" checked={v.bold} onChange={e => set({ bold: e.target.checked })} disabled={p.disabled} /> 太字</label>
             <label className="check"><input type="checkbox" checked={v.outline} onChange={e => set({ outline: e.target.checked })} disabled={p.disabled} /> 縁取り</label>
@@ -156,7 +141,6 @@ export function AnnotationTools(p: Props) {
           </Group>
         )}
         <Group title="全体">
-          <Pct label="透明度" value={1 - v.opacity} onChange={t => set({ opacity: 1 - t })} disabled={p.disabled} />
           {sel && (
             <select aria-label="表示範囲" value={scope} disabled={p.disabled} className={`scope-${scope}`}
               title="このクリップだけ／このシーンのすべてのクリップ／この動画のすべてのクリップ"

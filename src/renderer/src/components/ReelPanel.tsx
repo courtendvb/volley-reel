@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, markerCardOn, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker, shiftClip, shiftGroup,
+  MARKERS, MARKER_COLORS, chronological, markerCardOn, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
@@ -43,6 +43,7 @@ const DT_GROUP = 'application/x-vr-group'
 export function ReelPanel(p: Props) {
   const { reel } = p
   const [dragOver, setDragOver] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Marker | null>(null) // the marker whose title is open (gear)
   if (!reel) {
     return (
       <aside className="reel-panel">
@@ -82,6 +83,7 @@ export function ReelPanel(p: Props) {
         onDrop={g === 'none' ? undefined : e => onDropClip(e, g, i)}
         onClick={() => p.onActivate(c)}
       >
+        <span className="grip" aria-hidden title="ドラッグで並べ替え・マーカーのグループへ移動">⠿</span>
         {p.missing.has(c.id) || !r ? (
           <span className="clip-main missing">プレーが見つかりません（DVW が変更された可能性）</span>
         ) : (
@@ -94,8 +96,6 @@ export function ReelPanel(p: Props) {
         {p.overlaps.has(c.id) && <span className="overlap" title="同じ試合の別のクリップと範囲が重なっています">⚠</span>}
         <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? '長さを個別に調整済み' : '初期値の長さ'}>{dur.toFixed(1)}s</span>
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
-          {g !== 'none' && <button title="上へ" onClick={() => change(shiftClip(reel, c.id, -1))}>↑</button>}
-          {g !== 'none' && <button title="下へ" onClick={() => change(shiftClip(reel, c.id, 1))}>↓</button>}
           <button title="シーンから外す" onClick={() => change(removeClip(reel, c.id))}>×</button>
         </span>
       </div>
@@ -133,17 +133,17 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
       <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list">
-        {reel.groupOrder.map((m, gi) => (
+        {reel.groupOrder.map(m => (
           <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver === `g${m}` ? ' drop-into' : ''}`}
             onDragOver={allow(`g${m}`)} onDragLeave={() => setDragOver(null)} onDrop={e => onDropGroup(e, m)}>
             <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}>
+              <span className="grip" aria-hidden title="ドラッグでグループの順番を変える">⠿</span>
               {/* The number itself switches the group on (its color) or off (grey: not played or exported). */}
               <button className="swatch swatch-toggle" style={reel.markerOff?.[m] ? undefined : { background: MARKER_COLORS[m] }}
                 aria-pressed={!reel.markerOff?.[m]} aria-label={`マーカー ${m} を使う`}
                 title={reel.markerOff?.[m] ? 'オフ: 再生・書き出しに使わない（クリックでオン）' : 'オン: 再生・書き出しに使う（クリックでオフ）'}
                 onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>{m}</button>
-              <input value={reel.markerNames[m]} placeholder={`マーカー ${m} の名前`} aria-label={`マーカー ${m} の名前`}
-                onChange={e => change(renameMarker(reel, m, e.target.value))} />
+              <span className={`group-title${reel.markerNames[m] ? '' : ' muted'}`}>{reel.markerNames[m] || `マーカー ${m}`}</span>
               <span className="muted">{reel.groups[m].length}</span>
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
@@ -153,9 +153,13 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                     onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
                 )
               })()}
-              <button title="グループを上へ" disabled={gi === 0} onClick={() => change(shiftGroup(reel, m, -1))}>↑</button>
-              <button title="グループを下へ" disabled={gi === reel.groupOrder.length - 1} onClick={() => change(shiftGroup(reel, m, 1))}>↓</button>
+              <button className="gear" aria-label={`マーカー ${m} のタイトル`} aria-expanded={editing === m} title="タイトル（カードに出る名前）を編集"
+                onClick={() => setEditing(e => (e === m ? null : m))}>⚙</button>
             </header>
+            {editing === m && (
+              <TitleEdit label={`マーカー ${m} の名前`} value={reel.markerNames[m]} placeholder={`マーカー ${m} の名前（カードのタイトル）`}
+                onChange={v => change(renameMarker(reel, m, v))} onClose={() => setEditing(null)} />
+            )}
             {reel.groups[m].map((id, i) => clipRow(reel.clips[id], m, i))}
           </section>
         ))}
@@ -169,7 +173,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           {none.map((c, i) => clipRow(c, 'none', i))}
         </section>
       </div>
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（同じ数字か 0 で解除）。ドラッグでも並べ替えられます。</p>
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（同じ数字か 0 で解除）。左の ⠿ をドラッグして並べ替え、⚙ でタイトルを編集。</p>
     </aside>
   )
 }
@@ -195,6 +199,19 @@ function Defaults({ d, legacy, onChange }: { d: RangeDefaults; legacy: boolean; 
           {d.mode === 'rally' && <> サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒</>}
         </span>
       )}
+    </div>
+  )
+}
+
+// The title editor a gear opens, on its own line under the row. Enter or Escape closes it.
+export function TitleEdit({ label, value, placeholder, onChange, onClose }: {
+  label: string; value: string; placeholder: string; onChange: (v: string) => void; onClose: () => void
+}) {
+  return (
+    <div className="title-edit" onClick={e => e.stopPropagation()}>
+      <span className="field-label">タイトル</span>
+      <input autoFocus aria-label={label} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} onBlur={onClose}
+        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') onClose() }} />
     </div>
   )
 }

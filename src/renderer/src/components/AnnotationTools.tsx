@@ -61,10 +61,25 @@ export function AnnotationTools(p: Props) {
   const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
   const textKinds = kind === null || kind === 'text'
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
+  // The headline field: one centered text at the top middle (under a top-center scoreboard), kept
+  // in step with the field. Typing creates it, clearing the field removes it.
+  const quick = p.annotations.find(a => a.kind === 'text' && a.quick) as Extract<Annotation, { kind: 'text' }> | undefined
+  const setQuick = (text: string) => {
+    if (!text) { if (quick) p.onChange(p.annotations.filter(a => a.id !== quick.id)); return }
+    if (quick) { update({ ...quick, text }); return }
+    const a = applyStyle({ id: crypto.randomUUID(), kind: 'text', color: p.style.color, x: 0.5, y: 0.13, text, size: p.style.size, align: 'center', quick: true }, p.style)
+    p.onChange([...p.annotations, a])
+  }
   const rel = (t: number | undefined, fallback: string) => (t === undefined ? fallback : `${(t - p.clip.in).toFixed(1)}秒`)
 
   return (
     <div className={`ann-tools${p.disabled ? ' disabled' : ''}`}>
+      <div className="ann-row ann-quick">
+        <label className="field-label" htmlFor="ann-quick">見出し</label>
+        <input id="ann-quick" aria-label="見出し" value={quick?.text ?? ''} placeholder="ここに入力すると、動画の中央上部に表示します" disabled={p.disabled}
+          onChange={e => setQuick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur() }} />
+        {quick && <button className="link" onClick={() => p.onSelect(quick.id)} title="書式（色・サイズ・枠）を変える">書式</button>}
+      </div>
       <div className="ann-row">
         <div className="segmented" role="radiogroup" aria-label="注釈ツール">
           {TOOLS.map(([t, label, key, title]) => (

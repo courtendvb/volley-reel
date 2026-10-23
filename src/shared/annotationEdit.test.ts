@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
+import { applyStyle, bounds, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
 import { dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
@@ -91,6 +91,12 @@ describe('formats and polygons', () => {
     expect(applyStyle({ id: 'a', kind: 'arrow', color: '#FFF', x1: 0, y1: 0, x2: 1, y2: 1, width: 3 }, { heads: 'both' })).toMatchObject({ heads: 'both' })
     const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.1, y: 0.1, text: 'x', size: 36 }
     expect(applyStyle(text, { bold: false, box: { fill: '#000', fillOpacity: 0.5, stroke: null, strokeWidth: 2, padding: 8 } })).toMatchObject({ bold: false, box: { fillOpacity: 0.5 } })
+  })
+
+  it('centers a text on its x when asked', () => {
+    const ctx = { font: '', measureText: () => ({ width: 128 }) } as unknown as CanvasRenderingContext2D
+    const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.5, y: 0.1, text: 'x', size: 36, align: 'center' }
+    expect(bounds(ctx, text, 1280, 720).x).toBeCloseTo(0.45)
   })
 
   it('moves and rounds point shapes', () => {

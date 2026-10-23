@@ -37,7 +37,8 @@ export interface TextBox {
 }
 
 export type Annotation = Base & (
-  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null }
+  // align center: x is the middle of the text. quick: the clip's headline from the text field in the tools.
+  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean }
   | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
@@ -119,7 +120,8 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
       setTextFont(ctx, a.size * s, a.bold !== false)
       const w = ctx.measureText(a.text || ' ').width / W
       const pad = a.box ? a.box.padding / REF_HEIGHT : 0
-      return { x: a.x - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2) / REF_HEIGHT + 2 * pad }
+      const left = a.align === 'center' ? a.x - w / 2 : a.x
+      return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2) / REF_HEIGHT + 2 * pad }
     }
     case 'arrow': return box([[a.x1, a.y1], [a.x2, a.y2]])
     case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
@@ -206,7 +208,7 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
   const px = a.size * s
   setTextFont(ctx, px, a.bold !== false)
   ctx.textBaseline = 'top'
-  const x = a.x * W, y = a.y * H
+  const x = a.align === 'center' ? a.x * W - ctx.measureText(a.text).width / 2 : a.x * W, y = a.y * H
   if (a.box) {
     const pad = a.box.padding * s, w = ctx.measureText(a.text).width, h = px * 1.2
     if (a.box.fill) {

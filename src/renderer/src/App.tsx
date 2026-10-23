@@ -677,6 +677,10 @@ export function App() {
         await sleep(300)
         log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
       }
+      // The headline field: typing makes one centered text at the top middle.
+      await setValue('見出し', 'SIDE OUT'); await setValue('見出し', 'SIDE OUT!')
+      const q = anns().filter(a => a.kind === 'text' && a.quick)
+      log.headline = q.map(a => a.kind === 'text' ? { text: a.text, x: a.x, y: a.y, align: a.align } : null)
       await key('v'); setSelectedAnn(null); await sleep(300)
       // The overlay quick settings (gear in the auto-display row) open over the video.
       document.querySelector<HTMLButtonElement>('.ov-gear')?.click(); await sleep(150)

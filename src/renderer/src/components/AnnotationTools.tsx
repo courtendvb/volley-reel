@@ -61,13 +61,13 @@ export function AnnotationTools(p: Props) {
   const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
   const textKinds = kind === null || kind === 'text'
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
-  // The headline field: one centered text at the top middle (under a top-center scoreboard), kept
+  // The headline field: one centered text at the top middle, 48 px at 720p, kept
   // in step with the field. Typing creates it, clearing the field removes it.
   const quick = p.annotations.find(a => a.kind === 'text' && a.quick) as Extract<Annotation, { kind: 'text' }> | undefined
   const setQuick = (text: string) => {
     if (!text) { if (quick) p.onChange(p.annotations.filter(a => a.id !== quick.id)); return }
     if (quick) { update({ ...quick, text }); return }
-    const a = applyStyle({ id: crypto.randomUUID(), kind: 'text', color: p.style.color, x: 0.5, y: 0.13, text, size: p.style.size, align: 'center', quick: true }, p.style)
+    const a = applyStyle({ id: crypto.randomUUID(), kind: 'text', color: p.style.color, x: 0.5, y: 0.05, text, size: 48, align: 'center', quick: true }, { ...p.style, size: 48 })
     p.onChange([...p.annotations, a])
   }
   const rel = (t: number | undefined, fallback: string) => (t === undefined ? fallback : `${(t - p.clip.in).toFixed(1)}秒`)

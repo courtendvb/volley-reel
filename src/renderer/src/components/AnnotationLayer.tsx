@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import {
-  applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt,
+  applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type StylePatch,
 } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
@@ -26,6 +26,8 @@ interface Props {
   tool: Tool
   style: AnnStyle
   selectedId: string | null
+  extraIds?: string[] // more selected objects (Shift+click), moved and deleted with the selected one
+  onToggleExtra?: (id: string) => void
   scopeOf?: (id: string) => AnnScope | null // where each object lives (frame color and tag)
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
   cropping: boolean // the selected picture is being cropped: handles move the frame, dragging moves the picture
@@ -37,7 +39,7 @@ interface Props {
 type PathDraft = { kind: 'polyline' | 'polygon'; points: [number, number][]; hover: [number, number] | null }
 
 type Drag =
-  | { mode: 'move'; id: string; from: [number, number]; orig: Annotation }
+  | { mode: 'move'; id: string; from: [number, number]; orig: Annotation; others: Annotation[] }
   | { mode: 'handle'; id: string; handle: string }
   | { mode: 'draw'; draft: Annotation; from: [number, number] }
   | { mode: 'crop'; id: string; handle: BoxHandle; full: Box }
@@ -107,6 +109,18 @@ export function AnnotationLayer(p: Props) {
       drawAnnotation(ctx, a, p.size.w, p.size.h, assetImage)
     }
     ctx.globalAlpha = 1
+    // The other selected objects and the selected one's group: a thin frame each.
+    if (selected) {
+      for (const id of withGroups(p.annotations, [selected.id, ...(p.extraIds ?? [])])) {
+        if (id === selected.id) continue
+        const o = p.annotations.find(a => a.id === id)
+        if (!o) continue
+        const b = bounds(ctx, o, p.size.w, p.size.h)
+        ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.strokeStyle = '#4B61D1'
+        ctx.strokeRect(b.x * p.size.w - 4, b.y * p.size.h - 4, b.w * p.size.w + 8, b.h * p.size.h + 8)
+        ctx.setLineDash([])
+      }
+    }
     if (selected) {
       const b = bounds(ctx, selected, p.size.w, p.size.h)
       const scope = p.scopeOf?.(selected.id) ?? 'clip'
@@ -121,7 +135,7 @@ export function AnnotationLayer(p: Props) {
       }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf])
+  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {
@@ -210,8 +224,14 @@ export function AnnotationLayer(p: Props) {
       const h = handleAt(pt)
       if (h && selected) { playback.pause(); setDrag({ mode: 'handle', id: selected.id, handle: h.id }); return }
       const hit = hitTest(ctx2d(), p.annotations, pt[0], pt[1], p.size.w, p.size.h)
-      p.onSelect(hit?.id ?? null)
-      if (hit) setDrag({ mode: 'move', id: hit.id, from: pt, orig: hit })
+      if (e.shiftKey && hit && selected && hit.id !== selected.id && p.onToggleExtra) { p.onToggleExtra(hit.id); return }
+      const keep = !!hit && (hit.id === selected?.id || (p.extraIds ?? []).includes(hit.id))
+      if (!keep) p.onSelect(hit?.id ?? null) // a click on the selection keeps it (and drags all of it)
+      if (hit) {
+        const extras = keep ? [...(selected ? [selected.id] : []), ...(p.extraIds ?? [])] : []
+        const ids = withGroups(p.annotations, [hit.id, ...extras]).filter(id => id !== hit.id)
+        setDrag({ mode: 'move', id: hit.id, from: pt, orig: hit, others: p.annotations.filter(a => ids.includes(a.id)) })
+      }
       return
     }
     playback.pause()
@@ -229,7 +249,11 @@ export function AnnotationLayer(p: Props) {
     const drag = dragRef.current
     if (!drag) return
     if (drag.mode === 'move') {
-      replace(translate(drag.orig, x - drag.from[0], y - drag.from[1]))
+      const dx = x - drag.from[0], dy = y - drag.from[1]
+      const moved = new Map([drag.orig, ...drag.others].map(a => [a.id, translate(a, dx, dy)]))
+      const next = annsRef.current.map(a => moved.get(a.id) ?? a)
+      annsRef.current = next
+      p.onChange(next)
       return
     }
     if (drag.mode === 'crop') {

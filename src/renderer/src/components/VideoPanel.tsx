@@ -17,6 +17,10 @@ interface Props {
   onRenameScene: (id: string, name: string) => void
   onEditCard: (sceneId: string) => void // the gear: edit how scene title cards look, in the video window
   onEditVideoCard: () => void // the gear by the video's name: its opening card
+  videoCardOn: boolean
+  onVideoCard: (on: boolean) => void
+  sceneCardOn: (s: Reel) => boolean // the scene's card: its own choice, else the video's
+  onSceneCard: (s: Reel, on: boolean) => void
   onNewScene: () => void
   onOpenOverlay: () => void
   playing: boolean
@@ -59,6 +63,9 @@ export function VideoPanel(p: Props) {
       </div>
       <div className="reel-name-row">
         <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
+        <button className={`card-toggle${p.videoCardOn ? ' on' : ''}`} aria-pressed={p.videoCardOn}
+          title={p.videoCardOn ? '動画の頭に動画名のカードを出す（クリックで出さない）' : '動画の頭に動画名のカードを出さない（クリックで出す）'}
+          onClick={() => p.onVideoCard(!p.videoCardOn)}>カード</button>
         <button className="gear" aria-label="動画のタイトルカード" title="動画の頭のタイトルカード（動画名）を動画の画面で編集" onClick={p.onEditVideoCard}>⚙</button>
       </div>
 
@@ -91,6 +98,11 @@ export function VideoPanel(p: Props) {
               {s && usedIn(id) > 1 && <span className="shared" title={`${usedIn(id)} 本の動画で使っています。直すとすべてに反映されます`}>共有 {usedIn(id)}</span>}
               <span className="muted">{st.clips} 本・{fmtSec(st.sec)}</span>
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
+                {s && (
+                  <button className={`card-toggle${p.sceneCardOn(s) ? ' on' : ''}`} aria-pressed={p.sceneCardOn(s)}
+                    title={p.sceneCardOn(s) ? 'このシーンの前にタイトルカードを出す（クリックで出さない）' : 'このシーンの前にタイトルカードを出さない（クリックで出す）'}
+                    onClick={() => p.onSceneCard(s, !p.sceneCardOn(s))}>カード</button>
+                )}
                 {s && <button className="gear" aria-label="シーンのタイトルカードの見た目" title="シーンのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
                   onClick={() => p.onEditCard(id)}>⚙</button>}
                 <button title="動画から外す（シーンは残ります）" onClick={() => p.onChange(removeSceneAt(v, i))}>×</button>

@@ -35,6 +35,8 @@ interface Props {
   orderSec: number
   overlaps: Map<string, string[]>
   usedIn: number // videos that include this scene
+  videoSceneIds: string[] | null // the open video's scenes (null: no video): the scene list is split by them
+  onAddToVideo: (sceneId: string) => void
   markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
   onEditCard: (m: Marker) => void // the gear: edit how marker title cards look, in the video window
   onExportMarker: (m: Marker) => void // this marker group alone as an MP4
@@ -139,12 +141,24 @@ export function ReelPanel(p: Props) {
       <div className="reel-head">
         <span className="panel-kicker">シーン</span>
         <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label="シーン">
-          {p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          {p.videoSceneIds ? (
+            <>
+              <optgroup label="この動画のシーン">
+                {p.reels.filter(r => p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
+              <optgroup label="ほかのシーン（この動画には入っていない）">
+                {p.reels.filter(r => !p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
+            </>
+          ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         <button onClick={p.onNewReel} title="新しいシーン（今の動画にも入れる）">＋</button>
         <button onClick={() => { if (confirm(`シーン「${reel.name}」を削除しますか？${p.usedIn ? `
 ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="シーンを削除">削除</button>
       </div>
+      {p.videoSceneIds && !p.videoSceneIds.includes(reel.id) && (
+        <p className="hint pad-x">このシーンは今の動画に入っていません <button className="link" onClick={() => p.onAddToVideo(reel.id)}>動画に追加</button></p>
+      )}
       <label className="reel-name-row"><span className="field-label">名前</span>
         <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label="シーンの名前"
           title="シーンの名前。シーンのタイトルカードに出ます" /></label>

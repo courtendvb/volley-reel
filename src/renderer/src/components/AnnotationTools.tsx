@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import {
-  COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints,
+  COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints, withGroups,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
+import { forgetColor, rememberColor, usePalette } from '../palette'
+import { PaletteRow } from './PaletteRow'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
@@ -19,6 +21,7 @@ interface Props {
   onScope: (id: string, to: AnnScope) => void
   canVideo: boolean // a video is open, so objects can be put on all of it
   cardMode?: boolean // objects on a title card: no clip timing, no display scope
+  extraIds?: string[] // objects picked with Shift+click besides the selected one
   editPoints: boolean
   onEditPoints: (on: boolean) => void
   cropping: boolean
@@ -35,7 +38,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['circle', '○', 'C', '円'], ['rect', '□', 'R', '四角'], ['triangle', '△', 'G', '三角形'], ['polyline', '⌇', 'L', '折れ線（クリックで頂点）'],
   ['polygon', '⬠', 'P', '多角形（クリックで頂点）'], ['freehand', '✎', 'F', 'フリーハンド'],
 ]
-const KIND_LABEL: Record<Annotation['kind'], string> = {
+export const KIND_LABEL: Record<Annotation['kind'], string> = {
   text: 'テキスト', arrow: '矢印', circle: '円', rect: '四角', freehand: 'フリーハンド', polyline: '折れ線', polygon: '多角形', image: '画像',
 }
 
@@ -87,6 +90,21 @@ export function AnnotationTools(p: Props) {
               if (!p.editPoints && (sel.kind === 'rect' || sel.kind === 'circle')) update(toPolygon(sel))
               p.onEditPoints(!p.editPoints)
             }}>頂点の編集</button>
+        )}
+        {sel && (p.extraIds?.length ?? 0) > 0 && (
+          <button title="選んだ図形をまとめて、一緒に選択・移動できるようにする（Shift+クリックで選び足す）" disabled={p.disabled}
+            onClick={() => {
+              const ids = withGroups(p.annotations, [sel.id, ...p.extraIds!]), g = crypto.randomUUID()
+              p.onChange(p.annotations.map(a => (ids.includes(a.id) ? { ...a, groupId: g } : a)))
+            }}>グループ化</button>
+        )}
+        {sel?.groupId && !(p.extraIds?.length) && (
+          <button title="グループを解いて、図形を一つずつ扱う" disabled={p.disabled}
+            onClick={() => p.onChange(p.annotations.map(a => {
+              if (a.groupId !== sel.groupId) return a
+              const { groupId: _g, ...rest } = a
+              return rest as Annotation
+            }))}>グループ解除</button>
         )}
         {sel?.kind === 'image' && (
           <button className={p.cropping ? 'on' : ''} aria-pressed={p.cropping} disabled={p.disabled}
@@ -176,6 +194,10 @@ export function AnnotationTools(p: Props) {
         </Group>
       </div>
 
+      <PaletteRow disabled={p.disabled}
+        selection={sel ? (() => { const ids = withGroups(p.annotations, [sel.id, ...(p.extraIds ?? [])]); return p.annotations.filter(x => ids.includes(x.id)) })() : []}
+        onUse={anns => { if (!anns.length) return; p.onChange([...p.annotations, ...anns]); p.onSelect(anns[0].id) }} />
+
       <div className="ann-row">
         {sel && p.cardMode ? (
           <>
@@ -215,14 +237,31 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   return <div className="fmt-group"><span className="fmt-title">{title}</span><div className="fmt-body">{children}</div></div>
 }
 
+let colorTimer = 0
+
+// The base colors, then my colors (colors picked freely are remembered there, in the library, so
+// every project has them; right-click one to drop it), then the free picker.
 function ColorPick({ label, value, onChange, disabled }: { label: string; value: string; onChange: (c: string) => void; disabled: boolean }) {
+  const mine = usePalette().colors.filter(c => !COLORS.includes(c))
+  const swatch = (c: string, own: boolean) => (
+    <button key={c} role="radio" aria-checked={value.toUpperCase() === c} aria-label={`${label} ${c}`} className={`ann-swatch${value.toUpperCase() === c ? ' on' : ''}${own ? ' mine' : ''}`}
+      style={{ background: c }} onClick={() => onChange(c)} disabled={disabled} title={own ? `${c}（マイカラー。右クリックで外す）` : c}
+      onContextMenu={own ? e => { e.preventDefault(); void forgetColor(c) } : undefined} />
+  )
   return (
     <span className="ann-swatches" role="radiogroup" aria-label={label}>
-      {COLORS.map(c => (
-        <button key={c} role="radio" aria-checked={value.toUpperCase() === c} aria-label={`${label} ${c}`} className={`ann-swatch${value.toUpperCase() === c ? ' on' : ''}`}
-          style={{ background: c }} onClick={() => onChange(c)} disabled={disabled} />
-      ))}
-      <input type="color" aria-label={`${label}（自由に選ぶ）`} value={value.length === 7 ? value : '#FFFFFF'} onChange={e => onChange(e.target.value.toUpperCase())} disabled={disabled} />
+      {COLORS.map(c => swatch(c, false))}
+      {mine.length > 0 && <span className="swatch-sep" aria-hidden />}
+      {mine.map(c => swatch(c, true))}
+      <input type="color" aria-label={`${label}（自由に選ぶ）`} value={value.length === 7 ? value : '#FFFFFF'} disabled={disabled}
+        title="自由に選んだ色はマイカラーに残ります"
+        onChange={e => {
+          const c = e.target.value.toUpperCase()
+          onChange(c)
+          // Remembered once the picker settles (it reports every step while dragging).
+          clearTimeout(colorTimer)
+          if (!COLORS.includes(c)) colorTimer = window.setTimeout(() => void rememberColor(c), 800)
+        }} />
     </span>
   )
 }

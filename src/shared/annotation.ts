@@ -21,6 +21,7 @@ interface Base {
   showTo?: number
   dash?: Dash // default solid
   opacity?: number // whole object, 0..1; default 1
+  groupId?: string // objects with the same group id are selected and moved together
 }
 
 export interface Fillable {
@@ -63,6 +64,12 @@ export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, st
 export interface Rect { x: number; y: number; w: number; h: number } // normalized
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
+// The objects that move together with these: the ids themselves and every member of their groups.
+export function withGroups(list: Annotation[], ids: string[]): string[] {
+  const groups = new Set(list.filter(a => ids.includes(a.id) && a.groupId).map(a => a.groupId))
+  return list.filter(a => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map(a => a.id)
+}
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {
   return t >= (a.showFrom ?? clip.in) - 1e-3 && t <= (a.showTo ?? clip.out) + 1e-3

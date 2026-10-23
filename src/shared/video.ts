@@ -86,7 +86,7 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
     if (!s) continue
     const order = orderOf(s)
     if (!order.length) continue
-    if (overlay.titleCard.sceneCards) {
+    if (s.sceneCard ?? overlay.titleCard.sceneCards) {
       const ids = order.map(c => c.id)
       out.push({ kind: 'card', card: { marker: null, name: s.name, ...cardMatch(s, ids, matches, ourCodes), annotations: s.cardAnnotations ?? [] }, durationSec: overlay.titleCard.durationSec })
     }

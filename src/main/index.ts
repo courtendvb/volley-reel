@@ -5,6 +5,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
+import type { Annotation } from '../shared/annotation'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
 import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
@@ -187,6 +188,13 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
 
+  const lib = () => { if (!library) throw new Error('先に倉庫を選んでください'); return library }
+  const assetsDir = () => { if (!project) throw new Error('プロジェクトが開かれていません'); return join(project.dir, 'assets') }
+  ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
+  ipcMain.handle('palette:setColors', (_e, colors: string[]) => lib().setPaletteColors(colors))
+  ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[]) => lib().savePaletteItem(name, anns, assetsDir()))
+  ipcMain.handle('palette:remove', (_e, id: string) => lib().removePaletteItem(id))
+  ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {
     if (!library) throw new Error('先に倉庫を選んでください')

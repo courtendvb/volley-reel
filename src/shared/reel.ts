@@ -34,6 +34,7 @@ export interface Reel {
   scope: 'marked' | 'all'
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
   markerCards?: Partial<Record<Marker, boolean>> // title card per marker; missing = the video's setting
+  sceneCard?: boolean // this scene's title card; missing = the video's setting
   markerOff?: Partial<Record<Marker, boolean>> // a marker group switched off: kept, but not played or exported
   annotations?: Annotation[] // objects shown on every clip of the scene (表示範囲: シーン全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card

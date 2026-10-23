@@ -7,7 +7,8 @@ import { copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
-import type { ImportProgress, LibraryInfo, Match, ParsedDVW, ScanResult } from '../shared/types'
+import type { Annotation } from '../shared/annotation'
+import type { ImportProgress, LibraryInfo, Match, Palette, ParsedDVW, ScanResult } from '../shared/types'
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 
@@ -23,6 +24,56 @@ export class Library {
   notices: string[] = []
 
   private constructor(readonly dir: string) {}
+
+  // The palette: palette.json (my colors, saved objects) and palette-assets/ (their pictures).
+  async palette(): Promise<Palette> {
+    const f = join(this.dir, 'palette.json')
+    if (!existsSync(f)) return { colors: [], items: [] }
+    const { data } = await readJSON<Partial<Palette>>(f)
+    return { colors: Array.isArray(data.colors) ? data.colors : [], items: Array.isArray(data.items) ? data.items : [] }
+  }
+
+  private async savePalette(p: Palette): Promise<Palette> {
+    await writeJSON(join(this.dir, 'palette.json'), p)
+    return p
+  }
+
+  async setPaletteColors(colors: string[]): Promise<Palette> {
+    const clean = [...new Set(colors.filter(c => /^#[0-9A-F]{6}$/i.test(c)).map(c => c.toUpperCase()))].slice(0, 16)
+    return this.savePalette({ ...(await this.palette()), colors: clean })
+  }
+
+  // Saves objects; pictures are copied from the project's assets so other projects can use them.
+  async savePaletteItem(name: string, annotations: Annotation[], projectAssets: string): Promise<Palette> {
+    const dir = join(this.dir, 'palette-assets')
+    await mkdir(dir, { recursive: true })
+    for (const a of annotations) {
+      if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
+      const from = join(projectAssets, a.assetId), to = join(dir, a.assetId)
+      if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
+    }
+    const p = await this.palette()
+    const item = { id: randomUUID(), name: name.trim() || 'オブジェクト', createdAt: new Date().toISOString(), annotations }
+    return this.savePalette({ ...p, items: [item, ...p.items] })
+  }
+
+  async removePaletteItem(id: string): Promise<Palette> {
+    const p = await this.palette()
+    return this.savePalette({ ...p, items: p.items.filter(i => i.id !== id) })
+  }
+
+  // The item's objects for a project: their pictures copied into its assets/ when missing.
+  async usePaletteItem(id: string, projectAssets: string): Promise<Annotation[]> {
+    const item = (await this.palette()).items.find(i => i.id === id)
+    if (!item) throw new Error('パレットに見つかりません')
+    await mkdir(projectAssets, { recursive: true })
+    for (const a of item.annotations) {
+      if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
+      const from = join(this.dir, 'palette-assets', a.assetId), to = join(projectAssets, a.assetId)
+      if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
+    }
+    return item.annotations
+  }
 
   // Team logos for title cards: logos/<CODE>.<ext>, one per three-letter code, shared by every project.
   async logos(): Promise<Record<string, string>> {

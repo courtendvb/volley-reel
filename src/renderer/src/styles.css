@@ -371,5 +371,27 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .inline-title { flex: 1; min-width: 0; padding: 1px 4px; font: inherit; }
 .card-editor { position: absolute; inset: 0; }
 .card-edit-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #FEFCE8; border: 1px solid #FACC15; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
-.trim-object { position: absolute; bottom: 2px; height: 5px; border-radius: 3px; background: #F59E0B; box-shadow: 0 0 0 1px rgba(255,255,255,0.8); pointer-events: none; }
 .fade-layer { position: absolute; inset: 0; background: #000; pointer-events: none; }
+.swatch-sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; }
+.ann-swatch.mine { border-radius: 50%; }
+.trim-object { position: absolute; bottom: 2px; height: 6px; border-radius: 3px; background: #F59E0B; box-shadow: 0 0 0 1px rgba(255,255,255,0.85); }
+.trim-object.whole { background: #FCD34D; }
+.trim-object.main { bottom: 1px; height: 8px; }
+.obj-grip { position: absolute; top: -4px; width: 8px; height: calc(100% + 8px); background: #B45309; border-radius: 2px; cursor: ew-resize; }
+.obj-grip.from { left: -4px; }
+.obj-grip.to { right: -4px; }
+.trim-lanes-head { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.trim-lanes { display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
+.trim-lane-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 6px; font-size: 11.5px; cursor: pointer; border-radius: 4px; }
+.trim-lane-row.on { background: #FEF3C7; }
+.trim-lane-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); }
+.trim-lane { position: relative; height: 14px; }
+.trim-lane-clip { position: absolute; top: 5px; height: 4px; background: #E2E8F0; border-radius: 2px; }
+.trim-lane .trim-object { bottom: 3px; }
+.palette-row { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); padding-top: 6px; }
+.palette-name { width: 160px; padding: 1px 6px; font: inherit; }
+.palette-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.palette-item { display: inline-flex; align-items: center; gap: 2px; }
+.palette-use { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 2px; font-size: 12px; }
+.palette-thumb { width: 56px; height: 32px; border-radius: 4px; background: #334155; }
+.palette-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

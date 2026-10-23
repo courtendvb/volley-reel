@@ -1,3 +1,4 @@
+import type { Annotation } from './annotation'
 // Types shared by main, preload and renderer.
 import type { OverlayTheme } from './overlay'
 import type { Reel } from './reel'
@@ -166,6 +167,13 @@ export interface Api {
   readAsset(id: string): Promise<Uint8Array>
   smokePickAsset?: (path: string) => Promise<PickedAsset | null>
   // Team logos (library, by team code) for title cards. Each returns the codes that have one -> file.
+  // The palette (library, every project): my colors and saved objects. Pictures in saved objects
+  // are copied into the library, and into the project again when the object is used.
+  getPalette(): Promise<Palette>
+  setPaletteColors(colors: string[]): Promise<Palette>
+  savePaletteItem(name: string, annotations: Annotation[]): Promise<Palette>
+  removePaletteItem(id: string): Promise<Palette>
+  usePaletteItem(id: string): Promise<Annotation[]> // its objects, with their pictures now in the project
   listLogos(): Promise<Record<string, string>>
   pickLogo(code: string): Promise<Record<string, string>>
   removeLogo(code: string): Promise<Record<string, string>>
@@ -180,6 +188,9 @@ export interface Api {
   smokeCreateProject?: (dir: string, init: ProjectInit) => Promise<ProjectInfo>
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
+
+export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[] }
+export interface Palette { colors: string[]; items: PaletteItem[] }
 
 export type PickedAsset = { kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array; name: string }
 

@@ -4,8 +4,8 @@ import { assetImage, subscribeAssets } from '../assets'
 import { removePaletteItem, savePaletteItem, usePalette, usePaletteItem } from '../palette'
 
 // Saved objects to reuse (in the library, so every project has them): save the selection (with its
-// group) under a name, put a saved one on the clip or card, or drop it.
-export function PaletteRow({ selection, onUse, disabled }: {
+// group) under a name, put a saved one on the clip or card, or drop it. Folds away under its header.
+export function PalettePanel({ selection, onUse, disabled }: {
   selection: Annotation[] // what "save" stores (the selected objects and their groups)
   onUse: (anns: Annotation[]) => void
   disabled: boolean
@@ -13,6 +13,8 @@ export function PaletteRow({ selection, onUse, disabled }: {
   const palette = usePalette()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('vr.paletteOpen') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('vr.paletteOpen', open ? '1' : '0') } catch { /* not kept */ } }, [open])
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
   const save = () => run(async () => {
     // Show / hide times belong to one clip, so a saved object shows for the whole of wherever it goes.
@@ -21,10 +23,15 @@ export function PaletteRow({ selection, onUse, disabled }: {
     setName('')
   })
   return (
-    <div className="palette-row">
+    <section className={`palette-panel${open ? ' open' : ''}`}>
+      <button className="accordion-head" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <span className="accordion-arrow">{open ? '▼' : '▶'}</span> パレット
+        <span className="muted small">{palette.items.length ? `${palette.items.length} 個` : ''}</span>
+      </button>
+      {open && (
+      <div className="palette-body">
       <div className="ann-row">
-        <span className="fmt-title">パレット</span>
-        {selection.length > 0 ? (
+        {disabled ? <span className="muted small">クリップかタイトルカードを開くと、入れたり保存したりできます</span> : selection.length > 0 ? (
           <>
             <input className="palette-name" value={name} placeholder={defaultName(selection)} aria-label="パレットに保存する名前" disabled={disabled || busy}
               onChange={e => setName(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') void save() }} />
@@ -45,7 +52,10 @@ export function PaletteRow({ selection, onUse, disabled }: {
           ))}
         </div>
       )}
-    </div>
+      {!palette.items.length && <p className="muted small">まだ何も保存されていません</p>}
+      </div>
+      )}
+    </section>
   )
 }
 

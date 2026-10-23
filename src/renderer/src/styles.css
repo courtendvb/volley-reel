@@ -396,3 +396,9 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .palette-thumb { width: 56px; height: 32px; border-radius: 4px; background: #334155; }
 .palette-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-width: 200px; font-family: "Segoe UI", "Yu Gothic UI", sans-serif; }
+.palette-panel { flex: none; border-top: 2px solid var(--border); background: var(--surface); }
+.palette-panel.open { max-height: 30%; display: flex; flex-direction: column; min-height: 0; }
+.accordion-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 0; background: #F8FAFC; font-weight: 600; text-align: left; }
+.accordion-head:hover { background: #F1F5F9; }
+.accordion-arrow { font-size: 10px; color: var(--sub); width: 10px; }
+.palette-body { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; overflow-y: auto; min-height: 0; font-size: 12.5px; }

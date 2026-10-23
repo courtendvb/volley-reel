@@ -23,6 +23,7 @@ import { buildExportJob } from './exportRender'
 import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
 import { CardEditBar, CardEditor } from './components/CardEditor'
 import { FadeLayer } from './components/FadeLayer'
+import { PalettePanel } from './components/PalettePanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { Home } from './components/Home'
@@ -531,6 +532,20 @@ export function App() {
     const sc = reels.find(x => x.id === cardEdit.sceneId)
     if (sc) updateReel({ ...sc, markerCards: { ...sc.markerCards, [cardEdit.marker]: on }, updatedAt: new Date().toISOString() })
   }
+  // The palette works on the card being edited, else on the active clip: what "save" stores is the
+  // selection with its groups; a used item goes on top and is selected.
+  const paletteSelection = useMemo(() => {
+    const list = cardEditCard ? cardEditCard.annotations ?? [] : activeAnns
+    if (!selectedAnn) return []
+    const ids = withGroups(list, [selectedAnn, ...extraSel])
+    return list.filter(a => ids.includes(a.id))
+  }, [cardEditCard, activeAnns, selectedAnn, extraSel])
+  const putPaletteItem = (anns: Annotation[]) => {
+    if (!anns.length) return
+    if (cardEditRef.current) setCardAnns([...cardAnnsRef.current, ...anns])
+    else { const now = scopedNow(); if (!now) return; setAnns([...mergeScoped(now), ...anns]) }
+    setAnnTool('select'); selectAnn(anns[0].id)
+  }
   const editCard = (sceneId: string | null, marker: Marker | null) => {
     playback.stopSequence(); playback.pause(); setSelectedAnn(null); setCardTool('objects'); setCardEdit({ sceneId, marker })
   }
@@ -901,12 +916,16 @@ export function App() {
         await stroke([[mx, my], [mx + 0.02, my], [mx + 0.04, my]])
         log.groupMoved = +((anns().find(a => a.id === polyId) as { points: number[][] }).points[0][0] - p0).toFixed(3)
 
-        // Palette: save the group, put it back in: two more objects, with a new group of their own.
+        // Palette (the accordion under the scene editor): save the group, put it back in: two more objects, with a new group of their own.
+        const head = document.querySelector<HTMLButtonElement>('.palette-panel .accordion-head')!
+        if (head.getAttribute('aria-expanded') !== 'true') { head.click(); await sleep(200) }
         await setValue('パレットに保存する名前', 'smoke group')
-        ;[...document.querySelectorAll<HTMLButtonElement>('.palette-row button')].find(b => b.textContent === '選択を保存')!.click()
+        ;[...document.querySelectorAll<HTMLButtonElement>('.palette-panel button')].find(b => b.textContent === '選択を保存')!.click()
         await waitFor(() => document.querySelector('[aria-label="smoke group を入れる"]'), 5000, 'palette item')
         const before = anns().length
-        document.querySelector<HTMLButtonElement>('[aria-label="smoke group を入れる"]')!.click(); await sleep(600)
+        const useBtn = await waitFor(() => { const b = document.querySelector<HTMLButtonElement>('[aria-label="smoke group を入れる"]'); return b && !b.disabled ? b : null }, 5000, 'palette button')
+        log.paletteBtn = { disabled: useBtn.disabled, items: document.querySelectorAll('.palette-item').length }
+        useBtn.click(); await sleep(600)
         const added = anns().slice(before)
         log.palette = { added: added.length, newGroup: !!added[0]?.groupId && added[0].groupId !== g }
         // Clean up: the copies would cover the export frame.
@@ -1661,6 +1680,7 @@ export function App() {
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
               onExportMarker={m => { if (reel) void exportMarker(reel.id, m) }} canExport={!!video && !(exportState?.status === 'running' || exportState?.status === 'preparing')}
             />
+            <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem} />
           </div>
         </main>
       )}

@@ -71,7 +71,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
   const span = (o: TimelineObject, main: boolean) => {
     const grab = (edge: 'from' | 'to') => (e: PointerEvent) => {
       e.stopPropagation()
-      e.currentTarget.setPointerCapture(e.pointerId)
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
       const host = (main ? track.current : (e.currentTarget as HTMLElement).parentElement?.parentElement) as HTMLElement
       objDrag.current = { id: o.id, edge, rect: host.getBoundingClientRect() }
       onSelectObject(o.id)

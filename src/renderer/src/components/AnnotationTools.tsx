@@ -5,7 +5,6 @@ import {
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
 import { forgetColor, rememberColor, usePalette } from '../palette'
-import { PaletteRow } from './PaletteRow'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
@@ -193,10 +192,6 @@ export function AnnotationTools(p: Props) {
           {sel?.kind === 'polygon' && <button onClick={() => update(setClosed(sel, false))} title="多角形を折れ線に戻す">開く</button>}
         </Group>
       </div>
-
-      <PaletteRow disabled={p.disabled}
-        selection={sel ? (() => { const ids = withGroups(p.annotations, [sel.id, ...(p.extraIds ?? [])]); return p.annotations.filter(x => ids.includes(x.id)) })() : []}
-        onUse={anns => { if (!anns.length) return; p.onChange([...p.annotations, ...anns]); p.onSelect(anns[0].id) }} />
 
       <div className="ann-row">
         {sel && p.cardMode ? (

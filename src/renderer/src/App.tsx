@@ -812,12 +812,17 @@ export function App() {
 
       // Text, then boxed.
       await key('t'); await down(0.08, 0.86)
-      const input = await waitFor(() => document.querySelector<HTMLInputElement>('.ann-text-input'), 5000, 'text input')
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'BLOCK!')
+      const input = await waitFor(() => document.querySelector<HTMLTextAreaElement>('.ann-text-input'), 5000, 'text input')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'BLOCK!')
+      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
+      // Alt+Enter starts a second line (Enter alone finishes).
+      input.selectionStart = input.selectionEnd = input.value.length
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true })); await sleep(80)
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, input.value + 'TOUCH')
       input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
       ctl<HTMLInputElement>('枠付き').click(); await sleep(150)
-      log.text = { box: !!find('text')!.box, padding: (find('text')!.box as { padding?: number } | undefined)?.padding }
+      log.text = { box: !!find('text')!.box, padding: (find('text')!.box as { padding?: number } | undefined)?.padding, lines: String(find('text')!.text).split('\n') }
       // Triangle by dragging a box; widened by its right box handle (all points scale), then a
       // vertex added in Edit Points mode.
       ;(document.activeElement as HTMLElement | null)?.blur() // the box checkbox has focus, and keys typed there are ignored
@@ -830,6 +835,13 @@ export function App() {
       button('頂点の編集').click(); await sleep(120)
       await stroke([[0.65, 0.7], [0.65, 0.75], [0.65, 0.8]]) // bottom edge's midpoint
       log.triangleAfterInsert = tri()?.points.length ?? 0
+      {
+        // Shift on a vertex: it lines up with a neighbor (here the x of the vertex before it).
+        const t = tri()!, i = 3, prev = t.points[2], v = t.points[i]
+        await stroke([[v[0], v[1]], [prev[0] + 0.01, v[1] + 0.02], [prev[0] + 0.012, v[1] + 0.03]], true)
+        const after = tri()!.points[i]
+        log.shiftSnap = { x: +after[0].toFixed(4), neighborX: +prev[0].toFixed(4) }
+      }
 
       // Pictures: an image file and page 1 of a PDF, placed in the corners.
       if (opts.assets?.length) {
@@ -1290,8 +1302,8 @@ export function App() {
       await key('r'); await stroke([[0.8, 0.4], [0.7, 0.3], [0.6, 0.2]])
       await key('f'); await stroke([[0.2, 0.6], [0.25, 0.62], [0.3, 0.6], [0.35, 0.65]])
       await key('t'); await stroke([[0.1, 0.8]])
-      const input = await waitFor(() => document.querySelector<HTMLInputElement>('.ann-text-input'), 5000, 'text input')
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Watch the block')
+      const input = await waitFor(() => document.querySelector<HTMLTextAreaElement>('.ann-text-input'), 5000, 'text input')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'Watch the block')
       input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
       const drawn = anns().map(a => a.kind)

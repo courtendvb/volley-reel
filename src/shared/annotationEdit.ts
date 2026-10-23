@@ -87,6 +87,25 @@ export function dragHandle(a: Annotation, id: string, x: number, y: number, opts
   return { a, id }
 }
 
+// Shift while dragging a vertex (or an arrow end): the point lines up with a neighbor — the nearer of
+// "same x" and "same y" always, so that edge stays upright or level; the other one too when it is
+// within tolPx. Neighbors are the vertices on either side (for a midpoint, the edge's two ends).
+export function snapToNeighbors(a: Annotation, id: string, x: number, y: number, W: number, H: number, tolPx = 10): [number, number] {
+  let nbrs: [number, number][] = []
+  if (a.kind === 'arrow') nbrs = id === 'p1' ? [[a.x2, a.y2]] : id === 'p2' ? [[a.x1, a.y1]] : []
+  else if (isPoints(a)) {
+    const pts = a.points, n = pts.length, i = Number(id.slice(1)), closed = a.kind === 'polygon'
+    const at = (j: number) => (closed ? pts[(j + n) % n] : pts[j])
+    nbrs = (id[0] === 'v' ? [at(i - 1), at(i + 1)] : id[0] === 'm' ? [at(i), at(i + 1)] : []).filter((p): p is [number, number] => !!p)
+  }
+  if (!nbrs.length) return [x, y]
+  const bx = nbrs.reduce((b, p) => (Math.abs(p[0] - x) * W < Math.abs(b - x) * W ? p[0] : b), nbrs[0][0])
+  const by = nbrs.reduce((b, p) => (Math.abs(p[1] - y) * H < Math.abs(b - y) * H ? p[1] : b), nbrs[0][1])
+  const dx = Math.abs(bx - x) * W, dy = Math.abs(by - y) * H
+  if (dx <= dy) return [bx, dy <= tolPx ? by : y]
+  return [dx <= tolPx ? bx : x, by]
+}
+
 // Moves one edge or corner; dragging past the opposite side flips the box, which is then stored
 // with positive size again.
 export function resizeBox(b: { x: number; y: number; w: number; h: number }, h: BoxHandle, x: number, y: number, keepAspect: boolean) {

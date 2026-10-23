@@ -3,7 +3,7 @@ import {
   applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type StylePatch,
 } from '../../../shared/annotation'
-import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
+import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
@@ -64,7 +64,7 @@ export function AnnotationLayer(p: Props) {
   const setDrag = (d: Drag | null) => { dragRef.current = d; setDragState(d) }
   const annsRef = useRef(p.annotations)
   annsRef.current = p.annotations
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   // A polyline / polygon being drawn: fixed points plus the rubber-band point under the cursor.
   const [path, setPathState] = useState<PathDraft | null>(null)
   // Mirrors path so finishing reads the latest points and runs once, outside any state updater.
@@ -268,7 +268,10 @@ export function AnnotationLayer(p: Props) {
     if (drag.mode === 'handle') {
       const cur = annsRef.current.find(a => a.id === drag.id)
       if (!cur) return
-      const r = dragHandle(cur, drag.handle, x, y, { keepAspect: e.shiftKey })
+      // Shift: box corners keep their proportions; vertices and arrow ends line up with a neighbor.
+      const snap = e.shiftKey && /^(p[12]|[vm]\d+)$/.test(drag.handle)
+      const [sx, sy] = snap ? snapToNeighbors(cur, drag.handle, x, y, p.size.w, p.size.h) : [x, y]
+      const r = dragHandle(cur, drag.handle, sx, sy, { keepAspect: e.shiftKey && !snap })
       replace(r.a)
       if (r.id !== drag.handle) setDrag({ ...drag, handle: r.id }) // a midpoint became a vertex
       return
@@ -330,9 +333,16 @@ export function AnnotationLayer(p: Props) {
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
   }
-  const onTextKey = (e: KeyboardEvent<HTMLInputElement>) => {
+  // Enter finishes; Alt+Enter or Shift+Enter starts a new line; Escape cancels.
+  const onTextKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     e.stopPropagation()
-    if (e.key === 'Enter') commitText()
+    if (e.key === 'Enter' && (e.altKey || e.shiftKey)) {
+      e.preventDefault()
+      const el = e.currentTarget, at = el.selectionStart, v = el.value
+      setTextEdit(t => (t ? { ...t, value: v.slice(0, at) + '\n' + v.slice(el.selectionEnd) } : t))
+      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = at + 1 })
+    }
+    else if (e.key === 'Enter') { e.preventDefault(); commitText() }
     else if (e.key === 'Escape') setTextEdit(null)
   }
 
@@ -348,8 +358,9 @@ export function AnnotationLayer(p: Props) {
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onDoubleClick={onDouble} />
       {path && <div className="ann-hint">クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止</div>}
       {textEdit && (
-        <input
-          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト"
+        <textarea
+          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト（Alt+Enter で改行）"
+          rows={Math.max(1, textEdit.value.split('\n').length)}
           style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? textStyle(p.style).color }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}
         />

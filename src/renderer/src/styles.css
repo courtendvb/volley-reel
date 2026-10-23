@@ -395,3 +395,4 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .palette-use { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 2px; font-size: 12px; }
 .palette-thumb { width: 56px; height: 32px; border-radius: 4px; background: #334155; }
 .palette-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-width: 200px; font-family: "Segoe UI", "Yu Gothic UI", sans-serif; }

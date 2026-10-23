@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyStyle, bounds, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
-import { cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
+import { snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -50,6 +50,16 @@ describe('resizing boxes', () => {
 })
 
 describe('editing points', () => {
+  it('lines a dragged vertex up with a neighbor while Shift is held', () => {
+    // poly: (0.1,0.1) (0.5,0.1) (0.3,0.5). Dragging v2 near x 0.5: it takes the neighbor's x (upright edge).
+    expect(snapToNeighbors(poly, 'v2', 0.48, 0.6, 1000, 1000)).toEqual([0.5, 0.6])
+    // Close to both: both snap.
+    expect(snapToNeighbors(poly, 'v2', 0.505, 0.105, 1000, 1000)).toEqual([0.5, 0.1])
+    // An arrow end levels with the other end.
+    const ar: Annotation = { id: 'a', kind: 'arrow', color: '#FFF', x1: 0.1, y1: 0.5, x2: 0.6, y2: 0.55, width: 3 }
+    expect(snapToNeighbors(ar, 'p2', 0.6, 0.55, 1000, 1000)).toEqual([0.6, 0.5])
+  })
+
   it('drags a vertex', () => {
     const r = dragHandle(poly, 'v2', 0.3, 0.7)
     expect((r.a as { points: number[][] }).points[2]).toEqual([0.3, 0.7])
@@ -117,6 +127,14 @@ describe('formats and polygons', () => {
     const ctx = { font: '', measureText: () => ({ width: 128 }) } as unknown as CanvasRenderingContext2D
     const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.5, y: 0.1, text: 'x', size: 36, align: 'center' }
     expect(bounds(ctx, text, 1280, 720).x).toBeCloseTo(0.45)
+  })
+
+  it('measures text of several lines', () => {
+    const ctx = { font: '', measureText: (t: string) => ({ width: t.length * 10 }) } as unknown as CanvasRenderingContext2D
+    const text: Annotation = { id: 't', kind: 'text', color: '#FFF', x: 0.1, y: 0.1, text: 'ab\nabcd', size: 36 }
+    const b = bounds(ctx, text, 1280, 720)
+    expect(b.w).toBeCloseTo(40 / 1280)
+    expect(b.h).toBeCloseTo((36 * 1.2 * 2) / 720)
   })
 
   it('moves and rounds point shapes', () => {

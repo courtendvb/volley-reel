@@ -127,10 +127,11 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
     case 'text': {
       const s = H / REF_HEIGHT
       setTextFont(ctx, a.size * s, a.bold !== false)
-      const w = ctx.measureText(a.text || ' ').width / W
+      const lines = textLines(a.text)
+      const w = Math.max(...lines.map(l => ctx.measureText(l || ' ').width)) / W
       const pad = a.box ? a.box.padding / REF_HEIGHT : 0
       const left = a.align === 'center' ? a.x - w / 2 : a.x
-      return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2) / REF_HEIGHT + 2 * pad }
+      return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
     case 'arrow': return box([[a.x1, a.y1], [a.x2, a.y2]])
     case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
@@ -218,13 +219,19 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
   ctx.restore()
 }
 
+// Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
+export const textLines = (t: string): string[] => t.split('\n')
+
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
-  const px = a.size * s
+  const px = a.size * s, lh = px * 1.2
   setTextFont(ctx, px, a.bold !== false)
   ctx.textBaseline = 'top'
-  const x = a.align === 'center' ? a.x * W - ctx.measureText(a.text).width / 2 : a.x * W, y = a.y * H
+  const lines = textLines(a.text)
+  const widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
+  const x = a.align === 'center' ? a.x * W - wMax / 2 : a.x * W, y = a.y * H
+  const lineX = (i: number) => (a.align === 'center' ? a.x * W - widths[i] / 2 : x)
   if (a.box) {
-    const pad = a.box.padding * s, w = ctx.measureText(a.text).width, h = px * 1.2
+    const pad = a.box.padding * s, w = wMax, h = lh * lines.length
     if (a.box.fill) {
       ctx.save(); ctx.globalAlpha *= a.box.fillOpacity; ctx.fillStyle = a.box.fill
       ctx.fillRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
@@ -236,10 +243,11 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
   }
   // A black outline keeps light text readable on a bright court (on by default).
   if (a.outline !== false && a.color.toUpperCase() !== '#0F172A') {
-    ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'; ctx.strokeText(a.text, x, y); ctx.restore()
+    ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'
+    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), y + i * lh)); ctx.restore()
   }
   ctx.fillStyle = a.color
-  ctx.fillText(a.text, x, y)
+  lines.forEach((l, i) => ctx.fillText(l, lineX(i), y + i * lh))
 }
 
 function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash }, lw: number): void {

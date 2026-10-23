@@ -15,6 +15,7 @@ export function parseDVW(text: string): ParsedDVW {
   let homeRot: number | null = null
   let awayRot: number | null = null
   let rally: Rally | null = null
+  const codeNames: Record<string, string> = {}
 
   for (const raw of text.split(/\r?\n/)) {
     const l = raw.trim()
@@ -37,6 +38,11 @@ export function parseDVW(text: string): ParsedDVW {
       const lastName = (c[9] || '').trim()
       const firstName = (c[10] || '').trim()
       players[`${side}${jersey}`] = { key: playerKey(c[8], lastName, firstName, jersey), side, jersey, lastName, firstName }
+      continue
+    }
+    if (section === '[3ATTACKCOMBINATION]' || section === '[3SETTERCALL]') {
+      const name = (section === '[3SETTERCALL]' ? c[2] : c[4])?.trim()
+      if (c[0]?.trim() && name) codeNames[c[0].trim()] = name
       continue
     }
     if (section !== '[3SCOUT]') continue
@@ -107,7 +113,7 @@ export function parseDVW(text: string): ParsedDVW {
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })
   const allHome = plays.length > 0 && plays.every(p => p.side === '*')
-  return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome }
+  return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames }
 }
 
 // Same person across matches: DataVolley player ID with the scrimmage "-a" suffix removed.

@@ -65,7 +65,7 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
 .play-row {
   position: absolute; left: 0; right: 0;
-  display: grid; grid-template-columns: 22px 40px 34px minmax(0, 1fr) 104px 98px; gap: 5px; align-items: center; cursor: pointer;
+  display: grid; grid-template-columns: 22px 40px 34px minmax(0, 1fr) 124px 98px; gap: 5px; align-items: center; cursor: pointer;
   width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F1F5F9; border-radius: 0;
   padding: 5px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; background: transparent;
 }
@@ -341,9 +341,10 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .video-scene .scene-rename { flex: 1; min-width: 0; padding: 1px 6px; font: inherit; }
 .reel-name-row { display: flex; align-items: center; gap: 6px; margin: 0 10px; }
 .reel-name-row .reel-name { flex: 1; min-width: 0; margin: 0; }
-.group-switch { flex: none; width: 26px; height: 15px; padding: 0; border-radius: 999px; border: 0; background: #CBD5E1; position: relative; }
-.group-switch span { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: left 0.12s; }
-.group-switch.on { background: var(--primary); }
-.group-switch.on span { left: 13px; }
-.group.off > .group-head > :not(.group-switch), .group.off > :not(.group-head) { opacity: 0.4; filter: grayscale(1); }
+.group-head .swatch-toggle { border: 0; padding: 0; cursor: pointer; color: #fff; }
+.group.off .group-head .swatch-toggle { background: #94A3B8; }
+.group.off > .group-head > :not(.swatch-toggle), .group.off > :not(.group-head) { opacity: 0.4; filter: grayscale(1); }
 .group.off { background: #F1F5F9; }
+.filter-detail { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; margin: 0 -2px; border-radius: 6px; background: var(--page); }
+.play-row .skill .combo { color: var(--sub); font-size: 11px; }
+.play-row .skill { overflow: hidden; text-overflow: ellipsis; }

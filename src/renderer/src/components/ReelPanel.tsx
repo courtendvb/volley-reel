@@ -137,12 +137,11 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver === `g${m}` ? ' drop-into' : ''}`}
             onDragOver={allow(`g${m}`)} onDragLeave={() => setDragOver(null)} onDrop={e => onDropGroup(e, m)}>
             <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}>
-              <button className={`group-switch${reel.markerOff?.[m] ? '' : ' on'}`} role="switch" aria-checked={!reel.markerOff?.[m]}
-                aria-label={`マーカー ${m} を使う`}
+              {/* The number itself switches the group on (its color) or off (grey: not played or exported). */}
+              <button className="swatch swatch-toggle" style={reel.markerOff?.[m] ? undefined : { background: MARKER_COLORS[m] }}
+                aria-pressed={!reel.markerOff?.[m]} aria-label={`マーカー ${m} を使う`}
                 title={reel.markerOff?.[m] ? 'オフ: 再生・書き出しに使わない（クリックでオン）' : 'オン: 再生・書き出しに使う（クリックでオフ）'}
-                onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>
-                <span /></button>
-              <span className="swatch" style={{ background: MARKER_COLORS[m] }}>{m}</span>
+                onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>{m}</button>
               <input value={reel.markerNames[m]} placeholder={`マーカー ${m} の名前`} aria-label={`マーカー ${m} の名前`}
                 onChange={e => change(renameMarker(reel, m, e.target.value))} />
               <span className="muted">{reel.groups[m].length}</span>

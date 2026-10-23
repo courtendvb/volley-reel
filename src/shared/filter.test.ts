@@ -82,6 +82,14 @@ describe('filters', () => {
     expect(applyFilter(r, { ...EMPTY_FILTER, team: 'away' })).toHaveLength(1)
   })
 
+  it('search by tempo, attack combination and hit type', () => {
+    const r = refs()
+    expect(r.find(x => x.play.code.startsWith('a01AQ#'))).toMatchObject({ tempo: 'Q', combo: 'PA', hit: 'H' })
+    expect(applyFilter(r, { ...EMPTY_FILTER, combos: ['PA'] }).map(x => x.play.code.slice(0, 6))).toEqual(['a01AQ#'])
+    expect(applyFilter(r, { ...EMPTY_FILTER, tempos: ['Q'], skills: ['S'] })).toHaveLength(3)
+    expect(applyFilter(r, { ...EMPTY_FILTER, hits: ['T'] })).toHaveLength(0)
+  })
+
   it('match zones', () => {
     expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZone: 3, endZone: 6 })).toHaveLength(1)
     expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZone: 4 })).toHaveLength(0)

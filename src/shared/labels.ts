@@ -14,6 +14,13 @@ export const EFFECTS: Record<string, Record<string, string>> = {
   E: { '#': 'Perfect', '+': 'Positive', '!': 'OK', '-': 'Negative', '/': 'Poor', '=': 'Error' },
 }
 
+// The "type" letter after the skill: the tempo of the ball.
+export const TEMPOS: Record<string, string> = {
+  H: 'High', M: 'Half', Q: 'Quick', T: 'Tense', U: 'Super', N: 'Fast', O: 'Other',
+}
+// Attacks: how the ball was hit (the letter after the zones).
+export const HITS: Record<string, string> = { H: 'Hard', P: 'Soft', T: 'Tip' }
+
 export function playLabel(skill: string, effect: string): string {
   return `${SKILLS[skill] ?? skill} · ${EFFECTS[skill]?.[effect] ?? effect}`
 }

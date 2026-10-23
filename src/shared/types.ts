@@ -54,6 +54,7 @@ export interface ParsedDVW {
   plays: Play[]
   rallies: Rally[]
   allHome: boolean // every play coded as '*': side can't tell the teams apart
+  codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
 }
 
 export interface Match {

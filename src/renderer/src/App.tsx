@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
   addClips, clipRange, defaultRange, findClip, findOverlaps, groupOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel,
@@ -166,6 +166,8 @@ export function App() {
   }, [scope, matchId, refsByMatch, project, matchOrder])
   const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
   const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
+  // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
+  const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
   const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.side === null), [scopeRefs])
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
@@ -1214,7 +1216,7 @@ export function App() {
             )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
-              filter={filter} onChange={setFilter} people={people} extract={extract} onExtract={setExtract}
+              filter={filter} onChange={setFilter} people={people} details={details} extract={extract} onExtract={setExtract}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
               onAddAll={() => addPlays(results)}
             />

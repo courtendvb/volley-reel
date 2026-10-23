@@ -108,7 +108,7 @@ const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
-      <span className={`skill skill-${p.skill}`}>{playLabel(p.skill, p.effect)}</span>
+      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{playLabel(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}</span>
       <span className="marks">
         {MARKERS.map(m => (
           <button key={m} className={`mark${group === m ? ' on' : ''}`} style={group === m ? { background: MARKER_COLORS[m], borderColor: MARKER_COLORS[m] } : undefined}

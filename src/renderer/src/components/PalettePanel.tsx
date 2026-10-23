@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Accordion } from './Accordion'
-import { bounds, drawAnnotation, type Annotation } from '../../../shared/annotation'
+import { bounds, drawAnnotation, shiftTimes, type Annotation } from '../../../shared/annotation'
 import { assetImage, subscribeAssets } from '../assets'
 import { removePaletteItem, savePaletteItem, usePalette, usePaletteItem } from '../palette'
 import { composing } from '../keys'
@@ -53,14 +53,6 @@ export function PalettePanel({ selection, onUse, disabled, clipIn }: {
       </div>
     </Accordion>
   )
-}
-
-// Moves show / hide times by delta seconds; null drops them (the object shows the whole time).
-function shiftTimes(a: Annotation, delta: number | null): Annotation {
-  const { showFrom, showTo, ...rest } = a
-  if (delta === null) return rest as Annotation
-  return { ...rest, ...(showFrom !== undefined ? { showFrom: Math.round((showFrom + delta) * 100) / 100 } : {}),
-    ...(showTo !== undefined ? { showTo: Math.round((showTo + delta) * 100) / 100 } : {}) } as Annotation
 }
 
 function defaultName(sel: Annotation[]): string {

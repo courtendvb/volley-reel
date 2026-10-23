@@ -407,6 +407,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
+      copy: !!process.env.VR_SMOKE_COPY,
       mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,
       assets: process.env.VR_SMOKE_ASSETS?.split(';'),
       logo: process.env.VR_SMOKE_LOGO,

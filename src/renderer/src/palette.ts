@@ -1,6 +1,6 @@
 // The palette (kept in the library, shared by every project): my colors and saved objects.
 import { useEffect, useState } from 'react'
-import type { Annotation } from '../../shared/annotation'
+import { freshIds, type Annotation } from '../../shared/annotation'
 import type { Palette } from '../../shared/types'
 
 const api = window.api
@@ -40,10 +40,5 @@ export async function removePaletteItem(id: string): Promise<void> {
 
 // The item's objects with new ids (and new group ids), ready to add to a clip or a card.
 export async function usePaletteItem(id: string): Promise<Annotation[]> {
-  const anns = await api.usePaletteItem(id)
-  const groups = new Map<string, string>()
-  return anns.map(a => {
-    const g = a.groupId ? groups.get(a.groupId) ?? (groups.set(a.groupId, crypto.randomUUID()), groups.get(a.groupId)!) : undefined
-    return { ...a, id: crypto.randomUUID(), ...(g ? { groupId: g } : {}) }
-  })
+  return freshIds(await api.usePaletteItem(id))
 }

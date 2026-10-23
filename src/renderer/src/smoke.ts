@@ -28,6 +28,7 @@ export interface SmokeOpts {
   m8?: string
   video?: boolean
   obj?: boolean
+  copy?: boolean // Ctrl+C / Ctrl+V of objects within a clip and onto another clip
   assets?: string[] // with obj: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -120,6 +121,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.reel) return smokeReel(opts.reel, res)
     if (opts.trim) return smokeTrim(res)
     if (opts.ann) return smokeAnn(res)
+    if (opts.copy) return smokeCopy(res)
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
     if (opts.m8) return smokeM8(res, opts.m8)
@@ -794,6 +796,42 @@ export function installSmoke(h: SmokeHost): void {
 
   // Annotations through real pointer/key events on the overlay canvas: draw four kinds, move one,
   // give the arrow a show-from time, and read canvas pixels on either side of it.
+  // Ctrl+C on one of a grouped pair copies the pair (not the circle beside it); Ctrl+V on the same clip steps off the
+  // originals, on another clip lands in place with the show time moved to that clip's IN.
+  const smokeCopy = async (res: PlayRef[]) => {
+    const [p1, p2] = res.filter(x => x.play.rallyId !== null)
+    const { reel: built, ids } = addClips(newReel('copy smoke'), [p1, p2].map(x => ({ matchId: x.matchId, play: x.play })))
+    setReels(rs => [...rs, built]); setReelId(built.id)
+    await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'copy reel')
+    activateClip(built.clips[ids[0]]); await sleep(300)
+    const in1 = latest.current.clipInfo(built.clips[ids[0]]).range!.in
+    const anns = (i: number) => latest.current.reel!.clips[ids[i]].annotations
+    setAnns([
+      { id: 'c-rect', kind: 'rect', color: '#EF4444', x: 0.2, y: 0.2, w: 0.1, h: 0.1, width: 4, groupId: 'G', showFrom: in1 + 1 },
+      { id: 'c-arrow', kind: 'arrow', color: '#EF4444', x1: 0.1, y1: 0.1, x2: 0.2, y2: 0.2, width: 4, groupId: 'G' },
+      { id: 'c-other', kind: 'circle', color: '#FACC15', x: 0.6, y: 0.6, w: 0.1, h: 0.1, width: 4 },
+    ])
+    setSelectedAnn('c-rect'); await sleep(300)
+    const ctrl = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true })); await sleep(300) }
+    await ctrl('c')
+    const notice = latest.current.notice
+    await ctrl('v')
+    const same = anns(0)
+    const pasted = same.filter(a => !a.id.startsWith('c-'))
+    const pr = pasted.find(a => a.kind === 'rect') as { x: number; showFrom?: number; groupId?: string } | undefined
+    const selectedPasted = pasted.some(a => a.id === latest.current.selectedAnn)
+    activateClip(built.clips[ids[1]]); await sleep(400)
+    const in2 = latest.current.clipInfo(built.clips[ids[1]]).range!.in
+    await ctrl('v')
+    const other = anns(1)
+    const or = other.find(a => a.kind === 'rect') as { x: number; showFrom?: number } | undefined
+    return {
+      notice, sameCount: same.length, pastedKinds: pasted.map(a => a.kind).sort(), pastedX: pr?.x, pastedShowFromRel: pr?.showFrom !== undefined ? +(pr.showFrom - in1).toFixed(2) : null,
+      newGroup: !!pr?.groupId && pr.groupId !== 'G' && pasted.every(a => a.groupId === pr.groupId), selectedPasted,
+      otherCount: other.length, otherX: or?.x, otherShowFromRel: or?.showFrom !== undefined ? +(or.showFrom - in2).toFixed(2) : null,
+    }
+  }
+
   const smokeAnn = async (res: PlayRef[]) => {
     const r0 = res.find(x => x.play.rallyId !== null)!
     const { reel: built, ids } = addClips(newReel('annotation smoke'), [{ matchId: r0.matchId, play: r0.play }])

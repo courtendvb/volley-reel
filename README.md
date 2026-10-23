@@ -93,6 +93,7 @@ npm run typecheck
 | `[` / `]` | 再生位置を選択中のクリップの IN / OUT にする |
 | `V` `T` `A` `C` `R` `L` `P` `F` | 注釈ツール: 選択 / テキスト / 矢印 / 円 / 四角 / 折れ線 / 多角形 / フリーハンド |
 | `Delete` | 選択中の注釈を削除 |
+| `Ctrl` + `C` / `Ctrl` + `V` | 選択中の図形（グループごと）をコピー / 開いているクリップかタイトルカードに貼り付け。同じクリップでは少しずらし、ほかのクリップでは同じ位置に置く。出る・消える時刻はクリップの IN からの秒で合わせる（同じプロジェクト内のみ） |
 | `Esc` | 通し再生を止める |
 | `Ctrl` + `Z` / `Ctrl` + `Y` | 元に戻す / やり直す（シーン・動画の編集と設定の変更。続けて行った細かい操作は1回分にまとまる） |
 | `?` | ショートカット一覧（上部の「ショートカット」ボタンでも開く） |
@@ -121,7 +122,7 @@ npm run dist
 GitHub Actions（`.github/workflows/ci.yml`）が push と PR ごとに型チェック・単体テスト・ビルドを行う。以下の自己チェックは手元で実行する。自己チェックのコードは `src/renderer/src/smoke.ts` にあり、`VR_SMOKE` のときだけ読み込まれる（通常の起動では読み込まない）。`VR_SMOKE_M8=relink` が書き換える DVW は一時フォルダ内のコピーに限る（それ以外は拒否）。`VR_SMOKE_M8=relocate:<新しい DVW>` で、移動した DVW の表示と指し直しを確認する。
 
 試合を取り込み、絞り込み結果の n 番目に飛んで、ウィンドウのスクリーンショットを保存して終了する
-（`VR_SMOKE_SETTINGS=1` で設定ダイアログも開く、`VR_SMOKE_KEYS=3,1,0` でキー入力、`VR_SMOKE_TRIM=1` でループと IN/OUT の操作を確認、`VR_SMOKE_ANN=1` で注釈の描画・移動・表示時刻を確認、`VR_SMOKE_OV=1`（または `dialog`）でオーバーレイを確認、`VR_SMOKE_EXPORT=<出力.mp4>` で書き出し・フレーム確認・キャンセルを確認、`VR_SMOKE_M8=relink|flush-write|report|undo`（と `VR_SMOKE_CORRUPT=1`）で再リンク・終了時保存・復元・元に戻すを確認、`VR_SMOKE_VIDEO=1`（と `VR_SMOKE_EXPORT`）で動画・共有シーン・元に戻す・書き出しを確認、`VR_SMOKE_OBJ=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<画像;PDF>`）で図形・三角形・頂点の編集・書式・画像の挿入・書き出しを確認（`VR_SMOKE_MEM=<秒>` を足すと再生中のメモリ・CPU・描画回数を測る）、`VR_LIBRARY=<倉庫> VR_SMOKE_HOME=scan|import-create|home|picker VR_SMOKE_FOLDERS="<フォルダ>;…"` で倉庫とプロジェクト作成を確認、
+（`VR_SMOKE_SETTINGS=1` で設定ダイアログも開く、`VR_SMOKE_KEYS=3,1,0` でキー入力、`VR_SMOKE_TRIM=1` でループと IN/OUT の操作を確認、`VR_SMOKE_ANN=1` で注釈の描画・移動・表示時刻を確認、`VR_SMOKE_COPY=1` で図形のコピー・貼り付けを確認、`VR_SMOKE_OV=1`（または `dialog`）でオーバーレイを確認、`VR_SMOKE_EXPORT=<出力.mp4>` で書き出し・フレーム確認・キャンセルを確認、`VR_SMOKE_M8=relink|flush-write|report|undo`（と `VR_SMOKE_CORRUPT=1`）で再リンク・終了時保存・復元・元に戻すを確認、`VR_SMOKE_VIDEO=1`（と `VR_SMOKE_EXPORT`）で動画・共有シーン・元に戻す・書き出しを確認、`VR_SMOKE_OBJ=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<画像;PDF>`）で図形・三角形・頂点の編集・書式・画像の挿入・書き出しを確認（`VR_SMOKE_MEM=<秒>` を足すと再生中のメモリ・CPU・描画回数を測る）、`VR_LIBRARY=<倉庫> VR_SMOKE_HOME=scan|import-create|home|picker VR_SMOKE_FOLDERS="<フォルダ>;…"` で倉庫とプロジェクト作成を確認、
 `VR_SMOKE_REEL='{"markers":[2,1,null],"scope":"all"}'` で結果からリールを作って通し再生し、切り替え時間を測る）。試合は `;` 区切りで複数指定できる。
 
 ```bash

@@ -95,6 +95,33 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
   }
 }
 
+// Moves show / hide times by delta seconds; null drops them (the object shows the whole time).
+export function shiftTimes(a: Annotation, delta: number | null): Annotation {
+  const { showFrom, showTo, ...rest } = a
+  if (delta === null) return rest as Annotation
+  return { ...rest, ...(showFrom !== undefined ? { showFrom: Math.round((showFrom + delta) * 100) / 100 } : {}),
+    ...(showTo !== undefined ? { showTo: Math.round((showTo + delta) * 100) / 100 } : {}) } as Annotation
+}
+
+// The same objects with new ids, and one new group id per group, so they can sit next to the originals.
+export function freshIds(list: Annotation[], newId: () => string = () => crypto.randomUUID()): Annotation[] {
+  const groups = new Map<string, string>()
+  return list.map(a => {
+    const g = a.groupId ? groups.get(a.groupId) ?? (groups.set(a.groupId, newId()), groups.get(a.groupId)!) : undefined
+    return { ...a, id: newId(), ...(g ? { groupId: g } : {}) }
+  })
+}
+
+// Copies to paste into list: moved down-right a step at a time while the first one would land exactly
+// on an object already there (pasting where the originals are), else left in place (another clip).
+export function pasteCopies(copies: Annotation[], list: Annotation[], step = 0.02): Annotation[] {
+  const shape = (a: Annotation) => { const { id: _i, groupId: _g, showFrom: _f, showTo: _t, ...rest } = a; return JSON.stringify(roundCoords(rest as Annotation)) }
+  const taken = new Set(list.map(shape))
+  let out = copies
+  for (let n = 0; n < 20 && out.length && taken.has(shape(out[0])); n++) out = out.map(a => translate(a, step, step))
+  return out
+}
+
 // Shapes drawn by dragging may go either way; store them with positive w/h.
 export function normalizeBox<T extends { x: number; y: number; w: number; h: number }>(a: T): T {
   return { ...a, x: Math.min(a.x, a.x + a.w), y: Math.min(a.y, a.y + a.h), w: Math.abs(a.w), h: Math.abs(a.h) }

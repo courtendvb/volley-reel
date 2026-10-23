@@ -14,7 +14,7 @@ import { TrimBar } from './components/TrimBar'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
-import { withGroups, type Annotation } from '../../shared/annotation'
+import { freshIds, pasteCopies, shiftTimes, withGroups, type Annotation } from '../../shared/annotation'
 import { changed, mergeScoped, moveToScope, scopeOf, splitScoped, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
@@ -655,6 +655,36 @@ export function App() {
     else { const now = scopedNow(); if (!now) return; setAnns([...mergeScoped(now), ...anns]) }
     setAnnTool('select'); selectAnn(anns[0].id)
   }
+  // Ctrl+C / Ctrl+V: the selected objects (with their groups) are kept here with times relative to
+  // the clip's IN, like a palette item, and pasted as new objects on the clip or card being edited.
+  // Only within the project: pictures are the project's own files.
+  const paletteSelRef = useRef<Annotation[]>([])
+  paletteSelRef.current = paletteSelection
+  const copied = useRef<{ projectPath: string | null; anns: Annotation[] } | null>(null)
+  // The edited clip's IN, or null on a title card; undefined when nothing can take objects.
+  const editInNow = (): number | null | undefined => {
+    if (cardEditRef.current) return null
+    const { reel: r, activeClipId: id, clipInfo: info } = latest.current
+    const c = r && id ? r.clips[id] : null
+    return c ? info(c).range?.in : undefined
+  }
+  const copyObjects = (): boolean => {
+    const sel = paletteSelRef.current, at = editInNow()
+    if (!sel.length || at === undefined) return false
+    copied.current = { projectPath: latest.current.projectPath, anns: sel.map(a => shiftTimes(a, at === null ? null : -at)) }
+    const msg = `図形を ${sel.length} 個コピーしました（Ctrl+V で貼り付け）`
+    setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) // a short note, not one to dismiss
+    return true
+  }
+  const pasteObjects = (): boolean => {
+    const c = copied.current, at = editInNow()
+    if (!c || c.projectPath !== latest.current.projectPath || at === undefined || playback.current.seq) return false
+    const list = cardEditRef.current ? cardAnnsRef.current : mergeScoped(scopedNow()!)
+    const copies = pasteCopies(freshIds(c.anns.map(a => shiftTimes(a, at))), list)
+    putPaletteItem(copies)
+    setExtraSel(copies.slice(1).map(a => a.id))
+    return true
+  }
   const editCard = (sceneId: string | null, marker: Marker | null) => {
     playback.stopSequence(); playback.pause(); setSelectedAnn(null); setCardTool('objects'); setCardEdit({ sceneId, marker })
   }
@@ -729,6 +759,10 @@ export function App() {
     updateReel(trimClip(r, c.id, edge, t, i.range, i.def, ms[c.matchId]?.durationSec))
   }, [updateReel])
 
+  const copyObjectsRef = useRef(copyObjects)
+  copyObjectsRef.current = copyObjects
+  const pasteObjectsRef = useRef(pasteObjects)
+  pasteObjectsRef.current = pasteObjects
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
@@ -736,6 +770,8 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         const k = e.key.toLowerCase()
         if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo') }
+        else if (k === 'c' && !e.shiftKey && !window.getSelection()?.toString()) { if (copyObjectsRef.current()) e.preventDefault() }
+        else if (k === 'v' && !e.shiftKey) { if (pasteObjectsRef.current()) e.preventDefault() }
         else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); undoRedo('redo') }
         return
       }

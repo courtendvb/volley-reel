@@ -99,6 +99,11 @@
 
 - スコアボードは既定で**左上**（中央上は見出しの場所）。一度既定を非表示にしたが戻した。「自動表示」のチェックを入れると、
   動画全体でオフでもオンに戻す
+インストーラー:
+- electron-builder（26.17.0）で NSIS のインストーラー（`npm run dist`、設定は `electron-builder.yml`）。アプリ本体は `out/` を asar に、
+  ffmpeg / ffprobe は別プロセスで動かすので asar の外の `resources/ffmpeg` に置く。場所は `ffmpegDir()`（FFMPEG_DIR → インストール版は
+  resources/ffmpeg → 開発時は vendor/ffmpeg/bin）。React・pdf.js は Vite がまとめるので devDependencies（インストーラーに node_modules を入れない）
+
 13 回目の試用を受けた修正:
 - 表示時間の吸着: トリムバーで出る・消える時刻をドラッグすると、ほかの図形の時刻・IN・OUT・キープレーに 6 px 以内で吸着（`snapTime`）。
   吸着中は青い点線のガイド、Alt で吸着なし

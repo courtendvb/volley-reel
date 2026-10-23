@@ -1,0 +1,31 @@
+# Windows installer (npm run dist → release/). The app is the built out/ folder; ffmpeg and ffprobe
+# go next to it in resources/ffmpeg (they run as separate processes, so not inside the asar).
+appId: com.courtendvb.volleyreel
+productName: volley-reel
+copyright: courtendvb
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: vendor/ffmpeg/bin
+    to: ffmpeg
+    filter:
+      - ffmpeg.exe
+      - ffprobe.exe
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  executableName: volley-reel
+nsis:
+  oneClick: false
+  perMachine: false # installs for the current user: no administrator rights needed
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: volley-reel
+  artifactName: volley-reel-setup-${version}.${ext}

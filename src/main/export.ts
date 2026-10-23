@@ -6,10 +6,10 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { app } from 'electron'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
+import { ffmpegDir } from './ffmpegPath'
 
-const binDir = () => process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+const binDir = ffmpegDir
 
 export class ExportCancelled extends Error {
   constructor() { super('cancelled') }

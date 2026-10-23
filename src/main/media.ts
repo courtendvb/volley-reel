@@ -1,9 +1,9 @@
-// ffprobe / ffmpeg for import (design §3.1). Binaries: vendor/ffmpeg/bin, or FFMPEG_DIR.
+// ffprobe / ffmpeg for import (design §3.1). Binaries: see ffmpegDir.
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { app } from 'electron'
+import { ffmpegDir } from './ffmpegPath'
 
-const binDir = () => process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+const binDir = ffmpegDir
 
 export interface VideoInfo {
   codec: string

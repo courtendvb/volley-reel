@@ -12,6 +12,7 @@ import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProjec
 import { Exporter } from './export'
 import { Library } from './library'
 import { Project } from './project'
+import { ffmpegDir } from './ffmpegPath'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
 protocol.registerSchemesAsPrivileged([
@@ -285,7 +286,7 @@ async function serveMedia(req: Request): Promise<Response> {
 // Smoke only: probe the exported MP4, save frames at the check times, and confirm the cancelled
 // run left neither its output nor the work folder behind.
 function checkExport(r: { export: string; checks: { name: string; t: number }[]; cancelPath: string }): void {
-  const bin = process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+  const bin = ffmpegDir()
   const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_name,width,height,r_frame_rate,nb_read_packets:format=duration,size', '-of', 'json', r.export], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
   for (const c of r.checks) {
@@ -298,7 +299,7 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
 
 // Smoke only: probe an exported MP4 and save frames at the given times next to it.
 function grabFrames(file: string, checks: { name: string; t: number }[]): void {
-  const bin = process.env.FFMPEG_DIR || join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')
+  const bin = ffmpegDir()
   const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-show_entries', 'format=duration,size', '-of', 'json', file], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
   for (const c of checks) {

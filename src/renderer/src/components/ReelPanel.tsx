@@ -39,8 +39,6 @@ interface Props {
   onAddToVideo: (sceneId: string) => void
   markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
   onEditCard: (m: Marker) => void // the gear: edit how marker title cards look, in the video window
-  onExportMarker: (m: Marker) => void // this marker group alone as an MP4
-  canExport: boolean
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -198,8 +196,6 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                     onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
                 )
               })()}
-              <button className="gear" aria-label={`マーカー ${m} だけを書き出す`} title="このマーカーのクリップだけを MP4 に書き出す（動画のオーバーレイ設定で）"
-                disabled={!p.canExport || !reel.groups[m].length} onClick={() => p.onExportMarker(m)}>⤓</button>
               <button className="gear" aria-label={`マーカー ${m} のタイトルカードの見た目`} title="マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
                 onClick={() => p.onEditCard(m)}>⚙</button>
             </header>

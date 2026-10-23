@@ -1,34 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
+import { Accordion } from './Accordion'
 import { bounds, drawAnnotation, type Annotation } from '../../../shared/annotation'
 import { assetImage, subscribeAssets } from '../assets'
 import { removePaletteItem, savePaletteItem, usePalette, usePaletteItem } from '../palette'
 
 // Saved objects to reuse (in the library, so every project has them): save the selection (with its
 // group) under a name, put a saved one on the clip or card, or drop it. Folds away under its header.
-export function PalettePanel({ selection, onUse, disabled }: {
+// Show / hide times are kept relative to the clip's IN, so a saved object appears and leaves at the
+// same moments in whichever clip it is put on (on a title card it shows the whole time).
+export function PalettePanel({ selection, onUse, disabled, clipIn }: {
   selection: Annotation[] // what "save" stores (the selected objects and their groups)
   onUse: (anns: Annotation[]) => void
   disabled: boolean
+  clipIn: number | null // the active clip's IN (null: a title card is being edited)
 }) {
   const palette = usePalette()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem('vr.paletteOpen') === '1' } catch { return false } })
-  useEffect(() => { try { localStorage.setItem('vr.paletteOpen', open ? '1' : '0') } catch { /* not kept */ } }, [open])
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
   const save = () => run(async () => {
-    // Show / hide times belong to one clip, so a saved object shows for the whole of wherever it goes.
-    const clean = selection.map(a => { const { showFrom: _f, showTo: _t, ...rest } = a; return rest as Annotation })
+    const clean = selection.map(a => shiftTimes(a, clipIn === null ? null : -clipIn))
     await savePaletteItem(name || defaultName(selection), clean)
     setName('')
   })
   return (
-    <section className={`palette-panel${open ? ' open' : ''}`}>
-      <button className="accordion-head" aria-expanded={open} onClick={() => setOpen(o => !o)}>
-        <span className="accordion-arrow">{open ? '▼' : '▶'}</span> パレット
-        <span className="muted small">{palette.items.length ? `${palette.items.length} 個` : ''}</span>
-      </button>
-      {open && (
+    <Accordion id="palette" icon="◧" title="パレット" badge={palette.items.length ? `${palette.items.length} 個` : undefined}>
       <div className="palette-body">
       <div className="ann-row">
         {disabled ? <span className="muted small">クリップかタイトルカードを開くと、入れたり保存したりできます</span> : selection.length > 0 ? (
@@ -44,7 +40,7 @@ export function PalettePanel({ selection, onUse, disabled }: {
           {palette.items.map(it => (
             <span key={it.id} className="palette-item" title={`${it.name}（クリックで入れる）`}>
               <button className="palette-use" disabled={disabled || busy} aria-label={`${it.name} を入れる`}
-                onClick={() => void run(async () => onUse(await usePaletteItem(it.id)))}>
+                onClick={() => void run(async () => onUse((await usePaletteItem(it.id)).map(a => shiftTimes(a, clipIn))))}>
                 <Thumb annotations={it.annotations} /><span className="palette-label">{it.name}</span>
               </button>
               <button className="link" aria-label={`${it.name} をパレットから外す`} disabled={busy} onClick={() => void run(() => removePaletteItem(it.id))}>×</button>
@@ -54,9 +50,16 @@ export function PalettePanel({ selection, onUse, disabled }: {
       )}
       {!palette.items.length && <p className="muted small">まだ何も保存されていません</p>}
       </div>
-      )}
-    </section>
+    </Accordion>
   )
+}
+
+// Moves show / hide times by delta seconds; null drops them (the object shows the whole time).
+function shiftTimes(a: Annotation, delta: number | null): Annotation {
+  const { showFrom, showTo, ...rest } = a
+  if (delta === null) return rest as Annotation
+  return { ...rest, ...(showFrom !== undefined ? { showFrom: Math.round((showFrom + delta) * 100) / 100 } : {}),
+    ...(showTo !== undefined ? { showTo: Math.round((showTo + delta) * 100) / 100 } : {}) } as Annotation
 }
 
 function defaultName(sel: Annotation[]): string {

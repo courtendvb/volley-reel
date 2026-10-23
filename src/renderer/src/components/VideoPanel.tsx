@@ -26,8 +26,6 @@ interface Props {
   playing: boolean
   onPlay: () => void
   onStop: () => void
-  exporting: boolean
-  onExport: () => void
 }
 
 const DT_SCENE = 'application/x-vr-scene-index'
@@ -126,10 +124,6 @@ export function VideoPanel(p: Props) {
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlay} disabled={!total.clips}>▶ 動画を再生</button>}
-      </div>
-      <div className="reel-export">
-        <button className="primary" onClick={p.onExport} disabled={!total.clips || p.exporting}
-          title={p.exporting ? '書き出し中です' : 'この動画を MP4 にする'}>⤓ MP4 に書き出す</button>
       </div>
       <p className="count">{v.sceneIds.length} シーン・{total.clips} クリップ・{fmtSec(total.sec)}（タイトルカードを除く）</p>
     </section>

@@ -396,9 +396,36 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .palette-thumb { width: 56px; height: 32px; border-radius: 4px; background: #334155; }
 .palette-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-width: 200px; font-family: "Segoe UI", "Yu Gothic UI", sans-serif; }
-.palette-panel { flex: none; border-top: 2px solid var(--border); background: var(--surface); }
-.palette-panel.open { max-height: 30%; display: flex; flex-direction: column; min-height: 0; }
-.accordion-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 0; background: #F8FAFC; font-weight: 600; text-align: left; }
-.accordion-head:hover { background: #F1F5F9; }
-.accordion-arrow { font-size: 10px; color: var(--sub); width: 10px; }
-.palette-body { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; overflow-y: auto; min-height: 0; font-size: 12.5px; }
+/* Right column accordions (palette, export): big full-width headers, the body scrolls on its own. */
+.accordion { flex: none; display: flex; flex-direction: column; min-height: 0; border-top: 2px solid var(--border); background: var(--surface); }
+.accordion.open { max-height: 34%; }
+.accordion-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 8px 14px; border: 0; border-radius: 0;
+  background: #F8FAFC; font-weight: 600; font-size: 13px; text-align: left; cursor: pointer; }
+.accordion-head:hover { background: #EEF2FF; }
+.accordion-head:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.accordion-arrow { width: 10px; font-size: 10px; color: var(--sub); }
+.accordion-icon { width: 16px; text-align: center; color: var(--primary); }
+.accordion-title { flex: 1; }
+.accordion-badge { font-weight: 400; font-size: 12px; color: var(--sub); }
+.accordion-body { overflow-y: auto; min-height: 0; padding: 10px 14px 12px; font-size: 12.5px; }
+.palette-body { display: flex; flex-direction: column; gap: 6px; }
+.export-body { display: flex; flex-direction: column; gap: 10px; }
+.export-targets { display: flex; flex-direction: column; gap: 4px; }
+.export-target { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; }
+.export-target:hover { border-color: var(--primary); }
+.export-target.on { border-color: var(--primary); background: var(--primary-light); }
+.export-target.empty { opacity: 0.5; cursor: default; }
+.export-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.export-detail { grid-column: 2; color: var(--sub); font-size: 11.5px; }
+.export-info { margin: 0; color: var(--sub); font-size: 12px; }
+.export-go { width: 100%; min-height: 40px; font-size: 14px; }
+.export-progress { display: flex; align-items: center; gap: 8px; }
+.export-progress progress { flex: 1; height: 10px; }
+.export-result { margin: 0; font-size: 12px; }
+.export-result.error { color: #B91C1C; }
+/* Export: one line per choice (name left, length right) and the button always in reach at the bottom. */
+.export-target { grid-template-columns: 16px minmax(0, 1fr) auto; padding: 5px 8px; }
+.export-detail { grid-column: auto; white-space: nowrap; }
+.export-go, .export-progress { position: sticky; bottom: -12px; z-index: 1; box-shadow: 0 -6px 10px var(--surface); }
+.export-progress { background: var(--surface); padding: 6px 0; }

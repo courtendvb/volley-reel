@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyStyle, bounds, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
-import { dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
+import { cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -81,6 +81,26 @@ describe('editing points', () => {
     const three = dragHandle(line, 'm0', 0.3, 0.6).a
     expect(setClosed(three, true).kind).toBe('polygon')
     expect(setClosed({ ...poly, fill: '#000' } as Annotation, false)).not.toHaveProperty('fill')
+  })
+})
+
+describe('cropping pictures', () => {
+  const img = { id: 'i', kind: 'image', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.4, assetId: 'a.png' } as Extract<Annotation, { kind: 'image' }>
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
+
+  it('narrows the frame by a handle and keeps the picture in place', () => {
+    const c = cropHandle(img, fullRect(img), 'e', 0.4, 0.3)
+    expect(near(c.w, 0.2) && near(c.crop!.w, 0.5) && near(c.crop!.x, 0)).toBe(true)
+    const f0 = fullRect(img), f1 = fullRect(c)
+    expect(near(f0.x, f1.x) && near(f0.y, f1.y) && near(f0.w, f1.w) && near(f0.h, f1.h)).toBe(true)
+  })
+
+  it('zooms the picture around the frame center and pans it under the frame', () => {
+    const z = zoomCrop(img, 2)
+    expect(near(z.crop!.w, 0.5) && near(z.crop!.x, 0.25)).toBe(true)
+    expect(zoomCrop(img, 0.5)).not.toHaveProperty('crop') // never smaller than the frame
+    const p = panCrop(z, fullRect(z), 1, 0) // too far right: stops with the picture's left edge at the frame's
+    expect(near(p.crop!.x, 0)).toBe(true)
   })
 })
 

@@ -112,6 +112,47 @@ function resizePoints(pts: [number, number][], h: BoxHandle, x: number, y: numbe
   return pts.map(([px, py]) => [map(px, o.x, o.w, n.x, n.w), map(py, o.y, o.h, n.y, n.h)])
 }
 
+// ---- cropping a picture (Office-style: the frame shows part of the picture; the picture can be
+// moved and zoomed under the frame). "full" is where the whole picture would be on the frame.
+type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
+type Box = { x: number; y: number; w: number; h: number }
+
+export function fullRect(a: ImageAnnotation): Box {
+  const c = a.crop ?? { x: 0, y: 0, w: 1, h: 1 }
+  const w = a.w / c.w, h = a.h / c.h
+  return { x: a.x - c.x * w, y: a.y - c.y * h, w, h }
+}
+
+function withFrame(a: ImageAnnotation, box: Box, full: Box): ImageAnnotation {
+  const crop = { x: (box.x - full.x) / full.w, y: (box.y - full.y) / full.h, w: box.w / full.w, h: box.h / full.h }
+  const whole = Math.abs(crop.x) < 1e-6 && Math.abs(crop.y) < 1e-6 && Math.abs(crop.w - 1) < 1e-6 && Math.abs(crop.h - 1) < 1e-6
+  const { crop: _c, ...rest } = a
+  return { ...rest, ...box, ...(whole ? {} : { crop }) }
+}
+
+// Drags a frame handle: the frame changes, the picture stays; the frame can't leave the picture.
+export function cropHandle(a: ImageAnnotation, full: Box, h: BoxHandle, x: number, y: number): ImageAnnotation {
+  const b = resizeBox(a, h, Math.max(full.x, Math.min(full.x + full.w, x)), Math.max(full.y, Math.min(full.y + full.h, y)), false)
+  if (b.w < 0.01 || b.h < 0.01) return a
+  return withFrame(a, b, full)
+}
+
+// Moves the picture under the frame, so the frame stays on the picture.
+export function panCrop(a: ImageAnnotation, full: Box, dx: number, dy: number): ImageAnnotation {
+  const x = Math.min(a.x, Math.max(a.x + a.w - full.w, full.x + dx))
+  const y = Math.min(a.y, Math.max(a.y + a.h - full.h, full.y + dy))
+  return withFrame(a, a, { ...full, x, y })
+}
+
+// Zooms the picture around the frame's center; it never gets smaller than the frame.
+export function zoomCrop(a: ImageAnnotation, factor: number): ImageAnnotation {
+  const full = fullRect(a)
+  const s = Math.max(factor, a.w / full.w, a.h / full.h)
+  const cx = a.x + a.w / 2, cy = a.y + a.h / 2
+  const z = { x: cx - (cx - full.x) * s, y: cy - (cy - full.y) * s, w: full.w * s, h: full.h * s }
+  return panCrop(a, z, 0, 0)
+}
+
 // Deletes a vertex, keeping at least 2 points for lines and 3 for polygons.
 export function removeVertex(a: Annotation, i: number): Annotation {
   if (!isPoints(a) || a.points.length <= MIN_POINTS[a.kind]) return a

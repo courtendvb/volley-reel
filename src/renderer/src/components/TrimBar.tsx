@@ -10,13 +10,16 @@ interface Props {
   overrides: { in: boolean; out: boolean }
   overlapLabels: string[]
   onTrim: (edge: 'in' | 'out', t: number | null) => void
+  loop: boolean // loop the clip (off: play on past OUT to see around it)
+  onLoop: (on: boolean) => void
+  objectSpan: { from: number; to: number } | null // the selected object's show / hide times, drawn on the track
 }
 
 const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default range
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, loop, onLoop, objectSpan }: Props) {
   const track = useRef<HTMLDivElement>(null)
   const [now, setNow] = useState(playback.current.time)
   const [paused, setPaused] = useState(playback.current.paused)
@@ -52,7 +55,9 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     <div className="trim">
       <div className="trim-head">
         <span className="trim-title">{label}</span>
-        <span className="muted">{(range.out - range.in).toFixed(1)}秒{paused ? '' : '・ループ再生中'}</span>
+        <span className="muted">{(range.out - range.in).toFixed(1)}秒</span>
+        <label className="check muted" title="外すと OUT を過ぎても再生を続け、範囲の外も見られます">
+          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> ループ再生{loop && !paused ? '中' : ''}</label>
         {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} 本と範囲が重なっています</span>}
       </div>
 
@@ -66,6 +71,10 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <div className="trim-key" style={{ left: pct(keyTime) }} title="キープレー" />
         <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title="IN（ドラッグ）" />
         <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title="OUT（ドラッグ）" />
+        {objectSpan && (
+          <div className="trim-object" style={{ left: pct(Math.max(lo, objectSpan.from)), width: `calc(${pct(Math.min(hi, objectSpan.to))} - ${pct(Math.max(lo, objectSpan.from))})` }}
+            title={`選択中の図形の表示: ${rel(objectSpan.from)} 〜 ${rel(objectSpan.to)} 秒`} />
+        )}
         {now >= lo && now <= hi && <div className="trim-playhead" style={{ left: pct(now) }} />}
       </div>
 

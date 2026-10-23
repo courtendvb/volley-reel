@@ -67,7 +67,8 @@ export function App() {
   const [editPoints, setEditPoints] = useState(false)
   const [annStyle, setAnnStyle] = useState<AnnStyle>({ color: '#EF4444', width: 6, size: 36 }) // red by default
   const [selectedAnn, setSelectedAnn] = useState<string | null>(null)
-  useEffect(() => setEditPoints(false), [selectedAnn])
+  const [cropping, setCropping] = useState(false) // the selected picture is being cropped
+  useEffect(() => { setEditPoints(false); setCropping(false) }, [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [exportState, setExportState] = useState<{ status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string } | null>(null)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
@@ -335,6 +336,7 @@ export function App() {
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
   const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number } | null>(null)
   const [listRun, setListRun] = useState(false)
+  const [loopOn, setLoopOn] = useState(true) // the trim bar's ループ再生 box: off lets the clip play on past OUT
   const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false) }, [])
   const jump = useCallback((r: PlayRef) => {
     const m = latest.current.matches[r.matchId]
@@ -441,8 +443,8 @@ export function App() {
   const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out
   // The active clip loops while it's being trimmed; a through-play overrides the loop.
   useEffect(() => {
-    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun ? { key: active.matchId, in: loopIn, out: loopOut } : null)
-  }, [active, loopIn, loopOut, seqPlaying])
+    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun && loopOn ? { key: active.matchId, in: loopIn, out: loopOut } : null)
+  }, [active, loopIn, loopOut, seqPlaying, listRun, loopOn])
 
   useEffect(() => setSelectedAnn(null), [activeClipId])
 
@@ -772,7 +774,25 @@ export function App() {
         setAnns(anns().map(a => a.kind !== 'image' ? a : { ...a, x: ids.indexOf(a.id) === 0 ? 0.02 : 0.68, y: 0.05 }))
         await sleep(300)
         log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
+
+        // Cropping: the right handle narrows the frame, then the wheel zooms the picture in.
+        const imgId = anns().find(a => a.kind === 'image')!.id
+        const im = () => anns().find(a => a.id === imgId) as Extract<Annotation, { kind: 'image' }>
+        setSelectedAnn(imgId); await sleep(200)
+        button('トリミング').click(); await sleep(200)
+        const i0 = im(), my = i0.y + i0.h / 2
+        await stroke([[i0.x + i0.w, my], [i0.x + i0.w * 0.85, my], [i0.x + i0.w * 0.7, my]])
+        canvas.dispatchEvent(new WheelEvent('wheel', { ...pt(i0.x + i0.w * 0.35, my), deltaY: -100, cancelable: true })); await sleep(200)
+        const c1 = im().crop
+        log.crop = c1 ? { x: +c1.x.toFixed(3), y: +c1.y.toFixed(3), w: +c1.w.toFixed(3), h: +c1.h.toFixed(3), frameW: +im().w.toFixed(3) } : null
       }
+      // The selected object's show / hide span on the trim bar's track.
+      const arrowId = anns().find(a => a.kind === 'arrow')!.id
+      setSelectedAnn(arrowId); await sleep(200)
+      button('ここから表示').click(); await sleep(200)
+      log.objectSpan = !!document.querySelector('.trim-object')
+      log.loopBox = (document.querySelector('.trim-head input[type=checkbox]') as HTMLInputElement | null)?.checked ?? null
+      setSelectedAnn(null); await sleep(100)
       // 表示範囲: the rect to the whole scene, the triangle to the whole video, through the picker.
       const rectId = anns().find(a => a.kind === 'rect')!.id
       setSelectedAnn(rectId); await sleep(200); await setValue('表示範囲', 'scene')
@@ -1397,7 +1417,7 @@ export function App() {
                       <AnnotationLayer
                         size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here}
                         editable={!seqPlaying} tool={annTool} style={annStyle}
-                        selectedId={selectedAnn} editPoints={editPoints} onSelect={setSelectedAnn} onChange={setAnns}
+                        selectedId={selectedAnn} editPoints={editPoints} cropping={cropping} onSelect={setSelectedAnn} onChange={setAnns}
                       />
                     )}
                   </>
@@ -1419,13 +1439,18 @@ export function App() {
                   const oi = reel!.clips[id] ? clipInfo(reel!.clips[id]) : null
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
-                onTrim={trim}
+                onTrim={trim} loop={loopOn} onLoop={setLoopOn}
+                objectSpan={(() => {
+                  const a = selectedAnn ? active.annotations.find(x => x.id === selectedAnn) : undefined
+                  return a && (a.showFrom !== undefined || a.showTo !== undefined)
+                    ? { from: a.showFrom ?? activeInfo.range.in, to: a.showTo ?? activeInfo.range.out } : null
+                })()}
               />
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
-                annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints}
+                annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping}
                 onSelect={setSelectedAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
               />
             )}

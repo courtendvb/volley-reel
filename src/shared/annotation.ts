@@ -43,10 +43,12 @@ export type Annotation = Base & (
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number } & Fillable)
-  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string }
+  // crop: the part of the picture shown (fractions of its width / height); missing = all of it.
+  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop }
 )
 
 export type ImageLookup = (assetId: string) => CanvasImageSource | null
+export interface Crop { x: number; y: number; w: number; h: number }
 
 export type PointsAnnotation = Extract<Annotation, { points: [number, number][] }>
 export const isPoints = (a: Annotation): a is PointsAnnotation => a.kind === 'freehand' || a.kind === 'polyline' || a.kind === 'polygon'
@@ -164,7 +166,12 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
     case 'text': drawText(ctx, a, W, H, s); break
     case 'image': {
       const img = images?.(a.assetId) ?? null
-      if (img) { ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H); break }
+      if (img) {
+        const c = a.crop, iw = (img as { width: number }).width, ih = (img as { height: number }).height
+        if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
+        else ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H)
+        break
+      }
       // Not loaded (yet): a placeholder, so the object can still be seen and picked.
       ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(148,163,184,0.9)'
       ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H)

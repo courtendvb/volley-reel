@@ -30,8 +30,12 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
   return (
     <div className="ann-row clip-overlay">
       <span className="field-label">自動表示</span>
-      <label className="check"><input type="checkbox" checked={!o?.scoreboard?.hidden}
-        onChange={e => write({ ...o, scoreboard: { hidden: !e.target.checked } })} /> スコアボード</label>
+      {/* On for the clip and the video: ticking it while the video has the scoreboard off turns it on for the video. */}
+      <label className="check"><input type="checkbox" checked={s.scoreboard.enabled && !o?.scoreboard?.hidden}
+        onChange={e => {
+          if (e.target.checked && !s.scoreboard.enabled) onOverlay({ ...s, scoreboard: { ...s.scoreboard, enabled: true } })
+          write({ ...o, scoreboard: { hidden: !e.target.checked } })
+        }} /> スコアボード</label>
       <select className="ov-pos" aria-label="スコアボードの位置（動画全体）" title="スコアボードの位置（この動画のすべてのクリップ）" value={s.scoreboard.anchor}
         onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, anchor: e.target.value as Anchor } })}>
         {SB_POSITIONS.map(([a, l]) => <option key={a} value={a}>{l}</option>)}

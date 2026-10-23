@@ -371,3 +371,4 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .inline-title { flex: 1; min-width: 0; padding: 1px 4px; font: inherit; }
 .card-editor { position: absolute; inset: 0; }
 .card-edit-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #FEFCE8; border: 1px solid #FACC15; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
+.trim-object { position: absolute; bottom: 2px; height: 5px; border-radius: 3px; background: #F59E0B; box-shadow: 0 0 0 1px rgba(255,255,255,0.8); pointer-events: none; }

@@ -3,7 +3,7 @@ import {
   COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
-import { MAX_EDIT_POINTS, setClosed, simplify, toPolygon } from '../../../shared/annotationEdit'
+import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
@@ -20,6 +20,8 @@ interface Props {
   canVideo: boolean // a video is open, so objects can be put on all of it
   editPoints: boolean
   onEditPoints: (on: boolean) => void
+  cropping: boolean
+  onCropping: (on: boolean) => void
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
   onInsertImage: () => void
@@ -84,6 +86,19 @@ export function AnnotationTools(p: Props) {
               if (!p.editPoints && (sel.kind === 'rect' || sel.kind === 'circle')) update(toPolygon(sel))
               p.onEditPoints(!p.editPoints)
             }}>頂点の編集</button>
+        )}
+        {sel?.kind === 'image' && (
+          <button className={p.cropping ? 'on' : ''} aria-pressed={p.cropping} disabled={p.disabled}
+            title="枠のつまみで切り取る範囲、画像のドラッグで位置、ホイールか ＋／− で拡大・縮小"
+            onClick={() => p.onCropping(!p.cropping)}>トリミング</button>
+        )}
+        {sel?.kind === 'image' && p.cropping && (
+          <>
+            <button aria-label="画像を拡大" title="画像を拡大（枠はそのまま）" onClick={() => update(zoomCrop(sel, 1.15))}>＋</button>
+            <button aria-label="画像を縮小" title="画像を縮小（枠より小さくはならない）" onClick={() => update(zoomCrop(sel, 1 / 1.15))}>−</button>
+            {sel.crop && <button className="link" title="切り取りをやめて、画像全体を表示する"
+              onClick={() => { const { crop: _c, ...rest } = sel; update({ ...rest, ...fullRect(sel) }) }}>元の画像に戻す</button>}
+          </>
         )}
         <span className="muted small">{sel ? `${KIND_LABEL[sel.kind]}${sel.kind === 'text' ? `「${sel.text}」` : ''} を編集中` : '次に描く図形の書式'}</span>
       </div>

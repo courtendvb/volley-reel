@@ -3,7 +3,7 @@ import {
   applyStyle, bounds, drawAnnotation, hitTest, normalizeBox, translate, visibleAt,
   type Annotation, type AnnotationKind, type StylePatch,
 } from '../../../shared/annotation'
-import { dragHandle, handlesOf, pointsBox, removeVertex, trianglePoints, type Handle } from '../../../shared/annotationEdit'
+import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
@@ -28,6 +28,7 @@ interface Props {
   selectedId: string | null
   scopeOf?: (id: string) => AnnScope | null // where each object lives (frame color and tag)
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
+  cropping: boolean // the selected picture is being cropped: handles move the frame, dragging moves the picture
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
 }
@@ -38,6 +39,11 @@ type Drag =
   | { mode: 'move'; id: string; from: [number, number]; orig: Annotation }
   | { mode: 'handle'; id: string; handle: string }
   | { mode: 'draw'; draft: Annotation; from: [number, number] }
+  | { mode: 'crop'; id: string; handle: BoxHandle; full: Box }
+  | { mode: 'pan'; id: string; from: [number, number]; orig: ImageAnn; full: Box }
+
+type ImageAnn = Extract<Annotation, { kind: 'image' }>
+type Box = { x: number; y: number; w: number; h: number }
 
 const uid = () => crypto.randomUUID()
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
@@ -76,6 +82,7 @@ export function AnnotationLayer(p: Props) {
   const shown = drag?.mode === 'draw' ? [...p.annotations, drag.draft] : pathDraft ? [...p.annotations, pathDraft] : p.annotations
   const selected = p.editable && p.selectedId ? p.annotations.find(a => a.id === p.selectedId) ?? null : null
   const handles = selected ? handlesOf(selected, p.editPoints) : []
+  const cropImg = p.cropping && selected?.kind === 'image' ? selected : null
 
   useEffect(() => {
     const c = canvas.current
@@ -91,6 +98,11 @@ export function AnnotationLayer(p: Props) {
       const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'
       if (!vis && !p.editable) continue
       ctx.globalAlpha = vis ? 1 : 0.3
+      if (cropImg && a.id === cropImg.id) {
+        // While cropping, the whole picture shows faintly around the frame.
+        const img = assetImage(cropImg.assetId), f = fullRect(cropImg)
+        if (img) { ctx.save(); ctx.globalAlpha = 0.35; ctx.drawImage(img, f.x * p.size.w, f.y * p.size.h, f.w * p.size.w, f.h * p.size.h); ctx.restore() }
+      }
       drawAnnotation(ctx, a, p.size.w, p.size.h, assetImage)
     }
     ctx.globalAlpha = 1
@@ -128,6 +140,22 @@ export function AnnotationLayer(p: Props) {
     return [clamp01((e.clientX - r.left) / r.width), clamp01((e.clientY - r.top) / r.height)]
   }
   const ctx2d = () => canvas.current!.getContext('2d')!
+  // The wheel zooms the picture being cropped (a native listener: React's wheel handler can't prevent scrolling).
+  const cropRef = useRef<ImageAnn | null>(null)
+  cropRef.current = cropImg
+  useEffect(() => {
+    const c = canvas.current
+    if (!c) return
+    const onWheel = (e: WheelEvent) => {
+      const img = cropRef.current
+      if (!img) return
+      e.preventDefault()
+      const cur = annsRef.current.find(a => a.id === img.id)
+      if (cur?.kind === 'image') replace(zoomCrop(cur, e.deltaY < 0 ? 1.1 : 1 / 1.1))
+    }
+    c.addEventListener('wheel', onWheel, { passive: false })
+    return () => c.removeEventListener('wheel', onWheel)
+  })
   const handleAt = (pt: [number, number]): Handle | null => {
     // Vertices win over midpoints when they overlap.
     const near = handles.filter(h => Math.hypot((h.x - pt[0]) * p.size.w, (h.y - pt[1]) * p.size.h) <= HANDLE_PX)
@@ -170,6 +198,13 @@ export function AnnotationLayer(p: Props) {
       setPath({ ...q, points: [...q.points, pt] })
       return
     }
+    if (p.tool === 'select' && cropImg) {
+      const h = handleAt(pt), f = fullRect(cropImg)
+      if (h) { playback.pause(); setDrag({ mode: 'crop', id: cropImg.id, handle: h.id as BoxHandle, full: f }); return }
+      if (pt[0] >= f.x && pt[0] <= f.x + f.w && pt[1] >= f.y && pt[1] <= f.y + f.h) {
+        playback.pause(); setDrag({ mode: 'pan', id: cropImg.id, from: pt, orig: cropImg, full: f }); return
+      }
+    }
     if (p.tool === 'select') {
       const h = handleAt(pt)
       if (h && selected) { playback.pause(); setDrag({ mode: 'handle', id: selected.id, handle: h.id }); return }
@@ -194,6 +229,15 @@ export function AnnotationLayer(p: Props) {
     if (!drag) return
     if (drag.mode === 'move') {
       replace(translate(drag.orig, x - drag.from[0], y - drag.from[1]))
+      return
+    }
+    if (drag.mode === 'crop') {
+      const cur = annsRef.current.find(a => a.id === drag.id)
+      if (cur?.kind === 'image') replace(cropHandle(cur, drag.full, drag.handle, x, y))
+      return
+    }
+    if (drag.mode === 'pan') {
+      replace(panCrop(drag.orig, drag.full, x - drag.from[0], y - drag.from[1]))
       return
     }
     if (drag.mode === 'handle') {

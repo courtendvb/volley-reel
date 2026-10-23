@@ -58,7 +58,7 @@ describe('settings', () => {
   it('fills missing parts from the defaults', () => {
     const s = overlaySettings({ theme: { base: '#000000', accent: '#FFFFFF' }, scoreboard: { anchor: 'tr' } as never })
     expect(s.theme).toEqual({ base: '#000000', accent: '#FFFFFF' })
-    expect(s.scoreboard).toMatchObject({ anchor: 'tr', enabled: false, showSets: true })
+    expect(s.scoreboard).toMatchObject({ anchor: 'tr', enabled: true, showSets: true })
     expect(overlaySettings(undefined)).toEqual(DEFAULT_OVERLAY)
   })
 })

@@ -141,6 +141,7 @@ export class Project {
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
       settings: { ourTeamCodes: this.file.ourTeamCodes, playerAliases: this.file.playerAliases, ...(this.file.theme ? { theme: this.file.theme } : {}) },
+      missing: this.library.missing(matches),
     }
   }
 

@@ -436,3 +436,9 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .headline-times { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .fade-fields { display: inline-flex; align-items: center; gap: 4px; }
 .fade-fields input[type="number"] { width: 48px; }
+
+/* A match whose video or DVW moved: on its library row and in a bar above the project. */
+.match-row.lost { grid-template-columns: 96px 120px minmax(0, 1fr) 64px 18px auto; background: #FEF2F2; }
+.missing-note { display: inline-flex; gap: 10px; color: var(--danger-text); font-size: 12px; white-space: nowrap; }
+.missing-note button { margin-left: 6px; }
+.missing-bar { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 6px 12px; background: #FEF2F2; border-bottom: 1px solid #FECACA; font-size: 12.5px; }

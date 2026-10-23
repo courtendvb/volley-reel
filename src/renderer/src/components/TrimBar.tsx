@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { snapTime } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
+import { composing } from '../keys'
 
 interface Props {
   label: string
@@ -160,7 +161,7 @@ function Edge({ name, keyName, value, overridden, onSet, onType, onReset }: {
     <span className="trim-edge">
       <button onClick={onSet} title={`再生位置を ${name} にする (${keyName})`}>{keyName} {name}</button>
       <input type="number" step={0.1} value={text} aria-label={`${name}（キープレーからの秒）`}
-        onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit() }} />
+        onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       {overridden ? <button className="link" onClick={onReset}>既定に戻す</button> : <span className="muted small">既定</span>}
     </span>
   )

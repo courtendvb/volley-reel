@@ -26,6 +26,7 @@ export interface PlaybackState {
   seq: { index: number; total: number } | null // through-play position, when a reel is playing
   loop: SeqItem | null // the clip being trimmed: playback wraps from OUT back to IN
   card: CardItem['card'] | null // title card on screen during a through-play
+  cardSec: number // how long that card stays up (0 without one)
 }
 
 type Listener = (s: PlaybackState) => void
@@ -36,7 +37,7 @@ class Playback {
   private pending: { key: string; t: number; play: boolean } | null = null
   private fps = 30
   private listeners = new Set<Listener>()
-  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null, card: null }
+  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null, card: null, cardSec: 0 }
   private detachEvents: (() => void) | null = null
   private seq: { items: SequenceItem[]; index: number; onIndex: (i: number | null) => void } | null = null
   private cardTimer = 0
@@ -126,7 +127,7 @@ class Playback {
     if (!s) return
     this.seq = null
     clearTimeout(this.cardTimer)
-    this.set({ ...this.state, seq: null, card: null })
+    this.set({ ...this.state, seq: null, card: null, cardSec: 0 })
     s.onIndex(null)
   }
 
@@ -173,7 +174,7 @@ class Playback {
     s.index = i
     const it = s.items[i]
     clearTimeout(this.cardTimer)
-    this.set({ ...this.state, seq: { index: i, total: s.items.length }, card: isCard(it) ? it.card : null })
+    this.set({ ...this.state, seq: { index: i, total: s.items.length }, card: isCard(it) ? it.card : null, cardSec: isCard(it) ? it.durationSec : 0 })
     s.onIndex(i)
     if (isCard(it)) {
       this.video?.pause()

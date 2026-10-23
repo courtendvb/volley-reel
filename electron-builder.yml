@@ -15,12 +15,19 @@ extraResources:
     filter:
       - ffmpeg.exe
       - ffprobe.exe
+  # The ffmpeg build is GPL: its license and notes ship next to it.
+  - from: vendor/ffmpeg
+    to: ffmpeg
+    filter:
+      - LICENSE
+      - README.txt
 asar: true
 win:
   target:
     - target: nsis
       arch: [x64]
   executableName: volley-reel
+  icon: build/icon.png
 nsis:
   oneClick: false
   perMachine: false # installs for the current user: no administrator rights needed

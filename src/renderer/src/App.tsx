@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { composing } from './keys'
 import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, groupOf, markerCardOn, markersOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel,
 } from '../../shared/reel'
-import type { ImportProgress, Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
+import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
 import { FilterPanel, type Scope } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
@@ -27,17 +28,19 @@ import { PalettePanel } from './components/PalettePanel'
 import { ExportPanel, type ExportTarget } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
-import { Home } from './components/Home'
+import { Home, MissingNote } from './components/Home'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
 import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
-import { assetStats, forgetLogo, insertAsset, resetAssets } from './assets'
-import { canvasStats } from './canvas'
+import { insertAsset, resetAssets } from './assets'
+import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 
 const api = window.api
+// The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
+const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
 
 // Clips whose play can't be found in the DVW, per scene object and DVW set (relink walks every clip).
@@ -219,13 +222,13 @@ export function App() {
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
   // ---- reels --------------------------------------------------------------------------------
-  // One undo history for scenes and videos, in the order edits happened. Edits to the same thing
+  // One undo history for scenes, videos and the project settings, in the order edits happened. Edits to the same thing
   // within UNDO_MERGE_MS (a handle drag, typing a name) become one step.
-  type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video }
+  type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video } | { kind: 'settings'; value: ProjectSettings }
   const undoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
   const redoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
   const record = useCallback((prev: Snapshot) => {
-    const key = `${prev.kind}:${prev.value.id}`, now = Date.now(), top = undoStack.current[undoStack.current.length - 1]
+    const key = prev.kind === 'settings' ? 'settings' : `${prev.kind}:${prev.value.id}`, now = Date.now(), top = undoStack.current[undoStack.current.length - 1]
     if (top && top.key === key && now - top.at < UNDO_MERGE_MS) top.at = now
     else { undoStack.current.push({ key, prev, at: now }); if (undoStack.current.length > UNDO_LIMIT) undoStack.current.shift() }
     redoStack.current = []
@@ -251,7 +254,15 @@ export function App() {
   const undoRedo = useCallback((dir: 'undo' | 'redo') => {
     const [from, to] = dir === 'undo' ? [undoStack.current, redoStack.current] : [redoStack.current, undoStack.current]
     for (let e = from.pop(); e; e = from.pop()) {
-      const cur = e.prev.kind === 'scene' ? latest.current.reels.find(x => x.id === e!.prev.value.id) : latest.current.videos.find(x => x.id === e!.prev.value.id)
+      if (e.prev.kind === 'settings') {
+        const now = latest.current.settings
+        if (!now) continue
+        to.push({ key: e.key, prev: { kind: 'settings', value: now }, at: 0 })
+        void api.saveSettings(e.prev.value).then(setProject).catch(err => setError(String(err)))
+        return
+      }
+      const id = e.prev.value.id
+      const cur = e.prev.kind === 'scene' ? latest.current.reels.find(x => x.id === id) : latest.current.videos.find(x => x.id === id)
       if (!cur) continue // deleted since: skip to the next step
       to.push({ key: e.key, prev: { kind: e.prev.kind, value: cur } as Snapshot, at: 0 })
       if (e.prev.kind === 'scene') { putScene(e.prev.value); setReelId(e.prev.value.id) } else { putVideo(e.prev.value); setVideoId(e.prev.value.id) }
@@ -721,7 +732,7 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
-      if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLSelectElement || settingsOpen) return
+      if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || settingsOpen || composing(e)) return
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         const k = e.key.toLowerCase()
         if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo') }
@@ -808,827 +819,11 @@ export function App() {
     }
   }, [currentPlan])
 
-  // ---- dev self-check (VR_SMOKE) ------------------------------------------------------------
+  // ---- dev self-check (VR_SMOKE): only loaded when the main process runs one (see smoke.ts)
   useEffect(() => {
-    window.__smoke = async (opts: SmokeOpts) => {
-      if (opts.home) return smokeHome(opts)
-      const p = await api.getProject()
-      if (!p?.matches.length) throw new Error('no match in project')
-      await loadProject(p)
-      setScope(opts.scope)
-      const want = { ...EMPTY_FILTER, ...(opts.filter ?? {}) }
-      setFilter(want)
-      const res = await waitFor(() => {
-        const l = latest.current
-        return JSON.stringify(l.filter) === JSON.stringify(want) && l.results.length ? l.results : null
-      })
-      if (opts.reel) return smokeReel(opts.reel, res)
-      if (opts.trim) return smokeTrim(res)
-      if (opts.ann) return smokeAnn(res)
-      if (opts.ov) return smokeOverlay(res, opts.ov)
-      if (opts.exportTo) return smokeExport(res, opts.exportTo)
-      if (opts.m8) return smokeM8(res, opts.m8)
-      if (opts.video) return smokeVideo(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
-      if (opts.obj) return smokeObjects(res, opts).catch(e => { throw new Error(String((e as Error).stack)) }) // keep where it failed in the log
-      if (opts.listRun) {
-        // プレー前後: a play picked in the list is followed by the next ones on their own.
-        setExtract('keyplay'); await sleep(100)
-        const start = Math.min(opts.play, res.length - 3)
-        jump(res[start])
-        const seen = [res[start].play.id]
-        const t0 = performance.now()
-        while (seen.length < 3 && performance.now() - t0 < 40000) {
-          await sleep(200)
-          const s = latest.current.selected
-          if (s && s.playId !== seen[seen.length - 1]) seen.push(s.playId)
-        }
-        return { listRun: seen, expected: res.slice(start, start + 3).map(x => x.play.id), ms: Math.round(performance.now() - t0) }
-      }
-      const r = res[Math.min(opts.play, res.length - 1)]
-      jump(r)
-      await waitFor(() => playback.attachedKey === r.matchId && playback.current.ready || null)
-      const t = await playback.seekAndWait(r.play.time + latest.current.matches[r.matchId].offsetSec)
-      if (opts.settings) { setSettingsOpen(true); await sleep(300) }
-      // Real key events, as if typed: each one goes through the window keydown handler.
-      const afterKeys: (string | number | null)[] = []
-      for (const key of opts.keys ?? []) {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
-        await sleep(150)
-        const rl = latest.current.reel, c = rl && findClip(rl, r.matchId, r.play.id)
-        afterKeys.push(c ? groupOf(rl, c.id) : null)
-      }
-      return {
-        matches: p.matches.map(m => m.name), scope: opts.scope, results: res.length,
-        perMatch: Object.fromEntries(p.matches.map(m => [m.name, res.filter(x => x.matchId === m.id).length])),
-        // How the list runs through the matches: one entry per stretch of the same match.
-        matchRuns: latest.current.results.reduce<string[]>((o, x) => { const n = p.matches.find(m => m.id === x.matchId)?.name ?? '?'; if (o[o.length - 1] !== n) o.push(n); return o }, []).slice(0, 12),
-        jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
-        keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
-      }
-    }
-
-    // Objects through real pointer, key and form events: a polygon by clicks, a box resized by its
-    // corner, an arrow end dragged, a vertex inserted from a midpoint and one deleted, then fill,
-    // transparency, dash, arrow heads and a boxed text set from the format panel; optional export.
-    const smokeObjects = async (res: PlayRef[], opts: SmokeOpts) => {
-      const r0 = res.find(x => x.play.rallyId !== null)!
-      const sc = { ...addClips(newReel('object smoke'), [{ matchId: r0.matchId, play: r0.play }]).reel, scope: 'all' as const } // unmarked clip, so export everything
-      smokeUse(sc)
-      await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
-      const clip = latest.current.reel!.clips[sc.groups.none[0]]
-      activateClip(clip)
-      await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready ? true : null, 20000, 'video')
-      const range = latest.current.clipInfo(clip).range!
-      await playback.seekAndWait(range.in + 2)
-      const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 20000, 'canvas')
-      // Measured on every event: the layout can move while panels change.
-      const pt = (x: number, y: number) => { const b = canvas.getBoundingClientRect(); return { clientX: b.left + x * b.width, clientY: b.top + y * b.height, bubbles: true, pointerId: 1 } }
-      const key = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); await sleep(80) }
-      const down = async (x: number, y: number) => { canvas.dispatchEvent(new PointerEvent('pointerdown', pt(x, y))); await sleep(40); canvas.dispatchEvent(new PointerEvent('pointerup', pt(x, y))); await sleep(60) }
-      const stroke = async (path: [number, number][], shift = false) => {
-        canvas.dispatchEvent(new PointerEvent('pointerdown', pt(...path[0]))); await sleep(40)
-        for (const q of path.slice(1)) { canvas.dispatchEvent(new PointerEvent('pointermove', { ...pt(...q), shiftKey: shift })); await sleep(25) }
-        canvas.dispatchEvent(new PointerEvent('pointerup', pt(...path[path.length - 1]))); await sleep(120)
-      }
-      const dbl = async (x: number, y: number) => { canvas.dispatchEvent(new MouseEvent('dblclick', pt(x, y))); await sleep(150) }
-      const anns = () => latest.current.reel!.clips[clip.id].annotations
-      const find = (k: string) => anns().find(a => a.kind === k) as Record<string, unknown> | undefined
-      const ctl = <T extends HTMLElement>(label: string) => document.querySelector<T>(`[aria-label="${label}"]`)!
-      const setValue = async (label: string, value: string) => {
-        const el = ctl<HTMLInputElement | HTMLSelectElement>(label)
-        const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
-        Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value)
-        el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await sleep(120)
-      }
-      const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('.ann-tools button')].find(b => b.textContent?.startsWith(text))!
-      const log: Record<string, unknown> = {}
-
-      // Polygon: three clicks, then a double-click (whose two clicks add one duplicate point).
-      await key('p')
-      await down(0.2, 0.2); await down(0.4, 0.2); await down(0.3, 0.4); await down(0.3, 0.4); await dbl(0.3, 0.4)
-      log.polygon = (find('polygon')?.points as unknown[] | undefined)?.length ?? 0
-
-      // Rect drawn, then resized by its bottom-right handle.
-      await key('r'); await stroke([[0.55, 0.15], [0.65, 0.25], [0.75, 0.35]])
-      await key('v'); await stroke([[0.75, 0.35], [0.8, 0.4], [0.85, 0.45]])
-      const rect = find('rect')!
-      log.rectResized = { w: +(rect.w as number).toFixed(3), h: +(rect.h as number).toFixed(3) }
-
-      // Arrow drawn, then its end dragged.
-      await key('a'); await stroke([[0.1, 0.6], [0.2, 0.65], [0.3, 0.7]])
-      await key('v'); await stroke([[0.3, 0.7], [0.35, 0.75], [0.4, 0.8]])
-      const arrow = find('arrow')!
-      log.arrowEnd = [+(arrow.x2 as number).toFixed(3), +(arrow.y2 as number).toFixed(3)]
-      await setValue('矢印の先', 'both')
-      log.arrowHeads = find('arrow')!.heads
-
-      // Polygon: select by its top edge, turn on Edit Points, drag the top edge's midpoint up (adds
-      // one vertex however many moves arrive), then double-click the new vertex to delete it again.
-      await down(0.3, 0.2)
-      button('頂点の編集').click(); await sleep(120)
-      log.probe = { sel: latest.current.selectedAnn?.slice(0, 4), kind: anns().find(a => a.id === latest.current.selectedAnn)?.kind, pressed: document.querySelector('.ann-tools [aria-pressed]')?.getAttribute('aria-pressed') }
-      await stroke([[0.3, 0.2], [0.3, 0.18], [0.3, 0.16], [0.3, 0.14], [0.3, 0.12], [0.3, 0.1]])
-      log.polygonAfterInsert = (find('polygon')!.points as unknown[]).length
-      await dbl(0.3, 0.1)
-      log.polygonAfterDelete = (find('polygon')!.points as unknown[]).length
-
-      // Rect formats from the panel: fill on, 60% transparent, dashed outline.
-      await down(0.85, 0.3) // right edge of the resized rect
-      ctl<HTMLInputElement>('塗りつぶす').click(); await sleep(120)
-      await setValue('塗りの透明度', '60')
-      await setValue('線の種類', 'dash')
-      const rf = find('rect')!
-      log.rectFormat = { fill: rf.fill, fillOpacity: rf.fillOpacity, dash: rf.dash }
-
-      // Text, then boxed.
-      await key('t'); await down(0.08, 0.86)
-      const input = await waitFor(() => document.querySelector<HTMLTextAreaElement>('.ann-text-input'), 5000, 'text input')
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'BLOCK!')
-      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
-      // Alt+Enter starts a second line (Enter alone finishes).
-      input.selectionStart = input.selectionEnd = input.value.length
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true })); await sleep(80)
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, input.value + 'TOUCH')
-      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
-      ctl<HTMLInputElement>('枠付き').click(); await sleep(150)
-      log.text = { box: !!find('text')!.box, padding: (find('text')!.box as { padding?: number } | undefined)?.padding, lines: String(find('text')!.text).split('\n') }
-      // Triangle by dragging a box; widened by its right box handle (all points scale), then a
-      // vertex added in Edit Points mode.
-      ;(document.activeElement as HTMLElement | null)?.blur() // the box checkbox has focus, and keys typed there are ignored
-      await key('g'); await stroke([[0.55, 0.55], [0.6, 0.6], [0.65, 0.7]])
-      const triId = latest.current.selectedAnn
-      const tri = () => anns().find(a => a.id === triId) as { kind: string; points: number[][] } | undefined
-      log.triangle = tri()?.points.length ?? 0
-      await key('v'); await stroke([[0.65, 0.625], [0.7, 0.625], [0.75, 0.625]])
-      log.triangleWidened = tri() ? +(Math.max(...tri()!.points.map(p => p[0])) - Math.min(...tri()!.points.map(p => p[0]))).toFixed(3) : null
-      button('頂点の編集').click(); await sleep(120)
-      await stroke([[0.65, 0.7], [0.65, 0.75], [0.65, 0.8]]) // bottom edge's midpoint
-      log.triangleAfterInsert = tri()?.points.length ?? 0
-      {
-        // Shift on a vertex: it lines up with a neighbor (here the x of the vertex before it).
-        const t = tri()!, i = 3, prev = t.points[2], v = t.points[i]
-        await stroke([[v[0], v[1]], [prev[0] + 0.01, v[1] + 0.02], [prev[0] + 0.012, v[1] + 0.03]], true)
-        const after = tri()!.points[i]
-        log.shiftSnap = { x: +after[0].toFixed(4), neighborX: +prev[0].toFixed(4) }
-      }
-
-      // Pictures: an image file and page 1 of a PDF, placed in the corners.
-      if (opts.assets?.length) {
-        const ids: string[] = []
-        for (const path of opts.assets) { const id = await insertImage(path); if (id) ids.push(id) }
-        await sleep(300)
-        // The PDF page fades in over 2 s (checked in the export: half at 1 s, whole at 2.5 s).
-        setAnns(anns().map(a => a.kind !== 'image' ? a : { ...a, x: ids.indexOf(a.id) === 0 ? 0.02 : 0.68, y: 0.05, ...(ids.indexOf(a.id) === 1 ? { fadeIn: 2 } : {}) }))
-        await sleep(300)
-        log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
-
-        // Cropping: the right handle narrows the frame, then the wheel zooms the picture in.
-        const imgId = anns().find(a => a.kind === 'image')!.id
-        const im = () => anns().find(a => a.id === imgId) as Extract<Annotation, { kind: 'image' }>
-        setSelectedAnn(imgId); await sleep(200)
-        button('トリミング').click(); await sleep(200)
-        const i0 = im(), my = i0.y + i0.h / 2
-        await stroke([[i0.x + i0.w, my], [i0.x + i0.w * 0.85, my], [i0.x + i0.w * 0.7, my]])
-        canvas.dispatchEvent(new WheelEvent('wheel', { ...pt(i0.x + i0.w * 0.35, my), deltaY: -100, cancelable: true })); await sleep(200)
-        const c1 = im().crop
-        log.crop = c1 ? { x: +c1.x.toFixed(3), y: +c1.y.toFixed(3), w: +c1.w.toFixed(3), h: +c1.h.toFixed(3), frameW: +im().w.toFixed(3) } : null
-      }
-      // The selected object's show / hide span on the trim bar's track.
-      const arrowId = anns().find(a => a.kind === 'arrow')!.id
-      setSelectedAnn(arrowId); await sleep(200)
-      button('ここから表示').click(); await sleep(200)
-      log.objectSpan = !!document.querySelector('.trim-object')
-      log.loopBox = (document.querySelector('.trim-head input[type=checkbox]') as HTMLInputElement | null)?.checked ?? null
-      setSelectedAnn(null); await sleep(100)
-      // Timeline: the arrow's start grip dragged right on the trim track; then the lanes opened.
-      setSelectedAnn(arrowId); await sleep(200)
-      {
-        const grip = document.querySelector<HTMLElement>('.trim-track .trim-object.main .obj-grip.from')!
-        const track = document.querySelector<HTMLElement>('.trim-track')!.getBoundingClientRect()
-        const gb = grip.getBoundingClientRect(), gy = gb.top + gb.height / 2
-        grip.dispatchEvent(new PointerEvent('pointerdown', { clientX: gb.left + 4, clientY: gy, bubbles: true, pointerId: 2 }))
-        grip.dispatchEvent(new PointerEvent('pointermove', { clientX: track.left + track.width * 0.5, clientY: gy, bubbles: true, pointerId: 2 }))
-        grip.dispatchEvent(new PointerEvent('pointerup', { clientX: track.left + track.width * 0.5, clientY: gy, bubbles: true, pointerId: 2 }))
-        await sleep(200)
-        const ar = anns().find(a => a.id === arrowId)!
-        log.timelineDrag = { showFrom: ar.showFrom !== undefined ? +(ar.showFrom - range.in).toFixed(1) : null }
-        // Snapping: let go 3 px off the key play's mark; the time sticks to the key play.
-        {
-          const g2 = document.querySelector<HTMLElement>('.trim-track .trim-object.main .obj-grip.from')!
-          const kb = document.querySelector<HTMLElement>('.trim-track .trim-key')!.getBoundingClientRect()
-          const g2b = g2.getBoundingClientRect(), y2 = g2b.top + g2b.height / 2, x2 = kb.left + kb.width / 2 + 3
-          g2.dispatchEvent(new PointerEvent('pointerdown', { clientX: g2b.left + 4, clientY: y2, bubbles: true, pointerId: 3 }))
-          g2.dispatchEvent(new PointerEvent('pointermove', { clientX: x2, clientY: y2, bubbles: true, pointerId: 3 }))
-          await sleep(100)
-          const guide = !!document.querySelector('.trim-track .trim-snap')
-          g2.dispatchEvent(new PointerEvent('pointerup', { clientX: x2, clientY: y2, bubbles: true, pointerId: 3 }))
-          await sleep(200)
-          const inf = latest.current.clipInfo(latest.current.reel!.clips[clip.id])
-          const keyT = inf.ref!.play.time + latest.current.matches[clip.matchId].offsetSec
-          const sf = anns().find(a => a.id === arrowId)!.showFrom
-          log.timeSnap = { guide, stuckToKey: sf !== undefined && Math.abs(sf - Math.round(keyT * 100) / 100) < 0.011 }
-        }
-        ;[...document.querySelectorAll<HTMLButtonElement>('.trim-lanes-head button')][0]?.click(); await sleep(200)
-        log.lanes = document.querySelectorAll('.trim-lane-row').length
-      }
-
-      // Group: the arrow plus the polygon (Shift+click), grouped; dragging the arrow moves both.
-      {
-        const polyId = anns().find(a => a.kind === 'polygon')!.id
-        canvas.dispatchEvent(new PointerEvent('pointerdown', { ...pt(0.3, 0.2), shiftKey: true })); await sleep(40)
-        canvas.dispatchEvent(new PointerEvent('pointerup', pt(0.3, 0.2))); await sleep(150)
-        log.extraSelected = extraSelRef.current.includes(polyId)
-        button('グループ化').click(); await sleep(200)
-        const g = anns().find(a => a.id === arrowId)!.groupId
-        log.grouped = !!g && anns().find(a => a.id === polyId)!.groupId === g
-        const p0 = (anns().find(a => a.id === polyId) as { points: number[][] }).points[0][0]
-        const a0 = anns().find(a => a.id === arrowId) as { x1: number; y1: number; x2: number; y2: number }
-        const mx = (a0.x1 + a0.x2) / 2, my = (a0.y1 + a0.y2) / 2
-        await stroke([[mx, my], [mx + 0.02, my], [mx + 0.04, my]])
-        log.groupMoved = +((anns().find(a => a.id === polyId) as { points: number[][] }).points[0][0] - p0).toFixed(3)
-
-        // Palette (the accordion under the scene editor): save the group, put it back in: two more objects, with a new group of their own.
-        const head = document.querySelector<HTMLButtonElement>('[data-accordion="palette"] .accordion-head')!
-        if (head.getAttribute('aria-expanded') !== 'true') { head.click(); await sleep(200) }
-        await setValue('パレットに保存する名前', 'smoke group')
-        ;[...document.querySelectorAll<HTMLButtonElement>('[data-accordion="palette"] button')].find(b => b.textContent === '選択を保存')!.click()
-        await waitFor(() => document.querySelector('[aria-label="smoke group を入れる"]'), 5000, 'palette item')
-        const before = anns().length
-        const useBtn = await waitFor(() => { const b = document.querySelector<HTMLButtonElement>('[aria-label="smoke group を入れる"]'); return b && !b.disabled ? b : null }, 5000, 'palette button')
-        log.paletteBtn = { disabled: useBtn.disabled, items: document.querySelectorAll('.palette-item').length }
-        useBtn.click(); await sleep(600)
-        const added = anns().slice(before)
-        const arrowCopy = added.find(a => a.kind === 'arrow'), arrowNow = anns().find(a => a.id === arrowId)
-        log.palette = { added: added.length, newGroup: !!added[0]?.groupId && added[0].groupId !== g, sameShowFrom: arrowCopy?.showFrom === arrowNow?.showFrom && arrowCopy?.showFrom !== undefined }
-        // Clean up: the copies would cover the export frame.
-        setAnns(anns().filter(a => !added.some(x => x.id === a.id))); await sleep(200)
-      }
-      // Arrow keys: Down moves to the next play in the list.
-      {
-        const s0 = latest.current.selected
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await sleep(300)
-        log.arrowDown = latest.current.selected?.playId !== s0?.playId
-        activateClip(latest.current.reel!.clips[clip.id]); await sleep(600)
-      }
-      // 表示範囲: the rect to the whole scene, the triangle to the whole video, through the picker.
-      const rectId = anns().find(a => a.kind === 'rect')!.id
-      setSelectedAnn(rectId); await sleep(200); await setValue('表示範囲', 'scene')
-      if (triId) { setSelectedAnn(triId); await sleep(200); await setValue('表示範囲', 'video') }
-      await sleep(200)
-      log.scopes = {
-        clip: anns().map(a => a.kind), scene: (latest.current.reel!.annotations ?? []).map(a => a.kind),
-        video: (latest.current.video?.annotations ?? []).map(a => a.kind),
-        picker: (document.querySelector('[aria-label="表示範囲"]') as HTMLSelectElement | null)?.value,
-      }
-      // The headline field: typing makes one centered text at the top middle.
-      await setValue('見出し', 'SIDE OUT'); await setValue('見出し', 'SIDE OUT!')
-      const q = anns().filter(a => a.kind === 'text' && a.quick)
-      log.headline = q.map(a => a.kind === 'text' ? { text: a.text, x: a.x, y: a.y, align: a.align } : null)
-      await key('v'); setSelectedAnn(null); await sleep(300)
-      // The overlay quick settings (gear in the auto-display row) open over the video.
-      document.querySelector<HTMLButtonElement>('.ov-gear')?.click(); await sleep(150)
-      log.gearPopup = !!document.querySelector('.ov-gear-pop')
-      // A second (later) clip of the same scene shows the scene's and the video's objects too.
-      const r1 = res.find(x => x.matchId === r0.matchId && x.play.rallyId !== null && x.play.rallyId !== r0.play.rallyId && x.play.time > r0.play.time + 30)!
-      updateReel(addClips(latest.current.reel!, [{ matchId: r1.matchId, play: r1.play }]).reel); await sleep(300)
-      const other = Object.values(latest.current.reel!.clips).find(x => x.id !== clip.id)!
-      activateClip(other); await sleep(800)
-      const sc2 = scopedNow()
-      log.otherClip = sc2 ? mergeScoped(sc2).map(a => `${a.kind}:${scopeOf(sc2, a.id)}`) : []
-      setSelectedAnn(rectId); await sleep(300)
-
-      // Memory: play the clip (looping, with its objects, scene and video objects on screen) and
-      // sample the JS heap after a forced GC, to see what the playing editor keeps allocating.
-      if (opts.mem) {
-        const gc = (window as unknown as { gc?: () => void }).gc
-        const heap = () => { gc?.(); return (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0 }
-        const samples: number[] = []
-        let frames = 0, raf = 0
-        const count = () => { frames++; raf = requestAnimationFrame(count) }
-        raf = requestAnimationFrame(count)
-        if (playback.current.paused) playback.toggle()
-        const draws0 = canvasStats.draws, reallocs0 = canvasStats.reallocs
-        const t0 = performance.now()
-        for (let i = 0; i < opts.mem; i++) { await sleep(1000); samples.push(heap()) }
-        cancelAnimationFrame(raf)
-        playback.pause()
-        const mb = (b: number) => +(b / 1048576).toFixed(2)
-        log.mem = { seconds: opts.mem, fps: Math.round(frames / ((performance.now() - t0) / 1000)), startMB: mb(samples[0]), endMB: mb(samples[samples.length - 1]),
-          maxMB: mb(Math.max(...samples)), growthMBperMin: mb(((samples[samples.length - 1] - samples[0]) / (samples.length - 1)) * 60), gc: !!gc,
-          layerDrawsPerSec: +((canvasStats.draws - draws0) / opts.mem).toFixed(1), reallocs: canvasStats.reallocs - reallocs0, playing: !playback.current.paused, assets: assetStats() }
-      }
-
-      if (opts.videoExportTo) {
-        const job = await startExport(opts.videoExportTo)
-        await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 120000, 'export')
-        log.exportStatus = latest.current.exportState?.status
-        const t0 = job?.items[0]?.kind === 'card' ? (job.items[0] as { durationSec: number }).durationSec : 0
-        return { ...log, videoExport: opts.videoExportTo, exported: { checks: [{ name: 'objects', t: t0 + 2.5 }, { name: 'fade-half', t: t0 + 1.0 }] } }
-      }
-      return log
-    }
-
-    // Videos made of shared scenes: "ハイライト" = attack scene (two marker groups) + serve scene,
-    // "サーブ集" = the same serve scene. Checks the plan with scene and marker cards, that the scene
-    // editor follows a through-play, that editing the shared scene changes both videos, undo across
-    // a video edit and a scene edit, and (with exportTo) the exported file.
-    const smokeVideo = async (res: PlayRef[], opts: SmokeOpts) => {
-      if (opts.logo) { const [code, path] = opts.logo.split('|'); await window.api.smokeSetLogo!(code, path); forgetLogo(code) } // a logo for the title cards
-      const ours = res.filter(x => x.teamRole === 'our')
-      const kills = ours.filter(x => x.play.skill === 'A' && x.play.effect === '#').slice(0, 3)
-      const serves = ours.filter(x => x.play.skill === 'S' && (x.play.effect === '#' || x.play.effect === '+')).slice(0, 2)
-      let a = addClips(newReel('アタック'), kills.map(x => ({ matchId: x.matchId, play: x.play }))).reel
-      const ai = a.groups.none.slice()
-      a = toggleMarker(toggleMarker(toggleMarker(a, ai[0], 1), ai[1], 2), ai[2], 1)
-      a = { ...a, markerNames: { ...a.markerNames, 1: 'Kills', 2: 'Second look' }, rangeDefaults: { mode: 'keyplay', rallyLead: 1.5, rallyTail: 2.5, keyBefore: 3, keyAfter: 3 } }
-      let s = addClips(newReel('サーブ'), serves.map(x => ({ matchId: x.matchId, play: x.play }))).reel
-      for (const id of s.groups.none.slice()) s = toggleMarker(s, id, 1)
-      const cardsOn = { titleCard: { enabled: true, sceneCards: true, durationSec: 1 }, transition: { fade: true, durationSec: 0.3 } }
-      const v1 = newVideo('ハイライト', [a.id, s.id], cardsOn), v2 = newVideo('サーブ集', [s.id], cardsOn)
-      setReels(rs => [...rs, a, s]); setReelId(a.id)
-      setVideos(vs => [...vs, v1, v2]); setVideoId(v1.id)
-      await waitFor(() => latest.current.video?.id === v1.id && latest.current.reels.some(x => x.id === s.id) || null, 20000, 'videos')
-      const describe = (p: PlanItem[]) => p.map(it => it.kind === 'card' ? (it.card.marker === null ? `[scene ${it.card.name}]` : `[${it.card.marker} ${it.card.name}]`) : `${latest.current.reels.find(x => x.id === it.sceneId)?.name}:${it.clip.playId}`)
-      const planV1 = describe(currentPlan('video'))
-      const lens = { attackKeyplay: kills.length ? +(latest.current.infoFor(a.clips[ai[0]], a).range!.out - latest.current.infoFor(a.clips[ai[0]], a).range!.in).toFixed(2) : null }
-
-      // Through-play: which scene the editor shows a moment after each item starts.
-      const timeline: string[] = []
-      let last = -1
-      const unsub = playback.subscribe(st => {
-        if (!st.seq || st.seq.index === last) return
-        last = st.seq.index
-        const card = st.card
-        setTimeout(() => timeline.push(card ? `card:${card.marker ?? 'scene'}:${card.name}` : `clip, editor=${latest.current.reel?.name}`), 250)
-      })
-      playThrough('video', 0)
-      await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 180000, 'video through-play')
-      unsub()
-      await sleep(300)
-
-      // Shared scene: unmark one serve. Both videos lose that clip.
-      const sNow = latest.current.reels.find(x => x.id === s.id)!
-      updateReel(toggleMarker(sNow, sNow.groups[1][0], null))
-      await sleep(200)
-      const v1After = describe(currentPlan('video'))
-      setVideoId(v2.id); await waitFor(() => latest.current.video?.id === v2.id || null, 5000, 'v2')
-      const v2After = describe(currentPlan('video'))
-      setVideoId(v1.id); await waitFor(() => latest.current.video?.id === v1.id || null, 5000, 'v1')
-
-      // Undo across kinds: rename the video, then edit the attack scene; Ctrl+Z twice.
-      await sleep(700)
-      updateVideo({ ...latest.current.video!, name: 'ハイライト（改）' })
-      await sleep(700)
-      const aNow = latest.current.reels.find(x => x.id === a.id)!
-      updateReel({ ...aNow, name: 'アタック（改）' })
-      await sleep(200)
-      const key = async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(150) }
-      const names = () => `${latest.current.videos.find(x => x.id === v1.id)?.name} / ${latest.current.reels.find(x => x.id === a.id)?.name}`
-      const undo = [names()]
-      await key(); undo.push(names())
-      await key(); undo.push(names())
-
-      let exported: unknown = null
-      if (opts.videoExportTo) {
-        const plan = currentPlan('video')
-        const job = await startExport(opts.videoExportTo)
-        await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'export')
-        const starts: number[] = []; let acc = 0
-        for (const it of job!.items) { starts.push(acc); acc += it.kind === 'clip' ? it.out - it.in : it.durationSec }
-        exported = { status: latest.current.exportState?.status, items: job!.items.map(it => it.kind), expectedSec: +acc.toFixed(2),
-          checks: [{ name: 'fade-start', t: 0.03 }, { name: 'scene-card', t: 0.5 }, { name: 'marker-card', t: starts[1] + 0.5 }, { name: 'clip', t: starts[2] + 1 },
-            { name: 'second-scene-card', t: starts[plan.findIndex((it, i) => i > 0 && it.kind === 'card' && it.card.marker === null)] + 0.5 }] }
-      }
-      // Marker 2 of the attack scene switched off: out of the plan, greyed in the scene editor.
-      const aLast = latest.current.reels.find(x => x.id === a.id)!
-      setReelId(a.id); updateReel({ ...aLast, markerOff: { 2: true } }); await sleep(400)
-      const planOff = describe(currentPlan('video'))
-
-      // Drag the second scene of the video above the first: a line shows where it lands.
-      const sceneRows = () => [...document.querySelectorAll<HTMLLIElement>('.video-scene')]
-      const dt = new DataTransfer()
-      const [first, second] = sceneRows()
-      second.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
-      const fb = first.getBoundingClientRect()
-      first.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
-      await sleep(150)
-      const dropLine = first.className.includes('drop-before')
-      first.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
-      await sleep(300)
-      const dragged = { dropLine, order: latest.current.video!.sceneIds.map(id => latest.current.reels.find(x => x.id === id)?.name) }
-
-      // One marker group alone as an MP4 (its card and its clips).
-      let markerExport: unknown = null
-      if (opts.videoExportTo) {
-        const job = await exportMarker(a.id, 1, opts.videoExportTo.replace(/\.mp4$/, '-marker1.mp4'))
-        await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'marker export')
-        markerExport = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind) }
-      }
-
-      // The gear on marker 1: its title card over the video; dragging the title moves it.
-      editCard(a.id, 1); await sleep(400)
-      const radio = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === label)!
-      radio('タイトルの位置').click(); await sleep(200)
-      const ed = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=card-editor]'), 5000, 'card editor')
-      const eb = ed.getBoundingClientRect()
-      const ept = (fx: number, fy: number) => ({ clientX: eb.left + fx * eb.width, clientY: eb.top + fy * eb.height, bubbles: true, pointerId: 1 })
-      ed.dispatchEvent(new PointerEvent('pointerdown', ept(0.13, 0.36))); await sleep(40)
-      ed.dispatchEvent(new PointerEvent('pointermove', ept(0.18, 0.36))); await sleep(40)
-      ed.dispatchEvent(new PointerEvent('pointermove', ept(0.23, 0.41))); await sleep(40)
-      ed.dispatchEvent(new PointerEvent('pointerup', ept(0.23, 0.41))); await sleep(300)
-      const lay = latest.current.overlay.titleCard.markerLayout
-      const cardLayout = lay ? { x: +lay.x.toFixed(2), y: +lay.y.toFixed(2), scale: lay.scale } : null
-
-      // Objects on the card: back to 図形・文字, draw a rectangle on it.
-      radio('図形・文字').click(); await sleep(200)
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })); await sleep(100)
-      const ac = document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]')!
-      const ab = ac.getBoundingClientRect()
-      const apt = (fx: number, fy: number) => ({ clientX: ab.left + fx * ab.width, clientY: ab.top + fy * ab.height, bubbles: true, pointerId: 1 })
-      ac.dispatchEvent(new PointerEvent('pointerdown', apt(0.6, 0.6))); await sleep(40)
-      ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
-      ac.dispatchEvent(new PointerEvent('pointermove', apt(0.8, 0.8))); await sleep(40)
-      ac.dispatchEvent(new PointerEvent('pointerup', apt(0.8, 0.8))); await sleep(300)
-      // マーカー全体: an object on marker 1's first clip moved to the marker group shows on its other
-      // clip, not on marker 2's.
-      let markerScope: unknown = null
-      {
-        const aR = latest.current.reels.find(x => x.id === a.id)!
-        const g1 = aR.groups[1], g2 = aR.groups[2]
-        activateClip(aR.clips[g1[0]], 1); await sleep(600)
-        const rid = crypto.randomUUID()
-        setAnns([...mergeScoped(scopedNow()!), { id: rid, kind: 'rect', color: '#EF4444', x: 0.1, y: 0.1, w: 0.1, h: 0.1, width: 4 }]); await sleep(200)
-        setAnnScope(rid, 'marker'); await sleep(300)
-        const stored = (latest.current.reels.find(x => x.id === a.id)!.markerAnnotations?.[1] ?? []).map(x => x.id === rid)
-        activateClip(aR.clips[g1[1]], 1); await sleep(600)
-        const onOtherClip = mergeScoped(scopedNow()!).some(x => x.id === rid)
-        activateClip(aR.clips[g2[0]], 2); await sleep(600)
-        const onMarker2 = mergeScoped(scopedNow()!).some(x => x.id === rid)
-        const plan = currentPlan('video').filter(it => it.kind === 'clip' && it.sceneId === a.id)
-        // Up / Down after a click in the scene editor walks its rows, not the left list.
-        activateClip(aR.clips[g1[0]], 1); await sleep(400)
-        document.querySelector('.right-col')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
-        const listSel = latest.current.selected
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await sleep(400)
-        const sceneDown = { clip: latest.current.activeClipId === g1[1], group: latest.current.activeGroup }
-        document.querySelector('.sidebar')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await sleep(400)
-        const listMoved = latest.current.selected?.playId !== listSel?.playId
-        markerScope = { stored, onOtherClip, onMarker2, planGroups: plan.map(it => (it.kind === 'clip' ? it.group : null)), sceneDown, listMoved }
-      }
-
-      // The export accordion lists what can be exported.
-      {
-        const head = document.querySelector<HTMLButtonElement>('[data-accordion="export"] .accordion-head')!
-        if (head.getAttribute('aria-expanded') !== 'true') { head.click(); await sleep(200) }
-      }
-      const exportChoices = [...document.querySelectorAll('.export-target .export-label')].map(e => e.textContent)
-      const cardObjects = (latest.current.reels.find(x => x.id === a.id)?.markerCardAnnotations?.[1] ?? []).map(x => x.kind)
-      const planCard = currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1 && it.card.name === 'Kills')
-      const planCardObjects = planCard?.kind === 'card' ? (planCard.card.annotations ?? []).length : null
-      return { planV1, lens, timeline, v1After, v2After, undo, planOff, dragged, markerExport, cardLayout, cardObjects, planCardObjects, exportChoices, markerScope, videoExport: opts.videoExportTo ?? null, exported }
-    }
-
-    // Each smoke scene gets its own video, taking over the overlay the smoke set on the scene
-    // (scene cards off, so timelines match the checks written before videos existed).
-    const smokeUse = (r: Reel) => {
-      const v = newVideo(`${r.name} video`, [r.id], { ...(r.overlay ?? {}), titleCard: { sceneCards: false, ...(r.overlay?.titleCard ?? {}) } })
-      setReels(rs => [...rs, r]); setReelId(r.id)
-      setVideos(vs => [...vs, v]); setVideoId(v.id)
-    }
-
-    // v3 home flow. 'scan': scan folders and leave the pairing dialog open. 'import-create': import
-    // the sure pairs, create a project of every HTH/HTA match, open it. 'home' / 'picker': screens.
-    const smokeHome = async (opts: SmokeOpts) => {
-      setLibrary(await api.getLibrary())
-      if (opts.home === 'home') { await sleep(300); return { library: latest.current.library?.matches.length } }
-      if (opts.home === 'picker') { setPicker('create'); await sleep(400); return { library: latest.current.library?.matches.length } }
-      const r = await window.api.smokeScan!(opts.folders ?? [])
-      const summary = {
-        dvws: r.pairs.length, videos: r.videos.length, unreadable: r.unreadable.length,
-        paired: r.pairs.filter(p => p.video).map(p => `${p.date} ${p.home}-${p.away} -> ${p.video?.split(/[\\/]/).pop()} [${p.note}${p.inLibrary ? ', in library' : ''}]`),
-        unpaired: r.pairs.filter(p => !p.video).length,
-      }
-      if (opts.home === 'scan') { setScan(r); await sleep(400); return summary }
-      const sure = r.pairs.filter(p => p.video && p.score >= 3 && !p.inLibrary).map(p => ({ dvwPath: p.dvwPath, video: p.video! }))
-      const imported = await api.importPairs(sure)
-      const lib = await api.getLibrary()
-      setLibrary(lib)
-      const codes = ['HTH', 'HTA']
-      const ids = lib!.matches.filter(m => m.teams.some(t => codes.includes(t.code))).map(m => m.id)
-      const p = await window.api.smokeCreateProject!(opts.newProject!, { name: 'v3 smoke', ourTeamCodes: codes, matchIds: ids })
-      await loadProject(p)
-      await sleep(400)
-      return { ...summary, imported: imported.imported.map(m => m.name), failed: imported.failed, project: { name: p.name, matches: p.matches.map(m => m.name) } }
-    }
-
-    // M8 checks. 'relink': reel of 5 clips, the DVW copy gets an extra point and loses one play,
-    // reload. 'flush-write': rename and return at once (quit must flush). 'report': reels, notices.
-    // 'undo': trims, marker, rename, then Ctrl+Z / Ctrl+Y.
-    const smokeM8 = async (res: PlayRef[], mode: string) => {
-      if (mode === 'report') { await sleep(300); return { reels: latest.current.reels.map(r => r.name), notice: latest.current.notice } }
-      if (mode === 'flush-write') {
-        const r = latest.current.reels.find(x => x.name.startsWith('flush')) ?? latest.current.reels[0]
-        const name = `flush ${Date.now()}`
-        updateReel({ ...r, name })
-        return { renamedTo: name } // returns before the autosave delay; closing must write it
-      }
-      if (mode === 'relink') {
-        const picks = [10, 100, 300, 600, 900].map(i => res[i]).filter(Boolean)
-        const built = addClips(newReel('relink smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
-        setReels(rs => [...rs, built]); setReelId(built.id)
-        await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'relink reel')
-        await sleep(SAVE_DELAY_MS + 600)
-        const before = Object.values(built.clips).map(c => ({ id: c.id, playId: c.playId, code: picks.find(p => p.play.id === c.playId)!.play.code, time: picks.find(p => p.play.id === c.playId)!.play.time }))
-        const edited = await window.api.smokeEditDvw!(picks[0].matchId, picks[4].play.code, picks[4].play.time)
-        await loadProject(await api.getProject())
-        await waitFor(() => latest.current.reels.some(x => x.id === built.id) || null, 20000, 'reloaded')
-        const r = latest.current.reels.find(x => x.id === built.id)!
-        const d = latest.current.dvwsRef!
-        const after = Object.values(r.clips).map(c => ({ id: c.id, playId: c.playId, code: d[c.matchId].plays[c.playId]?.code, time: d[c.matchId].plays[c.playId]?.time }))
-        const miss = relink(r, d).missing
-        await sleep(SAVE_DELAY_MS + 600)
-        const savedReel = (await api.listReels()).find(x => x.id === built.id)!
-        return { edited, before, after, missing: [...miss].map(id => before.findIndex(b => b.id === id)), savedPlayIds: Object.values(savedReel.clips).map(c => c.playId) }
-      }
-      // undo
-      const r0 = addClips(newReel('undo smoke'), [res[20]].map(x => ({ matchId: x.matchId, play: x.play })))
-      setReels(rs => [...rs, r0.reel]); setReelId(r0.reel.id)
-      await waitFor(() => latest.current.reel?.id === r0.reel.id || null, 20000, 'undo reel')
-      const id = r0.ids[0]
-      const info = () => latest.current.clipInfo(latest.current.reel!.clips[id])
-      const snap = () => ({ in: +info().range!.in.toFixed(2), group: groupOf(latest.current.reel!, id), name: latest.current.reel!.name })
-      const states = [snap()]
-      for (let k = 1; k <= 5; k++) { updateReel(trimClip(latest.current.reel!, id, 'in', info().range!.in + 0.2, info().range!, info().def!)); await sleep(30) } // one drag
-      await sleep(700); states.push(snap())
-      updateReel(toggleMarker(latest.current.reel!, id, 3)); await sleep(700); states.push(snap())
-      updateReel({ ...latest.current.reel!, name: 'undo renamed' }); await sleep(700); states.push(snap())
-      const key = async (k: string, shift = false) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: true, shiftKey: shift, bubbles: true })); await sleep(120) }
-      const undone: unknown[] = []
-      for (let k = 0; k < 4; k++) { await key('z'); undone.push(snap()) }
-      const redone: unknown[] = []
-      await key('y'); redone.push(snap())
-      await key('z', true); redone.push(snap())
-      return { states, undone, redone }
-    }
-
-    // Export: three clips in two marker groups with title cards, a whole-clip and a timed annotation
-    // on the first clip. Measures UI response while encoding, then cancels a second run.
-    const smokeExport = async (res: PlayRef[], outPath: string) => {
-      const picks = [res.find(x => x.play.skill === 'S' && x.play.effect === '#'), res.find(x => x.play.skill === 'R' && x.play.effect === '#'), res.find(x => x.play.skill === 'B' && x.play.effect === '#')]
-        .filter((x): x is PlayRef => !!x)
-      let r = addClips(newReel('export smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
-      const ids = r.groups.none.slice()
-      r = toggleMarker(toggleMarker(toggleMarker(r, ids[0], 1), ids[1], 1), ids[2], 2)
-      r = { ...r, markerNames: { ...r.markerNames, 1: 'Serve and pass', 2: 'Blocks' },
-        overlay: { ...overlaySettings(undefined), titleCard: { enabled: true, durationSec: 1.5, showMarkerName: true, showMatch: true } } }
-      smokeUse(r)
-      await waitFor(() => latest.current.reel?.id === r.id && latest.current.order.length === 3 ? true : null, 20000, 'export reel')
-      const c0 = latest.current.reel!.clips[ids[0]], r0 = latest.current.clipInfo(c0).range!
-      const anns: Annotation[] = [
-        { id: 'whole', kind: 'rect', color: '#FACC15', x: 0.4, y: 0.45, w: 0.2, h: 0.2, width: 6 },
-        { id: 'timed', kind: 'text', color: '#22C55E', x: 0.62, y: 0.3, text: 'TIMED', size: 52, showFrom: r0.in + 1, showTo: r0.in + 3 },
-      ]
-      updateReel(setAnnotations(latest.current.reel!, ids[0], anns))
-      await waitFor(() => latest.current.reel!.clips[ids[0]].annotations.length === 2 ? true : null, 5000, 'annotations')
-
-      const wait = (pred: () => boolean, ms: number, label: string) => waitFor(() => (pred() ? true : null), ms, label)
-      const t0 = performance.now()
-      const job = await startExport(outPath)
-      if (!job) throw new Error('export did not start')
-      // UI response while ffmpeg runs: an IPC round trip and a frame.
-      await wait(() => latest.current.exportState?.status === 'running', 20000, 'export running')
-      const ipcSamples: number[] = []
-      for (let k = 0; k < 6; k++) { const q = performance.now(); await api.getProject(); ipcSamples.push(Math.round(performance.now() - q)); await sleep(400) }
-      const ipc0 = performance.now(); await api.parseMatch(picks[0].matchId); const ipcMs = Math.round(performance.now() - ipc0)
-      const raf0 = performance.now(); await new Promise(ok => requestAnimationFrame(() => ok(null))); const frameMs = Math.round(performance.now() - raf0)
-      await wait(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? ''), 180000, 'export done')
-      const done = { ...latest.current.exportState, wallMs: Math.round(performance.now() - t0) }
-
-      // Output timeline for frame checks.
-      const starts: number[] = []
-      let acc = 0
-      for (const it of job.items) { starts.push(acc); acc += it.kind === 'clip' ? it.out - it.in : it.durationSec }
-      const clip0At = starts[1]
-      const checks = [
-        { name: 'card1', t: 0.7 },
-        { name: 'clip1-before-timed', t: clip0At + 0.5 },
-        { name: 'clip1-timed', t: clip0At + 2 },
-        { name: 'card2', t: starts[3] + 0.7 },
-      ]
-
-      // Cancel: start a second export and stop it after ~1.5s.
-      const cancelPath = outPath.replace(/\.mp4$/, '-cancelled.mp4')
-      await startExport(cancelPath)
-      await wait(() => latest.current.exportState?.status === 'running', 20000, 'second export running')
-      await sleep(1500)
-      await api.cancelExport()
-      await wait(() => latest.current.exportState?.status === 'cancelled', 20000, 'cancelled')
-      await sleep(800)
-      return {
-        items: job.items.map(it => it.kind === 'clip' ? `clip ${(it.out - it.in).toFixed(2)}s layers=${it.layers.map(l => l.from === undefined ? 'whole' : `${l.from.toFixed(1)}-${l.to!.toFixed(1)}`).join(',')} png=${it.layers.map(l => l.png.length).join('/')}` : `card ${it.durationSec}s png=${it.png.length}`),
-        size: `${job.width}x${job.height}@${job.fpsStr}`, expectedSec: +acc.toFixed(3), done, ipcMs, ipcSamples, frameMs,
-        export: outPath, checks, cancelPath, cancelState: latest.current.exportState?.status,
-      }
-    }
-
-    // Automatic overlays: three clips (markers 1, 1, 2), pixels where the scoreboard and caption
-    // should be, a per-clip hide and caption rewrite, theme switch, then a through-play with title
-    // cards. ov = 'dialog' leaves the settings dialog open for the screenshot.
-    const smokeOverlay = async (res: PlayRef[], mode: string) => {
-      const picks = [res.find(x => x.play.skill === 'S' && x.play.effect === '#'), res.find(x => x.play.skill === 'A' && x.play.effect === '#'), res.find(x => x.play.skill === 'R' && x.play.effect === '#')]
-        .filter((x): x is PlayRef => !!x)
-      let r = addClips(newReel('overlay smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
-      const ids = r.groups.none.slice()
-      r = toggleMarker(toggleMarker(toggleMarker(r, ids[0], 1), ids[1], 1), ids[2], 2)
-      r = { ...r, markerNames: { ...r.markerNames, 1: 'Big serves', 2: 'Perfect passes' },
-        overlay: { ...overlaySettings(undefined), theme: { base: '#0B1F3A', accent: '#C9A227' }, titleCard: { enabled: true, durationSec: 1.5, showMarkerName: true, showMatch: true } } }
-      smokeUse(r)
-      await waitFor(() => latest.current.reel?.id === r.id || null, 20000, 'overlay reel')
-      activateClip(latest.current.reel!.clips[ids[0]])
-      await waitFor(() => playback.attachedKey === picks[0].matchId && playback.current.ready ? true : null, 20000, 'video')
-      const range = latest.current.clipInfo(latest.current.reel!.clips[ids[0]]).range!
-      await playback.seekAndWait(range.in + 1)
-      await sleep(300)
-      const alphaAt = (fx: number, fy: number) => {
-        const c = document.querySelector<HTMLCanvasElement>('[data-testid=overlay-canvas]')!
-        return c.getContext('2d')!.getImageData(Math.round(c.width * fx), Math.round(c.height * fy), 1, 1).data[3]
-      }
-      // Scoreboard: top centre, ~4% down. Caption: bottom left, ~6% from the left, ~93% down.
-      const shown = { scoreboard: alphaAt(0.5, 0.045), caption: alphaAt(0.06, 0.93) }
-      const data = latest.current.overlayData!(latest.current.reel!.clips[ids[0]])
-
-      updateReel(setOverlayOverride(latest.current.reel!, ids[0], { scoreboard: { hidden: true }, playerCaption: { line: 'what a serve' } }))
-      await sleep(300)
-      const hidden = { scoreboard: alphaAt(0.5, 0.045), caption: alphaAt(0.06, 0.93) }
-      const rewritten = latest.current.overlayData!(latest.current.reel!.clips[ids[0]])?.caption.line
-      setOverlay({ ...latest.current.overlay, theme: { base: '#111111', accent: '#C8102E' } })
-      await sleep(200)
-      const theme = latest.current.overlay.theme
-
-      if (mode === 'dialog') { updateReel(setOverlayOverride(latest.current.reel!, ids[0], undefined)); await sleep(200); setOverlayOpen(true); await sleep(500); return { shown, hidden, rewritten, theme, data } }
-
-      const t0 = performance.now()
-      const timeline: { kind: string; at: number }[] = []
-      let lastCard: unknown = null, lastIdx = -1
-      const unsub = playback.subscribe(s => {
-        if (s.card !== lastCard) { lastCard = s.card; if (s.card) timeline.push({ kind: `card ${s.card.marker} ${s.card.name} / ${s.card.match}`, at: Math.round(performance.now() - t0) }) }
-        if (s.seq && s.seq.index !== lastIdx) { lastIdx = s.seq.index; if (!s.card) timeline.push({ kind: `clip (item ${s.seq.index})`, at: Math.round(performance.now() - t0) }) }
-      })
-      playThrough('video', 0)
-      await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 120000, 'through-play')
-      unsub()
-      // Screenshot on the first title card.
-      playThrough('video', 0); await sleep(600)
-      return { shown, hidden, rewritten, theme, data, timeline, totalMs: Math.round(performance.now() - t0) }
-    }
-
-    // Annotations through real pointer/key events on the overlay canvas: draw four kinds, move one,
-    // give the arrow a show-from time, and read canvas pixels on either side of it.
-    const smokeAnn = async (res: PlayRef[]) => {
-      const r0 = res.find(x => x.play.rallyId !== null)!
-      const { reel: built, ids } = addClips(newReel('annotation smoke'), [{ matchId: r0.matchId, play: r0.play }])
-      setReels(rs => [...rs, built]); setReelId(built.id)
-      await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'ann reel')
-      activateClip(built.clips[ids[0]])
-      await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready ? true : null, 20000, 'video')
-      const range = latest.current.clipInfo(built.clips[ids[0]]).range!
-      await playback.seekAndWait(range.in + 2)
-      const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 20000, 'canvas')
-      const box = canvas.getBoundingClientRect()
-      const pt = (x: number, y: number) => ({ clientX: box.left + x * box.width, clientY: box.top + y * box.height, bubbles: true, pointerId: 1 })
-      const key = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); await sleep(80) }
-      const stroke = async (path: [number, number][]) => {
-        canvas.dispatchEvent(new PointerEvent('pointerdown', pt(...path[0]))); await sleep(30)
-        for (const p of path.slice(1)) { canvas.dispatchEvent(new PointerEvent('pointermove', pt(...p))); await sleep(20) }
-        canvas.dispatchEvent(new PointerEvent('pointerup', pt(...path[path.length - 1]))); await sleep(120)
-      }
-      const anns = () => latest.current.reel!.clips[ids[0]].annotations
-
-      await key('a'); await stroke([[0.3, 0.3], [0.4, 0.4], [0.5, 0.5]])
-      await key('r'); await stroke([[0.8, 0.4], [0.7, 0.3], [0.6, 0.2]])
-      await key('f'); await stroke([[0.2, 0.6], [0.25, 0.62], [0.3, 0.6], [0.35, 0.65]])
-      await key('t'); await stroke([[0.1, 0.8]])
-      const input = await waitFor(() => document.querySelector<HTMLTextAreaElement>('.ann-text-input'), 5000, 'text input')
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'Watch the block')
-      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
-      const drawn = anns().map(a => a.kind)
-
-      await key('v'); await stroke([[0.7, 0.21], [0.72, 0.23], [0.75, 0.26]]) // drag the rect by its top edge
-      const rect = anns().find(a => a.kind === 'rect')
-
-      await stroke([[0.4, 0.4]]) // select the arrow
-      await playback.seekAndWait(range.in + 3)
-      const btn = [...document.querySelectorAll('button')].find(b => b.textContent === 'ここから表示')!
-      btn.click(); await sleep(150)
-      const arrow = anns().find(a => a.kind === 'arrow')!
-
-      // Pixel on the arrow shaft, with the selection cleared so only the shape is drawn.
-      await key('Escape'); setSelectedAnn(null); setAnnTool('select')
-      const pixel = async (t: number) => {
-        await playback.seekAndWait(t); await sleep(250)
-        const c = document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]')!
-        const g = c.getContext('2d')!
-        const d = g.getImageData(Math.round(c.width * 0.4), Math.round(c.height * 0.4), 1, 1).data
-        return d[3]
-      }
-      // While editing, hidden annotations are drawn faint (alpha 0.3) so they can still be picked.
-      const alphaBefore = await pixel(range.in + 1)
-      const alphaAfter = await pixel(range.in + 4)
-      await sleep(700)
-      const saved = (await api.listReels()).find(x => x.id === built.id)
-      return {
-        drawn, rect, arrowShowFromRel: arrow.showFrom !== undefined ? +(arrow.showFrom - range.in).toFixed(2) : null,
-        alphaBefore, alphaAfter, savedAnnotations: saved?.clips[ids[0]].annotations.length ?? 0,
-        text: anns().find(a => a.kind === 'text'),
-      }
-    }
-
-    // Trimming: two plays of one rally (must warn as overlapping) plus one more; the first loops
-    // twice, then [ and ] at known playheads set IN/OUT, then the reel default switches mode.
-    const smokeTrim = async (res: PlayRef[]) => {
-      const r0 = res.find(x => x.play.rallyId !== null && res.some(y => y !== x && y.matchId === x.matchId && y.play.rallyId === x.play.rallyId))
-      if (!r0) throw new Error('no rally with two plays in the results')
-      const r1 = res.find(y => y !== r0 && y.matchId === r0.matchId && y.play.rallyId === r0.play.rallyId)!
-      const r2 = res.find(y => y.matchId === r0.matchId && y.play.rallyId !== null && y.play.rallyId > r0.play.rallyId! + 2)!
-      const { reel: built, ids } = addClips(newReel('trim smoke'), [r0, r1, r2].map(x => ({ matchId: x.matchId, play: x.play })))
-      setReels(rs => [...rs, built]); setReelId(built.id)
-      await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'trim reel')
-      const info0 = latest.current.clipInfo(built.clips[ids[0]])
-      const before = info0.range!
-      const overlapsFound = [...overlapsRef.current.keys()].filter(k => ids.includes(k)).length
-
-      activateClip(built.clips[ids[0]])
-      await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready && playback.current.loop ? true : null, 20000, 'loop start')
-      let wraps = 0, last = -1
-      const unsub = playback.subscribe(s => { if (last >= 0 && s.time < last - 1) wraps++; last = s.time })
-      const loopMs = Math.round((before.out - before.in) * 1000)
-      await waitFor(() => (wraps >= 2 ? true : null), loopMs * 3 + 5000, () => `two loops (wraps=${wraps}, t=${playback.current.time}, ${playback.debugVideo})`)
-      unsub()
-
-      const press = async (key: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })); await sleep(200) }
-      await playback.seekAndWait(before.in + 1.0); await press('[')
-      await playback.seekAndWait(before.out - 1.0); await press(']')
-      const c0 = latest.current.reel!.clips[ids[0]]
-      const after = latest.current.clipInfo(c0).range!
-
-      const dur = (id: string) => { const r = latest.current.clipInfo(latest.current.reel!.clips[id]).range!; return +(r.out - r.in).toFixed(2) }
-      const durRally = [dur(ids[0]), dur(ids[2])]
-      updateReel({ ...latest.current.reel!, rangeDefaults: { ...rangeDefaults(latest.current.reel!), mode: 'keyplay' } })
-      await sleep(300)
-      const durKey = [dur(ids[0]), dur(ids[2])]
-
-      playback.toggle()
-      await sleep(800)
-      return {
-        clips: [r0, r1, r2].map(x => `${x.play.code} rally ${x.play.rallyId}`),
-        overlapsFound, loopSec: (before.out - before.in).toFixed(2), wraps,
-        before, inSec: c0.inSec, outSec: c0.outSec, after,
-        expect: { in: +(before.in + 1).toFixed(3), out: +(before.out - 1).toFixed(3) },
-        durationsRallyMode: durRally, durationsKeyplayMode: durKey,
-      }
-    }
-
-    // Builds a fresh reel from the first results with the given markers, plays it through while
-    // timing each switch, then restarts at `shotAt` so the screenshot shows a clip mid-play.
-    const smokeReel = async (spec: NonNullable<SmokeOpts['reel']>, res: PlayRef[]) => {
-      // Round-robin across matches, skipping plays past the end of their video, so the run crosses matches.
-      const fits = (x: PlayRef) => { const m = latest.current.matches[x.matchId]; return x.play.time + m.offsetSec + 10 < m.durationSec }
-      const byMatch = [...new Set(res.map(x => x.matchId))].map(id => res.filter(x => x.matchId === id && fits(x)))
-      const picks: PlayRef[] = []
-      for (let i = 0; picks.length < spec.markers.length && byMatch.some(l => l.length > i); i++) {
-        for (const l of byMatch) if (l[i] && picks.length < spec.markers.length) picks.push(l[i])
-      }
-      const r0 = newReel('smoke')
-      let r = addClips(r0, picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
-      const ids = r.groups.none.slice()
-      spec.markers.forEach((m, i) => { if (m) r = toggleMarker(r, ids[i], m) })
-      r = { ...r, groupOrder: spec.groupOrder ?? r.groupOrder, scope: spec.scope ?? 'all' }
-      smokeUse(r)
-      await waitFor(() => latest.current.reel?.id === r.id && latest.current.order.length ? true : null, 20000, 'reel order')
-      const o = latest.current.order, info = latest.current.clipInfo
-      const plan = o.map(c => ({ match: latest.current.matches[c.matchId].name, play: c.playId, marker: groupOf(r, c.id), ...info(c).range! }))
-
-      const t0 = performance.now()
-      const timeline: { i: number; match: string; startedMs: number; onScreenMs: number | null; firstTime: number | null }[] = []
-      const unsub = playback.subscribe(s => {
-        const cur = timeline[timeline.length - 1]
-        const it = plan[cur?.i ?? -1]
-        if (cur && it && cur.onScreenMs === null && playback.attachedKey === o[cur.i].matchId && s.time >= it.in - 0.25 && s.time < it.out) {
-          cur.onScreenMs = Math.round(performance.now() - t0 - cur.startedMs); cur.firstTime = +s.time.toFixed(2)
-        }
-        if (s.seq && s.seq.index !== cur?.i) timeline.push({ i: s.seq.index, match: plan[s.seq.index].match, startedMs: Math.round(performance.now() - t0), onScreenMs: null, firstTime: null })
-      })
-      playThrough('video', 0)
-      await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 180000, () => `through-play end (at ${JSON.stringify(timeline.at(-1))}, t=${playback.current.time}, key=${playback.attachedKey}, ${playback.debugVideo})`)
-      unsub()
-      const totalMs = Math.round(performance.now() - t0)
-      playThrough('video', Math.min(spec.shotAt ?? 1, o.length - 1))
-      await sleep(1500)
-      return { plan, timeline, totalMs, expectedMs: Math.round(plan.reduce((s, x) => s + (x.out - x.in) * 1000, 0)) }
-    }
+    if (!SMOKE) return
+    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
+    void import('./smoke').then(m => m.installSmoke(host))
   }, [jump, loadProject, playThrough, activateClip, updateReel, updateVideo, overlayData, setOverlay, startExport, currentPlan])
 
   // ---- project ------------------------------------------------------------------------------
@@ -1659,6 +854,13 @@ export function App() {
     if (r.failed.length) setError(`取り込めなかった試合があります: ${r.failed.map(f => `${f.dvwPath.split(/[\\/]/).pop()}（${f.message}）`).join(' / ')}`)
     else setNotice(`${r.imported.length} 試合を倉庫に取り込みました`)
   })
+  const relocate = (id: string, part: MissingPart) => guard(async () => {
+    const r = await api.relocateMatch(id, part)
+    if (!r) return
+    setLibrary(r.library)
+    if (r.project) await loadProject(r.project)
+    setNotice(r.note)
+  })
   const importOne = () => guard(async () => { const m = await api.importMatch(); if (m) setLibrary(await api.getLibrary()) })
   const pickerDone = (r: { name: string; codes: string[]; matchIds: string[] }) => guard(async () => {
     setPicker(null)
@@ -1678,7 +880,11 @@ export function App() {
     const ours = settings?.ourTeamCodes ?? []
     return [...map.values()].sort((a, b) => Number(ours.includes(a.code)) - Number(ours.includes(b.code)) || a.code.localeCompare(b.code))
   }, [project, settings])
-  const saveSettings = async (s: ProjectSettings) => setProject(await api.saveSettings(s))
+  const saveSettings = async (s: ProjectSettings) => {
+    const prev = latest.current.settings
+    if (prev) record({ kind: 'settings', value: prev })
+    setProject(await api.saveSettings(s))
+  }
 
 
   const rawRefs = useMemo(() => settingsOpen && settings
@@ -1721,9 +927,17 @@ export function App() {
         </div>
       )}
 
+      {project && Object.keys(project.missing).length > 0 && (
+        <div className="missing-bar" role="alert">
+          {project.matches.filter(m => project.missing[m.id]).map(m => (
+            <span key={m.id}><b>{m.name}</b> <MissingNote parts={project.missing[m.id]} busy={!!progress} onRelocate={part => void relocate(m.id, part)} /></span>
+          ))}
+        </div>
+      )}
       {!project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
-          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} />
+          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)}
+          onRelocate={(id, part) => void relocate(id, part)} />
       ) : !project.matches.length ? (
         <div className="empty"><h2>試合を選びましょう</h2>
           <p className="muted">倉庫から、このプロジェクトで使う試合を選びます。</p>
@@ -1781,7 +995,7 @@ export function App() {
                         selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={selectAnn} onChange={setAnns}
                       />
                     )}
-                    {seqPlaying && overlay.transition.fade && here && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
+                    {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
                   </>
                 )
               }} />
@@ -1894,30 +1108,6 @@ export function App() {
   )
 }
 
-interface SmokeOpts {
-  play: number
-  filter: Partial<PlayFilter> | null
-  scope: Scope
-  settings?: boolean
-  keys?: string[]
-  trim?: boolean
-  ann?: boolean
-  ov?: string
-  exportTo?: string
-  m8?: string
-  video?: boolean
-  obj?: boolean
-  assets?: string[] // with obj: image / PDF files to insert
-  logo?: string // with video: "<code>|<image>" set as that team's logo first
-  listRun?: boolean // the list follows on to the next plays (プレー前後)
-  mem?: number // with obj: seconds of playback to sample the JS heap over
-  videoExportTo?: string
-  home?: string
-  folders?: string[]
-  newProject?: string
-  reel?: { markers: (Marker | null)[]; groupOrder?: Marker[]; scope?: 'marked' | 'all'; shotAt?: number }
-}
-
 // Dialog preview data: the active (or first) clip's real data, or a placeholder for an empty reel.
 function overlaySample(d: { scoreboard: ScoreboardData; caption: CaptionData } | null, r: Reel | null) {
   const m = r?.groupOrder.find(g => r.groups[g].length) ?? 1
@@ -1944,17 +1134,3 @@ function eta(ratio: number, elapsedSec: number): string {
   return `・残り約 ${left >= 60 ? `${Math.floor(left / 60)}分${left % 60}秒` : `${left}秒`}`
 }
 
-const sleep = (ms: number) => new Promise(ok => setTimeout(ok, ms))
-
-function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() => string) = 'condition'): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const start = Date.now()
-    const tick = () => {
-      const v = get()
-      if (v) return resolve(v)
-      if (Date.now() - start > timeoutMs) return reject(new Error(`timeout waiting for ${typeof label === 'function' ? label() : label}`))
-      setTimeout(tick, 100)
-    }
-    tick()
-  })
-}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
+import { composing } from '../keys'
 
 interface Props {
   override: ClipOverlayOverride | undefined
@@ -44,9 +45,9 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       <label className="check"><input type="checkbox" checked={!o?.playerCaption?.hidden}
         onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> テロップ</label>
       <input className="ov-text" value={name} placeholder={autoName} aria-label="テロップの名前（空欄で自動）"
-        onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit() }} />
+        onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <input className="ov-text wide" value={line} placeholder={autoLine} aria-label="テロップの2行目（空欄で自動）"
-        onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit() }} />
+        onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <span className="spacer" />
       <span className="ov-gear-wrap">
         <button className="ov-gear" aria-label="タイトルカードとフェード" aria-expanded={gear} title="タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」" onClick={() => setGear(g => !g)}>⚙</button>

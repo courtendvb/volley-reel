@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join } from 'node:path'
+import { basename, dirname, extname, join, resolve, sep } from 'node:path'
+import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
@@ -44,6 +45,10 @@ app.whenReady().then(async () => {
   if (process.env.VR_SMOKE) {
     ipcMain.handle('smoke:scan', (_e, folders: string[]) => library!.scan(folders))
     ipcMain.handle('smoke:pickAsset', (_e, path: string) => takeAsset(path))
+    ipcMain.handle('smoke:relocate', async (_e, id: string, part: 'video' | 'dvw', path: string) => {
+      const note = await library!.relocate(id, part, path, () => {})
+      return { library: library!.info(), project: project?.info() ?? null, note }
+    })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     ipcMain.handle('smoke:createProject', async (_e, dir: string, init: ProjectInit) => {
       await mkdir(dir, { recursive: true })
@@ -54,6 +59,9 @@ app.whenReady().then(async () => {
     ipcMain.handle('smoke:editDvw', async (_e, matchId: string, code: string, time: number) => {
       const m = library?.getMatch(matchId)
       if (!m) throw new Error('no match')
+      // Only ever a copy in the temp folder: a smoke run must not change a real scout file.
+      const tmp = resolve(tmpdir()) + sep
+      if (!resolve(m.dvwPath).toLowerCase().startsWith(tmp.toLowerCase())) throw new Error(`smoke:editDvw edits DVW copies in ${tmp} only (got ${m.dvwPath})`)
       const lines = readFileSync(m.dvwPath, 'latin1').split(/\r?\n/)
       const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
       lines.splice(at + 1, 0, lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_s, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`))
@@ -83,8 +91,10 @@ app.whenReady().then(async () => {
     ipcMain.once('app:flushed', done)
     win.webContents.send('app:flush')
   })
-  if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else await win.loadFile(join(__dirname, '../renderer/index.html'))
+  // ?smoke makes the renderer load its self-check code (smoke.ts); a normal start never does.
+  const query = process.env.VR_SMOKE ? '?smoke' : ''
+  if (process.env.ELECTRON_RENDERER_URL) await win.loadURL(process.env.ELECTRON_RENDERER_URL + query)
+  else await win.loadFile(join(__dirname, '../renderer/index.html'), query ? { search: 'smoke' } : {})
 
   if (process.env.VR_SMOKE) {
     win.webContents.on('console-message', e => console.log(`[renderer] ${e.message}`))
@@ -161,6 +171,18 @@ function registerIpc(): void {
       filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
     if (d.canceled || !d.filePaths[0]) return null
     return library.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
+  })
+
+  ipcMain.handle('match:relocate', async (e, id: string, part: 'video' | 'dvw') => {
+    if (!library) throw new Error('先に倉庫を選んでください')
+    const m = library.getMatch(id)
+    if (!m) throw new Error(`試合が見つかりません: ${id}`)
+    const r = await dialog.showOpenDialog(win!, part === 'video'
+      ? { title: `${m.name} の動画を選択（元: ${basename(m.sourceVideoPath)}）`, properties: ['openFile'], filters: [{ name: '動画', extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] }
+      : { title: `${m.name} の DVW を選択（元: ${basename(m.dvwPath)}）`, properties: ['openFile'], filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
+    if (r.canceled || !r.filePaths[0]) return null
+    const note = await library.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p))
+    return { library: library.info(), project: project?.info() ?? null, note }
   })
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
@@ -401,7 +423,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       const b = ms.find(m => m.type === 'Browser')
       procSamples.push({ renderer: r?.memory.workingSetSize ?? 0, gpu: g?.memory.workingSetSize ?? 0, main: b?.memory.workingSetSize ?? 0, rendererCpu: r?.cpu.cumulativeCPUUsage ?? 0, gpuCpu: g?.cpu.cumulativeCPUUsage ?? 0 })
     }, 1000) : null
-    const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
+    const result = await w.webContents.executeJavaScript(`(async () => { while (!window.__smoke) await new Promise(r => setTimeout(r, 50)); return window.__smoke(${JSON.stringify(opts)}) })()`)
     if (sampler) {
       clearInterval(sampler)
       const last = procSamples.slice(-Number(process.env.VR_SMOKE_MEM))

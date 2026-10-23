@@ -3,6 +3,7 @@ import { Accordion } from './Accordion'
 import { bounds, drawAnnotation, type Annotation } from '../../../shared/annotation'
 import { assetImage, subscribeAssets } from '../assets'
 import { removePaletteItem, savePaletteItem, usePalette, usePaletteItem } from '../palette'
+import { composing } from '../keys'
 
 // Saved objects to reuse (in the library, so every project has them): save the selection (with its
 // group) under a name, put a saved one on the clip or card, or drop it. Folds away under its header.
@@ -30,7 +31,7 @@ export function PalettePanel({ selection, onUse, disabled, clipIn }: {
         {disabled ? <span className="muted small">クリップかタイトルカードを開くと、入れたり保存したりできます</span> : selection.length > 0 ? (
           <>
             <input className="palette-name" value={name} placeholder={defaultName(selection)} aria-label="パレットに保存する名前" disabled={disabled || busy}
-              onChange={e => setName(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') void save() }} />
+              onChange={e => setName(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && !composing(e)) void save() }} />
             <button disabled={disabled || busy} onClick={() => void save()} title="選んだ図形（グループごと）をパレットに保存。ほかのプロジェクトでも使えます">選択を保存</button>
           </>
         ) : <span className="muted small">図形を選ぶと、パレットに保存できます（どのプロジェクトからも使えます）</span>}

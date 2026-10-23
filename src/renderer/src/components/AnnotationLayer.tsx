@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
+import { composing } from '../keys'
 import {
   applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type StylePatch,
@@ -341,6 +342,7 @@ export function AnnotationLayer(p: Props) {
   // Enter finishes; Alt+Enter or Shift+Enter starts a new line; Escape cancels.
   const onTextKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     e.stopPropagation()
+    if (composing(e)) return // the IME's Enter confirms the conversion, not the text
     if (e.key === 'Enter' && (e.altKey || e.shiftKey)) {
       e.preventDefault()
       const el = e.currentTarget, at = el.selectionStart, v = el.value

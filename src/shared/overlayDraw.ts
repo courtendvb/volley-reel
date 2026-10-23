@@ -5,7 +5,8 @@ import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
-export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif'
+// Bahnschrift has no Japanese: names and titles in Japanese fall through to Yu Gothic / Meiryo.
+export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif'
 const TEXT = '#FFFFFF'
 const SUB = '#BDBDBD'
 const MUTED = '#8F8F8F'

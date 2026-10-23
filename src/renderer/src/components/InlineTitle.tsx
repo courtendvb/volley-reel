@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { composing } from '../keys'
 
 // A title shown as text; clicking it turns it into a field to edit in place (Enter / Escape / leaving it ends).
 export function InlineTitle({ value, placeholder, label, onChange, className = '' }: {
@@ -10,7 +11,7 @@ export function InlineTitle({ value, placeholder, label, onChange, className = '
       <input className={`inline-title ${className}`} autoFocus aria-label={label} value={value} placeholder={placeholder}
         onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onChange={e => onChange(e.target.value)}
         onBlur={() => setEditing(false)}
-        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') setEditing(false) }} />
+        onKeyDown={e => { e.stopPropagation(); if ((e.key === 'Enter' || e.key === 'Escape') && !composing(e)) setEditing(false) }} />
     )
   }
   return (

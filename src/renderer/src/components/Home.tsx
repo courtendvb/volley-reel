@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { LibraryInfo, Match, RecentProject } from '../../../shared/types'
+import type { LibraryInfo, Match, MissingPart, RecentProject } from '../../../shared/types'
 import { formatTime } from '../format'
 
 interface Props {
@@ -11,11 +11,12 @@ interface Props {
   onImportOne: () => void
   onNewProject: () => void
   onOpenProject: (path?: string) => void
+  onRelocate: (id: string, part: MissingPart) => void
 }
 
 // Entry point (v3): the library on the left — every match, filterable by team code — and
 // projects on the right. A project is made by picking matches out of the library.
-export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportOne, onNewProject, onOpenProject }: Props) {
+export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportOne, onNewProject, onOpenProject, onRelocate }: Props) {
   const [q, setQ] = useState('')
   const shown = useMemo(() => filterMatches(library?.matches ?? [], q), [library, q])
 
@@ -41,7 +42,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
             </div>
             <p className="count">{shown.length} / {library.matches.length} 試合</p>
             <div className="match-table" role="list">
-              {shown.map(m => <MatchRow key={m.id} m={m} />)}
+              {shown.map(m => <MatchRow key={m.id} m={m} missing={library.missing[m.id]} busy={busy} onRelocate={part => onRelocate(m.id, part)} />)}
               {!library.matches.length && <p className="muted pad">まだ試合がありません。「フォルダから一括取り込み」で、動画と DVW のあるフォルダを選んでください。</p>}
             </div>
           </>
@@ -65,15 +66,28 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
   )
 }
 
-function MatchRow({ m }: { m: Match }) {
+function MatchRow({ m, missing, busy, onRelocate }: { m: Match; missing?: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void }) {
   return (
-    <div className="match-row" role="listitem" title={`${m.sourceVideoPath}\n${m.dvwPath}`}>
+    <div className={`match-row${missing ? ' lost' : ''}`} role="listitem" title={`${m.sourceVideoPath}\n${m.dvwPath}`}>
       <span className="date">{m.date ?? '—'}</span>
       <span className="teams"><b>{m.teams[0].code}</b> – <b>{m.teams[1].code}</b></span>
       <span className="muted names">{m.teams[0].name} / {m.teams[1].name}</span>
       <span className="muted dur">{formatTime(m.durationSec)}</span>
       {m.warnings.length > 0 && <span className="warn-dot" title={m.warnings.join('\n')}>⚠</span>}
+      {missing && <MissingNote parts={missing} busy={busy} onRelocate={onRelocate} />}
     </div>
+  )
+}
+
+// "動画が見つかりません [場所を指定…]": shown on a library row and above the project's workspace.
+export function MissingNote({ parts, busy, onRelocate }: { parts: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void }) {
+  return (
+    <span className="missing-note">
+      {parts.map(p => (
+        <span key={p}>{p === 'video' ? '動画' : 'DVW'}が見つかりません
+          <button className="small" disabled={busy} onClick={e => { e.stopPropagation(); onRelocate(p) }} title="移動したファイルを選び直します">場所を指定…</button></span>
+      ))}
+    </span>
   )
 }
 

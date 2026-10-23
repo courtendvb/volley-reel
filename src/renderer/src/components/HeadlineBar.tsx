@@ -1,6 +1,7 @@
 import { applyStyle, type Annotation } from '../../../shared/annotation'
 import { playback } from '../playback'
 import { textStyle, type AnnStyle } from './AnnotationLayer'
+import { composing } from '../keys'
 
 interface Props {
   annotations: Annotation[] // the active clip's objects (merged with its scene's and video's)
@@ -25,7 +26,7 @@ export function HeadlineBar({ annotations, onChange, onFormat, style, disabled, 
     <div className={`headline-bar${disabled ? ' disabled' : ''}`}>
       <label className="field-label" htmlFor="headline">見出し</label>
       <input id="headline" aria-label="見出し" value={quick?.text ?? ''} placeholder="ここに入力すると、動画の中央上部に表示します" disabled={disabled}
-        onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur() }} />
+        onChange={e => setText(e.target.value)} onKeyDown={e => { if ((e.key === 'Enter' || e.key === 'Escape') && !composing(e)) e.currentTarget.blur() }} />
       {quick && (
         <span className="headline-times">
           <span className="muted">{quick.showFrom === undefined ? '最初' : `${(quick.showFrom - clipIn).toFixed(1)}秒`} 〜 {quick.showTo === undefined ? '最後' : `${(quick.showTo - clipIn).toFixed(1)}秒`}</span>

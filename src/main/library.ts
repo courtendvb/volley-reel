@@ -8,7 +8,7 @@ import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
-import type { ImportProgress, LibraryInfo, Match, Palette, ParsedDVW, ScanResult } from '../shared/types'
+import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Palette, ParsedDVW, ScanResult } from '../shared/types'
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 
@@ -124,7 +124,52 @@ export class Library {
   }
 
   info(): LibraryInfo {
-    return { path: this.dir, matches: this.list() }
+    return { path: this.dir, matches: this.list(), missing: this.missing(this.list()) }
+  }
+
+  missing(ms: Match[]): MissingFiles {
+    const out: MissingFiles = {}
+    for (const m of ms) {
+      const parts: MissingPart[] = []
+      if (!existsSync(m.videoPath)) parts.push('video')
+      if (!existsSync(m.dvwPath)) parts.push('dvw')
+      if (parts.length) out[m.id] = parts
+    }
+    return out
+  }
+
+  // Points a match at its video or DVW after the file moved. A video is checked like on import
+  // (and prepared again when it needs it); a DVW must parse and have plays. Returns a note for the user.
+  async relocate(id: string, part: MissingPart, path: string, progress: (p: ImportProgress) => void): Promise<string> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(`試合が見つかりません: ${id}`)
+    let next: Match, note: string
+    if (part === 'dvw') {
+      const dvw = parseDVW(await readFile(path, 'latin1'))
+      if (!dvw.plays.length) throw new Error(`${basename(path)} にプレーがありません`)
+      const codes = dvw.teams.map(t => t.code).join('-'), was = m.teams.map(t => t.code).join('-')
+      next = { ...m, dvwPath: path }
+      note = codes === was ? `${m.name}: DVW の場所を更新しました` : `${m.name}: DVW の場所を更新しました（チームが ${was} から ${codes} に変わっています。別の試合でないか確認してください）`
+    } else {
+      progress({ stage: 'probe', message: `${basename(path)} を確認しています` })
+      const info = await probe(path)
+      const reason = prepareReason(info)
+      let playable = path
+      if (reason) {
+        playable = join(this.dir, 'cache', `${safeId(id)}.mp4`)
+        const what = reason === 'reencode' ? '再生できる形式に変換' : '音声トラックを除去'
+        progress({ stage: 'prepare', message: `${what}しています`, ratio: 0 })
+        await prepare(path, playable, reason, info.durationSec, ratio => progress({ stage: 'prepare', message: `${what}しています`, ratio }))
+      }
+      next = { ...m, sourceVideoPath: path, videoPath: playable, fps: info.fps, fpsStr: info.fpsStr, durationSec: info.durationSec, width: info.width, height: info.height }
+      note = Math.abs(info.durationSec - m.durationSec) > 2
+        ? `${m.name}: 動画の場所を更新しました（長さが ${fmt(m.durationSec)} から ${fmt(info.durationSec)} に変わっています。別の動画でないか確認してください）`
+        : `${m.name}: 動画の場所を更新しました`
+    }
+    progress({ stage: 'save', message: '保存しています' })
+    await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
+    this.matches.set(id, next)
+    return note
   }
 
   list(): Match[] {

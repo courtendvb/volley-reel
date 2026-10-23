@@ -89,12 +89,18 @@ export interface ProjectInfo {
   matches: Match[] // the project's matches found in the library
   matchIds: string[] // all ids the project refers to, including any missing from the library
   settings: ProjectSettings
+  missing: MissingFiles
 }
+
+// Matches whose playable video or DVW is no longer where the library points (moved or deleted).
+export type MissingPart = 'video' | 'dvw'
+export type MissingFiles = Record<string, MissingPart[]>
 
 // v3: the library holds every match; projects pick from it by id.
 export interface LibraryInfo {
   path: string
   matches: Match[]
+  missing: MissingFiles
 }
 
 export interface ScanPair {
@@ -139,6 +145,7 @@ export interface Api {
   getLibrary(): Promise<LibraryInfo | null>
   chooseLibrary(): Promise<LibraryInfo | null>
   importMatch(): Promise<Match | null> // into the library, choosing a video and a DVW
+  relocateMatch(id: string, part: MissingPart): Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string } | null> // choose where the moved file is now
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
@@ -178,6 +185,7 @@ export interface Api {
   pickLogo(code: string): Promise<Record<string, string>>
   removeLogo(code: string): Promise<Record<string, string>>
   readLogo(code: string): Promise<Uint8Array | null>
+  smokeRelocate?: (id: string, part: MissingPart, path: string) => Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string }>
   smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void

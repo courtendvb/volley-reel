@@ -35,7 +35,7 @@ export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
   theme: THEME_PRESETS[0].theme,
-  scoreboard: { enabled: true, anchor: 'tc', scale: 1, showSets: true },
+  scoreboard: { enabled: false, anchor: 'tc', scale: 1, showSets: true }, // off unless asked for: the headline text sits there
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
 }

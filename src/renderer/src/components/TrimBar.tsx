@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { snapTime } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 
 interface Props {
@@ -27,6 +28,8 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 // or type seconds relative to the key play. The clip loops while this bar is shown.
 export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
+  // While a show / hide time sticks to another time: that time, drawn as a guide line.
+  const [snapGuide, setSnapGuide] = useState<number | null>(null)
   // Dragging an object's start or end, on the main track or on its own lane (same scale).
   const objDrag = useRef<{ id: string; edge: 'from' | 'to'; rect: DOMRect } | null>(null)
   const track = useRef<HTMLDivElement>(null)
@@ -49,8 +52,12 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
   const onMove = (e: PointerEvent) => {
     const od = objDrag.current
     if (od) {
-      const t = lo + Math.max(0, Math.min(1, (e.clientX - od.rect.left) / od.rect.width)) * (hi - lo)
-      const clamped = Math.max(range.in, Math.min(range.out, t))
+      const raw = lo + Math.max(0, Math.min(1, (e.clientX - od.rect.left) / od.rect.width)) * (hi - lo)
+      // Sticks to the other objects' times, IN / OUT and the key play within 6 px (Alt: free).
+      const targets = [range.in, range.out, keyTime, ...objects.filter(o => o.id !== od.id).flatMap(o => [o.from, o.to])]
+      const sn = e.altKey ? { t: raw, snapped: null } : snapTime(raw, targets, (6 / od.rect.width) * (hi - lo))
+      setSnapGuide(sn.snapped)
+      const clamped = Math.max(range.in, Math.min(range.out, sn.t))
       const atEdge = od.edge === 'from' ? clamped <= range.in + 0.05 : clamped >= range.out - 0.05
       onObjectSpan(od.id, od.edge, atEdge ? null : Math.round(clamped * 100) / 100)
       playback.seek(clamped)
@@ -78,8 +85,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
       <div className={`trim-object${main ? ' main' : ''}${o.set ? '' : ' whole'}`}
         style={{ left: pct(Math.max(lo, o.from)), width: `calc(${pct(Math.min(hi, o.to))} - ${pct(Math.max(lo, o.from))})` }}
         title={`${o.label}: ${rel(o.from)} 〜 ${rel(o.to)} 秒`}>
-        <span className="obj-grip from" onPointerDown={grab('from')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null }} title="出る時刻（ドラッグ）" />
-        <span className="obj-grip to" onPointerDown={grab('to')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null }} title="消える時刻（ドラッグ）" />
+        <span className="obj-grip from" onPointerDown={grab('from')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title="出る時刻（ドラッグ）" />
+        <span className="obj-grip to" onPointerDown={grab('to')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title="消える時刻（ドラッグ）" />
       </div>
     )
   }
@@ -96,7 +103,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} 本と範囲が重なっています</span>}
       </div>
 
-      <div className="trim-track" ref={track} onPointerMove={onMove} onPointerUp={() => { setDrag(null); objDrag.current = null }}
+      <div className="trim-track" ref={track} onPointerMove={onMove} onPointerUp={() => { setDrag(null); objDrag.current = null; setSnapGuide(null) }}
         onPointerDown={e => playback.seek(timeAt(e.clientX))}>
         {seconds.map(s => (
           <span key={s} className={`tick${s === 0 ? ' zero' : ''}`} style={{ left: pct(keyTime + s) }}>{s % 2 === 0 ? (s > 0 ? `+${s}` : s) : ''}</span>
@@ -108,6 +115,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title="OUT（ドラッグ）" />
         {selected && span(selected, true)}
         <Playhead lo={lo} hi={hi} />
+        {snapGuide !== null && <div className="trim-snap" style={{ left: pct(snapGuide) }} />}
       </div>
 
       <div className="trim-lanes-head">
@@ -120,9 +128,10 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
           {objects.map(o => (
             <div key={o.id} className={`trim-lane-row${o.id === selectedObjectId ? ' on' : ''}`} onClick={() => onSelectObject(o.id)}>
               <span className="trim-lane-label" title={o.label}>{o.label}</span>
-              <div className="trim-lane" onPointerMove={onMove} onPointerUp={() => { objDrag.current = null }}>
+              <div className="trim-lane" onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }}>
                 <div className="trim-lane-clip" style={{ left: pct(range.in), width: `calc(${pct(range.out)} - ${pct(range.in)})` }} />
                 {span(o, false)}
+                {snapGuide !== null && <div className="trim-snap" style={{ left: pct(snapGuide) }} />}
               </div>
             </div>
           ))}

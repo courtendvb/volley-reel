@@ -977,6 +977,22 @@ export function App() {
         await sleep(200)
         const ar = anns().find(a => a.id === arrowId)!
         log.timelineDrag = { showFrom: ar.showFrom !== undefined ? +(ar.showFrom - range.in).toFixed(1) : null }
+        // Snapping: let go 3 px off the key play's mark; the time sticks to the key play.
+        {
+          const g2 = document.querySelector<HTMLElement>('.trim-track .trim-object.main .obj-grip.from')!
+          const kb = document.querySelector<HTMLElement>('.trim-track .trim-key')!.getBoundingClientRect()
+          const g2b = g2.getBoundingClientRect(), y2 = g2b.top + g2b.height / 2, x2 = kb.left + kb.width / 2 + 3
+          g2.dispatchEvent(new PointerEvent('pointerdown', { clientX: g2b.left + 4, clientY: y2, bubbles: true, pointerId: 3 }))
+          g2.dispatchEvent(new PointerEvent('pointermove', { clientX: x2, clientY: y2, bubbles: true, pointerId: 3 }))
+          await sleep(100)
+          const guide = !!document.querySelector('.trim-track .trim-snap')
+          g2.dispatchEvent(new PointerEvent('pointerup', { clientX: x2, clientY: y2, bubbles: true, pointerId: 3 }))
+          await sleep(200)
+          const inf = latest.current.clipInfo(latest.current.reel!.clips[clip.id])
+          const keyT = inf.ref!.play.time + latest.current.matches[clip.matchId].offsetSec
+          const sf = anns().find(a => a.id === arrowId)!.showFrom
+          log.timeSnap = { guide, stuckToKey: sf !== undefined && Math.abs(sf - Math.round(keyT * 100) / 100) < 0.011 }
+        }
         ;[...document.querySelectorAll<HTMLButtonElement>('.trim-lanes-head button')][0]?.click(); await sleep(200)
         log.lanes = document.querySelectorAll('.trim-lane-row').length
       }

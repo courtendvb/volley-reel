@@ -106,6 +106,14 @@ export function snapToNeighbors(a: Annotation, id: string, x: number, y: number,
   return [dx <= tolPx ? bx : x, by]
 }
 
+// Dragging a show / hide time: it sticks to the nearest of the given times (other objects' times,
+// the clip's IN / OUT, the key play) when within tol seconds. Returns the time and what it stuck to.
+export function snapTime(t: number, targets: number[], tol: number): { t: number; snapped: number | null } {
+  let best: number | null = null
+  for (const x of targets) if (Math.abs(x - t) <= tol && (best === null || Math.abs(x - t) < Math.abs(best - t))) best = x
+  return best === null ? { t, snapped: null } : { t: best, snapped: best }
+}
+
 // Moves one edge or corner; dragging past the opposite side flips the box, which is then stored
 // with positive size again.
 export function resizeBox(b: { x: number; y: number; w: number; h: number }, h: BoxHandle, x: number, y: number, keepAspect: boolean) {

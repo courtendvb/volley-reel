@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyStyle, bounds, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
-import { snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
+import { snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -58,6 +58,11 @@ describe('editing points', () => {
     // An arrow end levels with the other end.
     const ar: Annotation = { id: 'a', kind: 'arrow', color: '#FFF', x1: 0.1, y1: 0.5, x2: 0.6, y2: 0.55, width: 3 }
     expect(snapToNeighbors(ar, 'p2', 0.6, 0.55, 1000, 1000)).toEqual([0.6, 0.5])
+  })
+
+  it('sticks a dragged show / hide time to the nearest time within reach', () => {
+    expect(snapTime(10.08, [10, 10.1, 12], 0.15)).toEqual({ t: 10.1, snapped: 10.1 })
+    expect(snapTime(11, [10, 12], 0.15)).toEqual({ t: 11, snapped: null })
   })
 
   it('drags a vertex', () => {

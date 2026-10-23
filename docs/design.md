@@ -104,6 +104,11 @@
   ffmpeg / ffprobe は別プロセスで動かすので asar の外の `resources/ffmpeg` に置く。場所は `ffmpegDir()`（FFMPEG_DIR → インストール版は
   resources/ffmpeg → 開発時は vendor/ffmpeg/bin）。React・pdf.js は Vite がまとめるので devDependencies（インストーラーに node_modules を入れない）
 
+14 回目の試用を受けた修正:
+- 表示範囲に「マーカー全体」: シーンの `markerAnnotations[m]`（マーカーのグループごと）。描く順は動画 → シーン → マーカー → クリップ。
+  クリップは複数のマーカーに入れるので、開いた行のグループ（通し再生では計画のその回のグループ。計画のクリップに `group` を持たせた）
+  を使い、なければ最初のマーカー。書き出しも計画の回ごとのグループの図形を重ねる
+
 13 回目の試用を受けた修正:
 - 表示時間の吸着: トリムバーで出る・消える時刻をドラッグすると、ほかの図形の時刻・IN・OUT・キープレーに 6 px 以内で吸着（`snapTime`）。
   吸着中は青い点線のガイド、Alt で吸着なし

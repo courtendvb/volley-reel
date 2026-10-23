@@ -19,6 +19,7 @@ interface Props {
   scopeOf: (id: string) => AnnScope | null
   onScope: (id: string, to: AnnScope) => void
   canVideo: boolean // a video is open, so objects can be put on all of it
+  marker?: number | null // the marker group the clip is open in (objects can be put on all of its clips)
   cardMode?: boolean // objects on a title card: no clip timing, no display scope
   extraIds?: string[] // objects picked with Shift+click besides the selected one
   editPoints: boolean
@@ -176,9 +177,10 @@ export function AnnotationTools(p: Props) {
         <Group title="全体">
           {sel && !p.cardMode && (
             <select aria-label="表示範囲" value={scope} disabled={p.disabled} className={`scope-${scope}`}
-              title="このクリップだけ／このシーンのすべてのクリップ／この動画のすべてのクリップ"
+              title="このクリップだけ／このマーカーのグループのすべてのクリップ／このシーンのすべてのクリップ／この動画のすべてのクリップ"
               onChange={e => p.onScope(sel.id, e.target.value as AnnScope)}>
               <option value="clip">表示: このクリップ</option>
+              {(p.marker || scope === 'marker') && <option value="marker">{`表示: マーカー全体${p.marker ? `（${p.marker}）` : ''}`}</option>}
               <option value="scene">表示: シーン全体</option>
               {(p.canVideo || scope === 'video') && <option value="video">表示: 動画全体</option>}
             </select>
@@ -202,7 +204,7 @@ export function AnnotationTools(p: Props) {
           </>
         ) : sel && scope !== 'clip' ? (
           <>
-            <span className="muted">{scope === 'scene' ? 'このシーンのすべてのクリップ' : 'この動画のすべてのクリップ'}で、最初から最後まで表示します</span>
+            <span className="muted">{scope === 'marker' ? `マーカー ${p.marker ?? ''} のすべてのクリップ` : scope === 'scene' ? 'このシーンのすべてのクリップ' : 'この動画のすべてのクリップ'}で、最初から最後まで表示します</span>
             <span className="spacer" />
             <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title="削除 (Delete)">削除</button>
           </>

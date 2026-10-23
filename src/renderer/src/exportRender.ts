@@ -3,7 +3,7 @@
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import type { CaptionData, OverlaySettings, ScoreboardData } from '../../shared/overlay'
 import { drawCaption, drawScoreboard, drawTitleCard } from '../../shared/overlayDraw'
-import type { Clip } from '../../shared/reel'
+import type { Clip, Group } from '../../shared/reel'
 import type { PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
@@ -17,6 +17,7 @@ interface Deps {
   matches: Record<string, Match>
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
+  markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
 }
 
 // 720p at the source aspect, at the source frame rate when every match shares one (else 30).
@@ -34,6 +35,7 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
   const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations),
+    ...plan.flatMap(p => (p.kind === 'clip' ? d.markerAnnotations(p.sceneId, p.group) : [])),
     ...plan.flatMap(p => (p.kind === 'card' ? p.card.annotations ?? [] : []))]
   const images = await preloadAssets(all.flatMap(a => (a.kind === 'image' ? [a.assetId] : [])))
   try {
@@ -58,14 +60,14 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     }
     const c = p.clip, r = d.range(c, p.sceneId)
     if (!r) continue
-    items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, r, overlay, d, W, H, png, assetImage) })
+    items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, p.group, r, overlay, d, W, H, png, assetImage) })
   }
   return { outPath, width: W, height: H, fpsStr, items, ...(overlay.transition.fade ? { fadeSec: overlay.transition.durationSec } : {}) }
 }
 
 // One layer for everything shown for the whole clip (auto overlays first, annotations on top),
 // plus one per distinct show/hide window, switched by ffmpeg's enable='between(t,a,b)'.
-async function clipLayers(c: Clip, sceneId: string, r: { in: number; out: number }, overlay: OverlaySettings, d: Deps, W: number, H: number,
+async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: number; out: number }, overlay: OverlaySettings, d: Deps, W: number, H: number,
   png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
   const data = d.overlayData(c)
   const o = c.overlayOverride
@@ -74,8 +76,8 @@ async function clipLayers(c: Clip, sceneId: string, r: { in: number; out: number
   const window = (a: Annotation) => ({ from: Math.max(0, (a.showFrom ?? r.in) - r.in), to: Math.min(r.out, a.showTo ?? r.out) - r.in })
   const whole = (a: Annotation) => { const w = window(a); return w.from <= 0.001 && w.to >= r.out - r.in - 0.001 }
 
-  // The video's objects at the bottom, then the scene's, then the clip's (as in the editor).
-  const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...c.annotations]
+  // The video's objects at the bottom, then the scene's, the marker group's, the clip's (as in the editor).
+  const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
   const layers: ExportLayer[] = []
   const always = anns.filter(whole)
   if (showSb || showCap || always.length) {

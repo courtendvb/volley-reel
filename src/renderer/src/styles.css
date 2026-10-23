@@ -430,3 +430,4 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .export-go, .export-progress { position: sticky; bottom: -12px; z-index: 1; box-shadow: 0 -6px 10px var(--surface); }
 .export-progress { background: var(--surface); padding: 6px 0; }
 .trim-snap { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed #0EA5E9; pointer-events: none; }
+.ann-tools select.scope-marker { border-color: #7C3AED; color: #6D28D9; }

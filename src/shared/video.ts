@@ -4,7 +4,7 @@
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { OverlayPatch, OverlaySettings } from './overlay'
-import { markerCardOn, type Clip, type Reel } from './reel'
+import { markerCardOn, type Clip, type Group, type Reel } from './reel'
 import type { Match } from './types'
 
 export interface Video {
@@ -53,7 +53,7 @@ export function dropScene(v: Video, sceneId: string): Video {
 export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[] }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
-  | { kind: 'clip'; clip: Clip; sceneId: string }
+  | { kind: 'clip'; clip: Clip; sceneId: string; group: Group } // group: the marker group it plays in ('none' = unmarked)
 
 // One scene's clips in play order, with a card before each marker group when marker cards are on.
 // order is the scene's play order (playOrder, minus clips that can't be played). A clip with two
@@ -67,10 +67,10 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
       out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
-    for (const id of ids) out.push({ kind: 'clip', clip: scene.clips[id], sceneId: scene.id })
+    for (const id of ids) out.push({ kind: 'clip', clip: scene.clips[id], sceneId: scene.id, group: g })
   }
   const unmarked = new Set(scene.groups.none)
-  for (const c of order) if (unmarked.has(c.id)) out.push({ kind: 'clip', clip: c, sceneId: scene.id })
+  for (const c of order) if (unmarked.has(c.id)) out.push({ kind: 'clip', clip: c, sceneId: scene.id, group: 'none' })
   return out
 }
 

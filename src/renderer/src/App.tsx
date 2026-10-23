@@ -41,6 +41,13 @@ const api = window.api
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
 
 // Clips whose play can't be found in the DVW, per scene object and DVW set (relink walks every clip).
+// The marker group a clip is worked on in: the one it was opened from if it is still in it, else its
+// first marker (null when it has none, so there are no marker-wide objects to show).
+function markerFor(r: Reel, clipId: string, preferred: Group | null): Marker | null {
+  if (preferred && preferred !== 'none' && r.groups[preferred].includes(clipId)) return preferred
+  return markersOf(r, clipId)[0] ?? null
+}
+
 const missingMemo = new WeakMap<Reel, { dvws: Record<string, ParsedDVW>; missing: Set<string> }>()
 function missingOf(r: Reel, dvws: Record<string, ParsedDVW>): Set<string> {
   const hit = missingMemo.get(r)
@@ -74,6 +81,8 @@ export function App() {
   const [videos, setVideos] = useState<Video[]>([])
   const [videoId, setVideoId] = useState<string | null>(null)
   const [activeClipId, setActiveClipId] = useState<string | null>(null)
+  // The marker group the open clip was opened from (a clip can be in several); null = its first.
+  const [activeGroup, setActiveGroup] = useState<Group | null>(null)
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [annTool, setAnnTool] = useState<Tool>('select')
@@ -381,8 +390,8 @@ export function App() {
     const o = overlaySettings(video?.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
   }, [video?.overlay, project?.settings.theme])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null, projectPath: null as string | null })
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library }
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null, projectPath: null as string | null, activeGroup: null as Group | null })
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library, activeGroup }
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -425,8 +434,9 @@ export function App() {
     else { setListRun(false); playback.pause() }
   }), [])
 
-  const activateClip = useCallback((c: Clip) => {
+  const activateClip = useCallback((c: Clip, g?: Group) => {
     stopListRun()
+    setActiveGroup(g ?? null)
     const range = latest.current.clipInfo(c).range
     setActiveClipId(c.id)
     setSelected({ matchId: c.matchId, playId: c.playId })
@@ -450,7 +460,7 @@ export function App() {
     stopListRun()
     const { reels: rs, infoFor: inf } = latest.current
     const byId = Object.fromEntries(rs.map(s => [s.id, s]))
-    const items: SequenceItem[] = [], clipAt: ({ clip: Clip; sceneId: string } | null)[] = []
+    const items: SequenceItem[] = [], clipAt: ({ clip: Clip; sceneId: string; group: Group } | null)[] = []
     let startItem = -1, clipNo = 0
     for (const p of currentPlan(target)) {
       // The cards right before the start clip (a scene card, then a marker card) play first, so
@@ -458,14 +468,14 @@ export function App() {
       if (p.kind === 'card') { if (clipNo === startAt && startItem < 0) startItem = items.length; items.push({ card: p.card, durationSec: p.durationSec }); clipAt.push(null); continue }
       if (clipNo === startAt && startItem < 0) startItem = items.length
       items.push({ key: p.clip.matchId, ...inf(p.clip, byId[p.sceneId] ?? null).range! })
-      clipAt.push({ clip: p.clip, sceneId: p.sceneId })
+      clipAt.push({ clip: p.clip, sceneId: p.sceneId, group: p.group })
       clipNo++
     }
     playback.playSequence(items, i => {
       // On a title card, the clip after it is the one the panels follow.
       const at = i === null ? null : clipAt[i] ?? clipAt[i + 1] ?? null
       setPlayingClipId(at?.clip.id ?? null)
-      if (at) { setReelId(at.sceneId); setActiveClipId(at.clip.id); setSelected({ matchId: at.clip.matchId, playId: at.clip.playId }); setMatchId(at.clip.matchId) }
+      if (at) { setReelId(at.sceneId); setActiveClipId(at.clip.id); setActiveGroup(at.group); setSelected({ matchId: at.clip.matchId, playId: at.clip.playId }); setMatchId(at.clip.matchId) }
     }, Math.max(0, startItem))
   }, [currentPlan])
 
@@ -511,7 +521,11 @@ export function App() {
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption) }
   }, [dvws, settings, overlay])
   const activeOverlay = overlayData(active)
-  const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? { video: video?.annotations ?? [], scene: reel?.annotations ?? [], clip: active.annotations } : null,
+  const activeMarker = reel && active ? markerFor(reel, active.id, activeGroup) : null
+  const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? {
+    video: video?.annotations ?? [], scene: reel?.annotations ?? [],
+    marker: activeMarker && reel ? reel.markerAnnotations?.[activeMarker] ?? [] : [], clip: active.annotations,
+  } : null,
     [active, reel?.annotations, video?.annotations])
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
@@ -639,16 +653,19 @@ export function App() {
   const scopedNow = (): ScopedAnnotations | null => {
     const { reel: r, activeClipId: id, video: v } = latest.current
     const c = r && id ? r.clips[id] : null
-    return c ? { video: v?.annotations ?? [], scene: r!.annotations ?? [], clip: c.annotations } : null
+    const m = c ? markerFor(r!, c.id, latest.current.activeGroup) : null
+    return c ? { video: v?.annotations ?? [], scene: r!.annotations ?? [], marker: m ? r!.markerAnnotations?.[m] ?? [] : [], clip: c.annotations } : null
   }
   const applyScoped = useCallback((next: ScopedAnnotations) => {
     const { reel: r, activeClipId: id, video: v } = latest.current
     const prev = scopedNow()
     if (!r || !id || !prev) return
     const now = new Date().toISOString()
-    if (changed(prev.clip, next.clip) || changed(prev.scene, next.scene)) {
+    const m = markerFor(r, id, latest.current.activeGroup)
+    if (changed(prev.clip, next.clip) || changed(prev.scene, next.scene) || (m && changed(prev.marker, next.marker))) {
       let nr = changed(prev.clip, next.clip) ? setAnnotations(r, id, next.clip) : r
       if (changed(prev.scene, next.scene)) nr = { ...nr, annotations: next.scene, updatedAt: now }
+      if (m && changed(prev.marker, next.marker)) nr = { ...nr, markerAnnotations: { ...nr.markerAnnotations, [m]: next.marker }, updatedAt: now }
       updateReel(nr)
     }
     if (v && changed(prev.video, next.video)) updateVideo({ ...v, annotations: next.video, updatedAt: now })
@@ -764,7 +781,8 @@ export function App() {
       const byId = Object.fromEntries(rs.map(s => [s.id, s]))
       const job = await buildExportJob(plan, ov,
         { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms,
-          sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [] }, outPath)
+          sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [],
+          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []) }, outPath)
       await api.startExport(job)
       return job
     } catch (e) {
@@ -1213,6 +1231,25 @@ export function App() {
       ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
       ac.dispatchEvent(new PointerEvent('pointermove', apt(0.8, 0.8))); await sleep(40)
       ac.dispatchEvent(new PointerEvent('pointerup', apt(0.8, 0.8))); await sleep(300)
+      // マーカー全体: an object on marker 1's first clip moved to the marker group shows on its other
+      // clip, not on marker 2's.
+      let markerScope: unknown = null
+      {
+        const aR = latest.current.reels.find(x => x.id === a.id)!
+        const g1 = aR.groups[1], g2 = aR.groups[2]
+        activateClip(aR.clips[g1[0]], 1); await sleep(600)
+        const rid = crypto.randomUUID()
+        setAnns([...mergeScoped(scopedNow()!), { id: rid, kind: 'rect', color: '#EF4444', x: 0.1, y: 0.1, w: 0.1, h: 0.1, width: 4 }]); await sleep(200)
+        setAnnScope(rid, 'marker'); await sleep(300)
+        const stored = (latest.current.reels.find(x => x.id === a.id)!.markerAnnotations?.[1] ?? []).map(x => x.id === rid)
+        activateClip(aR.clips[g1[1]], 1); await sleep(600)
+        const onOtherClip = mergeScoped(scopedNow()!).some(x => x.id === rid)
+        activateClip(aR.clips[g2[0]], 2); await sleep(600)
+        const onMarker2 = mergeScoped(scopedNow()!).some(x => x.id === rid)
+        const plan = currentPlan('video').filter(it => it.kind === 'clip' && it.sceneId === a.id)
+        markerScope = { stored, onOtherClip, onMarker2, planGroups: plan.map(it => (it.kind === 'clip' ? it.group : null)) }
+      }
+
       // The export accordion lists what can be exported.
       {
         const head = document.querySelector<HTMLButtonElement>('[data-accordion="export"] .accordion-head')!
@@ -1222,7 +1259,7 @@ export function App() {
       const cardObjects = (latest.current.reels.find(x => x.id === a.id)?.markerCardAnnotations?.[1] ?? []).map(x => x.kind)
       const planCard = currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1 && it.card.name === 'Kills')
       const planCardObjects = planCard?.kind === 'card' ? (planCard.card.annotations ?? []).length : null
-      return { planV1, lens, timeline, v1After, v2After, undo, planOff, dragged, markerExport, cardLayout, cardObjects, planCardObjects, exportChoices, videoExport: opts.videoExportTo ?? null, exported }
+      return { planV1, lens, timeline, v1After, v2After, undo, planOff, dragged, markerExport, cardLayout, cardObjects, planCardObjects, exportChoices, markerScope, videoExport: opts.videoExportTo ?? null, exported }
     }
 
     // Each smoke scene gets its own video, taking over the overlay the smoke set on the scene
@@ -1768,7 +1805,7 @@ export function App() {
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
-                annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
+                annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
               />
             )}

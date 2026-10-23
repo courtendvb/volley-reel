@@ -27,7 +27,7 @@ interface Props {
   missing: Set<string>
   activeClipId: string | null
   playingClipId: string | null
-  onActivate: (c: Clip) => void
+  onActivate: (c: Clip, g: Group) => void // g: the group row it was clicked in
   playing: boolean
   onPlayThrough: () => void
   onStop: () => void
@@ -109,7 +109,7 @@ export function ReelPanel(p: Props) {
           setDragOver({ key: c.id, after: lower(e) })
         }}
         onDrop={g === 'none' ? undefined : e => onDropClip(e, g, i + (dragOver?.key === c.id && dragOver.after ? 1 : 0))}
-        onClick={() => p.onActivate(c)}
+        onClick={() => p.onActivate(c, g)}
       >
         <span className="grip" aria-hidden title="ドラッグで並べ替え・マーカーのグループへ移動">⠿</span>
         {p.missing.has(c.id) || !r ? (

@@ -33,11 +33,22 @@ import { MatchPicker } from './components/MatchPicker'
 import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
-import { forgetLogo, insertAsset } from './assets'
+import { assetStats, forgetLogo, insertAsset, resetAssets } from './assets'
+import { canvasStats } from './canvas'
 import { playback, type SequenceItem } from './playback'
 
 const api = window.api
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
+
+// Clips whose play can't be found in the DVW, per scene object and DVW set (relink walks every clip).
+const missingMemo = new WeakMap<Reel, { dvws: Record<string, ParsedDVW>; missing: Set<string> }>()
+function missingOf(r: Reel, dvws: Record<string, ParsedDVW>): Set<string> {
+  const hit = missingMemo.get(r)
+  if (hit && hit.dvws === dvws) return hit.missing
+  const missing = relink(r, dvws).missing
+  missingMemo.set(r, { dvws, missing })
+  return missing
+}
 const NO_ALIASES: ProjectSettings['playerAliases'] = {}
 const SAVE_DELAY_MS = 400
 const UNDO_MERGE_MS = 600
@@ -107,6 +118,8 @@ export function App() {
   const loadGen = useRef(0)
   const loadProject = useCallback(async (p: ProjectInfo | null) => {
     const gen = ++loadGen.current
+    if (p?.path !== latest.current.projectPath) resetAssets() // another project's pictures go
+    latest.current.projectPath = p?.path ?? null
     setProject(p)
     setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
     if (!p) { setDvws({}); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
@@ -120,9 +133,15 @@ export function App() {
     if (gen !== loadGen.current) return
     const vids = await api.listVideos()
     if (gen !== loadGen.current) return
-    const loaded = listed.map(r => relink(r, parsed).reel)
-    saved.current = new Map([...loaded.map(r => [`scene:${r.id}`, JSON.stringify(r)] as const), ...vids.map(v => [`video:${v.id}`, JSON.stringify(v)] as const)])
-    for (const r of loaded) if (relink(r, parsed).changed) saved.current.delete(`scene:${r.id}`)
+    // Scenes whose clips were re-pointed to their plays (the DVW changed) count as unsaved, so the
+    // new pointers are written; the rest are clean as loaded.
+    const relinked = listed.map(r => relink(r, parsed))
+    const loaded = relinked.map(x => x.reel)
+    saved.current = new Map<string, object>([
+      ...relinked.filter(x => !x.changed).map(x => [`scene:${x.reel.id}`, x.reel] as const),
+      ...vids.map(v => [`video:${v.id}`, v] as const),
+    ])
+    savedJson.current = new Map([...saved.current].map(([k, o]) => [k, JSON.stringify(o)] as const))
     undoStack.current = []; redoStack.current = []
     setReels(loaded)
     setVideos(vids)
@@ -134,16 +153,22 @@ export function App() {
 
   // Autosave: any reel whose JSON differs from what was last written is saved shortly after.
   // Closing the window flushes whatever is still pending (see the main process's close handler).
-  const saved = useRef(new Map<string, string>())
+  // The last saved object per "scene:id" / "video:id" (unchanged = the same object) and its JSON.
+  const saved = useRef(new Map<string, object>())
+  const savedJson = useRef(new Map<string, string>())
   const [saveState, setSaveState] = useState<'saved' | 'pending' | 'error'>('saved')
-  const allClean = () => latest.current.reels.every(x => saved.current.get(`scene:${x.id}`) === JSON.stringify(x))
-    && latest.current.videos.every(x => saved.current.get(`video:${x.id}`) === JSON.stringify(x))
+  const allClean = () => latest.current.reels.every(x => saved.current.get(`scene:${x.id}`) === x)
+    && latest.current.videos.every(x => saved.current.get(`video:${x.id}`) === x)
   const saveNow = useCallback(async (kind: 'scene' | 'video', obj: Reel | Video) => {
-    const key = `${kind}:${obj.id}`, json = JSON.stringify(obj)
-    if (saved.current.get(key) === json) return
+    const key = `${kind}:${obj.id}`
+    if (saved.current.get(key) === obj) return
+    // Serialized only here, for an object that may have changed: an edit that ended where it
+    // started is not written again.
+    const json = JSON.stringify(obj)
+    if (savedJson.current.get(key) === json) { saved.current.set(key, obj); if (allClean()) setSaveState('saved'); return }
     try {
       if (kind === 'scene') await api.saveReel(obj as Reel); else await api.saveVideo(obj as Video)
-      saved.current.set(key, json)
+      saved.current.set(key, obj); savedJson.current.set(key, json)
       if (allClean()) setSaveState('saved')
     } catch (e) {
       setSaveState('error')
@@ -155,8 +180,8 @@ export function App() {
   ]), [saveNow])
   useEffect(() => {
     const dirty = [
-      ...reels.filter(r => saved.current.get(`scene:${r.id}`) !== JSON.stringify(r)).map(r => ['scene', r] as const),
-      ...videos.filter(v => saved.current.get(`video:${v.id}`) !== JSON.stringify(v)).map(v => ['video', v] as const),
+      ...reels.filter(r => saved.current.get(`scene:${r.id}`) !== r).map(r => ['scene', r] as const),
+      ...videos.filter(v => saved.current.get(`video:${v.id}`) !== v).map(v => ['video', v] as const),
     ]
     if (!dirty.length) return
     setSaveState(s => (s === 'error' ? s : 'pending'))
@@ -224,7 +249,7 @@ export function App() {
       return
     }
   }, [])
-  const missing = useMemo(() => (reel ? relink(reel, dvws).missing : new Set<string>()), [reel, dvws])
+  const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
   // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
   const infoFor = useCallback((c: Clip, scene: Reel | null): ClipInfo => {
     const m = matches[c.matchId], d = dvws[c.matchId], play = d?.plays[c.playId]
@@ -239,14 +264,27 @@ export function App() {
   }, [matches, dvws, refsByMatch, matchLabels])
   const clipInfo = useCallback((c: Clip): ClipInfo => infoFor(c, reel), [infoFor, reel])
   // A scene's clips in play order (its scope), leaving out clips that can't be played.
+  // A scene's play order and stats are asked for many times per render (the scene editor, the
+  // video's scene list, the plan, the export choices); scenes are immutable, so each result is kept
+  // per scene object (and dropped with it) until the DVWs or the matches change.
+  const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
-    const miss = relink(s, dvws).missing
-    return playOrder(s, c => { const i = infoFor(c, s); return [i.date, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
-  }, [dvws, infoFor])
+    const hit = orderMemo.get(s)
+    if (hit) return hit
+    const miss = missingOf(s, dvws)
+    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.date, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
+    orderMemo.set(s, o)
+    return o
+  }, [dvws, infoFor, orderMemo])
+  const statsMemo = useMemo(() => new WeakMap<Reel, { clips: number; sec: number }>(), [orderOf])
   const sceneStats = useCallback((s: Reel) => {
+    const hit = statsMemo.get(s)
+    if (hit) return hit
     const o = orderOf(s)
-    return { clips: o.length, sec: o.reduce((t, c) => { const r = infoFor(c, s).range!; return t + r.out - r.in }, 0) }
-  }, [orderOf, infoFor])
+    const st = { clips: o.length, sec: o.reduce((t, c) => { const r = infoFor(c, s).range!; return t + r.out - r.in }, 0) }
+    statsMemo.set(s, st)
+    return st
+  }, [orderOf, infoFor, statsMemo])
   const order = useMemo(() => {
     if (!reel) return []
     return playOrder(reel, c => { const i = clipInfo(c); return [i.date, i.range?.in ?? 0] })
@@ -315,7 +353,7 @@ export function App() {
   // Deleting a scene takes it out of every video that used it.
   const deleteReel = async (id: string) => {
     await api.deleteReel(id)
-    saved.current.delete(`scene:${id}`)
+    saved.current.delete(`scene:${id}`); savedJson.current.delete(`scene:${id}`)
     const rest = reels.filter(r => r.id !== id)
     setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
     for (const v of latest.current.videos) if (v.sceneIds.includes(id)) updateVideo(dropScene(v, id))
@@ -333,7 +371,7 @@ export function App() {
   }
   const deleteVideo = async (id: string) => {
     await api.deleteVideo(id)
-    saved.current.delete(`video:${id}`)
+    saved.current.delete(`video:${id}`); savedJson.current.delete(`video:${id}`)
     const rest = videos.filter(v => v.id !== id)
     setVideos(rest); setVideoId(rest[0]?.id ?? null)
   }
@@ -343,7 +381,7 @@ export function App() {
     const o = overlaySettings(video?.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
   }, [video?.overlay, project?.settings.theme])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null })
+  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null, projectPath: null as string | null })
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library }
 
   // ---- navigation ---------------------------------------------------------------------------
@@ -1007,6 +1045,27 @@ export function App() {
       const sc2 = scopedNow()
       log.otherClip = sc2 ? mergeScoped(sc2).map(a => `${a.kind}:${scopeOf(sc2, a.id)}`) : []
       setSelectedAnn(rectId); await sleep(300)
+
+      // Memory: play the clip (looping, with its objects, scene and video objects on screen) and
+      // sample the JS heap after a forced GC, to see what the playing editor keeps allocating.
+      if (opts.mem) {
+        const gc = (window as unknown as { gc?: () => void }).gc
+        const heap = () => { gc?.(); return (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0 }
+        const samples: number[] = []
+        let frames = 0, raf = 0
+        const count = () => { frames++; raf = requestAnimationFrame(count) }
+        raf = requestAnimationFrame(count)
+        if (playback.current.paused) playback.toggle()
+        const draws0 = canvasStats.draws, reallocs0 = canvasStats.reallocs
+        const t0 = performance.now()
+        for (let i = 0; i < opts.mem; i++) { await sleep(1000); samples.push(heap()) }
+        cancelAnimationFrame(raf)
+        playback.pause()
+        const mb = (b: number) => +(b / 1048576).toFixed(2)
+        log.mem = { seconds: opts.mem, fps: Math.round(frames / ((performance.now() - t0) / 1000)), startMB: mb(samples[0]), endMB: mb(samples[samples.length - 1]),
+          maxMB: mb(Math.max(...samples)), growthMBperMin: mb(((samples[samples.length - 1] - samples[0]) / (samples.length - 1)) * 60), gc: !!gc,
+          layerDrawsPerSec: +((canvasStats.draws - draws0) / opts.mem).toFixed(1), reallocs: canvasStats.reallocs - reallocs0, playing: !playback.current.paused, assets: assetStats() }
+      }
 
       if (opts.videoExportTo) {
         const job = await startExport(opts.videoExportTo)
@@ -1770,6 +1829,7 @@ interface SmokeOpts {
   assets?: string[] // with obj: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   listRun?: boolean // the list follows on to the next plays (プレー前後)
+  mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
   home?: string
   folders?: string[]

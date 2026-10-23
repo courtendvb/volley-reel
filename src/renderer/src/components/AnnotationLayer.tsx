@@ -5,6 +5,7 @@ import {
 } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
+import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 
@@ -73,10 +74,15 @@ export function AnnotationLayer(p: Props) {
   const [textEdit, setTextEdit] = useState<{ id: string | null; x: number; y: number; value: string } | null>(null)
   const [assetTick, setAssetTick] = useState(0) // redraw when an image finishes loading
   useEffect(() => subscribeAssets(() => setAssetTick(n => n + 1)), [])
-  const [time, setTime] = useState(playback.current.time)
+  // Which objects are visible right now ("id,id,…"): the layer redraws when this changes, not on
+  // every frame of the video.
   // A title card covers the frame during a through-play: the clip's objects are not on it.
   const [onCard, setOnCard] = useState(!!playback.current.card)
-  useEffect(() => playback.subscribe(s => { setTime(s.time); setOnCard(!!s.card) }), [])
+  const visibleKey = (t: number) => `${playback.attachedKey}|${annsRef.current.filter(a => visibleAt(a, t, clipRef.current)).map(a => a.id).join(',')}`
+  const [visKey, setVisKey] = useState('')
+  const clipRef = useRef(p.clip)
+  clipRef.current = p.clip
+  useEffect(() => playback.subscribe(s => { setVisKey(visibleKey(s.time)); setOnCard(!!s.card) }), [])
 
   const onScreen = p.always || playback.attachedKey === p.clip.key
   const pathDraft: Annotation | null = path && path.points.length
@@ -90,12 +96,9 @@ export function AnnotationLayer(p: Props) {
   useEffect(() => {
     const c = canvas.current
     if (!c) return
-    const dpr = window.devicePixelRatio || 1
-    c.width = Math.round(p.size.w * dpr); c.height = Math.round(p.size.h * dpr)
-    const ctx = c.getContext('2d')!
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, p.size.w, p.size.h)
+    const ctx = prepareCanvas(c, p.size.w, p.size.h)
     if (!onScreen || (onCard && !p.always)) return
+    const time = playback.current.time
     for (const a of shown) {
       if (textEdit?.id === a.id) continue
       const vis = visibleAt(a, time, p.clip) || a.id === 'path-draft'
@@ -135,7 +138,7 @@ export function AnnotationLayer(p: Props) {
       }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds])
+  }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {

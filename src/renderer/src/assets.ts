@@ -3,16 +3,46 @@
 import type { ImageLookup } from '../../shared/annotation'
 
 const api = window.api
-const cache = new Map<string, ImageBitmap>()
+// Decoded pictures take width × height × 4 bytes each (a phone photo is ~48 MB), so: they are
+// decoded at most MAX_SIDE on their long side (the video is 720p, the export too), and the cache
+// keeps at most CACHE_BYTES, dropping (and closing) the least recently drawn first.
+const MAX_SIDE = 1920
+const CACHE_BYTES = 192 * 1024 * 1024
+const cache = new Map<string, ImageBitmap>() // in order of use: the first is the least recent
 const loading = new Map<string, Promise<ImageBitmap | null>>()
 const listeners = new Set<() => void>()
+let cacheBytes = 0
+const pinned = new Map<string, number>() // ids an export is drawing with: never dropped meanwhile
+const bytesOf = (b: ImageBitmap) => b.width * b.height * 4
+
+// Decodes image bytes, scaled down when larger than maxSide on its long side.
+async function decode(data: Uint8Array, maxSide: number): Promise<ImageBitmap> {
+  const full = await createImageBitmap(new Blob([data as BlobPart]))
+  const k = maxSide / Math.max(full.width, full.height)
+  if (k >= 1) return full
+  const small = await createImageBitmap(full, { resizeWidth: Math.round(full.width * k), resizeHeight: Math.round(full.height * k), resizeQuality: 'high' })
+  full.close()
+  return small
+}
+
+function keep(id: string, bmp: ImageBitmap): void {
+  cache.set(id, bmp)
+  cacheBytes += bytesOf(bmp)
+  for (const [old, b] of cache) {
+    if (cacheBytes <= CACHE_BYTES) break
+    if (old === id || pinned.has(old)) continue
+    cache.delete(old); loading.delete(old) // drawn again later: decoded again
+    cacheBytes -= bytesOf(b)
+    b.close()
+  }
+}
 
 function load(id: string): Promise<ImageBitmap | null> {
   let p = loading.get(id)
   if (!p) {
     p = api.readAsset(id)
-      .then(data => createImageBitmap(new Blob([data as BlobPart])))
-      .then(bmp => { cache.set(id, bmp); listeners.forEach(f => f()); return bmp })
+      .then(data => decode(data, MAX_SIDE))
+      .then(bmp => { keep(id, bmp); listeners.forEach(f => f()); return bmp })
       .catch(() => null) // missing or unreadable: drawn as a placeholder
     loading.set(id, p)
   }
@@ -22,9 +52,19 @@ function load(id: string): Promise<ImageBitmap | null> {
 // For drawing: the image if it is decoded, else null (and it starts loading).
 export const assetImage: ImageLookup = id => {
   const bmp = cache.get(id)
-  if (!bmp) void load(id)
-  return bmp ?? null
+  if (!bmp) { void load(id); return null }
+  cache.delete(id); cache.set(id, bmp) // most recently used
+  return bmp
 }
+
+// A project's pictures belong to it: when another project opens, they are let go.
+export function resetAssets(): void {
+  for (const b of cache.values()) b.close()
+  cache.clear(); loading.clear(); cacheBytes = 0
+}
+
+// For the memory smoke check.
+export const assetStats = () => ({ images: cache.size, mb: +(cacheBytes / 1048576).toFixed(1) })
 
 // Redraw when an image finishes loading.
 export function subscribeAssets(f: () => void): () => void {
@@ -32,9 +72,17 @@ export function subscribeAssets(f: () => void): () => void {
   return () => { listeners.delete(f) }
 }
 
-// The export draws every frame layer at once, so it waits for its images first.
-export async function preloadAssets(ids: string[]): Promise<void> {
-  await Promise.all([...new Set(ids)].map(load))
+// The export draws every frame layer at once: it waits for its images and holds them (they can't be
+// dropped from the cache) until it calls release.
+export async function preloadAssets(ids: string[]): Promise<{ lookup: ImageLookup; release: () => void }> {
+  const want = [...new Set(ids)]
+  for (const id of want) pinned.set(id, (pinned.get(id) ?? 0) + 1)
+  const got = new Map<string, ImageBitmap>()
+  await Promise.all(want.map(async id => { const b = await load(id); if (b) got.set(id, b) }))
+  return {
+    lookup: id => got.get(id) ?? null,
+    release: () => { for (const id of want) { const n = (pinned.get(id) ?? 1) - 1; if (n > 0) pinned.set(id, n); else pinned.delete(id) } },
+  }
 }
 
 // Team logos (library, by code), decoded once; forgetLogo after one is replaced or removed.
@@ -45,7 +93,7 @@ function loadLogo(code: string): Promise<ImageBitmap | null> {
   let p = logos.get(code)
   if (!p) {
     p = api.readLogo(code)
-      .then(data => (data ? createImageBitmap(new Blob([data as BlobPart])) : null))
+      .then(data => (data ? decode(data, 800) : null)) // logos are drawn small
       .catch(() => null)
       .then(bmp => { logoReady.set(code, bmp); listeners.forEach(f => f()); return bmp })
     logos.set(code, p)
@@ -64,6 +112,7 @@ export async function preloadLogos(codes: (string | null | undefined)[]): Promis
 }
 
 export function forgetLogo(code: string): void {
+  logoReady.get(code)?.close()
   logos.delete(code); logoReady.delete(code)
   void loadLogo(code)
 }

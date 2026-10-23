@@ -102,7 +102,7 @@ npm run typecheck
 ## 開発用の自己チェック
 
 試合を取り込み、絞り込み結果の n 番目に飛んで、ウィンドウのスクリーンショットを保存して終了する
-（`VR_SMOKE_SETTINGS=1` で設定ダイアログも開く、`VR_SMOKE_KEYS=3,1,0` でキー入力、`VR_SMOKE_TRIM=1` でループと IN/OUT の操作を確認、`VR_SMOKE_ANN=1` で注釈の描画・移動・表示時刻を確認、`VR_SMOKE_OV=1`（または `dialog`）でオーバーレイを確認、`VR_SMOKE_EXPORT=<出力.mp4>` で書き出し・フレーム確認・キャンセルを確認、`VR_SMOKE_M8=relink|flush-write|report|undo`（と `VR_SMOKE_CORRUPT=1`）で再リンク・終了時保存・復元・元に戻すを確認、`VR_SMOKE_VIDEO=1`（と `VR_SMOKE_EXPORT`）で動画・共有シーン・元に戻す・書き出しを確認、`VR_SMOKE_OBJ=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<画像;PDF>`）で図形・三角形・頂点の編集・書式・画像の挿入・書き出しを確認、`VR_LIBRARY=<倉庫> VR_SMOKE_HOME=scan|import-create|home|picker VR_SMOKE_FOLDERS="<フォルダ>;…"` で倉庫とプロジェクト作成を確認、
+（`VR_SMOKE_SETTINGS=1` で設定ダイアログも開く、`VR_SMOKE_KEYS=3,1,0` でキー入力、`VR_SMOKE_TRIM=1` でループと IN/OUT の操作を確認、`VR_SMOKE_ANN=1` で注釈の描画・移動・表示時刻を確認、`VR_SMOKE_OV=1`（または `dialog`）でオーバーレイを確認、`VR_SMOKE_EXPORT=<出力.mp4>` で書き出し・フレーム確認・キャンセルを確認、`VR_SMOKE_M8=relink|flush-write|report|undo`（と `VR_SMOKE_CORRUPT=1`）で再リンク・終了時保存・復元・元に戻すを確認、`VR_SMOKE_VIDEO=1`（と `VR_SMOKE_EXPORT`）で動画・共有シーン・元に戻す・書き出しを確認、`VR_SMOKE_OBJ=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<画像;PDF>`）で図形・三角形・頂点の編集・書式・画像の挿入・書き出しを確認（`VR_SMOKE_MEM=<秒>` を足すと再生中のメモリ・CPU・描画回数を測る）、`VR_LIBRARY=<倉庫> VR_SMOKE_HOME=scan|import-create|home|picker VR_SMOKE_FOLDERS="<フォルダ>;…"` で倉庫とプロジェクト作成を確認、
 `VR_SMOKE_REEL='{"markers":[2,1,null],"scope":"all"}'` で結果からリールを作って通し再生し、切り替え時間を測る）。試合は `;` 区切りで複数指定できる。
 
 ```bash

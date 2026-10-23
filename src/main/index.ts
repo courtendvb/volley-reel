@@ -22,6 +22,8 @@ protocol.registerSchemesAsPrivileged([
 // occlusion tracking counts a window behind another app as hidden). This is an editor: a
 // through-play must keep going while the user looks at another window.
 app.commandLine.appendSwitch('disable-background-media-suspend')
+// The memory smoke check forces a GC before each heap sample.
+if (process.env.VR_SMOKE_MEM) app.commandLine.appendSwitch('js-flags', '--expose-gc')
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 let library: Library | null = null
@@ -382,12 +384,35 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
+      mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,
       assets: process.env.VR_SMOKE_ASSETS?.split(';'),
       logo: process.env.VR_SMOKE_LOGO,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }
+    // With VR_SMOKE_MEM: each second, the renderer's and the GPU process's memory and CPU (the
+    // last samples cover the playback window the renderer measures).
+    const procSamples: { renderer: number; gpu: number; main: number; rendererCpu: number; gpuCpu: number }[] = []
+    const pid = w.webContents.getOSProcessId()
+    const sampler = process.env.VR_SMOKE_MEM ? setInterval(() => {
+      const ms = app.getAppMetrics()
+      const r = ms.find(m => m.pid === pid), g = ms.find(m => m.type === 'GPU')
+      const b = ms.find(m => m.type === 'Browser')
+      procSamples.push({ renderer: r?.memory.workingSetSize ?? 0, gpu: g?.memory.workingSetSize ?? 0, main: b?.memory.workingSetSize ?? 0, rendererCpu: r?.cpu.cumulativeCPUUsage ?? 0, gpuCpu: g?.cpu.cumulativeCPUUsage ?? 0 })
+    }, 1000) : null
     const result = await w.webContents.executeJavaScript(`window.__smoke(${JSON.stringify(opts)})`)
+    if (sampler) {
+      clearInterval(sampler)
+      const last = procSamples.slice(-Number(process.env.VR_SMOKE_MEM))
+      const mb = (kb: number) => +(kb / 1024).toFixed(1)
+      console.log(`[mem] ${JSON.stringify({
+        rendererMB: { first: mb(last[0]?.renderer ?? 0), last: mb(last[last.length - 1]?.renderer ?? 0), max: mb(Math.max(...last.map(x => x.renderer))) },
+        gpuMB: { first: mb(last[0]?.gpu ?? 0), last: mb(last[last.length - 1]?.gpu ?? 0), max: mb(Math.max(...last.map(x => x.gpu))) },
+        mainMB: { first: mb(last[0]?.main ?? 0), last: mb(last[last.length - 1]?.main ?? 0) },
+        // CPU seconds used per second of the window (1.0 = one core busy).
+        cpuCores: { renderer: +((last[last.length - 1].rendererCpu - last[0].rendererCpu) / Math.max(1, last.length - 1)).toFixed(3), gpu: +((last[last.length - 1].gpuCpu - last[0].gpuCpu) / Math.max(1, last.length - 1)).toFixed(3) },
+      })}`)
+    }
     await new Promise(r => setTimeout(r, 400))
     await writeFile(outPng, (await w.webContents.capturePage()).toPNG())
     console.log(`[smoke] ${JSON.stringify(result)}`)

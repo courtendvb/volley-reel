@@ -3,6 +3,7 @@ import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type
 import { drawTitleCard, type Box } from '../../../shared/overlayDraw'
 import type { Card } from '../../../shared/video'
 import { logoImage, subscribeAssets } from '../assets'
+import { prepareCanvas } from '../canvas'
 
 interface Props {
   size: { w: number; h: number }
@@ -30,10 +31,7 @@ export function CardEditor({ size, card, settings, onChange, active }: Props) {
   useEffect(() => {
     const c = canvas.current
     if (!c) return
-    const dpr = window.devicePixelRatio || 1
-    c.width = Math.round(size.w * dpr); c.height = Math.round(size.h * dpr)
-    const ctx = c.getContext('2d')!
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const ctx = prepareCanvas(c, size.w, size.h)
     const b = drawTitleCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp))
     boxRef.current = b
     if (!active) return

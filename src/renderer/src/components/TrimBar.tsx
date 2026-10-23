@@ -30,10 +30,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
   // Dragging an object's start or end, on the main track or on its own lane (same scale).
   const objDrag = useRef<{ id: string; edge: 'from' | 'to'; rect: DOMRect } | null>(null)
   const track = useRef<HTMLDivElement>(null)
-  const [now, setNow] = useState(playback.current.time)
-  const [paused, setPaused] = useState(playback.current.paused)
   const [drag, setDrag] = useState<'in' | 'out' | null>(null)
-  useEffect(() => playback.subscribe(s => { setNow(s.time); setPaused(s.paused) }), [])
 
   const lo = Math.max(0, Math.min(range.in, def.in) - CONTEXT_SEC)
   const hi = Math.min(durationSec || Infinity, Math.max(range.out, def.out) + CONTEXT_SEC)
@@ -95,7 +92,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <span className="trim-title">{label}</span>
         <span className="muted">{(range.out - range.in).toFixed(1)}秒</span>
         <label className="check muted" title="外すと OUT を過ぎても再生を続け、範囲の外も見られます">
-          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> ループ再生{loop && !paused ? '中' : ''}</label>
+          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> ループ再生{loop && <Playing />}</label>
         {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} 本と範囲が重なっています</span>}
       </div>
 
@@ -110,7 +107,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title="IN（ドラッグ）" />
         <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title="OUT（ドラッグ）" />
         {selected && span(selected, true)}
-        {now >= lo && now <= hi && <div className="trim-playhead" style={{ left: pct(now) }} />}
+        <Playhead lo={lo} hi={hi} />
       </div>
 
       <div className="trim-lanes-head">
@@ -158,4 +155,19 @@ function Edge({ name, keyName, value, overridden, onSet, onType, onReset }: {
       {overridden ? <button className="link" onClick={onReset}>既定に戻す</button> : <span className="muted small">既定</span>}
     </span>
   )
+}
+
+// The parts that follow the video every frame are their own small components, so the bar (with
+// its lanes) doesn't re-render as the video plays.
+function Playhead({ lo, hi }: { lo: number; hi: number }) {
+  const [now, setNow] = useState(playback.current.time)
+  useEffect(() => playback.subscribe(st => setNow(st.time)), [])
+  if (now < lo || now > hi) return null
+  return <div className="trim-playhead" style={{ left: `${((now - lo) / (hi - lo)) * 100}%` }} />
+}
+
+function Playing() {
+  const [paused, setPaused] = useState(playback.current.paused)
+  useEffect(() => playback.subscribe(st => setPaused(st.paused)), [])
+  return paused ? null : <>中</>
 }

@@ -6,6 +6,10 @@ import {
 import { dragHandle, handlesOf, pointsBox, removeVertex, trianglePoints, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { playback } from '../playback'
+import type { AnnScope } from '../../../shared/annotationScope'
+
+const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', scene: '#D97706', video: '#059669' }
+const SCOPE_TAG: Record<AnnScope, string> = { clip: '', scene: 'シーン全体', video: '動画全体' }
 
 // A triangle is drawn like a box and stored as a polygon.
 export type Tool = 'select' | AnnotationKind | 'triangle'
@@ -20,6 +24,7 @@ interface Props {
   tool: Tool
   style: AnnStyle
   selectedId: string | null
+  scopeOf?: (id: string) => AnnScope | null // where each object lives (frame color and tag)
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
@@ -89,12 +94,19 @@ export function AnnotationLayer(p: Props) {
     ctx.globalAlpha = 1
     if (selected) {
       const b = bounds(ctx, selected, p.size.w, p.size.h)
-      ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#4B61D1'
+      const scope = p.scopeOf?.(selected.id) ?? 'clip'
+      ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = SCOPE_COLOR[scope]
       ctx.strokeRect(b.x * p.size.w - 6, b.y * p.size.h - 6, b.w * p.size.w + 12, b.h * p.size.h + 12)
       ctx.setLineDash([])
+      if (SCOPE_TAG[scope]) {
+        ctx.font = 'bold 11px "Segoe UI", "Yu Gothic UI", sans-serif'
+        const tw = ctx.measureText(SCOPE_TAG[scope]).width + 10, tx = b.x * p.size.w - 6, ty = Math.max(0, b.y * p.size.h - 24)
+        ctx.fillStyle = SCOPE_COLOR[scope]; ctx.fillRect(tx, ty, tw, 17)
+        ctx.fillStyle = '#FFFFFF'; ctx.textBaseline = 'middle'; ctx.fillText(SCOPE_TAG[scope], tx + 5, ty + 9)
+      }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard])
+  }, [shown, time, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {

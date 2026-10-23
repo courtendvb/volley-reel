@@ -13,6 +13,7 @@ import { TrimBar } from './components/TrimBar'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools } from './components/AnnotationTools'
 import type { Annotation } from '../../shared/annotation'
+import { changed, mergeScoped, moveToScope, scopeOf, splitScoped, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
@@ -422,16 +423,43 @@ export function App() {
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption) }
   }, [dvws, settings, overlay])
   const activeOverlay = overlayData(active)
+  const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? { video: video?.annotations ?? [], scene: reel?.annotations ?? [], clip: active.annotations } : null,
+    [active, reel?.annotations, video?.annotations])
+  const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
+  const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
   }, [updateVideo])
 
+  // The active clip's objects with its scene's and its video's (表示範囲). The editor gets them
+  // merged; edits are split back to where each object lives.
+  const scopedNow = (): ScopedAnnotations | null => {
+    const { reel: r, activeClipId: id, video: v } = latest.current
+    const c = r && id ? r.clips[id] : null
+    return c ? { video: v?.annotations ?? [], scene: r!.annotations ?? [], clip: c.annotations } : null
+  }
+  const applyScoped = useCallback((next: ScopedAnnotations) => {
+    const { reel: r, activeClipId: id, video: v } = latest.current
+    const prev = scopedNow()
+    if (!r || !id || !prev) return
+    const now = new Date().toISOString()
+    if (changed(prev.clip, next.clip) || changed(prev.scene, next.scene)) {
+      let nr = changed(prev.clip, next.clip) ? setAnnotations(r, id, next.clip) : r
+      if (changed(prev.scene, next.scene)) nr = { ...nr, annotations: next.scene, updatedAt: now }
+      updateReel(nr)
+    }
+    if (v && changed(prev.video, next.video)) updateVideo({ ...v, annotations: next.video, updatedAt: now })
+  }, [updateReel, updateVideo])
   const setAnns = useCallback((list: Annotation[]) => {
-    const { reel: r, activeClipId: id } = latest.current
-    if (r && id && r.clips[id]) updateReel(setAnnotations(r, id, list))
-  }, [updateReel])
+    const prev = scopedNow()
+    if (prev) applyScoped(splitScoped(prev, list))
+  }, [applyScoped])
+  const setAnnScope = useCallback((annId: string, to: AnnScope) => {
+    const prev = scopedNow()
+    if (prev) applyScoped(moveToScope(prev, annId, to))
+  }, [applyScoped])
 
   // Puts a picture (or page 1 of a PDF) in the middle of the frame, 30% of its width.
   const insertImage = useCallback(async (path?: string): Promise<string | null> => {
@@ -447,8 +475,8 @@ export function App() {
       let w = 0.3, h = w * ratio
       if (h > 0.8) { h = 0.8; w = h / ratio }
       const a: Annotation = { id: crypto.randomUUID(), kind: 'image', color: '#FFFFFF', x: (1 - w) / 2, y: (1 - h) / 2, w, h, assetId: img.assetId }
-      const now = latest.current.reel?.clips[c.id]
-      if (now) setAnns([...now.annotations, a])
+      const now = scopedNow()
+      if (now) setAnns([...mergeScoped(now), a])
       setSelectedAnn(a.id); setAnnTool('select')
       return a.id
     } catch (e) {
@@ -486,9 +514,8 @@ export function App() {
         setAnnTool(tools[e.key.toLowerCase()])
       }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {
-        const { reel: r, activeClipId: id, selectedAnn: sel } = latest.current
-        const c = r && id ? r.clips[id] : null
-        if (r && c) { e.preventDefault(); updateReel(setAnnotations(r, c.id, c.annotations.filter(a => a.id !== sel))); setSelectedAnn(null) }
+        const sel = latest.current.selectedAnn, now = scopedNow()
+        if (now) { e.preventDefault(); setAnns(mergeScoped(now).filter(a => a.id !== sel)); setSelectedAnn(null) }
       }
       else if (e.key === '[' || e.key === ']') {
         const { reel: r, activeClipId: id } = latest.current
@@ -520,7 +547,8 @@ export function App() {
     try {
       const byId = Object.fromEntries(rs.map(s => [s.id, s]))
       const job = await buildExportJob(plan, ov,
-        { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms }, outPath)
+        { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms,
+          sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [] }, outPath)
       await api.startExport(job)
       return job
     } catch (e) {
@@ -677,6 +705,16 @@ export function App() {
         await sleep(300)
         log.images = anns().filter(a => a.kind === 'image').map(a => a.kind === 'image' ? { w: +a.w.toFixed(3), h: +a.h.toFixed(3), asset: a.assetId.slice(-4) } : null)
       }
+      // 表示範囲: the rect to the whole scene, the triangle to the whole video, through the picker.
+      const rectId = anns().find(a => a.kind === 'rect')!.id
+      setSelectedAnn(rectId); await sleep(200); await setValue('表示範囲', 'scene')
+      if (triId) { setSelectedAnn(triId); await sleep(200); await setValue('表示範囲', 'video') }
+      await sleep(200)
+      log.scopes = {
+        clip: anns().map(a => a.kind), scene: (latest.current.reel!.annotations ?? []).map(a => a.kind),
+        video: (latest.current.video?.annotations ?? []).map(a => a.kind),
+        picker: (document.querySelector('[aria-label="表示範囲"]') as HTMLSelectElement | null)?.value,
+      }
       // The headline field: typing makes one centered text at the top middle.
       await setValue('見出し', 'SIDE OUT'); await setValue('見出し', 'SIDE OUT!')
       const q = anns().filter(a => a.kind === 'text' && a.quick)
@@ -685,6 +723,14 @@ export function App() {
       // The overlay quick settings (gear in the auto-display row) open over the video.
       document.querySelector<HTMLButtonElement>('.ov-gear')?.click(); await sleep(150)
       log.gearPopup = !!document.querySelector('.ov-gear-pop')
+      // A second (later) clip of the same scene shows the scene's and the video's objects too.
+      const r1 = res.find(x => x.matchId === r0.matchId && x.play.rallyId !== null && x.play.rallyId !== r0.play.rallyId && x.play.time > r0.play.time + 30)!
+      updateReel(addClips(latest.current.reel!, [{ matchId: r1.matchId, play: r1.play }]).reel); await sleep(300)
+      const other = Object.values(latest.current.reel!.clips).find(x => x.id !== clip.id)!
+      activateClip(other); await sleep(800)
+      const sc2 = scopedNow()
+      log.otherClip = sc2 ? mergeScoped(sc2).map(a => `${a.kind}:${scopeOf(sc2, a.id)}`) : []
+      setSelectedAnn(rectId); await sleep(300)
 
       if (opts.videoExportTo) {
         const job = await startExport(opts.videoExportTo)
@@ -1247,7 +1293,7 @@ export function App() {
                       caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
                     {here && active && (
                       <AnnotationLayer
-                        size={size} annotations={active.annotations} clip={here}
+                        size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here}
                         editable={!seqPlaying} tool={annTool} style={annStyle}
                         selectedId={selectedAnn} editPoints={editPoints} onSelect={setSelectedAnn} onChange={setAnns}
                       />
@@ -1272,7 +1318,7 @@ export function App() {
             {active && activeInfo?.range && active.matchId === matchId && (
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
-                annotations={active.annotations} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints}
+                annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints}
                 onSelect={setSelectedAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
               />
             )}

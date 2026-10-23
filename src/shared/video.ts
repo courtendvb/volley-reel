@@ -2,6 +2,7 @@
 // groups of clips). Scenes are shared: a video only refers to them by id, so fixing a scene fixes
 // every video that uses it (design §0). The overlay look belongs to the video.
 import { ourSide } from './filter'
+import type { Annotation } from './annotation'
 import type { OverlayPatch, OverlaySettings } from './overlay'
 import { groupOf, markerCardOn, type Clip, type Reel } from './reel'
 import type { Match } from './types'
@@ -11,6 +12,7 @@ export interface Video {
   name: string
   sceneIds: string[] // play order; the same scene may appear in several videos
   overlay?: OverlayPatch // read through overlaySettings()
+  annotations?: Annotation[] // objects shown on every clip of the video (表示範囲: 動画全体)
   updatedAt: string
 }
 

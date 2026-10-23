@@ -5,6 +5,7 @@ import {
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, setClosed, simplify, toPolygon } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
+import type { AnnScope } from '../../../shared/annotationScope'
 import type { AnnStyle, Tool } from './AnnotationLayer'
 
 interface Props {
@@ -14,6 +15,9 @@ interface Props {
   onStyle: (s: AnnStyle) => void
   annotations: Annotation[]
   selectedId: string | null
+  scopeOf: (id: string) => AnnScope | null
+  onScope: (id: string, to: AnnScope) => void
+  canVideo: boolean // a video is open, so objects can be put on all of it
   editPoints: boolean
   onEditPoints: (on: boolean) => void
   onSelect: (id: string | null) => void
@@ -43,6 +47,7 @@ export function AnnotationTools(p: Props) {
   }
 
   // What the controls show: the selection's values with the old-look defaults filled in.
+  const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
   const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' ? 'polygon' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
@@ -152,6 +157,15 @@ export function AnnotationTools(p: Props) {
         )}
         <Group title="全体">
           <Pct label="透明度" value={1 - v.opacity} onChange={t => set({ opacity: 1 - t })} disabled={p.disabled} />
+          {sel && (
+            <select aria-label="表示範囲" value={scope} disabled={p.disabled} className={`scope-${scope}`}
+              title="このクリップだけ／このシーンのすべてのクリップ／この動画のすべてのクリップ"
+              onChange={e => p.onScope(sel.id, e.target.value as AnnScope)}>
+              <option value="clip">表示: このクリップ</option>
+              <option value="scene">表示: シーン全体</option>
+              {(p.canVideo || scope === 'video') && <option value="video">表示: 動画全体</option>}
+            </select>
+          )}
           {sel && isPoints(sel) && sel.points.length > MAX_EDIT_POINTS && (
             <button onClick={() => update(simplify(sel, 2, 1280, 720))} title="形を保ったまま点を減らし、頂点を編集できるようにする">点を減らす（{sel.points.length}点）</button>
           )}
@@ -163,7 +177,13 @@ export function AnnotationTools(p: Props) {
       </div>
 
       <div className="ann-row">
-        {sel ? (
+        {sel && scope !== 'clip' ? (
+          <>
+            <span className="muted">{scope === 'scene' ? 'このシーンのすべてのクリップ' : 'この動画のすべてのクリップ'}で、最初から最後まで表示します</span>
+            <span className="spacer" />
+            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title="削除 (Delete)">削除</button>
+          </>
+        ) : sel ? (
           <>
             <span className="muted">表示 {rel(sel.showFrom, '最初')} 〜 {rel(sel.showTo, '最後')}</span>
             <button onClick={() => update({ ...sel, showFrom: playback.current.time })} title="今の再生位置から表示する">ここから表示</button>

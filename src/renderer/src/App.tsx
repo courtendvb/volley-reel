@@ -20,7 +20,8 @@ import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { buildExportJob } from './exportRender'
-import { addScene, dropScene, newVideo, planScene, planVideo, type PlanItem, type Video } from '../../shared/video'
+import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, type Card, type PlanItem, type Video } from '../../shared/video'
+import { CardEditBar, CardEditor } from './components/CardEditor'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { Home } from './components/Home'
@@ -458,6 +459,28 @@ export function App() {
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
+  // One marker group of a scene as its own MP4: its card (when on) and its clips, with the video's
+  // overlays and objects. A group switched off can still be exported this way.
+  const exportMarker = (sceneId: string, m: Marker, outPath?: string) => {
+    const { reels: rs, orderOf: of, overlay: ov, matches: ms, settings: st, video: v } = latest.current
+    const sc = rs.find(x => x.id === sceneId)
+    if (!sc) return Promise.resolve(null)
+    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
+    const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
+    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || `マーカー${m}`}`
+    return startExport(outPath, { plan, name })
+  }
+  // The gear on a scene or marker: edit how that kind of title card looks, over the video window.
+  const [cardEdit, setCardEdit] = useState<{ sceneId: string; marker: Marker | null } | null>(null)
+  const cardEditCard = useMemo((): Card | null => {
+    if (!cardEdit) return null
+    const sc = reels.find(x => x.id === cardEdit.sceneId)
+    if (!sc) return null
+    const ids = cardEdit.marker === null ? Object.keys(sc.clips) : sc.groups[cardEdit.marker]
+    const m = cardMatch(sc, ids, matches, settings?.ourTeamCodes ?? [])
+    return { marker: cardEdit.marker, name: cardEdit.marker === null ? sc.name : sc.markerNames[cardEdit.marker], ...m }
+  }, [cardEdit, reels, matches, settings])
+  const editCard = (sceneId: string, marker: Marker | null) => { playback.stopSequence(); playback.pause(); setCardEdit({ sceneId, marker }) }
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
@@ -567,11 +590,12 @@ export function App() {
     else setExportState({ status: 'cancelled', ratio: 0, message: '書き出しをキャンセルしました' })
   }), [])
 
-  const startExport = useCallback(async (outPathArg?: string) => {
+  // The whole video by default; part of it (one marker group) when a plan and a file name are given.
+  const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
     const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf } = latest.current
-    const plan = currentPlan('video')
+    const plan = part?.plan ?? currentPlan('video')
     if (!v || !plan.some(p => p.kind === 'clip')) return null
-    const outPath = outPathArg ?? await api.chooseExportPath(v.name)
+    const outPath = outPathArg ?? await api.chooseExportPath(part?.name ?? v.name)
     if (!outPath) return null
     setExportState({ status: 'preparing', ratio: 0, message: 'オーバーレイを準備しています' })
     try {
@@ -860,7 +884,40 @@ export function App() {
       const aLast = latest.current.reels.find(x => x.id === a.id)!
       setReelId(a.id); updateReel({ ...aLast, markerOff: { 2: true } }); await sleep(400)
       const planOff = describe(currentPlan('video'))
-      return { planV1, lens, timeline, v1After, v2After, undo, planOff, videoExport: opts.videoExportTo ?? null, exported }
+
+      // Drag the second scene of the video above the first: a line shows where it lands.
+      const sceneRows = () => [...document.querySelectorAll<HTMLLIElement>('.video-scene')]
+      const dt = new DataTransfer()
+      const [first, second] = sceneRows()
+      second.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
+      const fb = first.getBoundingClientRect()
+      first.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
+      await sleep(150)
+      const dropLine = first.className.includes('drop-before')
+      first.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
+      await sleep(300)
+      const dragged = { dropLine, order: latest.current.video!.sceneIds.map(id => latest.current.reels.find(x => x.id === id)?.name) }
+
+      // One marker group alone as an MP4 (its card and its clips).
+      let markerExport: unknown = null
+      if (opts.videoExportTo) {
+        const job = await exportMarker(a.id, 1, opts.videoExportTo.replace(/\.mp4$/, '-marker1.mp4'))
+        await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'marker export')
+        markerExport = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind) }
+      }
+
+      // The gear on marker 1: its title card over the video; dragging the title moves it.
+      editCard(a.id, 1); await sleep(400)
+      const ed = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=card-editor]'), 5000, 'card editor')
+      const eb = ed.getBoundingClientRect()
+      const ept = (fx: number, fy: number) => ({ clientX: eb.left + fx * eb.width, clientY: eb.top + fy * eb.height, bubbles: true, pointerId: 1 })
+      ed.dispatchEvent(new PointerEvent('pointerdown', ept(0.13, 0.36))); await sleep(40)
+      ed.dispatchEvent(new PointerEvent('pointermove', ept(0.18, 0.36))); await sleep(40)
+      ed.dispatchEvent(new PointerEvent('pointermove', ept(0.23, 0.41))); await sleep(40)
+      ed.dispatchEvent(new PointerEvent('pointerup', ept(0.23, 0.41))); await sleep(300)
+      const lay = latest.current.overlay.titleCard.markerLayout
+      const cardLayout = lay ? { x: +lay.x.toFixed(2), y: +lay.y.toFixed(2), scale: lay.scale } : null
+      return { planV1, lens, timeline, v1After, v2After, undo, planOff, dragged, markerExport, cardLayout, videoExport: opts.videoExportTo ?? null, exported }
     }
 
     // Each smoke scene gets its own video, taking over the overlay the smoke set on the scene
@@ -1331,6 +1388,7 @@ export function App() {
             {match && (
               <VideoPane key={match.id} match={match} overlay={size => {
                 const here = active && activeInfo?.range && active.matchId === match.id ? { key: active.matchId, ...activeInfo.range } : null
+                if (cardEditCard) return <CardEditor size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} />
                 return (
                   <>
                     <OverlayLayer size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
@@ -1346,11 +1404,12 @@ export function App() {
                 )
               }} />
             )}
-            {active && activeInfo?.range && active.matchId === matchId && (
+            {cardEditCard && <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onDone={() => setCardEdit(null)} />}
+            {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
               <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying}
                 onFormat={id => { setAnnTool('select'); setSelectedAnn(id) }} />
             )}
-            {active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
+            {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -1363,14 +1422,14 @@ export function App() {
                 onTrim={trim}
               />
             )}
-            {active && activeInfo?.range && active.matchId === matchId && (
+            {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints}
                 onSelect={setSelectedAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
               />
             )}
-            {active && activeInfo?.ref && active.matchId === matchId && (
+            {!cardEdit && active && activeInfo?.ref && active.matchId === matchId && (
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
@@ -1384,6 +1443,7 @@ export function App() {
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
               onSelectVideo={setVideoId} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
               onSelectScene={id => { setReelId(id); setActiveClipId(null) }} onNewScene={createReel}
+              onEditCard={id => editCard(id, null)}
               onRenameScene={(id, name) => { const r = latest.current.reels.find(x => x.id === id); if (r && r.name !== name) updateReel({ ...r, name, updatedAt: new Date().toISOString() }) }}
               onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onStop={() => playback.stopSequence()}
               onExport={() => void startExport()} exporting={exportState?.status === 'running' || exportState?.status === 'preparing'}
@@ -1394,7 +1454,8 @@ export function App() {
               info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
               onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
-              markerCardDefault={overlay.titleCard.enabled}
+              markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
+              onExportMarker={m => { if (reel) void exportMarker(reel.id, m) }} canExport={!!video && !(exportState?.status === 'running' || exportState?.status === 'preparing')}
             />
           </div>
         </main>

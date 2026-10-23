@@ -16,9 +16,16 @@ export interface OverlaySettings {
   theme: OverlayTheme
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean }
-  // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene
-  titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean }
+  // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
+  // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
+  titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
+    markerLayout?: CardLayout; sceneLayout?: CardLayout }
 }
+
+// x / y: the marker title's top-left, or the scene title's center (0..1 of the frame); scale: 1 = default size.
+export interface CardLayout { x: number; y: number; scale: number }
+export const DEFAULT_MARKER_LAYOUT: CardLayout = { x: 0.1, y: 0.3, scale: 1 }
+export const DEFAULT_SCENE_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1 }
 
 export interface ClipOverlayOverride {
   scoreboard?: { hidden?: boolean }

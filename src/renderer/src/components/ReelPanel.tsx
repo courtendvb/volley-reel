@@ -6,6 +6,7 @@ import {
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
 import { pad2 } from '../format'
+import { InlineTitle } from './InlineTitle'
 
 export interface ClipInfo {
   ref: PlayRef | undefined
@@ -35,6 +36,9 @@ interface Props {
   overlaps: Map<string, string[]>
   usedIn: number // videos that include this scene
   markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
+  onEditCard: (m: Marker) => void // the gear: edit how marker title cards look, in the video window
+  onExportMarker: (m: Marker) => void // this marker group alone as an MP4
+  canExport: boolean
 }
 
 const DT_CLIP = 'application/x-vr-clip'
@@ -42,8 +46,7 @@ const DT_GROUP = 'application/x-vr-group'
 
 export function ReelPanel(p: Props) {
   const { reel } = p
-  const [dragOver, setDragOver] = useState<string | null>(null)
-  const [editing, setEditing] = useState<Marker | null>(null) // the marker whose title is open (gear)
+  const [dragOver, setDragOver] = useState<{ key: string; after: boolean } | null>(null)
   if (!reel) {
     return (
       <aside className="reel-panel">
@@ -57,18 +60,36 @@ export function ReelPanel(p: Props) {
   const multiMatch = new Set(Object.values(reel.clips).map(c => c.matchId)).size > 1
   const when = (c: Clip): [string, number] => { const i = p.info(c); return [i.date, i.range?.in ?? 0] }
 
-  const onDropClip = (e: DragEvent, to: Group, index?: number) => {
+  // Dragging shows a line where the item will land: above or below the row under the pointer.
+  const lower = (e: DragEvent) => { const b = (e.currentTarget as HTMLElement).getBoundingClientRect(); return e.clientY > b.top + b.height / 2 }
+  const dragging = (e: DragEvent, type: string) => e.dataTransfer.types.includes(type)
+  const lineClass = (key: string) => (dragOver?.key === key ? (dragOver.after ? ' drop-after' : ' drop-before') : '')
+
+  // A clip dropped on a row of a marker group lands before or after it; on a group, at its end.
+  const onDropClip = (e: DragEvent, to: Group, slot?: number) => {
     const id = e.dataTransfer.getData(DT_CLIP)
-    if (id) { e.preventDefault(); change(moveClip(reel, id, to, index)) }
     setDragOver(null)
+    if (!id) return
+    e.preventDefault(); e.stopPropagation()
+    const from = to === 'none' ? -1 : reel.groups[to].indexOf(id)
+    // slot counts the rows as they are; moveClip counts them without the moved clip.
+    change(moveClip(reel, id, to, slot === undefined ? undefined : from >= 0 && from < slot ? slot - 1 : slot))
   }
-  const onDropGroup = (e: DragEvent, before: Marker) => {
+  // A group dropped on another goes above or below it.
+  const onDropGroup = (e: DragEvent, at: Marker) => {
     const g = Number(e.dataTransfer.getData(DT_GROUP)) as Marker
-    if (g && g !== before) { e.preventDefault(); change(placeGroup(reel, g, before)) }
-    else onDropClip(e, before)
+    if (!g) { onDropClip(e, at); return }
+    e.preventDefault()
+    const after = dragOver?.key === `h${at}` && dragOver.after
     setDragOver(null)
+    const i = reel.groupOrder.indexOf(at)
+    const before = after ? reel.groupOrder[i + 1] ?? null : at
+    if (g !== at && before !== g) change(placeGroup(reel, g, before))
   }
-  const allow = (key: string) => (e: DragEvent) => { e.preventDefault(); setDragOver(key) }
+  const overGroup = (m: Marker) => (e: DragEvent) => {
+    e.preventDefault()
+    setDragOver(dragging(e, DT_GROUP) ? { key: `h${m}`, after: lower(e) } : { key: `g${m}`, after: false })
+  }
 
   const clipRow = (c: Clip, g: Group, i: number) => {
     const inf = p.info(c), r = inf.ref
@@ -77,10 +98,14 @@ export function ReelPanel(p: Props) {
     return (
       <div
         key={c.id} role="listitem" draggable
-        className={`clip-row${c.id === p.activeClipId ? ' active' : ''}${c.id === p.playingClipId ? ' playing' : ''}${dragOver === c.id ? ' drop-before' : ''}`}
+        className={`clip-row${c.id === p.activeClipId ? ' active' : ''}${c.id === p.playingClipId ? ' playing' : ''}${lineClass(c.id)}`}
         onDragStart={e => { e.dataTransfer.setData(DT_CLIP, c.id); e.dataTransfer.effectAllowed = 'move' }}
-        onDragOver={g === 'none' ? undefined : allow(c.id)} onDragLeave={() => setDragOver(null)}
-        onDrop={g === 'none' ? undefined : e => onDropClip(e, g, i)}
+        onDragOver={g === 'none' ? undefined : e => {
+          if (!dragging(e, DT_CLIP)) return
+          e.preventDefault(); e.stopPropagation()
+          setDragOver({ key: c.id, after: lower(e) })
+        }}
+        onDrop={g === 'none' ? undefined : e => onDropClip(e, g, i + (dragOver?.key === c.id && dragOver.after ? 1 : 0))}
         onClick={() => p.onActivate(c)}
       >
         <span className="grip" aria-hidden title="ドラッグで並べ替え・マーカーのグループへ移動">⠿</span>
@@ -91,6 +116,7 @@ export function ReelPanel(p: Props) {
             {multiMatch && <span className="muted">{inf.matchLabel} </span>}
             <span className="muted">S{r.play.setNum} {pad2(r.play.score.home)}-{pad2(r.play.score.away)} </span>
             <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill}`}>{playLabel(r.play.skill, r.play.effect)}</span>
+            {r.play.skill === 'A' && r.combo && <span className="combo" title={r.comboName ?? undefined}> {r.combo}</span>}
           </span>
         )}
         {p.overlaps.has(c.id) && <span className="overlap" title="同じ試合の別のクリップと範囲が重なっています">⚠</span>}
@@ -132,10 +158,11 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
       <Defaults d={rangeDefaults(reel)} legacy={Object.values(reel.clips).some(c => !c.mode)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
       <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
-      <div className="reel-groups" role="list">
+      <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
+        onDragEnd={() => setDragOver(null)}>
         {reel.groupOrder.map(m => (
-          <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver === `g${m}` ? ' drop-into' : ''}`}
-            onDragOver={allow(`g${m}`)} onDragLeave={() => setDragOver(null)} onDrop={e => onDropGroup(e, m)}>
+          <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver?.key === `g${m}` ? ' drop-into' : ''}${lineClass(`h${m}`)}`}
+            onDragOver={overGroup(m)} onDrop={e => onDropGroup(e, m)}>
             <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}>
               <span className="grip" aria-hidden title="ドラッグでグループの順番を変える">⠿</span>
               {/* The number itself switches the group on (its color) or off (grey: not played or exported). */}
@@ -143,7 +170,8 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                 aria-pressed={!reel.markerOff?.[m]} aria-label={`マーカー ${m} を使う`}
                 title={reel.markerOff?.[m] ? 'オフ: 再生・書き出しに使わない（クリックでオン）' : 'オン: 再生・書き出しに使う（クリックでオフ）'}
                 onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>{m}</button>
-              <span className={`group-title${reel.markerNames[m] ? '' : ' muted'}`}>{reel.markerNames[m] || `マーカー ${m}`}</span>
+              <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={`マーカー ${m}`} label={`マーカー ${m} の名前`}
+                onChange={v => change(renameMarker(reel, m, v))} />
               <span className="muted">{reel.groups[m].length}</span>
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
@@ -153,18 +181,17 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                     onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
                 )
               })()}
-              <button className="gear" aria-label={`マーカー ${m} のタイトル`} aria-expanded={editing === m} title="タイトル（カードに出る名前）を編集"
-                onClick={() => setEditing(e => (e === m ? null : m))}>⚙</button>
+              <button className="gear" aria-label={`マーカー ${m} だけを書き出す`} title="このマーカーのクリップだけを MP4 に書き出す（動画のオーバーレイ設定で）"
+                disabled={!p.canExport || !reel.groups[m].length} onClick={() => p.onExportMarker(m)}>⤓</button>
+              <button className="gear" aria-label={`マーカー ${m} のタイトルカードの見た目`} title="マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
+                onClick={() => p.onEditCard(m)}>⚙</button>
             </header>
-            {editing === m && (
-              <TitleEdit label={`マーカー ${m} の名前`} value={reel.markerNames[m]} placeholder={`マーカー ${m} の名前（カードのタイトル）`}
-                onChange={v => change(renameMarker(reel, m, v))} onClose={() => setEditing(null)} />
-            )}
             {reel.groups[m].map((id, i) => clipRow(reel.clips[id], m, i))}
           </section>
         ))}
-        <section className={`group none${reel.scope === 'marked' ? ' excluded' : ''}${dragOver === 'gnone' ? ' drop-into' : ''}`}
-          onDragOver={allow('gnone')} onDragLeave={() => setDragOver(null)} onDrop={e => onDropClip(e, 'none')}>
+        <section className={`group none${reel.scope === 'marked' ? ' excluded' : ''}${dragOver?.key === 'gnone' ? ' drop-into' : ''}`}
+          onDragOver={e => { if (dragging(e, DT_CLIP)) { e.preventDefault(); setDragOver({ key: 'gnone', after: false }) } }}
+          onDrop={e => onDropClip(e, 'none')}>
           <header className="group-head">
             <span className="swatch none">–</span>
             <span className="none-title">マーカーなし（時系列）{reel.scope === 'marked' && <span className="muted"> — 書き出し対象外</span>}</span>
@@ -173,7 +200,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           {none.map((c, i) => clipRow(c, 'none', i))}
         </section>
       </div>
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（同じ数字か 0 で解除）。左の ⠿ をドラッグして並べ替え、⚙ でタイトルを編集。</p>
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（同じ数字か 0 で解除）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。</p>
     </aside>
   )
 }
@@ -199,19 +226,6 @@ function Defaults({ d, legacy, onChange }: { d: RangeDefaults; legacy: boolean; 
           {d.mode === 'rally' && <> サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒</>}
         </span>
       )}
-    </div>
-  )
-}
-
-// The title editor a gear opens, on its own line under the row. Enter or Escape closes it.
-export function TitleEdit({ label, value, placeholder, onChange, onClose }: {
-  label: string; value: string; placeholder: string; onChange: (v: string) => void; onClose: () => void
-}) {
-  return (
-    <div className="title-edit" onClick={e => e.stopPropagation()}>
-      <span className="field-label">タイトル</span>
-      <input autoFocus aria-label={label} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} onBlur={onClose}
-        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') onClose() }} />
     </div>
   )
 }

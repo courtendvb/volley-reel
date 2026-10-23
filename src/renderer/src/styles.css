@@ -357,8 +357,17 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .grip:hover { color: var(--text); }
 .gear { padding: 0 5px; border: 0; background: transparent; color: var(--sub); font-size: 14px; line-height: 1; }
 .gear:hover, .gear[aria-expanded="true"] { color: var(--primary); }
-.title-edit { display: flex; align-items: center; gap: 8px; padding: 4px 10px 6px 30px; flex-basis: 100%; }
-.title-edit input { flex: 1; min-width: 0; padding: 2px 6px; font: inherit; }
 .group-head .group-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .video-scene { flex-wrap: wrap; }
 .clip-row { padding-left: 6px; }
+/* Drop helper: a line where the dragged item will land. */
+.clip-row.drop-after, .video-scene.drop-after { box-shadow: inset 0 -3px 0 var(--primary); }
+.clip-row.drop-before, .video-scene.drop-before { box-shadow: inset 0 3px 0 var(--primary); }
+.group.drop-before { box-shadow: 0 -3px 0 var(--primary); }
+.group.drop-after { box-shadow: 0 3px 0 var(--primary); }
+.clip-row .combo { color: var(--sub); font-size: 11px; }
+.inline-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; border-radius: 4px; padding: 0 3px; }
+.inline-title-text:hover { background: rgba(75, 97, 209, 0.08); }
+.inline-title { flex: 1; min-width: 0; padding: 1px 4px; font: inherit; }
+.card-editor { position: absolute; inset: 0; }
+.card-edit-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #FEFCE8; border: 1px solid #FACC15; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }

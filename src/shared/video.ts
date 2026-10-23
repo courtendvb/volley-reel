@@ -59,7 +59,7 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
   order.forEach((c, i) => {
     const g = groupOf(scene, c.id)
     if (g !== null && g !== 'none' && markerCardOn(scene, g, overlay.titleCard.enabled) && (i === 0 || groupOf(scene, order[i - 1].id) !== g)) {
-      out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], ...groupMatch(scene, scene.groups[g], matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
+      out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ kind: 'clip', clip: c, sceneId: scene.id })
   })
@@ -79,7 +79,7 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
     if (!order.length) continue
     if (overlay.titleCard.sceneCards) {
       const ids = order.map(c => c.id)
-      out.push({ kind: 'card', card: { marker: null, name: s.name, ...groupMatch(s, ids, matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
+      out.push({ kind: 'card', card: { marker: null, name: s.name, ...cardMatch(s, ids, matches, ourCodes) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push(...planScene(order, s, overlay, matches, ourCodes))
   }
@@ -87,7 +87,7 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
 }
 
 // The card's match line, when every clip it introduces comes from one match.
-function groupMatch(scene: Reel, clipIds: string[], matches: Record<string, Match>, ourCodes: string[]): { match: string | null; opp: string | null } {
+export function cardMatch(scene: Reel, clipIds: string[], matches: Record<string, Match>, ourCodes: string[]): { match: string | null; opp: string | null } {
   const ids = new Set(clipIds.map(id => scene.clips[id]?.matchId).filter(Boolean))
   const m = ids.size === 1 ? matches[[...ids][0]!] : undefined
   return m ? { match: cardMatchLabel(m, ourCodes), opp: cardOpponent(m, ourCodes) } : { match: null, opp: null }

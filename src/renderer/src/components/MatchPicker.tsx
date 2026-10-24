@@ -6,7 +6,7 @@ interface Props {
   mode: 'create' | 'edit'
   matches: Match[] // the whole library
   initial: { name: string; codes: string[]; selected: string[] }
-  onDone: (r: { name: string; codes: string[]; matchIds: string[] }) => void
+  onDone: (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => void
   onClose: () => void
 }
 
@@ -76,8 +76,13 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
         </div>
         <div className="modal-actions">
           <button onClick={onClose}>キャンセル</button>
-          <button className="primary" disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected] })}>
-            {mode === 'create' ? 'フォルダを選んで作成' : '保存'}
+          {mode === 'create' && (
+            <button disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected], chooseFolder: true })}
+              title="倉庫の外など、置く場所を自分で選んで作ります">場所を選んで作成…</button>
+          )}
+          <button className="primary" disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected] })}
+            title={mode === 'create' ? '倉庫の projects フォルダに、プロジェクト名のフォルダを作ります' : undefined}>
+            {mode === 'create' ? '作成' : '保存'}
           </button>
         </div>
       </div>

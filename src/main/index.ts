@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
+import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
@@ -134,9 +135,19 @@ function registerIpc(): void {
 
   ipcMain.handle('project:create', async (_e, init: ProjectInit) => {
     if (!library) throw new Error('先に倉庫を選んでください')
-    const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトを作るフォルダを選択（空のフォルダ）', properties: ['openDirectory', 'createDirectory'] })
-    if (r.canceled || !r.filePaths[0]) return null
-    project = await Project.create(r.filePaths[0], library, init)
+    const name = init.name.trim() || `${init.ourTeamCodes[0] ?? ''} プロジェクト`.trim()
+    let dir: string
+    if (init.chooseFolder) {
+      const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトを作るフォルダを選択（空のフォルダ）', properties: ['openDirectory', 'createDirectory'] })
+      if (r.canceled || !r.filePaths[0]) return null
+      dir = r.filePaths[0]
+    } else {
+      // No folder to pick: a new one named after the project, next to the library's matches.
+      const root = join(library.dir, 'projects')
+      dir = join(root, uniqueName(folderName(name), n => existsSync(join(root, n))))
+      await mkdir(dir, { recursive: true })
+    }
+    project = await Project.create(dir, library, { ...init, name })
     rememberProject(project)
     return project.info()
   })

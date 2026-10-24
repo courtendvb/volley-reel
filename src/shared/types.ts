@@ -130,6 +130,7 @@ export interface ProjectInit {
   name: string
   ourTeamCodes: string[]
   matchIds: string[]
+  chooseFolder?: boolean // ask where to put it; otherwise a new folder in the library's projects/
 }
 
 export interface ImportProgress {
@@ -149,7 +150,7 @@ export interface Api {
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
-  createProject(init: ProjectInit): Promise<ProjectInfo | null> // asks for a folder
+  createProject(init: ProjectInit): Promise<ProjectInfo | null> // in <library>/projects/<name>, or a folder the user picks
   openProject(path?: string): Promise<ProjectInfo | null> // asks for a folder when no path
   closeProject(): Promise<void>
   setProjectMatches(ids: string[]): Promise<ProjectInfo>

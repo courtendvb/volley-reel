@@ -601,6 +601,24 @@ export function installSmoke(h: SmokeHost): void {
     setLibrary(await api.getLibrary())
     if (opts.home === 'home') { await sleep(300); return { library: latest.current.library?.matches.length } }
     if (opts.home === 'picker') { setPicker('create'); await sleep(400); return { library: latest.current.library?.matches.length } }
+    if (opts.home === 'auto-create') {
+      // "作成" in the picker twice with the same name: two folders in <library>/projects, no dialog.
+      const made: string[] = []
+      for (let i = 0; i < 2; i++) {
+        setPicker('create'); await sleep(400)
+        const input = document.querySelector<HTMLInputElement>('.modal input[placeholder^="例"]')!
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'スモーク: 自動作成?')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        document.querySelector<HTMLElement>('.match-row.pick')!.click(); await sleep(150) // tick a match
+        const buttons = [...document.querySelectorAll<HTMLButtonElement>('.modal-actions button')]
+        const other = buttons.some(b => b.textContent === '場所を選んで作成…')
+        const before = latest.current.projectPath
+        buttons.find(b => b.textContent === '作成')!.click()
+        await waitFor(() => (latest.current.projectPath && latest.current.projectPath !== before ? true : null), 20000, 'project created')
+        made.push(`${latest.current.projectPath}${other ? '' : ' (no choose-folder button)'}`)
+      }
+      return { made, name: (await api.getProject())?.name }
+    }
     const r = await window.api.smokeScan!(opts.folders ?? [])
     const summary = {
       dvws: r.pairs.length, videos: r.videos.length, unreadable: r.unreadable.length,

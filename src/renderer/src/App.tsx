@@ -898,10 +898,10 @@ export function App() {
     setNotice(r.note)
   })
   const importOne = () => guard(async () => { const m = await api.importMatch(); if (m) setLibrary(await api.getLibrary()) })
-  const pickerDone = (r: { name: string; codes: string[]; matchIds: string[] }) => guard(async () => {
+  const pickerDone = (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => guard(async () => {
     setPicker(null)
     if (picker === 'create') {
-      const p = await api.createProject({ name: r.name, ourTeamCodes: r.codes, matchIds: r.matchIds })
+      const p = await api.createProject({ name: r.name, ourTeamCodes: r.codes, matchIds: r.matchIds, chooseFolder: r.chooseFolder })
       if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
       return
     }

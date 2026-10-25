@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
+import { applyStyle, drawAnnotation, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
 
 // Enough of a 2D context for hit testing: text width = 0.5 * font px per character.
 const fake = { font: '', measureText: (t: string) => ({ width: t.length * 0.5 * parseFloat(/(\d+(\.\d+)?)px/.exec(fake.font)![1]) }) }
@@ -79,5 +79,34 @@ describe('copy and paste', () => {
     expect(moved.x).toBeCloseTo(0.62)
     const twice = pasteCopies(copy, [g1, moved as unknown as Annotation])[0] as unknown as { x: number }
     expect(twice.x).toBeCloseTo(0.64)
+  })
+})
+
+describe('drawAnnotation', () => {
+  // Records ellipse() radii and, like the browser, throws on a negative one.
+  const canvas = () => {
+    const calls: string[] = [], radii: number[][] = []
+    const rec = (name: string) => () => { calls.push(name) }
+    const c = {
+      globalAlpha: 1, save: rec('save'), restore: rec('restore'), beginPath: rec('beginPath'), fill: rec('fill'), stroke: rec('stroke'), setLineDash: rec('setLineDash'),
+      ellipse: (_x: number, _y: number, rx: number, ry: number) => {
+        if (rx < 0 || ry < 0) throw new DOMException('negative radius', 'IndexSizeError')
+        radii.push([rx, ry])
+      },
+      rect: () => { throw new Error('broken') },
+    }
+    return { ctx: c as unknown as CanvasRenderingContext2D, calls, radii }
+  }
+
+  it('draws a circle dragged up and to the left (negative size) without throwing', () => {
+    const { ctx, radii } = canvas()
+    drawAnnotation(ctx, { id: 'c', kind: 'circle', color: '#F00', x: 0.5, y: 0.5, w: -0.2, h: -0.1, width: 4 }, 1000, 500)
+    expect(radii).toEqual([[100, 25]])
+  })
+
+  it('skips an object it cannot draw and leaves the canvas state balanced', () => {
+    const { ctx, calls } = canvas()
+    expect(() => drawAnnotation(ctx, rect, 100, 100)).not.toThrow()
+    expect(calls.filter(c => c === 'save').length).toBe(calls.filter(c => c === 'restore').length)
   })
 })

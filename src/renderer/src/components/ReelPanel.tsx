@@ -1,8 +1,8 @@
-import { useEffect, useState, type DragEvent } from 'react'
+import { useEffect, useState, type DragEvent, type MouseEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, markerCardOn, moveClip, placeGroup, rangeDefaults, removeClip, renameMarker,
-  type Clip, type Group, type Marker, type RangeDefaults, type Reel,
+  MARKERS, MARKER_COLORS, chronological, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, spotAt,
+  type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideSpot,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
 import { pad2 } from '../format'
@@ -39,14 +39,29 @@ interface Props {
   onAddToVideo: (sceneId: string) => void
   markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
   onEditCard: (m: Marker) => void // the gear: edit how marker title cards look, in the video window
+  onSlide: (spot: SlideSpot, how: SlideHow) => void // the ＋ between rows: put slides there
+  onEditSlide: (id: string) => void
+  editingSlideId: string | null
+  canFrame: boolean // a match's video is on screen (a slide can be made from its picture)
 }
+
+// blank: an empty page to draw on. file: PDF pages or pictures. frame: the picture on screen.
+export type SlideHow = 'blank' | 'file' | 'frame'
 
 const DT_CLIP = 'application/x-vr-clip'
 const DT_GROUP = 'application/x-vr-group'
+const DT_SLIDE = 'application/x-vr-slide'
 
 export function ReelPanel(p: Props) {
   const { reel } = p
   const [dragOver, setDragOver] = useState<{ key: string; after: boolean } | null>(null)
+  const [menu, setMenu] = useState<{ spot: SlideSpot; x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!menu) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menu])
   // The open clip stays in view (it can change with the Up / Down keys).
   useEffect(() => { document.querySelector('.reel-groups .clip-row.active')?.scrollIntoView({ block: 'nearest' }) }, [p.activeClipId])
   if (!reel) {
@@ -82,6 +97,7 @@ export function ReelPanel(p: Props) {
   }
   // A group dropped on another goes above or below it.
   const onDropGroup = (e: DragEvent, at: Marker) => {
+    if (dragging(e, DT_SLIDE)) { const rows = groupRows(reel, at); onDropSlide(e, at, rows, rows.length); return }
     const g = Number(e.dataTransfer.getData(DT_GROUP)) as Marker
     if (!g) { onDropClip(e, at); return }
     e.preventDefault()
@@ -96,7 +112,66 @@ export function ReelPanel(p: Props) {
     setDragOver(dragging(e, DT_GROUP) ? { key: `h${m}`, after: lower(e) } : { key: `g${m}`, after: false })
   }
 
-  const clipRow = (c: Clip, g: Group, i: number) => {
+  // A slide dropped at row k of a group's rows lands there, after the clip above it.
+  const onDropSlide = (e: DragEvent, g: Group, rows: Row[], k: number) => {
+    const id = e.dataTransfer.getData(DT_SLIDE)
+    const s = reel.slides?.find(x => x.id === id)
+    setDragOver(null)
+    if (!s) return
+    e.preventDefault(); e.stopPropagation()
+    const from = rows.findIndex(r => r.kind === 'slide' && r.slide.id === id)
+    const rest = rows.filter((_, i) => i !== from)
+    change(putSlides(reel, [s], spotAt(rest, g, from >= 0 && from < k ? k - 1 : k)))
+  }
+  // Rows take slides in any group, and clips in a marker group ('none' is in time order).
+  const takes = (e: DragEvent, g: Group) => dragging(e, DT_SLIDE) || (dragging(e, DT_CLIP) && g !== 'none')
+  const dropOnRow = (e: DragEvent, g: Group, rows: Row[], k: number) => {
+    const at = k + (dragOver?.after ? 1 : 0)
+    if (dragging(e, DT_SLIDE)) { onDropSlide(e, g, rows, at); return }
+    if (g !== 'none') onDropClip(e, g, rows.slice(0, at).filter(r => r.kind === 'clip').length)
+  }
+  const openMenu = (e: MouseEvent, spot: SlideSpot) => {
+    e.preventDefault(); e.stopPropagation()
+    setMenu({ spot, x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 130) })
+  }
+  // Between rows: a thin strip that shows ＋ on hover, to put slides there.
+  const gap = (g: Group, rows: Row[], k: number) => (
+    <div key={`gap${k}`} className="slide-gap">
+      <button title="ここにスライドを入れる（右クリックでも）" aria-label="ここにスライドを入れる" onClick={e => openMenu(e, spotAt(rows, g, k))}>＋</button>
+    </div>
+  )
+  const rowsOf = (g: Group, ids: string[]) => {
+    const rows = groupRows(reel, g, ids)
+    let clipNo = 0
+    return [gap(g, rows, 0), ...rows.flatMap((r, k) => [
+      r.kind === 'clip' ? clipRow(reel.clips[r.id], g, clipNo++, rows, k) : slideRow(r.slide, g, rows, k),
+      gap(g, rows, k + 1),
+    ])]
+  }
+
+  const slideRow = (s: Slide, g: Group, rows: Row[], k: number) => (
+    <div
+      key={s.id} role="listitem" draggable
+      className={`clip-row slide-row${s.id === p.editingSlideId ? ' active' : ''}${lineClass(`s${s.id}`)}`}
+      onDragStart={e => { e.dataTransfer.setData(DT_SLIDE, s.id); e.dataTransfer.effectAllowed = 'move' }}
+      onDragOver={e => { if (!takes(e, g)) return; e.preventDefault(); e.stopPropagation(); setDragOver({ key: `s${s.id}`, after: lower(e) }) }}
+      onDrop={e => dropOnRow(e, g, rows, k)}
+      onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1))}
+      onClick={() => p.onEditSlide(s.id)}
+      title="クリックで動画の画面に出して編集（文字・図形を置く・秒数）"
+    >
+      <span className="grip" aria-hidden title="ドラッグで並べ替え">⠿</span>
+      <span className="slide-icon" aria-hidden>▣</span>
+      <span className="clip-main">{slideLabel(s)}</span>
+      {s.annotations.length > 0 && <span className="muted" title="置いた図形・文字の数">✎{s.annotations.length}</span>}
+      <span className="clip-dur">{s.durationSec.toFixed(1)}s</span>
+      <span className="clip-actions" onClick={e => e.stopPropagation()}>
+        <button title="スライドを外す" onClick={() => change(removeSlide(reel, s.id))}>×</button>
+      </span>
+    </div>
+  )
+
+  const clipRow = (c: Clip, g: Group, i: number, rows: Row[], k: number) => {
     const inf = p.info(c), r = inf.ref
     const dur = inf.range ? inf.range.out - inf.range.in : 0
     const trimmed = c.inSec !== null || c.outSec !== null
@@ -105,12 +180,16 @@ export function ReelPanel(p: Props) {
         key={c.id} role="listitem" draggable
         className={`clip-row${c.id === p.activeClipId ? ' active' : ''}${c.id === p.playingClipId ? ' playing' : ''}${lineClass(c.id)}`}
         onDragStart={e => { e.dataTransfer.setData(DT_CLIP, `${c.id}|${g}`); e.dataTransfer.effectAllowed = 'move' }}
-        onDragOver={g === 'none' ? undefined : e => {
-          if (!dragging(e, DT_CLIP)) return
+        onDragOver={e => {
+          if (!takes(e, g)) return
           e.preventDefault(); e.stopPropagation()
           setDragOver({ key: c.id, after: lower(e) })
         }}
-        onDrop={g === 'none' ? undefined : e => onDropClip(e, g, i + (dragOver?.key === c.id && dragOver.after ? 1 : 0))}
+        onDrop={e => {
+          if (dragging(e, DT_SLIDE)) { dropOnRow(e, g, rows, k); return }
+          if (g !== 'none') onDropClip(e, g, i + (dragOver?.key === c.id && dragOver.after ? 1 : 0))
+        }}
+        onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1))}
         onClick={() => p.onActivate(c, g)}
       >
         <span className="grip" aria-hidden title="ドラッグで並べ替え・マーカーのグループへ移動">⠿</span>
@@ -173,10 +252,10 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
         </div>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
-          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount} title="このシーンだけを再生">▶ シーンを再生</button>}
+          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title="このシーンだけを再生">▶ シーンを再生</button>}
       </div>
       <Defaults d={rangeDefaults(reel)} legacy={Object.values(reel.clips).some(c => !c.mode)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
-      <p className="count">{p.orderCount} クリップ・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
+      <p className="count">{p.orderCount} クリップ{reel.slides?.length ? `・スライド ${reel.slides.length}` : ''}・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
         onDragEnd={() => setDragOver(null)}>
@@ -205,23 +284,47 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
               <button className="gear" aria-label={`マーカー ${m} のタイトルカードの見た目`} title="マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
                 onClick={() => p.onEditCard(m)}>⚙</button>
             </header>
-            {reel.groups[m].map((id, i) => clipRow(reel.clips[id], m, i))}
+            {rowsOf(m, reel.groups[m])}
           </section>
         ))}
         <section className={`group none${reel.scope === 'marked' ? ' excluded' : ''}${dragOver?.key === 'gnone' ? ' drop-into' : ''}`}
-          onDragOver={e => { if (dragging(e, DT_CLIP)) { e.preventDefault(); setDragOver({ key: 'gnone', after: false }) } }}
-          onDrop={e => onDropClip(e, 'none')}>
+          onDragOver={e => { if (dragging(e, DT_CLIP) || dragging(e, DT_SLIDE)) { e.preventDefault(); setDragOver({ key: 'gnone', after: false }) } }}
+          onDrop={e => {
+            if (dragging(e, DT_SLIDE)) { const rows = groupRows(reel, 'none', none.map(c => c.id)); onDropSlide(e, 'none', rows, rows.length); return }
+            onDropClip(e, 'none')
+          }}>
           <header className="group-head">
             <span className="swatch none">–</span>
             <span className="none-title">マーカーなし（時系列）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
             <span className="muted">{none.length}</span>
           </header>
-          {none.map((c, i) => clipRow(c, 'none', i))}
+          {rowsOf('none', none.map(c => c.id))}
         </section>
       </div>
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。</p>
+      {menu && (
+        <>
+          <div className="menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
+          <div className="slide-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+            <div className="slide-menu-title">ここにスライドを入れる</div>
+            {([['blank', '無地のスライド', 'タイトルカードと同じ色の無地。文字や図形を置いて説明に使う'],
+              ['file', 'PDF・画像を読み込む…', 'PowerPoint から PDF で書き出したもの。全ページが 1 枚ずつ入る'],
+              ['frame', '今の画面を静止画に', '動画の今のコマを背景にして、矢印などを描く']] as const).map(([how, label, hint]) => (
+              <button key={how} role="menuitem" title={hint} disabled={how === 'frame' && !p.canFrame}
+                onClick={() => { setMenu(null); p.onSlide(menu.spot, how) }}>{label}</button>
+            ))}
+          </div>
+        </>
+      )}
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行の間の ＋（または右クリック）でスライドを入れる。</p>
     </aside>
   )
+}
+
+function slideLabel(s: Slide): string {
+  if (s.bg.kind === 'blank') return 'スライド（無地）'
+  const src = s.bg.source
+  if (!src) return 'スライド（静止画）'
+  return `スライド ${src.name}${src.page ? ` p.${src.page}` : ''}`
 }
 
 // Default clip length for clips without their own IN/OUT (design §3.5).

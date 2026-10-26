@@ -129,22 +129,34 @@ export async function insertAsset(path?: string): Promise<{ assetId: string; wid
 
 // Page 1 at about 1600 px wide: sharp at 1080p even when shown large.
 async function pdfFirstPage(data: Uint8Array): Promise<Uint8Array> {
+  let first: Uint8Array | null = null
+  await pdfPages(data, async (_n, png) => { first = png }, 1)
+  if (!first) throw new Error('PDF を画像にできませんでした')
+  return first
+}
+
+// Each page (up to `upTo`) rendered at about 1600 px wide, as a PNG, in order. Returns the page count.
+export async function pdfPages(data: Uint8Array, each: (page: number, png: Uint8Array, total: number) => Promise<void>, upTo = Infinity): Promise<number> {
   const pdfjs = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
   const task = pdfjs.getDocument({ data })
   const doc = await task.promise
   try {
-    const page = await doc.getPage(1)
-    const base = page.getViewport({ scale: 1 })
-    const viewport = page.getViewport({ scale: Math.min(4, 1600 / base.width) })
     const canvas = document.createElement('canvas')
-    canvas.width = Math.round(viewport.width); canvas.height = Math.round(viewport.height)
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#FFFFFF' // PDF pages are paper: transparent areas would show the video
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise
-    const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error('PDF を画像にできませんでした'))), 'image/png'))
-    return new Uint8Array(await blob.arrayBuffer())
+    for (let n = 1; n <= Math.min(doc.numPages, upTo); n++) {
+      const page = await doc.getPage(n)
+      const base = page.getViewport({ scale: 1 })
+      const viewport = page.getViewport({ scale: Math.min(4, 1600 / base.width) })
+      canvas.width = Math.round(viewport.width); canvas.height = Math.round(viewport.height)
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = '#FFFFFF' // PDF pages are paper: transparent areas would show the video
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      await page.render({ canvas, canvasContext: ctx, viewport }).promise
+      const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error('PDF を画像にできませんでした'))), 'image/png'))
+      await each(n, new Uint8Array(await blob.arrayBuffer()), doc.numPages)
+      page.cleanup()
+    }
+    return doc.numPages
   } finally {
     void task.destroy()
   }

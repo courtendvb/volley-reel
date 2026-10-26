@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
-import { drawTitleCard, type Box } from '../../../shared/overlayDraw'
+import { drawCard, type Box } from '../../../shared/overlayDraw'
+import type { Slide } from '../../../shared/reel'
 import type { Card } from '../../../shared/video'
-import { logoImage, subscribeAssets } from '../assets'
+import { assetImage, logoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 
 interface Props {
@@ -18,7 +19,7 @@ type Drag = { mode: 'move' | 'scale'; from: [number, number]; start: CardLayout;
 const HANDLE = 9 // px, the resize corner
 
 // The title card drawn over the video window, with its title in a frame: drag it to move, drag the
-// corner to resize. Changes the video's layout for that kind of card (all scene cards, or all marker cards).
+// corner to resize (a slide is only drawn: it has no title). Changes the video's layout for that kind of card (all scene cards, or all marker cards).
 export function CardEditor({ size, card, settings, onChange, active }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<Box | null>(null)
@@ -32,9 +33,9 @@ export function CardEditor({ size, card, settings, onChange, active }: Props) {
     const c = canvas.current
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
-    const b = drawTitleCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp))
+    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp), assetImage)
     boxRef.current = b
-    if (!active) return
+    if (!active || !b) return // a slide has no title to move
     ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#FACC15'
     ctx.strokeRect(b.x - 6, b.y - 6, b.w + 12, b.h + 12)
     ctx.setLineDash([])
@@ -114,6 +115,25 @@ export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, sh
           <button onClick={() => set(def)}>元に戻す</button>
         </>
       )}
+      <span className="spacer" />
+      <button className="primary" onClick={onDone}>完了</button>
+    </div>
+  )
+}
+
+// Below the video while a slide is being edited: how long it stays up, reading its file again, done.
+export function SlideEditBar({ slide, onChange, onReload, onDone }: {
+  slide: Slide; onChange: (s: Slide) => void; onReload: (() => void) | null; onDone: () => void
+}) {
+  const src = slide.bg.kind === 'image' ? slide.bg.source : undefined
+  return (
+    <div className="card-edit-bar">
+      <b>スライド{src ? `「${src.name}${src.page ? ` p.${src.page}` : ''}」` : slide.bg.kind === 'blank' ? '（無地）' : '（静止画）'}</b>
+      <label className="check">表示
+        <input type="number" aria-label="スライドを出す秒数" min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 64 }}
+          onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0.5) onChange({ ...slide, durationSec: Math.min(120, n) }) }} />秒</label>
+      <span className="muted">下の道具で文字・図形・画像を置けます</span>
+      {onReload && <button onClick={onReload} title={`${src?.path ?? ''} を読み直す（PowerPoint で直して書き出し直したとき）`}>元のファイルを読み直す</button>}
       <span className="spacer" />
       <button className="primary" onClick={onDone}>完了</button>
     </div>

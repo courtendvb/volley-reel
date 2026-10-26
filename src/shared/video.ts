@@ -4,7 +4,7 @@
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { OverlayPatch, OverlaySettings } from './overlay'
-import { markerCardOn, type Clip, type Group, type Reel } from './reel'
+import { groupRows, markerCardOn, type Clip, type Group, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
 
 export interface Video {
@@ -50,28 +50,42 @@ export function dropScene(v: Video, sceneId: string): Video {
 
 // marker null = scene card. opp: the opponent's team code when every clip is from one match (for its logo).
 // video: the opening card with the video's name. annotations: objects drawn on the card.
-export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[] }
+// slide: a slide of a scene, played like a card (drawn as its page instead of a title).
+export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]
+  slide?: { id: string; bg: SlideBg } }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
   | { kind: 'clip'; clip: Clip; sceneId: string; group: Group } // group: the marker group it plays in ('none' = unmarked)
 
-// One scene's clips in play order, with a card before each marker group when marker cards are on.
-// order is the scene's play order (playOrder, minus clips that can't be played). A clip with two
-// markers is in it twice; walking the groups tells which group each occurrence belongs to.
+// One scene's clips in play order, with a card before each marker group when marker cards are on,
+// and its slides where they sit. order is the scene's play order (playOrder, minus clips that can't
+// be played). A clip with two markers is in it twice; walking the groups tells which group each
+// occurrence belongs to. A group with only slides still plays (a scene can be just slides).
 export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem[] {
   const out: PlanItem[] = []
   const playable = new Set(order.map(c => c.id))
+  const items = (g: Group, ids?: string[]): PlanItem[] => groupRows(scene, g, ids).flatMap((r): PlanItem[] =>
+    r.kind === 'slide' ? [slideItem(r.slide)] : playable.has(r.id) ? [{ kind: 'clip', clip: scene.clips[r.id], sceneId: scene.id, group: g }] : [])
   for (const g of scene.groupOrder.filter(m => !scene.markerOff?.[m])) {
-    const ids = scene.groups[g].filter(id => playable.has(id))
-    if (!ids.length) continue
+    const list = items(g)
+    if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
       out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
-    for (const id of ids) out.push({ kind: 'clip', clip: scene.clips[id], sceneId: scene.id, group: g })
+    out.push(...list)
   }
+  // Unmarked clips (and their slides) only play when the scene uses them all; order is chronological.
   const unmarked = new Set(scene.groups.none)
-  for (const c of order) if (unmarked.has(c.id)) out.push({ kind: 'clip', clip: c, sceneId: scene.id, group: 'none' })
+  if (scene.scope === 'all') out.push(...items('none', order.filter(c => unmarked.has(c.id)).map(c => c.id)))
   return out
+}
+
+export function slideItem(s: Slide): PlanItem {
+  return { kind: 'card', card: slideCard(s), durationSec: s.durationSec }
+}
+
+export function slideCard(s: Slide): Card {
+  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg }, annotations: s.annotations }
 }
 
 // A whole video: each scene in turn, led by a scene card (the scene's name) when scene cards are on.
@@ -85,12 +99,13 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
     const s = scenes[id]
     if (!s) continue
     const order = orderOf(s)
-    if (!order.length) continue
+    const items = planScene(order, s, overlay, matches, ourCodes)
+    if (!items.length) continue
     if (s.sceneCard ?? overlay.titleCard.sceneCards) {
       const ids = order.map(c => c.id)
       out.push({ kind: 'card', card: { marker: null, name: s.name, ...cardMatch(s, ids, matches, ourCodes), annotations: s.cardAnnotations ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
-    out.push(...planScene(order, s, overlay, matches, ourCodes))
+    out.push(...items)
   }
   return out
 }

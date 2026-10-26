@@ -40,9 +40,29 @@ export interface Reel {
   markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
+  slides?: Slide[] // still pages between clips; see Slide
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string
 }
+
+// A slide: a still page shown between clips (blank, a picture, a PDF page or a frame of a match),
+// with objects on it like a title card. It sits in one group right after a clip (`after`; null =
+// the group's head) and follows that clip when the clip moves. Slides after the same clip play in
+// their order in Reel.slides.
+export interface Slide {
+  id: string
+  group: Group
+  after: string | null
+  durationSec: number
+  bg: SlideBg
+  annotations: Annotation[]
+}
+
+// blank: the title card's background color. image: a picture in assets/. source: the file it was
+// read from (page: a PDF's page, 1-based), so it can be read again when that file changes.
+export type SlideBg = { kind: 'blank' } | { kind: 'image'; assetId: string; source?: SlideSource }
+export interface SlideSource { path: string; name: string; page: number | null; pages?: number; mtimeMs: number } // pages: the PDF's page count
+export const DEFAULT_SLIDE_SEC = 3
 
 const uid = () => globalThis.crypto.randomUUID()
 
@@ -101,7 +121,7 @@ export function moveClip(reel: Reel, clipId: string, to: Group, index?: number, 
   const target = [...groups[to]]
   target.splice(index === undefined ? target.length : Math.max(0, Math.min(index, target.length)), 0, clipId)
   groups[to] = target
-  return touch({ ...reel, groups })
+  return keepSlides(reel, touch({ ...reel, groups }))
 }
 
 // Title card before a marker group: the scene's choice for that marker, else the video's setting.
@@ -132,7 +152,7 @@ export function toggleMarker(reel: Reel, clipId: string, m: Marker | null, when?
     groups[m] = list
     groups.none = groups.none.filter(id => id !== clipId)
   }
-  return touch({ ...reel, groups })
+  return keepSlides(reel, touch({ ...reel, groups }))
 }
 
 export function shiftClip(reel: Reel, clipId: string, delta: number): Reel {
@@ -159,7 +179,70 @@ export function removeClip(reel: Reel, clipId: string): Reel {
   const clips = { ...reel.clips }
   delete clips[clipId]
   const groups = Object.fromEntries(Object.entries(reel.groups).map(([g, ids]) => [g, ids.filter(id => id !== clipId)])) as Reel['groups']
-  return touch({ ...reel, clips, groups })
+  return keepSlides(reel, touch({ ...reel, clips, groups }))
+}
+
+// ---- slides ---------------------------------------------------------------------------------
+export type Row = { kind: 'clip'; id: string } | { kind: 'slide'; slide: Slide }
+// Where slides go: after a clip of the group (null = its head), at this index among the slides there.
+export interface SlideSpot { group: Group; after: string | null; index: number }
+
+export function newSlide(bg: SlideBg, durationSec = DEFAULT_SLIDE_SEC): Slide {
+  return { id: uid(), group: 'none', after: null, durationSec, bg, annotations: [] }
+}
+
+// A group as it is listed and played: its head slides, then each clip followed by its slides.
+// clipIds: the group's clips in display order ('none' is shown chronologically).
+export function groupRows(reel: Reel, g: Group, clipIds: string[] = reel.groups[g]): Row[] {
+  const mine = (reel.slides ?? []).filter(s => s.group === g)
+  const at = (after: string | null): Row[] => mine.filter(s => s.after === after).map(slide => ({ kind: 'slide', slide }))
+  const rows: Row[] = at(null)
+  for (const id of clipIds) rows.push({ kind: 'clip', id }, ...at(id))
+  // A slide whose clip isn't listed (keepSlides prevents it; a hand-edited file might not): at the end.
+  const listed = new Set(clipIds)
+  for (const s of mine) if (s.after !== null && !listed.has(s.after)) rows.push({ kind: 'slide', slide: s })
+  return rows
+}
+
+// The spot for something put at row k (0 = before the first row) of a group's rows.
+export function spotAt(rows: Row[], g: Group, k: number): SlideSpot {
+  let after: string | null = null, index = 0
+  for (const r of rows.slice(0, k)) {
+    if (r.kind === 'clip') { after = r.id; index = 0 } else index++
+  }
+  return { group: g, after, index }
+}
+
+// Puts slides (new ones, or ones already in the scene: they move) at a spot, in the given order.
+export function putSlides(reel: Reel, list: Slide[], at: SlideSpot): Reel {
+  const ids = new Set(list.map(s => s.id))
+  const rest = (reel.slides ?? []).filter(s => !ids.has(s.id))
+  const here = (s: Slide) => s.group === at.group && s.after === at.after
+  const there = rest.filter(here)
+  there.splice(Math.max(0, Math.min(at.index, there.length)), 0, ...list.map(s => ({ ...s, group: at.group, after: at.after })))
+  return touch({ ...reel, slides: [...rest.filter(s => !here(s)), ...there] })
+}
+
+export function setSlide(reel: Reel, slide: Slide): Reel {
+  return touch({ ...reel, slides: (reel.slides ?? []).map(s => (s.id === slide.id ? slide : s)) })
+}
+
+export function removeSlide(reel: Reel, id: string): Reel {
+  return touch({ ...reel, slides: (reel.slides ?? []).filter(s => s.id !== id) })
+}
+
+// After clips move or leave: a slide whose clip is no longer in its group goes after the clip that
+// was before that one (still in the group), after that clip's own slides; else to the group's head.
+function keepSlides(old: Reel, next: Reel): Reel {
+  if (!next.slides?.length) return next
+  const kept: Slide[] = [], moved: Slide[] = []
+  for (const s of next.slides) {
+    const ids = next.groups[s.group]
+    if (s.after === null || ids.includes(s.after)) { kept.push(s); continue }
+    const before = old.groups[s.group].slice(0, Math.max(0, old.groups[s.group].indexOf(s.after)))
+    moved.push({ ...s, after: before.reverse().find(id => ids.includes(id)) ?? null })
+  }
+  return moved.length ? { ...next, slides: [...kept, ...moved] } : next
 }
 
 export function renameMarker(reel: Reel, m: Marker, name: string): Reel {

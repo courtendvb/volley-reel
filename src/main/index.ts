@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, utimes, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
@@ -10,11 +10,12 @@ import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
-import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject } from '../shared/types'
+import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
 import { Exporter } from './export'
 import { Library } from './library'
 import { Project } from './project'
 import { ffmpegDir } from './ffmpegPath'
+import { grabFrame } from './media'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
 protocol.registerSchemesAsPrivileged([
@@ -46,6 +47,17 @@ app.whenReady().then(async () => {
   if (process.env.VR_SMOKE) {
     ipcMain.handle('smoke:scan', (_e, folders: string[]) => library!.scan(folders))
     ipcMain.handle('smoke:pickAsset', (_e, path: string) => takeAsset(path))
+    // Copies, so the slide check can change "its" file without touching the given ones.
+    ipcMain.handle('smoke:pickSlides', async (_e, paths: string[]) => {
+      const dir = join(project!.dir, 'smoke-slides')
+      await mkdir(dir, { recursive: true })
+      return Promise.all(paths.map(async p => { const to = join(dir, basename(p)); await writeFile(to, await readFile(p)); return takeSlideFile(to) }))
+    })
+    ipcMain.handle('smoke:touch', async (_e, path: string) => {
+      if (!resolve(path).startsWith(resolve(project!.dir) + sep)) throw new Error('outside the project')
+      const now = new Date()
+      await utimes(path, now, now)
+    })
     ipcMain.handle('smoke:relocate', async (_e, id: string, part: 'video' | 'dvw', path: string) => {
       const note = await library!.relocate(id, part, path, () => {})
       return { library: library!.info(), project: project?.info() ?? null, note }
@@ -259,6 +271,37 @@ function registerIpc(): void {
     return readFile(join(project.dir, 'assets', id))
   })
 
+  ipcMain.handle('slide:pick', async () => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'スライドを読み込む（PDF・画像。複数選べます）', properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'PDF・画像', extensions: ['pdf', ...IMAGE_EXT] }],
+    })
+    // Pictures in name order, numbers by value (スライド2 before スライド10), as exported from PowerPoint.
+    const paths = r.canceled ? [] : [...r.filePaths].sort((a, b) => basename(a).localeCompare(basename(b), 'ja', { numeric: true }))
+    return Promise.all(paths.map(takeSlideFile))
+  })
+  // Only files slides already came from are read again (the renderer can't name any other file).
+  ipcMain.handle('slide:read', async (_e, path: string) => {
+    if (!(await slideSources()).has(path)) throw new Error('スライドの元のファイルではありません')
+    return takeSlideFile(path)
+  })
+  ipcMain.handle('slide:times', async (_e, paths: string[]) => {
+    const known = await slideSources()
+    const out: Record<string, number | null> = {}
+    for (const p of paths) out[p] = known.has(p) ? await stat(p).then(s => s.mtimeMs, () => null) : null
+    return out
+  })
+  ipcMain.handle('slide:frame', async (_e, matchId: string, sec: number) => {
+    const file = library?.getMatch(matchId)?.videoPath
+    if (!file || !existsSync(file)) throw new Error('動画が見つかりません')
+    const dir = assetsDir()
+    await mkdir(dir, { recursive: true })
+    const id = `${randomUUID()}.png`
+    await grabFrame(file, sec, join(dir, id))
+    return id
+  })
+
   ipcMain.handle('video:list', () => project?.listVideos() ?? [])
   ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveVideo(v) })
   ipcMain.handle('video:delete', (_e, id: string) => project?.deleteVideo(id))
@@ -281,6 +324,24 @@ async function takeAsset(path: string): Promise<PickedAsset> {
   if (ext === 'pdf') return { kind: 'pdf', data: new Uint8Array(data), name: basename(path) }
   if (!IMAGE_EXT.includes(ext)) throw new Error('画像（PNG・JPEG など）か PDF を選んでください')
   return { kind: 'image', assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext) }
+}
+
+// The files slides were read from: picked in this session, or named by the project's saved scenes.
+const pickedSlides = new Set<string>()
+async function slideSources(): Promise<Set<string>> {
+  const out = new Set(pickedSlides)
+  for (const r of (await project?.listReels()) ?? []) for (const s of r.slides ?? []) if (s.bg.kind === 'image' && s.bg.source) out.add(s.bg.source.path)
+  return out
+}
+
+async function takeSlideFile(path: string): Promise<SlideFile> {
+  pickedSlides.add(path)
+  const ext = extname(path).slice(1).toLowerCase()
+  if (ext !== 'pdf' && !IMAGE_EXT.includes(ext)) throw new Error('PDF か画像（PNG・JPEG など）を選んでください')
+  const [data, st] = await Promise.all([readFile(path), stat(path)])
+  const base = { path, name: basename(path), mtimeMs: st.mtimeMs }
+  if (ext === 'pdf') return { ...base, kind: 'pdf', data: new Uint8Array(data) }
+  return { ...base, kind: 'image', assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext) }
 }
 
 // A copy in the project, so the project keeps working if the original file moves.
@@ -392,6 +453,8 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_VIDEO=1 [VR_SMOKE_EXPORT=<out.mp4>]: videos of shared scenes, cards, undo, export]
 // [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.png;b.pdf>]: object handles, polygon
 //  and triangle drawing, edit points, format panel, inserted pictures, export]
+// [VR_SMOKE_SLIDES=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.pdf;b.png>]: the ＋ menu, objects on a slide,
+//  PDF pages and pictures, a frame, drag, through-play, a changed file read again, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
@@ -412,13 +475,14 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       trim: !!process.env.VR_SMOKE_TRIM,
       ann: !!process.env.VR_SMOKE_ANN,
       ov: process.env.VR_SMOKE_OV,
-      exportTo: process.env.VR_SMOKE_VIDEO || process.env.VR_SMOKE_OBJ ? undefined : process.env.VR_SMOKE_EXPORT,
-      videoExportTo: process.env.VR_SMOKE_VIDEO || process.env.VR_SMOKE_OBJ ? process.env.VR_SMOKE_EXPORT : undefined,
+      exportTo: process.env.VR_SMOKE_VIDEO || process.env.VR_SMOKE_OBJ || process.env.VR_SMOKE_SLIDES ? undefined : process.env.VR_SMOKE_EXPORT,
+      videoExportTo: process.env.VR_SMOKE_VIDEO || process.env.VR_SMOKE_OBJ || process.env.VR_SMOKE_SLIDES ? process.env.VR_SMOKE_EXPORT : undefined,
       m8: process.env.VR_SMOKE_M8,
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
       copy: !!process.env.VR_SMOKE_COPY,
+      slides: !!process.env.VR_SMOKE_SLIDES,
       mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,
       assets: process.env.VR_SMOKE_ASSETS?.split(';'),
       logo: process.env.VR_SMOKE_LOGO,

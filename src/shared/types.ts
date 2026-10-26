@@ -174,6 +174,14 @@ export interface Api {
   saveAsset(png: Uint8Array): Promise<string>
   readAsset(id: string): Promise<Uint8Array>
   smokePickAsset?: (path: string) => Promise<PickedAsset | null>
+  // Slides: files picked as slides (several at once), read again by path when one changes, their
+  // modified times (null: gone), and a frame of a match's video saved as a picture.
+  pickSlides(): Promise<SlideFile[]>
+  readSlideFile(path: string): Promise<SlideFile>
+  slideFileTimes(paths: string[]): Promise<Record<string, number | null>>
+  grabFrame(matchId: string, sec: number): Promise<string>
+  smokePickSlides?: (paths: string[]) => Promise<SlideFile[]> // copies them into the project first
+  smokeTouch?: (path: string) => Promise<void> // a file in the project: marked as just changed
   // Team logos (library, by team code) for title cards. Each returns the codes that have one -> file.
   // The palette (library, every project): my colors and saved objects. Pictures in saved objects
   // are copied into the library, and into the project again when the object is used.
@@ -200,6 +208,9 @@ export interface Api {
 
 export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[] }
 export interface Palette { colors: string[]; items: PaletteItem[] }
+
+// A picture is copied into assets/ right away; a PDF's pages are rendered by the renderer.
+export type SlideFile = { path: string; name: string; mtimeMs: number } & ({ kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array })
 
 export type PickedAsset = { kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array; name: string }
 

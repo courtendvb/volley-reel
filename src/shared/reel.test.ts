@@ -3,6 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
+  groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -273,5 +274,69 @@ describe.skipIf(!realDir)('relink on real DVW files after an added point', () =>
       const was = before.plays[reel.clips[c.id].playId], now = after.plays[c.playId]
       expect([now.code, now.time]).toEqual([was.code, was.time])
     }
+  })
+})
+
+describe('slides', () => {
+  const blank = () => newSlide({ kind: 'blank' })
+  const marked = () => {
+    let { reel, c } = reelWith([0, 2, 4])
+    for (const id of c) reel = toggleMarker(reel, id, 1)
+    return { reel, c }
+  }
+  const listed = (r: Reel, g: 1 | 'none' = 1) => groupRows(r, g).map(x => (x.kind === 'clip' ? x.id : `s:${x.slide.id}`))
+
+  it('sits after a clip (or at the head) and lists in place', () => {
+    const { reel, c } = marked()
+    const [a, b] = [blank(), blank()]
+    let r = putSlides(reel, [a], { group: 1, after: c[0], index: 0 })
+    r = putSlides(r, [b], { group: 1, after: null, index: 0 })
+    expect(listed(r)).toEqual([`s:${b.id}`, c[0], `s:${a.id}`, c[1], c[2]])
+  })
+
+  it('turns a row position into a spot, counting slides after the clip above', () => {
+    const { reel, c } = marked()
+    const [a, b] = [blank(), blank()]
+    const r = putSlides(reel, [a, b], { group: 1, after: c[0], index: 0 })
+    const rows = groupRows(r, 1)
+    expect(spotAt(rows, 1, 0)).toEqual({ group: 1, after: null, index: 0 })
+    expect(spotAt(rows, 1, 2)).toEqual({ group: 1, after: c[0], index: 1 })
+    expect(spotAt(rows, 1, 4)).toEqual({ group: 1, after: c[1], index: 0 })
+  })
+
+  it('moves a slide to another spot', () => {
+    const { reel, c } = marked()
+    const a = blank()
+    let r = putSlides(reel, [a], { group: 1, after: c[0], index: 0 })
+    r = putSlides(r, [r.slides![0]], { group: 1, after: c[2], index: 0 })
+    expect(listed(r)).toEqual([c[0], c[1], c[2], `s:${a.id}`])
+    expect(r.slides).toHaveLength(1)
+  })
+
+  it('follows its clip when the clip is reordered', () => {
+    const { reel, c } = marked()
+    const a = blank()
+    const r = moveClip(putSlides(reel, [a], { group: 1, after: c[0], index: 0 }), c[0], 1, 3)
+    expect(listed(r)).toEqual([c[1], c[2], c[0], `s:${a.id}`])
+  })
+
+  it('stays in place, after the clip before, when its clip leaves the group', () => {
+    const { reel, c } = marked()
+    const [a, b] = [blank(), blank()]
+    let r = putSlides(reel, [a], { group: 1, after: c[0], index: 0 })
+    r = putSlides(r, [b], { group: 1, after: c[1], index: 0 })
+    r = removeClip(r, c[1])
+    expect(listed(r)).toEqual([c[0], `s:${a.id}`, `s:${b.id}`, c[2]])
+    r = toggleMarker(r, c[0], 1) // the first clip loses marker 1: its slides go to the head
+    expect(listed(r)).toEqual([`s:${a.id}`, `s:${b.id}`, c[2]])
+  })
+
+  it('is removed and changed by id', () => {
+    const { reel, c } = marked()
+    const a = blank()
+    let r = putSlides(reel, [a], { group: 1, after: c[0], index: 0 })
+    r = setSlide(r, { ...r.slides![0], durationSec: 5 })
+    expect(r.slides![0].durationSec).toBe(5)
+    expect(removeSlide(r, a.id).slides).toEqual([])
   })
 })

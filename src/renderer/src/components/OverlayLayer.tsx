@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CaptionData, ClipOverlayOverride, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
-import { drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
+import { drawCaption, drawCard, drawScoreboard } from '../../../shared/overlayDraw'
 import { drawAnnotation } from '../../../shared/annotation'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
@@ -15,7 +15,7 @@ interface Props {
   override?: ClipOverlayOverride
 }
 
-// Scoreboard and caption for the clip on screen, and title cards during a through-play.
+// Scoreboard and caption for the clip on screen, and title cards and slides during a through-play.
 // Drawn with the same functions the export will use. Sits under the annotation layer.
 export function OverlayLayer({ size, settings, clip, scoreboard, caption, override }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -37,7 +37,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
     if (st.card) {
-      drawTitleCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp))
+      drawCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp), assetImage)
       for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
       return
     }

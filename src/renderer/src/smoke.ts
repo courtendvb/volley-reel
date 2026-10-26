@@ -1,15 +1,15 @@
 // Dev self-checks (VR_SMOKE): scripted runs through the real UI that report what they saw.
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
-import { addClips, findClip, groupOf, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel } from '../../shared/reel'
-import type { ExportJob, LibraryInfo, Match, ParsedDVW, ProjectInfo, ProjectSettings, ScanResult } from '../../shared/types'
+import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel, type SlideSpot } from '../../shared/reel'
+import type { ExportJob, LibraryInfo, Match, ParsedDVW, ProjectInfo, ProjectSettings, ScanResult, SlideFile } from '../../shared/types'
 import type { Annotation } from '../../shared/annotation'
 import { mergeScoped, scopeOf, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { overlaySettings, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
 import { newVideo, type PlanItem, type Video } from '../../shared/video'
 import type { Scope } from './components/FilterPanel'
 import type { PlayKey } from './components/PlayList'
-import type { ClipInfo } from './components/ReelPanel'
+import type { ClipInfo, SlideHow } from './components/ReelPanel'
 import type { Tool } from './components/AnnotationLayer'
 import { assetStats, forgetLogo } from './assets'
 import { canvasStats } from './canvas'
@@ -29,7 +29,8 @@ export interface SmokeOpts {
   video?: boolean
   obj?: boolean
   copy?: boolean // Ctrl+C / Ctrl+V of objects within a clip and onto another clip
-  assets?: string[] // with obj: image / PDF files to insert
+  slides?: boolean // slides: the ＋ menu, objects on a slide, PDF pages, a frame, through-play, reading again, export
+  assets?: string[] // with obj / slides: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
@@ -61,6 +62,7 @@ export interface SmokeHost {
   loadProject: (p: ProjectInfo | null) => Promise<void>
   overlapsRef: RefObject<Map<string, string[]>>
   playThrough: (target: 'video' | 'scene', startAt?: number) => void
+  putSlide: (spot: SlideSpot, how: SlideHow, files?: SlideFile[]) => Promise<void>
   scopedNow: () => ScopedAnnotations | null
   setAnnScope: (annId: string, to: AnnScope) => void
   setAnnTool: Dispatch<SetStateAction<Tool>>
@@ -104,7 +106,7 @@ function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() 
 // Installs window.__smoke, which the main process calls with the run's options (VR_SMOKE_*).
 // Loaded with a dynamic import only on a self-check run, so normal use never runs or parses it.
 export function installSmoke(h: SmokeHost): void {
-  const { activateClip, currentPlan, editCard, exportMarker, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
+  const { activateClip, currentPlan, editCard, exportMarker, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
   window.__smoke = async (opts: SmokeOpts) => {
     if (opts.home) return smokeHome(opts)
     if (opts.m8?.startsWith('relocate:')) return smokeRelocate(opts.m8.slice('relocate:'.length))
@@ -122,6 +124,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.trim) return smokeTrim(res)
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
+    if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
     if (opts.m8) return smokeM8(res, opts.m8)
@@ -167,6 +170,117 @@ export function installSmoke(h: SmokeHost): void {
   // Objects through real pointer, key and form events: a polygon by clicks, a box resized by its
   // corner, an arrow end dragged, a vertex inserted from a midpoint and one deleted, then fill,
   // transparency, dash, arrow heads and a boxed text set from the format panel; optional export.
+  // Slides: a blank one through the ＋ between rows (it opens for editing; a rectangle drawn on it,
+  // its seconds changed), PDF pages / pictures (copied into the project first) at the group's head,
+  // a frame of the video, a drag, the plan and a through-play, a changed file read again, export.
+  const smokeSlides = async (res: PlayRef[], opts: SmokeOpts) => {
+    const picks = res.filter(x => x.play.rallyId !== null).slice(0, 2)
+    let sc = addClips(newReel('slide smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
+    const ids = sc.groups.none.slice()
+    for (const id of ids) sc = toggleMarker(sc, id, 1)
+    smokeUse(sc)
+    await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+    activateClip(latest.current.reel!.clips[ids[0]], 1)
+    await waitFor(() => playback.attachedKey === picks[0].matchId && playback.current.ready ? true : null, 20000, 'video')
+    await playback.seekAndWait(latest.current.clipInfo(latest.current.reel!.clips[ids[0]]).range!.in + 1.5)
+    const scene = () => latest.current.reels.find(x => x.id === sc.id)!
+    const rows = () => groupRows(scene(), 1).map(r => (r.kind === 'clip' ? `clip${ids.indexOf(r.id)}` : r.slide.bg.kind === 'blank' ? 'blank' : r.slide.bg.source ? `file:${r.slide.bg.source.page ?? r.slide.bg.source.name}` : 'frame'))
+    const log: Record<string, unknown> = {}
+
+    // The ＋ under the first clip (gaps: head, after clip 0, after clip 1), then 無地のスライド.
+    const gaps = [...document.querySelectorAll<HTMLButtonElement>('.reel-groups .group:first-child .slide-gap button')]
+    log.gaps = gaps.length
+    gaps[1].click(); await sleep(150)
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].map(b => `${b.textContent}${b.disabled ? '(off)' : ''}`)
+    log.menu = items
+    ;[...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].find(b => b.textContent === '無地のスライド')!.click()
+    await waitFor(() => document.querySelector('.card-edit-bar')?.textContent?.includes('スライド') || null, 5000, 'slide editor')
+    log.afterBlank = rows()
+    log.editorOpen = document.querySelector('.slide-row.active') !== null
+
+    // A rectangle on the slide, and 2.5 seconds.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })); await sleep(100)
+    const ac = document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]')!
+    const apt = (fx: number, fy: number) => { const b = ac.getBoundingClientRect(); return { clientX: b.left + fx * b.width, clientY: b.top + fy * b.height, bubbles: true, pointerId: 1 } }
+    ac.dispatchEvent(new PointerEvent('pointerdown', apt(0.3, 0.3))); await sleep(40)
+    ac.dispatchEvent(new PointerEvent('pointermove', apt(0.5, 0.5))); await sleep(40)
+    ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
+    ac.dispatchEvent(new PointerEvent('pointerup', apt(0.7, 0.7))); await sleep(300)
+    const secs = document.querySelector<HTMLInputElement>('[aria-label="スライドを出す秒数"]')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(secs, '2.5')
+    secs.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200)
+    const blank = scene().slides!.find(s => s.bg.kind === 'blank')!
+    log.blank = { objects: blank.annotations.map(a => a.kind), sec: blank.durationSec }
+
+    // PDF pages and pictures at the head of marker 1; a frame of the video after the last clip.
+    const files = await api.smokePickSlides!(opts.assets ?? [])
+    await putSlide({ group: 1, after: null, index: 0 }, 'file', files)
+    await putSlide({ group: 1, after: ids[1], index: 0 }, 'frame')
+    await sleep(300)
+    log.afterFiles = rows()
+    log.frameEditing = document.querySelector('.card-edit-bar')?.textContent?.includes('静止画') ?? false
+
+    // Drag the blank slide onto the top half of the first row: it goes to the head.
+    const blankRow = [...document.querySelectorAll<HTMLElement>('.slide-row')].find(r => r.textContent?.includes('無地'))!
+    const firstRow = document.querySelector<HTMLElement>('.reel-groups .group:first-child .clip-row')!
+    const dt = new DataTransfer()
+    blankRow.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
+    const fb = firstRow.getBoundingClientRect()
+    firstRow.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
+    await sleep(150)
+    firstRow.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
+    await sleep(300)
+    log.afterDrag = rows()
+
+    // The plan, and a through-play: each item as it starts.
+    const describe = (p: PlanItem[]) => p.map(it => it.kind === 'card' ? (it.card.slide ? `slide ${it.durationSec}s` : `[card ${it.card.marker}]`) : `clip${ids.indexOf(it.clip.id)}`)
+    log.plan = describe(currentPlan('video'))
+    const timeline: string[] = []
+    let last = -1
+    const unsub = playback.subscribe(st => {
+      if (!st.seq || st.seq.index === last) return
+      last = st.seq.index
+      timeline.push(st.card ? (st.card.slide ? `slide` : 'card') : 'clip')
+    })
+    document.querySelector<HTMLButtonElement>('.card-edit-bar button.primary')?.click(); await sleep(200)
+    playThrough('video', 0)
+    await waitFor(() => (playback.current.seq === null && timeline.length ? true : null), 180000, 'through-play')
+    unsub()
+    log.timeline = timeline
+
+    // A picture's file changes (its copy in the project): the bar appears on focus; 読み直す gives a new picture.
+    const pic = scene().slides!.find(s => s.bg.kind === 'image' && s.bg.source && s.bg.source.page === null)
+    if (pic && pic.bg.kind === 'image' && pic.bg.source) {
+      const before = pic.bg.assetId
+      await sleep(1100)
+      await api.smokeTouch!(pic.bg.source.path)
+      window.dispatchEvent(new Event('focus'))
+      const bar = await waitFor(() => document.querySelector<HTMLElement>('.banner.slides-stale'), 5000, 'stale bar')
+      log.staleBar = bar.textContent
+      ;[...bar.querySelectorAll('button')].find(b => b.textContent === '読み直す')!.click()
+      await waitFor(() => { const s = scene().slides!.find(x => x.id === pic.id); return s?.bg.kind === 'image' && s.bg.assetId !== before ? true : null }, 10000, 'reloaded picture')
+      log.reloaded = { notice: latest.current.notice, barGone: !document.querySelector('.banner.slides-stale') }
+    }
+
+    // Export: the plan's slides become stills of their length.
+    let exported: unknown = null
+    if (opts.videoExportTo) {
+      const job = await startExport(opts.videoExportTo)
+      await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 300000, 'export')
+      const starts: number[] = []; let acc = 0
+      for (const it of job!.items) { starts.push(acc); acc += it.kind === 'clip' ? it.out - it.in : it.durationSec }
+      const kinds = job!.items.map(it => it.kind)
+      const at = (i: number) => +(starts[i] + 0.5).toFixed(2)
+      exported = { status: latest.current.exportState?.status, message: latest.current.exportState?.message, items: kinds, expectedSec: +acc.toFixed(2),
+        checks: kinds.flatMap((k, i) => (k === 'card' ? [{ name: `slide${i}`, t: at(i) }] : [])) }
+    }
+
+    // End on the frame slide in the editor, for the screenshot.
+    const frame = scene().slides!.find(s => s.bg.kind === 'image' && !s.bg.source)
+    if (frame) { [...document.querySelectorAll<HTMLElement>('.slide-row')].find(r => r.textContent?.includes('静止画'))?.click(); await sleep(600) }
+    return { ...log, videoExport: opts.videoExportTo ?? null, exported }
+  }
+
   const smokeObjects = async (res: PlayRef[], opts: SmokeOpts) => {
     const r0 = res.find(x => x.play.rallyId !== null)!
     const sc = { ...addClips(newReel('object smoke'), [{ matchId: r0.matchId, play: r0.play }]).reel, scope: 'all' as const } // unmarked clip, so export everything

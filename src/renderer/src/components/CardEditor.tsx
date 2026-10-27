@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
-import { drawCard, type Box } from '../../../shared/overlayDraw'
+import { cardBackground, drawCard, type Box } from '../../../shared/overlayDraw'
 import type { Slide } from '../../../shared/reel'
 import type { Card } from '../../../shared/video'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
@@ -85,11 +85,13 @@ const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' =
 const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
 const cardKindName = (card: Card) => (card.video ? '動画' : card.marker === null ? 'シーン' : 'マーカー')
 
-// Below the video while a card is being edited: whether it is shown, what the pointer edits (the
+// Below the video while a card is being edited: whether it is shown, its text (the name unless set;
+// a line break makes a second line), the background of every card, what the pointer edits (the
 // objects on this card, or the title's place and size for every card of this kind), reset and done.
-export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, shown, onShown }: {
+export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onDone: () => void
   tool: 'objects' | 'title'; onTool: (t: 'objects' | 'title') => void; shown: boolean; onShown: (on: boolean) => void
+  title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
 }) {
   const kind = layoutKey(card), def = defaultLayout(card)
   const layout = settings.titleCard[kind] ?? def
@@ -99,6 +101,14 @@ export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, sh
     <div className="card-edit-bar">
       <b>{what}のタイトルカード{card.name ? `「${card.name}」` : ''}</b>
       <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> このカードを出す</label>
+      <label className="check card-title-field" title="カードに出す文字。改行（Enter）で 2 段になる。空にすると名前を出す">文字
+        <textarea aria-label="カードの文字" rows={Math.max(1, Math.min(3, (title || nameTitle).split('\n').length))} value={title} placeholder={nameTitle || '（名前）'}
+          onChange={e => onTitle(e.target.value)} /></label>
+      <label className="check" title="すべてのタイトルカードと無地のスライドの背景色（この動画）">背景
+        <input type="color" aria-label="カードの背景色" value={cardBackground(settings.titleCard, settings.theme)}
+          onChange={e => onChange({ ...settings, titleCard: { ...settings.titleCard, background: e.target.value } })} /></label>
+      {settings.titleCard.background && <button className="link" title="配色（テーマ）から決まる色に戻す"
+        onClick={() => { const { background: _bg, ...rest } = settings.titleCard; onChange({ ...settings, titleCard: rest }) }}>配色に戻す</button>}
       <div className="segmented" role="radiogroup" aria-label="カードの編集">
         <button role="radio" aria-checked={tool === 'objects'} className={tool === 'objects' ? 'on' : ''} onClick={() => onTool('objects')}
           title="このカードに文字・画像・図形を置く">図形・文字</button>

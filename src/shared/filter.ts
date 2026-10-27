@@ -10,7 +10,7 @@ export interface PlayRef {
   teamRole: TeamRole | null // null: all-home input, or neither team is ours
   side: Side | null // null: all-home input, where the team can't be known
   teamCode: string
-  personKey: string // player key after the alias table
+  personKey: string // the DataVolley player key (home/away and the "-a" suffix already merged)
   name: string
   rot: number | null // rotation of the team that made the play
   tempo: string | null // the type letter (H, M, Q, T, U, N, O)
@@ -55,14 +55,6 @@ export function ourSide(teams: [Team, Team], codes: string[]): Side | null {
   return null
 }
 
-// Follows alias links to the end; a loop stops at the first repeat instead of hanging.
-export function resolvePerson(key: string, aliases: Record<string, string>): string {
-  const seen = new Set<string>()
-  let k = key
-  while (aliases[k] && !seen.has(k)) { seen.add(k); k = aliases[k] }
-  return k
-}
-
 export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSettings): PlayRef[] {
   const our = dvw.allHome ? null : ourSide(dvw.teams, settings.ourTeamCodes)
   return dvw.plays.map(p => ({
@@ -71,7 +63,7 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
     teamRole: dvw.allHome || our === null ? null : p.side === our ? 'our' : 'opp',
     side: dvw.allHome ? null : p.side,
     teamCode: dvw.allHome ? '—' : (p.side === '*' ? dvw.teams[0] : dvw.teams[1]).code,
-    personKey: resolvePerson(p.playerKey, settings.playerAliases),
+    personKey: p.playerKey,
     name: displayName(dvw.players, p.side, p.jersey),
     rot: p.side === '*' ? p.homeRot : p.awayRot,
     ...detailOf(p.code, p.skill, dvw.codeNames ?? {}),

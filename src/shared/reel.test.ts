@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
-  groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt,
+  groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -338,5 +338,26 @@ describe('slides', () => {
     r = setSlide(r, { ...r.slides![0], durationSec: 5 })
     expect(r.slides![0].durationSec).toBe(5)
     expect(removeSlide(r, a.id).slides).toEqual([])
+  })
+})
+
+describe('tags', () => {
+  it('sets, trims and clears a tag', () => {
+    const { reel, c } = reelWith([1, 2])
+    const r = setTag(reel, c[0], '  A12345 ')
+    expect(r.clips[c[0]].tag).toBe('A123')
+    expect('tag' in setTag(r, c[0], '').clips[c[0]]).toBe(false)
+    expect(setTag(r, c[0], 'A123')).toBe(r)
+  })
+  it('sorts a group by tag, numbers in number order, untagged last, ties kept', () => {
+    let { reel, c } = reelWith([0, 1, 2, 3, 4])
+    for (const id of c) reel = toggleMarker(reel, id, 1)
+    reel = setTag(reel, c[0], '10')
+    reel = setTag(reel, c[2], '2')
+    reel = setTag(reel, c[3], '2')
+    reel = setTag(reel, c[4], 'A')
+    const r = sortByTag(reel, 1)
+    expect(r.groups[1]).toEqual([c[2], c[3], c[0], c[4], c[1]])
+    expect(sortByTag(r, 1)).toBe(r)
   })
 })

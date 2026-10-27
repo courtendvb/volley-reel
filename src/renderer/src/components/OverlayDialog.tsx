@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
-import { drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
+import { cardBackground, drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
 
 interface Props {
   settings: OverlaySettings
@@ -91,6 +91,9 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
               <div className="filter-row indent">
                 {check('マーカー名', s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
                 {check('試合名', s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}
+                <label className="check" title="すべてのタイトルカードと無地のスライドの背景色">背景
+                  <input type="color" aria-label="カードの背景色" value={cardBackground(s.titleCard, s.theme)} onChange={e => set('titleCard', { background: e.target.value })} /></label>
+                {s.titleCard.background && <button className="link" onClick={() => { const { background: _bg, ...rest } = s.titleCard; onChange({ ...s, titleCard: rest }) }}>配色に戻す</button>}
               </div>
             </section>
           </div>

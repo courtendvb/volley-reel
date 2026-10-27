@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { composing } from './keys'
 import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
 import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
@@ -59,7 +59,6 @@ function missingOf(r: Reel, dvws: Record<string, ParsedDVW>): Set<string> {
   missingMemo.set(r, { dvws, missing })
   return missing
 }
-const NO_ALIASES: ProjectSettings['playerAliases'] = {}
 const SAVE_DELAY_MS = 400
 const UNDO_MERGE_MS = 600
 const UNDO_LIMIT = 100
@@ -220,6 +219,13 @@ export function App() {
   // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
   const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
   const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
+  // Where each match comes in the play list (old or new matches first): clips without a marker, and
+  // clips just marked, go in this order too, so the scene reads like the list it was picked from.
+  const matchRank = useMemo(() => {
+    const ms = project?.matches ?? [] // oldest first
+    const list = matchOrder === 'new' ? [...ms].reverse() : ms
+    return Object.fromEntries(list.map((m, i) => [m.id, String(i).padStart(4, '0')]))
+  }, [project, matchOrder])
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
   // ---- reels --------------------------------------------------------------------------------
@@ -280,22 +286,22 @@ export function App() {
       range: d && m ? clipRange(c, d, m.offsetSec, defaults) : null,
       def: d && m && play ? defaultRange(d, play, m.offsetSec, defaults, c.mode) : null,
       matchLabel: matchLabels[c.matchId] ?? '?',
-      date: m?.date ?? '',
+      matchKey: matchRank[c.matchId] ?? '9999',
     }
-  }, [matches, dvws, refsByMatch, matchLabels])
+  }, [matches, dvws, refsByMatch, matchLabels, matchRank])
   const clipInfo = useCallback((c: Clip): ClipInfo => infoFor(c, reel), [infoFor, reel])
   // A scene's clips in play order (its scope), leaving out clips that can't be played.
   // A scene's play order and stats are asked for many times per render (the scene editor, the
   // video's scene list, the plan, the export choices); scenes are immutable, so each result is kept
   // per scene object (and dropped with it) until the DVWs or the matches change.
-  // A clip's [match date, IN time] in a scene: where a newly marked clip goes in its group.
-  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.date, i.range?.in ?? 0] }
+  // A clip's [match in list order, IN time] in a scene: where a newly marked clip goes in its group.
+  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
     const hit = orderMemo.get(s)
     if (hit) return hit
     const miss = missingOf(s, dvws)
-    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.date, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
+    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
     orderMemo.set(s, o)
     return o
   }, [dvws, infoFor, orderMemo])
@@ -310,7 +316,7 @@ export function App() {
   }, [orderOf, infoFor, statsMemo])
   const order = useMemo(() => {
     if (!reel) return []
-    return playOrder(reel, c => { const i = clipInfo(c); return [i.date, i.range?.in ?? 0] })
+    return playOrder(reel, c => { const i = clipInfo(c); return [i.matchKey, i.range?.in ?? 0] })
       .filter(c => !missing.has(c.id) && clipInfo(c).range)
   }, [reel, clipInfo, missing])
   const orderSec = useMemo(() => order.reduce((s, c) => { const r = clipInfo(c).range!; return s + r.out - r.in }, 0), [order, clipInfo])
@@ -613,7 +619,7 @@ export function App() {
     if (cardEdit.slideId) { const sl = sc.slides?.find(s => s.id === cardEdit.slideId); return sl ? slideCard(sl) : null }
     const m = cardEdit.marker
     const ids = m === null ? Object.keys(sc.clips) : sc.groups[m]
-    return { marker: m, name: m === null ? sc.name : sc.markerNames[m], ...cardMatch(sc, ids, matches, codes),
+    return { marker: m, name: (m === null ? sc.cardTitle || sc.name : sc.markerCardTitles?.[m] || sc.markerNames[m]), ...cardMatch(sc, ids, matches, codes),
       annotations: (m === null ? sc.cardAnnotations : sc.markerCardAnnotations?.[m]) ?? [] }
   }, [cardEdit, reels, video, matches, settings])
   const setCardAnns = useCallback((list: Annotation[]) => {
@@ -631,6 +637,23 @@ export function App() {
   cardEditRef.current = cardEdit
   const cardAnnsRef = useRef<Annotation[]>([])
   cardAnnsRef.current = cardEditCard?.annotations ?? []
+  // The card's own text ('' = its name) and the name it falls back to.
+  const cardTitleNow = (() => {
+    if (!cardEdit || cardEdit.slideId) return { title: '', name: '' }
+    if (cardEdit.sceneId === null) return { title: video?.cardTitle ?? '', name: video?.name ?? '' }
+    const sc = reels.find(x => x.id === cardEdit.sceneId)
+    const m = cardEdit.marker
+    return m === null ? { title: sc?.cardTitle ?? '', name: sc?.name ?? '' } : { title: sc?.markerCardTitles?.[m] ?? '', name: sc?.markerNames[m] ?? '' }
+  })()
+  const setCardTitle = (t: string) => {
+    if (!cardEdit) return
+    const now = new Date().toISOString(), value = t.trim() ? t : undefined
+    if (cardEdit.sceneId === null) { if (video) updateVideo({ ...video, cardTitle: value, updatedAt: now }); return }
+    const sc = reels.find(x => x.id === cardEdit.sceneId)
+    if (!sc) return
+    const m = cardEdit.marker
+    updateReel(m === null ? { ...sc, cardTitle: value, updatedAt: now } : { ...sc, markerCardTitles: { ...sc.markerCardTitles, [m]: value }, updatedAt: now })
+  }
   // Whether this card is shown at all (the same switches as the overlay dialog and the scene editor).
   const cardShown = !cardEdit ? false : cardEdit.sceneId === null ? !!overlay.titleCard.videoCard
     : cardEdit.marker === null ? (reels.find(x => x.id === cardEdit.sceneId)?.sceneCard ?? overlay.titleCard.sceneCards)
@@ -955,11 +978,20 @@ export function App() {
         const { reel: r, activeClipId: id } = latest.current
         if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
       }
+      else if (e.shiftKey && /^(Digit|Numpad)[0-5]$/.test(e.code)) {
+        // Shift + 1–5: the active clip's tag (the same number takes it off; Shift + 0 always does).
+        // By key position, as Shift + a digit types a symbol on most layouts.
+        const { reel: r, activeClipId: id } = latest.current
+        if (!r || !id || !r.clips[id]) return
+        e.preventDefault()
+        const n = e.code.slice(-1)
+        updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n))
+      }
       else if (/^[0-5]$/.test(e.key)) { e.preventDefault(); markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, markerKey, trim])
+  }, [settingsOpen, markerKey, trim, updateReel])
 
   // ---- export (design §3.8) ------------------------------------------------------------------
   // The job is built here (PNG layers drawn with the preview's functions) and handed to the main
@@ -1061,9 +1093,6 @@ export function App() {
   }
 
 
-  const rawRefs = useMemo(() => settingsOpen && settings
-    ? (project?.matches ?? []).flatMap(m => dvws[m.id] ? buildRefs(m.id, dvws[m.id], { ...settings, playerAliases: NO_ALIASES }) : [])
-    : [], [settingsOpen, settings, project, dvws])
 
   return (
     <div className="app">
@@ -1141,6 +1170,7 @@ export function App() {
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
               filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
+              range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
               onAddAll={() => addPlays(results)}
             />
@@ -1188,7 +1218,8 @@ export function App() {
             )}
             {cardEditCard && !editingSlide && (
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
-                tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown} />
+                tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
+                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} />
             )}
             {cardEditCard && cardTool === 'objects' && (
               <AnnotationTools
@@ -1290,7 +1321,7 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   )

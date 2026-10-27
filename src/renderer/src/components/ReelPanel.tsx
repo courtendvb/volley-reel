@@ -1,7 +1,7 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, spotAt,
+  MARKERS, MARKER_COLORS, chronological, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, setTag, sortByTag, spotAt, TAG_MAX,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideSpot,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
@@ -13,7 +13,7 @@ export interface ClipInfo {
   range: { in: number; out: number } | null
   def: { in: number; out: number } | null
   matchLabel: string
-  date: string
+  matchKey: string // the match's place in the play list's order (old or new matches first)
 }
 
 interface Props {
@@ -75,7 +75,7 @@ export function ReelPanel(p: Props) {
 
   const change = (r: Reel) => p.onChange(r)
   const multiMatch = new Set(Object.values(reel.clips).map(c => c.matchId)).size > 1
-  const when = (c: Clip): [string, number] => { const i = p.info(c); return [i.date, i.range?.in ?? 0] }
+  const when = (c: Clip): [string, number] => { const i = p.info(c); return [i.matchKey, i.range?.in ?? 0] }
 
   // Dragging shows a line where the item will land: above or below the row under the pointer.
   const lower = (e: DragEvent) => { const b = (e.currentTarget as HTMLElement).getBoundingClientRect(); return e.clientY > b.top + b.height / 2 }
@@ -204,6 +204,7 @@ export function ReelPanel(p: Props) {
           </span>
         )}
         {p.overlaps.has(c.id) && <span className="overlap" title="同じ試合の別のクリップと範囲が重なっています">⚠</span>}
+        <TagChip tag={c.tag} onChange={t => change(setTag(reel, c.id, t))} />
         <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? '長さを個別に調整済み' : '初期値の長さ'}>{dur.toFixed(1)}s</span>
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
           <button title="シーンから外す" onClick={() => change(removeClip(reel, c.id))}>×</button>
@@ -231,7 +232,6 @@ export function ReelPanel(p: Props) {
             </>
           ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <button onClick={p.onNewReel} title="新しいシーン（今の動画にも入れる）">＋</button>
         <button onClick={() => { if (confirm(`シーン「${reel.name}」を削除しますか？${p.usedIn ? `
 ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="シーンを削除">削除</button>
       </div>
@@ -248,13 +248,13 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}
             title="マーカーの付いたクリップだけを使う（マーカーなしは使わない）">マーカー付きだけ</button>
           <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}
-            title="マーカーなしのクリップも、マーカーのあとに時系列で使う">全部</button>
+            title="マーカーなしのクリップも、マーカーのあとにプレー一覧の順（試合の並び・試合の中は時間順）で使う">全部</button>
         </div>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title="このシーンだけを再生">▶ シーンを再生</button>}
       </div>
-      <Defaults d={rangeDefaults(reel)} legacy={Object.values(reel.clips).some(c => !c.mode)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
+      {Object.values(reel.clips).some(c => !c.mode) && <Legacy d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />}
       <p className="count">{p.orderCount} クリップ{reel.slides?.length ? `・スライド ${reel.slides.length}` : ''}・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
@@ -273,12 +273,16 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                 onChange={v => change(renameMarker(reel, m, v))} />
               {reel.markerOff?.[m] && <span className="excluded-note" title="番号をクリックするとオンに戻ります">オフ（使わない）</span>}
               <span className="muted">{reel.groups[m].length}</span>
+              {reel.groups[m].some(id => reel.clips[id]?.tag) && (
+                <button className="tag-sort" title="このグループのクリップをタグの順に並べる（タグなしは最後。Ctrl+Z で戻せる）"
+                  onClick={() => change(sortByTag(reel, m))}>タグ順</button>
+              )}
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
                 return (
                   <button className={`card-toggle${on ? ' on' : ''}`} aria-pressed={on}
-                    title={on ? 'このマーカーの前にタイトルカードを出す（クリックで出さない）' : 'このマーカーの前にタイトルカードを出さない（クリックで出す）'}
-                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
+                    title={`${on ? 'このマーカーの前にタイトルカードを出す（クリックで出さない）' : 'このマーカーの前にタイトルカードを出さない（クリックで出す）'}${reel.markerCards?.[m] === undefined ? '。今は動画の設定どおり' : ''}`}
+                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>{on ? 'カードあり' : 'カードなし'}</button>
                 )
               })()}
               <button className="gear" aria-label={`マーカー ${m} のタイトルカードの見た目`} title="マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
@@ -295,7 +299,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           }}>
           <header className="group-head">
             <span className="swatch none">–</span>
-            <span className="none-title">マーカーなし（時系列）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
+            <span className="none-title">マーカーなし（一覧の順）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
             <span className="muted">{none.length}</span>
           </header>
           {rowsOf('none', none.map(c => c.id))}
@@ -315,9 +319,37 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           </div>
         </>
       )}
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行の間の ＋（または右クリック）でスライドを入れる。</p>
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でタグ（並べ替え用のメモ）、「タグ順」でグループをタグの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行の間の ＋（または右クリック）でスライドを入れる。</p>
     </aside>
   )
+}
+
+// A clip's tag: a small colored chip, or a faint ＋ shown on hover; a click edits it in place.
+function TagChip({ tag, onChange }: { tag: string | undefined; onChange: (t: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  if (editing) {
+    return (
+      <input className="tag-input" autoFocus defaultValue={tag ?? ''} maxLength={TAG_MAX} aria-label="タグ"
+        onClick={e => e.stopPropagation()} onFocus={e => e.currentTarget.select()}
+        onBlur={e => { setEditing(false); onChange(e.currentTarget.value) }}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { e.currentTarget.value = tag ?? ''; e.currentTarget.blur() } }} />
+    )
+  }
+  return (
+    <button className={`tag-chip${tag ? '' : ' empty'}`} style={tag ? tagColor(tag) : undefined}
+      title={tag ? `タグ「${tag}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません` : 'タグを付ける（並べ替え用のメモ。Shift+1〜5 でも付けられる）'}
+      onClick={e => { e.stopPropagation(); setEditing(true) }}>{tag || '＋'}</button>
+  )
+}
+
+// The same tag always gets the same color, so clips that belong together are seen at a glance.
+const TAG_HUES = [210, 25, 140, 280, 350, 50, 180, 320]
+function tagColor(tag: string) {
+  let h = 0
+  for (const ch of tag) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const n = /^[1-9]$/.test(tag) ? Number(tag) - 1 : h
+  const hue = TAG_HUES[n % TAG_HUES.length]
+  return { background: `hsl(${hue} 80% 92%)`, color: `hsl(${hue} 60% 30%)`, borderColor: `hsl(${hue} 55% 70%)` }
 }
 
 function slideLabel(s: Slide): string {
@@ -327,28 +359,26 @@ function slideLabel(s: Slide): string {
   return `スライド ${src.name}${src.page ? ` p.${src.page}` : ''}`
 }
 
-// Default clip length for clips without their own IN/OUT (design §3.5).
-// The seconds clips are cut with. Clips added from the search carry their own cut (around the key
-// play, or to the end of the rally); clips added before that follow the scene's mode select.
-function Defaults({ d, legacy, onChange }: { d: RangeDefaults; legacy: boolean; onChange: (d: RangeDefaults) => void }) {
-  const num = (v: number, set: (n: number) => RangeDefaults, label: string) => (
-    <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label}
-      onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(set(n)) }} />
-  )
+// Clips added before each clip carried its own cut (design §3.5) follow the scene's mode select.
+// The seconds themselves are set next to 切り出し in the search panel.
+function Legacy({ d, onChange }: { d: RangeDefaults; onChange: (d: RangeDefaults) => void }) {
   return (
     <div className="reel-defaults">
-      <span>キープレー −{num(d.keyBefore, n => ({ ...d, keyBefore: n }), 'キープレーの何秒前から')}秒 〜 +{num(d.keyAfter, n => ({ ...d, keyAfter: n }), 'キープレーの何秒後まで')}秒</span>
-      <span>ラリー終わり +{num(d.rallyTail, n => ({ ...d, rallyTail: n }), '最後のプレーの何秒後まで')}秒</span>
-      {legacy && (
-        <span title="切り出しの指定がない（以前に入れた）クリップの長さ">
-          以前のクリップ <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
-            <option value="rally">ラリー全体</option>
-            <option value="keyplay">キープレー中心</option>
-          </select>
-          {d.mode === 'rally' && <> サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒</>}
-        </span>
-      )}
+      <span title="切り出しの指定がない（以前に入れた）クリップの長さ">
+        以前のクリップ <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
+          <option value="rally">ラリー全体</option>
+          <option value="keyplay">キープレー中心</option>
+        </select>
+        {d.mode === 'rally' && <> サーブ −<SecInput v={d.rallyLead} label="サーブの何秒前から" onChange={n => onChange({ ...d, rallyLead: n })} />秒</>}
+      </span>
     </div>
+  )
+}
+
+export function SecInput({ v, label, onChange, disabled }: { v: number; label: string; onChange: (n: number) => void; disabled?: boolean }) {
+  return (
+    <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label} disabled={disabled}
+      onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(n) }} />
   )
 }
 

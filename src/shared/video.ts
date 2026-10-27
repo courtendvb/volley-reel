@@ -14,6 +14,7 @@ export interface Video {
   overlay?: OverlayPatch // read through overlaySettings()
   annotations?: Annotation[] // objects shown on every clip of the video (表示範囲: 動画全体)
   cardAnnotations?: Annotation[] // objects on the video's title card (its opening card)
+  cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
   updatedAt: string
 }
 
@@ -70,7 +71,7 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
     const list = items(g)
     if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
-      out.push({ kind: 'card', card: { marker: g, name: scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
+      out.push({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
     out.push(...list)
   }
@@ -103,7 +104,7 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
     if (!items.length) continue
     if (s.sceneCard ?? overlay.titleCard.sceneCards) {
       const ids = order.map(c => c.id)
-      out.push({ kind: 'card', card: { marker: null, name: s.name, ...cardMatch(s, ids, matches, ourCodes), annotations: s.cardAnnotations ?? [] }, durationSec: overlay.titleCard.durationSec })
+      out.push({ kind: 'card', card: { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, ids, matches, ourCodes), annotations: s.cardAnnotations ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
     out.push(...items)
   }
@@ -114,7 +115,7 @@ export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (
 export function videoCard(video: Video, scenes: Record<string, Reel>, matches: Record<string, Match>, ourCodes: string[]): Card {
   const ids = new Set(video.sceneIds.flatMap(id => Object.values(scenes[id]?.clips ?? {}).map(c => c.matchId)))
   const m = ids.size === 1 ? matches[[...ids][0]] : undefined
-  return { marker: null, video: true, name: video.name, match: m ? cardMatchLabel(m, ourCodes) : null, opp: m ? cardOpponent(m, ourCodes) : null, annotations: video.cardAnnotations ?? [] }
+  return { marker: null, video: true, name: video.cardTitle || video.name, match: m ? cardMatchLabel(m, ourCodes) : null, opp: m ? cardOpponent(m, ourCodes) : null, annotations: video.cardAnnotations ?? [] }
 }
 
 // The card's match line, when every clip it introduces comes from one match.

@@ -1,4 +1,4 @@
-// Project folder (v3): project.json (name, our team codes, alias table, which library matches it
+// Project folder (v3): project.json (name, our team codes, which library matches it
 // uses) and reels/. Matches live in the library and are referenced by id. A pre-v3 project (with
 // its own matches/) is migrated on open: its matches move into the library under the same ids.
 import { existsSync } from 'node:fs'
@@ -11,20 +11,20 @@ import type { Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/t
 import type { Library } from './library'
 import { readJSON, safeId, writeJSON } from './store'
 
-const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH'], playerAliases: {} }
+const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH'] }
 
 interface ProjectFile {
   version: 2
   name: string
   ourTeamCodes: string[]
-  playerAliases: Record<string, string>
+  playerAliases: Record<string, string> // the old 名寄せ table: no longer used, kept as saved
   theme?: OverlayTheme
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
 
 export class Project {
-  private file: ProjectFile = { version: 2, name: '', ...DEFAULT_SETTINGS, matchIds: [] }
+  private file: ProjectFile = { version: 2, name: '', ...DEFAULT_SETTINGS, playerAliases: {}, matchIds: [] }
   // Problems found while loading (recovered or unreadable files), shown once by the renderer.
   notices: string[] = []
 
@@ -140,7 +140,7 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, playerAliases: this.file.playerAliases, ...(this.file.theme ? { theme: this.file.theme } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.theme ? { theme: this.file.theme } : {}) },
       missing: this.library.missing(matches),
     }
   }
@@ -166,7 +166,6 @@ export class Project {
 
   async saveSettings(s: ProjectSettings): Promise<void> {
     this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes).slice(0, 1)
-    this.file.playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
     if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }
     await this.save()
   }

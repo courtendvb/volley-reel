@@ -1,7 +1,9 @@
 // Drawing for the automatic overlays — the design picked in the M6 review: black plates with
 // slanted ends, an accent block for the number, Bahnschrift bold. One renderer for the preview and
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
+import type { ImageLookup } from './annotation'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import type { SlideBg } from './reel'
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
@@ -141,6 +143,30 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
 }
 
 export interface Box { x: number; y: number; w: number; h: number }
+
+// A card or a slide (a card with `slide`). Returns the title's box, or null for a slide.
+export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof drawTitleCard>[3] & { slide?: { bg: SlideBg } }, s: OverlaySettings['titleCard'],
+  theme: OverlayTheme, logo: CanvasImageSource | null, image: ImageLookup): Box | null {
+  if (!card.slide) return drawTitleCard(ctx, W, H, card, s, theme, logo)
+  drawSlide(ctx, W, H, card.slide.bg, theme, image)
+  return null
+}
+
+// A slide's page: blank in the title cards' background color, or its picture fitted inside the
+// frame on black (a 4:3 page gets bars). Drawn black while the picture loads.
+export function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, theme: OverlayTheme, image: ImageLookup): void {
+  if (bg.kind === 'blank') { fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H); return }
+  fillRect(ctx, '#000000', 0, 0, W, H)
+  const img = image(bg.assetId)
+  if (!img) return
+  const iw = Number((img as { width: number }).width), ih = Number((img as { height: number }).height)
+  if (!iw || !ih) return
+  const q = Math.min(W / iw, H / ih)
+  ctx.save()
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, (W - iw * q) / 2, (H - ih * q) / 2, iw * q, ih * q)
+  ctx.restore()
+}
 
 function logoRatio(img: CanvasImageSource): number {
   const w = (img as { width: number }).width, h = (img as { height: number }).height

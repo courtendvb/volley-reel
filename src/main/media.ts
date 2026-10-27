@@ -49,6 +49,11 @@ export function prepare(src: string, dst: string, reason: 'reencode' | 'strip-au
   ).then(() => undefined)
 }
 
+// One frame of a video as a PNG file (a slide made from the picture on screen), at full size.
+export function grabFrame(src: string, sec: number, dst: string): Promise<void> {
+  return run(join(binDir(), 'ffmpeg.exe'), ['-hide_banner', '-y', '-ss', String(Math.max(0, sec)), '-i', src, '-frames:v', '1', dst]).then(() => undefined)
+}
+
 function run(bin: string, args: string[], onStdout?: (s: string) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { windowsHide: true })

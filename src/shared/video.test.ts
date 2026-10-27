@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import { DEFAULT_OVERLAY, type OverlaySettings } from './overlay'
-import { addClips, newReel, playOrder, toggleMarker, type Reel } from './reel'
+import { addClips, newReel, newSlide, playOrder, putSlides, toggleMarker, type Reel } from './reel'
 import type { Match } from './types'
 import { addScene, dropScene, moveSceneAt, newVideo, planVideo, removeSceneAt } from './video'
 
@@ -74,5 +74,32 @@ describe('editing a video', () => {
     expect(moveSceneAt(v, 3, 0).sceneIds).toEqual(['a', 'a', 'c', 'b'])
     expect(removeSceneAt(v, 0).sceneIds).toEqual(['c', 'b', 'a'])
     expect(dropScene(v, 'a').sceneIds).toEqual(['c', 'b'])
+  })
+})
+
+describe('slides in the plan', () => {
+  const withSlide = (r: Reel, after: string | null, g: 1 | 'none' = 1) => putSlides(r, [{ ...newSlide({ kind: 'blank' }), durationSec: 4 }], { group: g, after, index: 0 })
+  const kinds = (items: ReturnType<typeof planVideo>) => items.map(it => (it.kind === 'card' ? (it.card.slide ? 'slide' : `[${it.card.marker ?? 'scene'}]`) : D.plays[it.clip.playId].code.slice(0, 6)))
+
+  it('plays a slide right after its clip, as a card with its own length', () => {
+    const s = scene('s', [0, 1], [1, 1])
+    const r = withSlide(s, s.groups[1][0])
+    const plan = planVideo(newVideo('v', [r.id]), { [r.id]: r }, order, cards({ sceneCards: false, enabled: true }), matches, ['HTH'])
+    expect(kinds(plan)).toEqual(['[1]', '*07AQ#', 'slide', '*07AQ+'])
+    expect(plan[2]).toMatchObject({ kind: 'card', durationSec: 4 })
+  })
+
+  it('plays a scene of only slides', () => {
+    const r = withSlide(newReel('only slides'), null)
+    const plan = planVideo(newVideo('v', [r.id]), { [r.id]: r }, order, cards({ sceneCards: true, enabled: false }), matches, ['HTH'])
+    expect(kinds(plan)).toEqual(['[scene]', 'slide'])
+  })
+
+  it('leaves out slides among unmarked clips unless the scene uses them all', () => {
+    const s = scene('s', [0, 1], [1, null])
+    const r = withSlide(s, s.groups.none[0], 'none')
+    const plan = (x: Reel) => kinds(planVideo(newVideo('v', [x.id]), { [x.id]: x }, order, cards({ sceneCards: false, enabled: false }), matches, ['HTH']))
+    expect(plan(r)).toEqual(['*07AQ#'])
+    expect(plan({ ...r, scope: 'all' })).toEqual(['*07AQ#', '*07AQ+', 'slide'])
   })
 })

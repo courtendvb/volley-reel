@@ -2,7 +2,7 @@
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import type { CaptionData, OverlaySettings, ScoreboardData } from '../../shared/overlay'
-import { drawCaption, drawScoreboard, drawTitleCard } from '../../shared/overlayDraw'
+import { drawCaption, drawCard, drawScoreboard } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
 import type { PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
@@ -37,7 +37,8 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
   const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations),
     ...plan.flatMap(p => (p.kind === 'clip' ? d.markerAnnotations(p.sceneId, p.group) : [])),
     ...plan.flatMap(p => (p.kind === 'card' ? p.card.annotations ?? [] : []))]
-  const images = await preloadAssets(all.flatMap(a => (a.kind === 'image' ? [a.assetId] : [])))
+  const slides = plan.flatMap(p => (p.kind === 'card' && p.card.slide?.bg.kind === 'image' ? [p.card.slide.bg.assetId] : []))
+  const images = await preloadAssets([...slides, ...all.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
   try {
     return await buildItems(plan, overlay, d, outPath, W, H, fpsStr, images.lookup)
   } finally {
@@ -53,7 +54,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
   for (const p of plan) {
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
-        drawTitleCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp))
+        drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
       }) })
       continue

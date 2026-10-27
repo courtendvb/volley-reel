@@ -13,7 +13,7 @@ export interface ClipInfo {
   range: { in: number; out: number } | null
   def: { in: number; out: number } | null
   matchLabel: string
-  date: string
+  matchKey: string // the match's place in the play list's order (old or new matches first)
 }
 
 interface Props {
@@ -75,7 +75,7 @@ export function ReelPanel(p: Props) {
 
   const change = (r: Reel) => p.onChange(r)
   const multiMatch = new Set(Object.values(reel.clips).map(c => c.matchId)).size > 1
-  const when = (c: Clip): [string, number] => { const i = p.info(c); return [i.date, i.range?.in ?? 0] }
+  const when = (c: Clip): [string, number] => { const i = p.info(c); return [i.matchKey, i.range?.in ?? 0] }
 
   // Dragging shows a line where the item will land: above or below the row under the pointer.
   const lower = (e: DragEvent) => { const b = (e.currentTarget as HTMLElement).getBoundingClientRect(); return e.clientY > b.top + b.height / 2 }
@@ -231,7 +231,6 @@ export function ReelPanel(p: Props) {
             </>
           ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <button onClick={p.onNewReel} title="新しいシーン（今の動画にも入れる）">＋</button>
         <button onClick={() => { if (confirm(`シーン「${reel.name}」を削除しますか？${p.usedIn ? `
 ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="シーンを削除">削除</button>
       </div>
@@ -248,13 +247,13 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}
             title="マーカーの付いたクリップだけを使う（マーカーなしは使わない）">マーカー付きだけ</button>
           <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}
-            title="マーカーなしのクリップも、マーカーのあとに時系列で使う">全部</button>
+            title="マーカーなしのクリップも、マーカーのあとにプレー一覧の順（試合の並び・試合の中は時間順）で使う">全部</button>
         </div>
         {p.playing
           ? <button onClick={p.onStop}>■ 停止</button>
           : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title="このシーンだけを再生">▶ シーンを再生</button>}
       </div>
-      <Defaults d={rangeDefaults(reel)} legacy={Object.values(reel.clips).some(c => !c.mode)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />
+      {Object.values(reel.clips).some(c => !c.mode) && <Legacy d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />}
       <p className="count">{p.orderCount} クリップ{reel.slides?.length ? `・スライド ${reel.slides.length}` : ''}・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
@@ -295,7 +294,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           }}>
           <header className="group-head">
             <span className="swatch none">–</span>
-            <span className="none-title">マーカーなし（時系列）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
+            <span className="none-title">マーカーなし（一覧の順）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
             <span className="muted">{none.length}</span>
           </header>
           {rowsOf('none', none.map(c => c.id))}
@@ -327,28 +326,26 @@ function slideLabel(s: Slide): string {
   return `スライド ${src.name}${src.page ? ` p.${src.page}` : ''}`
 }
 
-// Default clip length for clips without their own IN/OUT (design §3.5).
-// The seconds clips are cut with. Clips added from the search carry their own cut (around the key
-// play, or to the end of the rally); clips added before that follow the scene's mode select.
-function Defaults({ d, legacy, onChange }: { d: RangeDefaults; legacy: boolean; onChange: (d: RangeDefaults) => void }) {
-  const num = (v: number, set: (n: number) => RangeDefaults, label: string) => (
-    <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label}
-      onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(set(n)) }} />
-  )
+// Clips added before each clip carried its own cut (design §3.5) follow the scene's mode select.
+// The seconds themselves are set next to 切り出し in the search panel.
+function Legacy({ d, onChange }: { d: RangeDefaults; onChange: (d: RangeDefaults) => void }) {
   return (
     <div className="reel-defaults">
-      <span>キープレー −{num(d.keyBefore, n => ({ ...d, keyBefore: n }), 'キープレーの何秒前から')}秒 〜 +{num(d.keyAfter, n => ({ ...d, keyAfter: n }), 'キープレーの何秒後まで')}秒</span>
-      <span>ラリー終わり +{num(d.rallyTail, n => ({ ...d, rallyTail: n }), '最後のプレーの何秒後まで')}秒</span>
-      {legacy && (
-        <span title="切り出しの指定がない（以前に入れた）クリップの長さ">
-          以前のクリップ <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
-            <option value="rally">ラリー全体</option>
-            <option value="keyplay">キープレー中心</option>
-          </select>
-          {d.mode === 'rally' && <> サーブ −{num(d.rallyLead, n => ({ ...d, rallyLead: n }), 'サーブの何秒前から')}秒</>}
-        </span>
-      )}
+      <span title="切り出しの指定がない（以前に入れた）クリップの長さ">
+        以前のクリップ <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
+          <option value="rally">ラリー全体</option>
+          <option value="keyplay">キープレー中心</option>
+        </select>
+        {d.mode === 'rally' && <> サーブ −<SecInput v={d.rallyLead} label="サーブの何秒前から" onChange={n => onChange({ ...d, rallyLead: n })} />秒</>}
+      </span>
     </div>
+  )
+}
+
+export function SecInput({ v, label, onChange, disabled }: { v: number; label: string; onChange: (n: number) => void; disabled?: boolean }) {
+  return (
+    <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label} disabled={disabled}
+      onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(n) }} />
   )
 }
 

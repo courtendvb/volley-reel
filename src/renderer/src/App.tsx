@@ -220,6 +220,13 @@ export function App() {
   // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
   const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
   const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
+  // Where each match comes in the play list (old or new matches first): clips without a marker, and
+  // clips just marked, go in this order too, so the scene reads like the list it was picked from.
+  const matchRank = useMemo(() => {
+    const ms = project?.matches ?? [] // oldest first
+    const list = matchOrder === 'new' ? [...ms].reverse() : ms
+    return Object.fromEntries(list.map((m, i) => [m.id, String(i).padStart(4, '0')]))
+  }, [project, matchOrder])
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
   // ---- reels --------------------------------------------------------------------------------
@@ -280,22 +287,22 @@ export function App() {
       range: d && m ? clipRange(c, d, m.offsetSec, defaults) : null,
       def: d && m && play ? defaultRange(d, play, m.offsetSec, defaults, c.mode) : null,
       matchLabel: matchLabels[c.matchId] ?? '?',
-      date: m?.date ?? '',
+      matchKey: matchRank[c.matchId] ?? '9999',
     }
-  }, [matches, dvws, refsByMatch, matchLabels])
+  }, [matches, dvws, refsByMatch, matchLabels, matchRank])
   const clipInfo = useCallback((c: Clip): ClipInfo => infoFor(c, reel), [infoFor, reel])
   // A scene's clips in play order (its scope), leaving out clips that can't be played.
   // A scene's play order and stats are asked for many times per render (the scene editor, the
   // video's scene list, the plan, the export choices); scenes are immutable, so each result is kept
   // per scene object (and dropped with it) until the DVWs or the matches change.
-  // A clip's [match date, IN time] in a scene: where a newly marked clip goes in its group.
-  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.date, i.range?.in ?? 0] }
+  // A clip's [match in list order, IN time] in a scene: where a newly marked clip goes in its group.
+  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
     const hit = orderMemo.get(s)
     if (hit) return hit
     const miss = missingOf(s, dvws)
-    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.date, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
+    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
     orderMemo.set(s, o)
     return o
   }, [dvws, infoFor, orderMemo])
@@ -310,7 +317,7 @@ export function App() {
   }, [orderOf, infoFor, statsMemo])
   const order = useMemo(() => {
     if (!reel) return []
-    return playOrder(reel, c => { const i = clipInfo(c); return [i.date, i.range?.in ?? 0] })
+    return playOrder(reel, c => { const i = clipInfo(c); return [i.matchKey, i.range?.in ?? 0] })
       .filter(c => !missing.has(c.id) && clipInfo(c).range)
   }, [reel, clipInfo, missing])
   const orderSec = useMemo(() => order.reduce((s, c) => { const r = clipInfo(c).range!; return s + r.out - r.in }, 0), [order, clipInfo])
@@ -1158,6 +1165,7 @@ export function App() {
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
               filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
+              range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
               onAddAll={() => addPlays(results)}
             />

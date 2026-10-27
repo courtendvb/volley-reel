@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { EFFECTS, HITS, SKILLS, TEMPOS } from '../../../shared/labels'
 import { EMPTY_FILTER, type Person, type PlayFilter, type detailOptions } from '../../../shared/filter'
-import type { ClipMode } from '../../../shared/reel'
+import type { ClipMode, RangeDefaults } from '../../../shared/reel'
+import { SecInput } from './ReelPanel'
 
 export type Scope = 'match' | 'all' // picked with the match select above the filters
 
@@ -12,6 +13,8 @@ interface Props {
   details: ReturnType<typeof detailOptions> // what the detailed search can offer for the plays in scope
   extract: ClipMode // how plays added from here are cut
   onExtract: (m: ClipMode) => void
+  range: RangeDefaults // the open scene's seconds (the defaults when there is no scene yet)
+  onRange: ((d: RangeDefaults) => void) | null // null: no scene to keep them in
   shown: number
   total: number
   targetCode: string // the project's target team, shown on the team button
@@ -21,7 +24,7 @@ interface Props {
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, shown, total, teamFilterLimited, onAddAll }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, onAddAll }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length
@@ -35,9 +38,16 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         <label className="field-label">チーム</label>
         <Segmented value={f.team} onChange={team => set({ team })} options={[['all', 'すべて'], ['our', targetCode || '対象チーム'], ['opp', '相手']]} />
       </div>
-      <div className="filter-row" title="シーンに入れるときの長さ。秒数はシーンの設定（キープレーの前後、ラリーの最後のプレーの後）">
+      <div className="filter-row" title="シーンに入れるときの長さ。秒数は今開いているシーンの設定で、そのシーンのクリップすべてに効きます">
         <label className="field-label">切り出し</label>
         <Segmented value={extract} onChange={onExtract} options={[['keyplay', 'プレー前後'], ['toEnd', 'ラリー終わりまで']]} />
+      </div>
+      <div className="filter-row extract-sec">
+        <span className="field-label" />
+        <span>キープレー −<SecInput v={d.keyBefore} label="キープレーの何秒前から" disabled={!onRange} onChange={n => onRange?.({ ...d, keyBefore: n })} />秒</span>
+        {extract === 'keyplay'
+          ? <span>〜 +<SecInput v={d.keyAfter} label="キープレーの何秒後まで" disabled={!onRange} onChange={n => onRange?.({ ...d, keyAfter: n })} />秒</span>
+          : <span>〜 ラリー終わり +<SecInput v={d.rallyTail} label="最後のプレーの何秒後まで" disabled={!onRange} onChange={n => onRange?.({ ...d, rallyTail: n })} />秒</span>}
       </div>
       {teamFilterLimited && f.team !== 'all' && (
         <p className="hint">全部ホーム入力の試合や対象チームが出ていない試合はチームを区別できないため、全プレーを含めています</p>

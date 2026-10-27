@@ -19,6 +19,7 @@ export interface Clip {
   annotations: Annotation[] // design §3.6; times are absolute video times
   overlayOverride?: ClipOverlayOverride // design §3.7: hide an auto element or rewrite the caption
   mode?: ClipMode // how it was cut when added from the search; missing = the scene's default
+  tag?: string // a short note ("1", "A") to sort a group's clips by hand; never played or exported
 }
 
 // "keyplay": key play ± seconds. "toEnd": from just before the key play to the end of its rally.
@@ -169,6 +170,32 @@ export function shiftGroup(reel: Reel, m: Marker, delta: number): Reel {
   const i = Math.max(0, Math.min(reel.groupOrder.indexOf(m) + delta, order.length))
   order.splice(i, 0, m)
   return touch({ ...reel, groupOrder: order })
+}
+
+// Tags are a few characters at most; an empty one takes the tag off.
+export const TAG_MAX = 4
+
+export function setTag(reel: Reel, clipId: string, tag: string | null): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  const t = (tag ?? '').trim().slice(0, TAG_MAX)
+  if ((c.tag ?? '') === t) return reel
+  const { tag: _, ...rest } = c
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: t ? { ...rest, tag: t } : rest } })
+}
+
+// A marker group's clips by tag ("2" before "10"), the order among equal tags kept; untagged clips
+// go last, in their order. Slides stay after the clip they follow.
+export function sortByTag(reel: Reel, m: Marker): Reel {
+  const ids = reel.groups[m]
+  const tagOf = (id: string) => reel.clips[id]?.tag
+  const sorted = [...ids].sort((a, b) => {
+    const ta = tagOf(a), tb = tagOf(b)
+    if (!ta || !tb) return Number(!ta) - Number(!tb)
+    return ta.localeCompare(tb, 'ja', { numeric: true })
+  })
+  if (sorted.every((id, i) => id === ids[i])) return reel
+  return touch({ ...reel, groups: { ...reel.groups, [m]: sorted } })
 }
 
 export function placeGroup(reel: Reel, m: Marker, before: Marker | null): Reel {

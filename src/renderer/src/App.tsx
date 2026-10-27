@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { composing } from './keys'
 import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
 import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
@@ -979,11 +979,20 @@ export function App() {
         const { reel: r, activeClipId: id } = latest.current
         if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
       }
+      else if (e.shiftKey && /^(Digit|Numpad)[0-5]$/.test(e.code)) {
+        // Shift + 1–5: the active clip's tag (the same number takes it off; Shift + 0 always does).
+        // By key position, as Shift + a digit types a symbol on most layouts.
+        const { reel: r, activeClipId: id } = latest.current
+        if (!r || !id || !r.clips[id]) return
+        e.preventDefault()
+        const n = e.code.slice(-1)
+        updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n))
+      }
       else if (/^[0-5]$/.test(e.key)) { e.preventDefault(); markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, markerKey, trim])
+  }, [settingsOpen, markerKey, trim, updateReel])
 
   // ---- export (design §3.8) ------------------------------------------------------------------
   // The job is built here (PNG layers drawn with the preview's functions) and handed to the main

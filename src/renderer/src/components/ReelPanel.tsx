@@ -1,7 +1,7 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, spotAt,
+  MARKERS, MARKER_COLORS, chronological, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, setTag, sortByTag, spotAt, TAG_MAX,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideSpot,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
@@ -204,6 +204,7 @@ export function ReelPanel(p: Props) {
           </span>
         )}
         {p.overlaps.has(c.id) && <span className="overlap" title="同じ試合の別のクリップと範囲が重なっています">⚠</span>}
+        <TagChip tag={c.tag} onChange={t => change(setTag(reel, c.id, t))} />
         <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? '長さを個別に調整済み' : '初期値の長さ'}>{dur.toFixed(1)}s</span>
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
           <button title="シーンから外す" onClick={() => change(removeClip(reel, c.id))}>×</button>
@@ -272,6 +273,10 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                 onChange={v => change(renameMarker(reel, m, v))} />
               {reel.markerOff?.[m] && <span className="excluded-note" title="番号をクリックするとオンに戻ります">オフ（使わない）</span>}
               <span className="muted">{reel.groups[m].length}</span>
+              {reel.groups[m].some(id => reel.clips[id]?.tag) && (
+                <button className="tag-sort" title="このグループのクリップをタグの順に並べる（タグなしは最後。Ctrl+Z で戻せる）"
+                  onClick={() => change(sortByTag(reel, m))}>タグ順</button>
+              )}
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
                 return (
@@ -314,9 +319,37 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           </div>
         </>
       )}
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行の間の ＋（または右クリック）でスライドを入れる。</p>
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でタグ（並べ替え用のメモ）、「タグ順」でグループをタグの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行の間の ＋（または右クリック）でスライドを入れる。</p>
     </aside>
   )
+}
+
+// A clip's tag: a small colored chip, or a faint ＋ shown on hover; a click edits it in place.
+function TagChip({ tag, onChange }: { tag: string | undefined; onChange: (t: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  if (editing) {
+    return (
+      <input className="tag-input" autoFocus defaultValue={tag ?? ''} maxLength={TAG_MAX} aria-label="タグ"
+        onClick={e => e.stopPropagation()} onFocus={e => e.currentTarget.select()}
+        onBlur={e => { setEditing(false); onChange(e.currentTarget.value) }}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { e.currentTarget.value = tag ?? ''; e.currentTarget.blur() } }} />
+    )
+  }
+  return (
+    <button className={`tag-chip${tag ? '' : ' empty'}`} style={tag ? tagColor(tag) : undefined}
+      title={tag ? `タグ「${tag}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません` : 'タグを付ける（並べ替え用のメモ。Shift+1〜5 でも付けられる）'}
+      onClick={e => { e.stopPropagation(); setEditing(true) }}>{tag || '＋'}</button>
+  )
+}
+
+// The same tag always gets the same color, so clips that belong together are seen at a glance.
+const TAG_HUES = [210, 25, 140, 280, 350, 50, 180, 320]
+function tagColor(tag: string) {
+  let h = 0
+  for (const ch of tag) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const n = /^[1-9]$/.test(tag) ? Number(tag) - 1 : h
+  const hue = TAG_HUES[n % TAG_HUES.length]
+  return { background: `hsl(${hue} 80% 92%)`, color: `hsl(${hue} 60% 30%)`, borderColor: `hsl(${hue} 55% 70%)` }
 }
 
 function slideLabel(s: Slide): string {

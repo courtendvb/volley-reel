@@ -63,7 +63,7 @@ export function VideoPanel(p: Props) {
         <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
         <button className={`card-toggle${p.videoCardOn ? ' on' : ''}`} aria-pressed={p.videoCardOn}
           title={p.videoCardOn ? '動画の頭に動画名のカードを出す（クリックで出さない）' : '動画の頭に動画名のカードを出さない（クリックで出す）'}
-          onClick={() => p.onVideoCard(!p.videoCardOn)}>カード</button>
+          onClick={() => p.onVideoCard(!p.videoCardOn)}>{p.videoCardOn ? 'カードあり' : 'カードなし'}</button>
         <button className="gear" aria-label="動画のタイトルカード" title="動画の頭のタイトルカード（動画名）を動画の画面で編集" onClick={p.onEditVideoCard}>⚙</button>
       </div>
 
@@ -98,8 +98,8 @@ export function VideoPanel(p: Props) {
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
                 {s && (
                   <button className={`card-toggle${p.sceneCardOn(s) ? ' on' : ''}`} aria-pressed={p.sceneCardOn(s)}
-                    title={p.sceneCardOn(s) ? 'このシーンの前にタイトルカードを出す（クリックで出さない）' : 'このシーンの前にタイトルカードを出さない（クリックで出す）'}
-                    onClick={() => p.onSceneCard(s, !p.sceneCardOn(s))}>カード</button>
+                    title={`${p.sceneCardOn(s) ? 'このシーンの前にタイトルカードを出す（クリックで出さない）' : 'このシーンの前にタイトルカードを出さない（クリックで出す）'}${s.sceneCard === undefined ? '。今は動画の設定どおり' : ''}`}
+                    onClick={() => p.onSceneCard(s, !p.sceneCardOn(s))}>{p.sceneCardOn(s) ? 'カードあり' : 'カードなし'}</button>
                 )}
                 {s && <button className="gear" aria-label="シーンのタイトルカードの見た目" title="シーンのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
                   onClick={() => p.onEditCard(id)}>⚙</button>}

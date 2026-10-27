@@ -20,7 +20,8 @@ export interface OverlaySettings {
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
     markerLayout?: CardLayout; sceneLayout?: CardLayout
-    videoCard?: boolean; videoLayout?: CardLayout } // videoCard: an opening card with the video's name
+    videoCard?: boolean; videoLayout?: CardLayout // videoCard: an opening card with the video's name
+    background?: string } // the cards' (and blank slides') background; missing = a darker shade of the theme's base
   // Fade from and to black at the start and end of every clip and card.
   transition: { fade: boolean; durationSec: number }
 }

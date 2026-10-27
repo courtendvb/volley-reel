@@ -613,7 +613,7 @@ export function App() {
     if (cardEdit.slideId) { const sl = sc.slides?.find(s => s.id === cardEdit.slideId); return sl ? slideCard(sl) : null }
     const m = cardEdit.marker
     const ids = m === null ? Object.keys(sc.clips) : sc.groups[m]
-    return { marker: m, name: m === null ? sc.name : sc.markerNames[m], ...cardMatch(sc, ids, matches, codes),
+    return { marker: m, name: (m === null ? sc.cardTitle || sc.name : sc.markerCardTitles?.[m] || sc.markerNames[m]), ...cardMatch(sc, ids, matches, codes),
       annotations: (m === null ? sc.cardAnnotations : sc.markerCardAnnotations?.[m]) ?? [] }
   }, [cardEdit, reels, video, matches, settings])
   const setCardAnns = useCallback((list: Annotation[]) => {
@@ -631,6 +631,23 @@ export function App() {
   cardEditRef.current = cardEdit
   const cardAnnsRef = useRef<Annotation[]>([])
   cardAnnsRef.current = cardEditCard?.annotations ?? []
+  // The card's own text ('' = its name) and the name it falls back to.
+  const cardTitleNow = (() => {
+    if (!cardEdit || cardEdit.slideId) return { title: '', name: '' }
+    if (cardEdit.sceneId === null) return { title: video?.cardTitle ?? '', name: video?.name ?? '' }
+    const sc = reels.find(x => x.id === cardEdit.sceneId)
+    const m = cardEdit.marker
+    return m === null ? { title: sc?.cardTitle ?? '', name: sc?.name ?? '' } : { title: sc?.markerCardTitles?.[m] ?? '', name: sc?.markerNames[m] ?? '' }
+  })()
+  const setCardTitle = (t: string) => {
+    if (!cardEdit) return
+    const now = new Date().toISOString(), value = t.trim() ? t : undefined
+    if (cardEdit.sceneId === null) { if (video) updateVideo({ ...video, cardTitle: value, updatedAt: now }); return }
+    const sc = reels.find(x => x.id === cardEdit.sceneId)
+    if (!sc) return
+    const m = cardEdit.marker
+    updateReel(m === null ? { ...sc, cardTitle: value, updatedAt: now } : { ...sc, markerCardTitles: { ...sc.markerCardTitles, [m]: value }, updatedAt: now })
+  }
   // Whether this card is shown at all (the same switches as the overlay dialog and the scene editor).
   const cardShown = !cardEdit ? false : cardEdit.sceneId === null ? !!overlay.titleCard.videoCard
     : cardEdit.marker === null ? (reels.find(x => x.id === cardEdit.sceneId)?.sceneCard ?? overlay.titleCard.sceneCards)
@@ -1188,7 +1205,8 @@ export function App() {
             )}
             {cardEditCard && !editingSlide && (
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
-                tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown} />
+                tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
+                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} />
             )}
             {cardEditCard && cardTool === 'objects' && (
               <AnnotationTools

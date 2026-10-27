@@ -91,15 +91,27 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
   ctx.restore()
 }
 
+// The cards' background: the video's choice, else a darker shade of the theme's base.
+export function cardBackground(s: OverlaySettings['titleCard'], theme: OverlayTheme): string {
+  return s.background ?? mix(theme.base, '#000000', 0.4)
+}
+
+// A card's text, one entry per line (a line break in the name starts a new line).
+const titleLines = (name: string, fallback: string): string[] => {
+  const lines = name.split('\n').map(l => l.trim()).filter(Boolean)
+  return (lines.length ? lines : [fallback]).map(l => l.toUpperCase())
+}
+
 // Full-frame card at the head of a marker group: small match line over "[n] MARKER NAME".
 // marker null = a scene card: the scene name, a little larger, behind a narrow accent block.
+// A name with line breaks is drawn as several lines on a taller plate.
 // logo: the opponent's logo, drawn beside the marker title or above the scene title.
 // Returns the title's box in pixels (for the card editor to grab). Position and size come from
 // s.markerLayout / s.sceneLayout, which the editor changes.
 export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
   const k = H / 720
   ctx.save()
-  fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H)
+  fillRect(ctx, cardBackground(s, theme), 0, 0, W, H)
   if (d.marker === null) {
     // The video's opening card is drawn like a scene card, larger by default, with its own layout.
     const L = d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT
@@ -110,14 +122,15 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   // Marker cards: 3× the base size times the layout's scale, the title's top-left at the layout's
   // point (10% / 30% by default); shrunk to stay inside the frame when the name is long.
   const L = s.markerLayout ?? DEFAULT_MARKER_LAYOUT
-  const name = (s.showMarkerName && d.name ? d.name : `MARKER ${d.marker}`).toUpperCase()
+  const names = titleLines(s.showMarkerName ? d.name : '', `MARKER ${d.marker}`)
+  const more = names.length - 1 // each further line makes the plate 34 (× q) taller
   const match = s.showMatch && d.match ? d.match : null
   const x = W * L.x, top = H * L.y
   const lr = logo ? logoRatio(logo) : 0 // width / height
   const layout = (q: number) => {
     const numW = measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q
-    const plateW = measure(ctx, name, font(28 * q), 0.08 * 28 * q) + 46 * q
-    const logoH = (match ? 22 * q : 0) + 46 * q
+    const plateW = Math.max(...names.map(n => measure(ctx, n, font(28 * q), 0.08 * 28 * q))) + 46 * q
+    const logoH = (match ? 22 * q : 0) + (46 + 34 * more) * q
     const matchW = match ? measure(ctx, match, font(12 * q, 400), 0.4 * 12 * q) : 0
     const total = Math.max(numW + plateW - 6 * q, matchW) // the logo goes after the plate or the match line, whichever is wider
     return { numW, plateW, logoH, total: total + (logo ? 28 * q + logoH * lr : 0) }
@@ -127,7 +140,7 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   if (x + first.total > W * 0.98) q *= Math.max(0.2, (W * 0.98 - x) / first.total)
   const { numW, plateW, logoH, total } = layout(q)
   const numFont = font(24 * q), nameFont = font(28 * q), matchFont = font(12 * q, 400)
-  const h = 46 * q, slant = 10 * q
+  const h = (46 + 34 * more) * q, slant = 10 * q
   ctx.textBaseline = 'middle'
   if (match) text(ctx, match, x, top + 8 * q, matchFont, MUTED, 0.4 * 12 * q)
   const y = top + (match ? 22 * q : 0)
@@ -136,7 +149,7 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
   const nw = measure(ctx, String(d.marker), numFont, 0)
   text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
-  text(ctx, name, px + slant + 14 * q, y + h / 2, nameFont, TEXT, 0.08 * 28 * q)
+  names.forEach((n, i) => text(ctx, n, px + slant + 14 * q, y + h / 2 + (i - more / 2) * 34 * q, nameFont, TEXT, 0.08 * 28 * q))
   if (logo) ctx.drawImage(logo, x + total - logoH * lr, top, logoH * lr, logoH) // as tall as the whole title
   ctx.restore()
   return { x, y: top, w: total, h: logoH }
@@ -148,14 +161,14 @@ export interface Box { x: number; y: number; w: number; h: number }
 export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof drawTitleCard>[3] & { slide?: { bg: SlideBg } }, s: OverlaySettings['titleCard'],
   theme: OverlayTheme, logo: CanvasImageSource | null, image: ImageLookup): Box | null {
   if (!card.slide) return drawTitleCard(ctx, W, H, card, s, theme, logo)
-  drawSlide(ctx, W, H, card.slide.bg, theme, image)
+  drawSlide(ctx, W, H, card.slide.bg, cardBackground(s, theme), image)
   return null
 }
 
 // A slide's page: blank in the title cards' background color, or its picture fitted inside the
 // frame on black (a 4:3 page gets bars). Drawn black while the picture loads.
-export function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, theme: OverlayTheme, image: ImageLookup): void {
-  if (bg.kind === 'blank') { fillRect(ctx, mix(theme.base, '#000000', 0.4), 0, 0, W, H); return }
+export function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, cardBg: string, image: ImageLookup): void {
+  if (bg.kind === 'blank') { fillRect(ctx, cardBg, 0, 0, W, H); return }
   fillRect(ctx, '#000000', 0, 0, W, H)
   const img = image(bg.assetId)
   if (!img) return
@@ -177,9 +190,10 @@ function logoRatio(img: CanvasImageSource): number {
 function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null, L: CardLayout): Box {
   const k = k0 * L.scale
   const nameFont = font(36 * k), matchFont = font(12 * k, 400)
-  const label = (name || 'SCENE').toUpperCase()
-  const blockW = 22 * k, h = 58 * k, slant = 12 * k
-  const plateW = measure(ctx, label, nameFont, 0.08 * 36 * k) + 56 * k
+  const labels = titleLines(name, 'SCENE')
+  const more = labels.length - 1 // each further line makes the plate 44 (× k) taller
+  const blockW = 22 * k, h = (58 + 44 * more) * k, slant = 12 * k
+  const plateW = Math.max(...labels.map(l => measure(ctx, l, nameFont, 0.08 * 36 * k))) + 56 * k
   const total = blockW + plateW - 6 * k
   const mw = match ? measure(ctx, match, matchFont, 0.4 * 12 * k) : 0
   // Logo: at most 120 px tall at 720p and half the width.
@@ -198,7 +212,7 @@ function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string,
   fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])
   fillPoly(ctx, theme.accent, [[x, y], [x + blockW, y], [x + blockW - slant, y + h], [x, y + h]])
   ctx.textBaseline = 'middle'
-  text(ctx, label, px + slant + 18 * k, y + h / 2, nameFont, TEXT, 0.08 * 36 * k)
+  labels.forEach((l, i) => text(ctx, l, px + slant + 18 * k, y + h / 2 + (i - more / 2) * 44 * k, nameFont, TEXT, 0.08 * 36 * k))
   const w = Math.max(total, mw, lw)
   return { x: cx - w / 2, y: y - above, w, h: above + h }
 }

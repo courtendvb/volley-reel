@@ -77,6 +77,15 @@ describe('editing a video', () => {
   })
 })
 
+describe('card text', () => {
+  it('uses the card text when set (line breaks kept), else the name', () => {
+    const s = { ...scene('アタック', [0], [1]), cardTitle: '7番\nアタック', markerCardTitles: { 1: '決定' } }
+    const v = { ...newVideo('動画', [s.id]), cardTitle: '' }
+    const plan = planVideo(v, { [s.id]: s }, order, cards({ sceneCards: true, enabled: true, videoCard: true }), matches, ['HTH'])
+    expect(plan.flatMap(it => (it.kind === 'card' ? [it.card.name] : []))).toEqual(['動画', '7番\nアタック', '決定'])
+  })
+})
+
 describe('slides in the plan', () => {
   const withSlide = (r: Reel, after: string | null, g: 1 | 'none' = 1) => putSlides(r, [{ ...newSlide({ kind: 'blank' }), durationSec: 4 }], { group: g, after, index: 0 })
   const kinds = (items: ReturnType<typeof planVideo>) => items.map(it => (it.kind === 'card' ? (it.card.slide ? 'slide' : `[${it.card.marker ?? 'scene'}]`) : D.plays[it.clip.playId].code.slice(0, 6)))

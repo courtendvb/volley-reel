@@ -330,8 +330,10 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 }
 .ov-gear-pop .ov-presets { display: flex; gap: 6px; flex-wrap: wrap; }
 .ov-gear-pop input[type="number"] { width: 56px; }
-.group-head .card-toggle { padding: 1px 6px; font-size: 11px; color: var(--sub); }
-.group-head .card-toggle.on { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+/* Title card switches (video name, each scene, each marker): on is filled, off is dashed and grey. */
+.card-toggle { flex: none; padding: 1px 6px; font-size: 11px; color: #94A3B8; border-style: dashed; white-space: nowrap; }
+.card-toggle.on { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary); font-weight: 600; }
+.card-toggle.on::before { content: "▣ "; }
 .clip-overlay { gap: 8px; flex-wrap: nowrap; }
 .clip-overlay .check { white-space: nowrap; }
 .clip-overlay .ov-text { flex: 1 1 80px; min-width: 60px; }
@@ -464,3 +466,5 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .slide-menu button:disabled { color: #94A3B8; cursor: default; }
 .banner.slides-stale { background: var(--warn-bg); color: var(--warn-text); }
 .banner.slides-stale button { padding: 2px 10px; }
+.card-title-field textarea { width: 200px; min-height: 26px; padding: 2px 6px; font: inherit; resize: vertical; }
+.card-edit-bar input[type="color"] { width: 32px; height: 24px; padding: 0 2px; }

@@ -40,6 +40,8 @@ export interface Reel {
   markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
+  cardTitle?: string // the scene card's text when it differs from the name (may have line breaks: one line each)
+  markerCardTitles?: Partial<Record<Marker, string>> // the same for each marker's card
   slides?: Slide[] // still pages between clips; see Slide
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string

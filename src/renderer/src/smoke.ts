@@ -275,9 +275,18 @@ export function installSmoke(h: SmokeHost): void {
         checks: kinds.flatMap((k, i) => (k === 'card' ? [{ name: `slide${i}`, t: at(i) }] : [])) }
     }
 
-    // End on the frame slide in the editor, for the screenshot.
-    const frame = scene().slides!.find(s => s.bg.kind === 'image' && !s.bg.source)
-    if (frame) { [...document.querySelectorAll<HTMLElement>('.slide-row')].find(r => r.textContent?.includes('静止画'))?.click(); await sleep(600) }
+    // The card switches say on / off in words; marker 1's card with two lines of text on a navy
+    // background (typed into the card bar), left open for the screenshot.
+    log.cardSwitches = [...document.querySelectorAll('.card-toggle')].map(b => b.textContent)
+    editCard(sc.id, 1); await sleep(400)
+    const ta = document.querySelector<HTMLTextAreaElement>('[aria-label="カードの文字"]')!
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, '7番のアタック\nセット 1')
+    ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200)
+    const color = document.querySelector<HTMLInputElement>('[aria-label="カードの背景色"]')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(color, '#1e3a8a')
+    color.dispatchEvent(new Event('input', { bubbles: true })); await sleep(400)
+    log.card = { title: scene().markerCardTitles?.[1], background: latest.current.overlay.titleCard.background,
+      planName: currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1)?.kind === 'card' ? (currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1) as { card: { name: string } }).card.name : null }
     return { ...log, videoExport: opts.videoExportTo ?? null, exported }
   }
 

@@ -59,7 +59,6 @@ function missingOf(r: Reel, dvws: Record<string, ParsedDVW>): Set<string> {
   missingMemo.set(r, { dvws, missing })
   return missing
 }
-const NO_ALIASES: ProjectSettings['playerAliases'] = {}
 const SAVE_DELAY_MS = 400
 const UNDO_MERGE_MS = 600
 const UNDO_LIMIT = 100
@@ -1094,9 +1093,6 @@ export function App() {
   }
 
 
-  const rawRefs = useMemo(() => settingsOpen && settings
-    ? (project?.matches ?? []).flatMap(m => dvws[m.id] ? buildRefs(m.id, dvws[m.id], { ...settings, playerAliases: NO_ALIASES }) : [])
-    : [], [settingsOpen, settings, project, dvws])
 
   return (
     <div className="app">
@@ -1325,7 +1321,7 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   )

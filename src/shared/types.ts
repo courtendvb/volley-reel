@@ -79,7 +79,6 @@ export interface Match {
 
 export interface ProjectSettings {
   ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
-  playerAliases: Record<string, string> // player key -> the key it is the same person as (manual exceptions)
   theme?: OverlayTheme // overlay colors for the whole project (scoreboard, captions, title cards); missing = each video's own
 }
 

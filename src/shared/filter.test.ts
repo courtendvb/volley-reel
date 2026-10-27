@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide, resolvePerson } from './filter'
+import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide } from './filter'
 import type { ProjectSettings } from './types'
 
 // Two made-up matches: HTH at home in A, away in B (same player, other side, "-a" style ID in B).
@@ -26,7 +26,7 @@ const B = parseDVW(dvw('XYZ', 'HTH', ['LEE-KIM-90', 'LEE', 'Kim'], ['TAN-TAR-02-
 a01SQ-~~~16A;;;;;;;;1;5;2;1;70;;
 *01RQ#~~~16A;;;;;;;;1;5;2;1;72;;
 `))
-const settings: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'], playerAliases: {} }
+const settings: ProjectSettings = { ourTeamCodes: ['HTH', 'HTA'] }
 const refs = () => [...buildRefs('A', A, settings), ...buildRefs('B', B, settings)]
 
 describe('team roles', () => {
@@ -45,16 +45,6 @@ describe('the same player across matches', () => {
   it('is one person when home in one match and away in another', () => {
     const r = applyFilter(refs(), { ...EMPTY_FILTER, person: 'TAN-TAR-02' })
     expect(r.map(x => x.matchId)).toEqual(['A', 'B'])
-  })
-
-  it('merges further keys through the alias table', () => {
-    const s = { ...settings, playerAliases: { 'LEE-KIM-90': 'SMI-JOH-95' } }
-    const r = applyFilter([...buildRefs('A', A, s), ...buildRefs('B', B, s)], { ...EMPTY_FILTER, person: 'SMI-JOH-95' })
-    expect(r.map(x => x.matchId)).toEqual(['A', 'A', 'B', 'B'])
-  })
-
-  it('survives alias loops', () => {
-    expect(resolvePerson('x', { x: 'y', y: 'x' })).toBe('x')
   })
 
   it('lists our people first', () => {

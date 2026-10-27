@@ -292,9 +292,13 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 /* ---- videos and scenes (v3) ---- */
 .right-col { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface); }
 .right-col .reel-panel { flex: 1; min-height: 0; border-left: 0; border-top: 2px solid var(--border); }
-.video-panel { flex: none; display: flex; flex-direction: column; max-height: 46%; min-height: 0; background: #F8FAFC; }
+.video-panel { flex: none; display: flex; flex-direction: column; max-height: 60%; min-height: 0; background: #F8FAFC; }
 .panel-kicker { flex: none; align-self: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--sub); }
-.video-scenes { list-style: none; margin: 6px 10px 0; padding: 0; overflow-y: auto; min-height: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.video-scenes { list-style: none; margin: 6px 10px 0; padding: 0; overflow-y: auto; min-height: 0; max-height: 172px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+/* Drag to set the scene list's height (about five rows by default, then it scrolls). */
+.list-resize { flex: none; height: 8px; margin: 0 10px; cursor: ns-resize; touch-action: none; position: relative; }
+.list-resize::after { content: ''; position: absolute; left: 50%; top: 2px; width: 32px; height: 4px; margin-left: -16px; border-radius: 2px; background: #CBD5E1; }
+.list-resize:hover::after { background: var(--primary); }
 .video-scene { display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 12.5px; border-bottom: 1px solid #F1F5F9; cursor: pointer; }
 .video-scene:hover { background: #F8FAFC; }
 .video-scene.current { background: var(--primary-light); }

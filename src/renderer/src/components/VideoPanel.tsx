@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
@@ -29,6 +29,8 @@ interface Props {
 }
 
 const DT_SCENE = 'application/x-vr-scene-index'
+const LIST_KEY = 'vr.sceneListHeight'
+const LIST_MIN = 64, LIST_MAX = 640
 
 // A video is a list of scenes (v3, design §0). Scenes are shared: the same scene can be in several
 // videos, and editing it changes all of them. The overlay look, through-play and export are per video.
@@ -36,6 +38,22 @@ export function VideoPanel(p: Props) {
   const v = p.video
   // Where a dragged scene will land: above or below the row under the pointer (shown as a line).
   const [dragOver, setDragOver] = useState<{ i: number; after: boolean } | null>(null)
+  // The scene list scrolls past about five rows so the scene editor below keeps its room; the
+  // handle under it sets its height (kept), a double-click goes back to the default.
+  const listRef = useRef<HTMLOListElement>(null)
+  const [listH, setListH] = useState<number | null>(() => { try { const n = Number(localStorage.getItem(LIST_KEY)); return n > 0 ? n : null } catch { return null } })
+  useEffect(() => { try { if (listH) localStorage.setItem(LIST_KEY, String(listH)); else localStorage.removeItem(LIST_KEY) } catch { /* not kept */ } }, [listH])
+  const drag = useRef<{ y: number; h: number } | null>(null)
+  const onHandleDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (!listRef.current) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { y: e.clientY, h: listRef.current.getBoundingClientRect().height }
+  }
+  const onHandleMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (drag.current) setListH(Math.round(Math.max(LIST_MIN, Math.min(LIST_MAX, drag.current.h + e.clientY - drag.current.y))))
+  }
+  // The open scene stays in view (it can be picked from the scene editor's select too).
+  useEffect(() => { listRef.current?.querySelector('.video-scene.current')?.scrollIntoView({ block: 'nearest' }) }, [p.currentSceneId, v?.id])
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
   const total = v ? v.sceneIds.reduce((acc, id) => { const s = byId[id]; if (!s) return acc; const st = p.sceneStats(s); return { clips: acc.clips + st.clips, sec: acc.sec + st.sec } }, { clips: 0, sec: 0 }) : { clips: 0, sec: 0 }
@@ -67,7 +85,7 @@ export function VideoPanel(p: Props) {
         <button className="gear" aria-label="動画のタイトルカード" title="動画の頭のタイトルカード（動画名）を動画の画面で編集" onClick={p.onEditVideoCard}>⚙</button>
       </div>
 
-      <ol className="video-scenes" role="list">
+      <ol ref={listRef} className="video-scenes" role="list" style={listH ? { maxHeight: listH } : undefined}>
         {v.sceneIds.map((id, i) => {
           const s = byId[id]
           const st = s ? p.sceneStats(s) : { clips: 0, sec: 0 }
@@ -110,6 +128,10 @@ export function VideoPanel(p: Props) {
         })}
         {!v.sceneIds.length && <li className="muted pad-x">まだシーンがありません</li>}
       </ol>
+      <div className="list-resize" role="separator" aria-orientation="horizontal" aria-label="シーン一覧の高さ"
+        title="ドラッグでシーン一覧の高さを変える（ダブルクリックで元に戻す）"
+        onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}
+        onDoubleClick={() => setListH(null)} />
 
       <div className="video-add">
         <select value="" onChange={e => { if (e.target.value) p.onChange(addScene(v, e.target.value)) }} aria-label="シーンを追加">

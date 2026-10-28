@@ -23,6 +23,7 @@ const api: Api = {
   saveReel: r => ipcRenderer.invoke('reel:save', r),
   deleteReel: id => ipcRenderer.invoke('reel:delete', id),
   chooseExportPath: name => ipcRenderer.invoke('export:choosePath', name),
+  chooseExportFolder: names => ipcRenderer.invoke('export:chooseFolder', names),
   startExport: job => ipcRenderer.invoke('export:start', job),
   cancelExport: () => ipcRenderer.invoke('export:cancel'),
   onExportEvent: cb => {

@@ -47,6 +47,7 @@ export interface SmokeHost {
   currentPlan: (target: 'video' | 'scene') => PlanItem[]
   editCard: (sceneId: string | null, marker: Marker | null) => void
   exportMarker: (sceneId: string, m: Marker, outPath?: string) => Promise<ExportJob | null>
+  exportScenes: (dir?: string) => Promise<void>
   extraSelRef: RefObject<string[]>
   insertImage: (path?: string) => Promise<string | null>
   jump: (r: PlayRef) => void
@@ -106,7 +107,7 @@ function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() 
 // Installs window.__smoke, which the main process calls with the run's options (VR_SMOKE_*).
 // Loaded with a dynamic import only on a self-check run, so normal use never runs or parses it.
 export function installSmoke(h: SmokeHost): void {
-  const { activateClip, currentPlan, editCard, exportMarker, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
+  const { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
   window.__smoke = async (opts: SmokeOpts) => {
     if (opts.home) return smokeHome(opts)
     if (opts.m8?.startsWith('relocate:')) return smokeRelocate(opts.m8.slice('relocate:'.length))
@@ -645,6 +646,21 @@ export function installSmoke(h: SmokeHost): void {
       await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'marker export')
       markerExport = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind) }
     }
+    // One MP4 per scene of the video, one after another, into the export's folder.
+    let scenesExport: unknown = null
+    if (opts.videoExportTo) {
+      const dir = opts.videoExportTo.replace(/[\\/][^\\/]*$/, '')
+      const seen: string[] = [] // the scenes the progress text named, in order
+      const t0 = performance.now()
+      await exportScenes(dir)
+      await waitFor(() => {
+        const st = latest.current.exportState, at = st?.message.match(/^シーン \d+ \/ \d+「[^」]*」/)?.[0]
+        if (at && seen[seen.length - 1] !== at) seen.push(at)
+        const finished = st?.status === 'error' || st?.status === 'cancelled' || (st?.status === 'done' && st.message.startsWith('シーンごと'))
+        return finished || null
+      }, 300000, 'scene exports')
+      scenesExport = { status: latest.current.exportState?.status, message: latest.current.exportState?.message, outPath: latest.current.exportState?.outPath, seen, wallMs: Math.round(performance.now() - t0) }
+    }
 
     // The gear on marker 1: its title card over the video; dragging the title moves it.
     editCard(a.id, 1); await sleep(400)
@@ -707,7 +723,7 @@ export function installSmoke(h: SmokeHost): void {
     const cardObjects = (latest.current.reels.find(x => x.id === a.id)?.markerCardAnnotations?.[1] ?? []).map(x => x.kind)
     const planCard = currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1 && it.card.name === 'Kills')
     const planCardObjects = planCard?.kind === 'card' ? (planCard.card.annotations ?? []).length : null
-    return { planV1, lens, timeline, v1After, v2After, undo, planOff, dragged, markerExport, cardLayout, cardObjects, planCardObjects, exportChoices, markerScope, videoExport: opts.videoExportTo ?? null, exported }
+    return { planV1, lens, timeline, v1After, v2After, undo, planOff, dragged, markerExport, scenesExport, cardLayout, cardObjects, planCardObjects, exportChoices, markerScope, videoExport: opts.videoExportTo ?? null, exported }
   }
 
   // Each smoke scene gets its own video, taking over the overlay the smoke set on the scene

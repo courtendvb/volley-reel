@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import { DEFAULT_OVERLAY, type OverlaySettings } from './overlay'
 import { addClips, newReel, newSlide, playOrder, putSlides, toggleMarker, type Reel } from './reel'
 import type { Match } from './types'
-import { addScene, dropScene, moveSceneAt, newVideo, planVideo, removeSceneAt } from './video'
+import { addScene, chapterText, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames } from './video'
 
 const D = parseDVW(`[3TEAMS]
 HTH;HOME;;;;
@@ -63,6 +63,22 @@ describe('videos made of scenes', () => {
   it('skips scenes that no longer exist', () => {
     expect(planVideo(newVideo('x', ['gone', serve.id]), scenes, order, cards({ sceneCards: false }), matches, ['HTH'])).toHaveLength(1)
   })
+
+  it('starts a chapter at each scene, and at each marker group of a scene with several', () => {
+    const { plan, chapters } = planVideoChapters(video, scenes, order, cards({ sceneCards: true, enabled: true, videoCard: true }), matches, ['HTH'])
+    expect(describePlan(plan)).toEqual(describePlan(planVideo(video, scenes, order, cards({ sceneCards: true, enabled: true, videoCard: true }), matches, ['HTH'])))
+    // The first chapter takes in the opening card; a scene's first group takes in the scene card.
+    expect(chapters).toEqual([{ at: 0, title: '7番のアタック - Kills' }, { at: 5, title: '7番のアタック - Others' }, { at: 7, title: 'サーブ' }])
+  })
+})
+
+describe('YouTube chapters', () => {
+  it('writes m:ss (h:mm:ss past an hour), the first at 0:00, and names chapters under 10 seconds', () => {
+    const r = chapterText([{ startSec: 2, title: 'A' }, { startSec: 65.9, title: 'B' }, { startSec: 70, title: 'C' }], 130)
+    expect(r.text).toBe('0:00 A\n1:05 B\n1:10 C\n')
+    expect(r.short).toEqual(['B'])
+    expect(chapterText([{ startSec: 0, title: 'A' }, { startSec: 3725, title: 'B' }], 4000).text).toBe('0:00:00 A\n1:02:05 B\n')
+  })
 })
 
 describe('editing a video', () => {
@@ -110,5 +126,12 @@ describe('slides in the plan', () => {
     const plan = (x: Reel) => kinds(planVideo(newVideo('v', [x.id]), { [x.id]: x }, order, cards({ sceneCards: false, enabled: false }), matches, ['HTH']))
     expect(plan(r)).toEqual(['*07AQ#'])
     expect(plan({ ...r, scope: 'all' })).toEqual(['*07AQ#', '*07AQ+', 'slide'])
+  })
+})
+
+describe('one file per scene', () => {
+  it('names files after the scenes, made safe and unique', () => {
+    expect(sceneFileNames(['サーブ', 'A/B: 速攻?', 'サーブ', 'Serve', 'serve', '  ', 'end. ', 'a\\b'])).toEqual(
+      ['サーブ', 'A_B_ 速攻_', 'サーブ (2)', 'Serve', 'serve (2)', 'シーン', 'end', 'a_b'])
   })
 })

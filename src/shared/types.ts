@@ -162,6 +162,7 @@ export interface Api {
   saveVideo(v: Video): Promise<void>
   deleteVideo(id: string): Promise<void>
   chooseExportPath(defaultName: string): Promise<string | null>
+  chooseExportFolder(fileNames: string[]): Promise<{ paths: string[]; existing: string[] } | null> // one .mp4 per name
   startExport(job: ExportJob): Promise<void>
   cancelExport(): Promise<void>
   onExportEvent(cb: (e: ExportEvent) => void): () => void
@@ -235,10 +236,12 @@ export interface ExportJob {
   fpsStr: string // e.g. '30000/1001'
   items: ExportItem[]
   fadeSec?: number // fade in and out of black on every item (clips and cards)
+  chapters?: { item: number; title: string }[] // YouTube chapters starting at these items: a .txt next to the MP4
 }
 
 export type ExportEvent =
   | { type: 'progress'; ratio: number; item: number; items: number; elapsedSec: number }
-  | { type: 'done'; outPath: string; elapsedSec: number; footageSec: number; sizeBytes: number }
+  | { type: 'done'; outPath: string; elapsedSec: number; footageSec: number; sizeBytes: number
+      chaptersPath?: string; chapterCount?: number; shortChapters?: string[] } // the chapter list written, how many, those under 10 s
   | { type: 'error'; message: string }
   | { type: 'cancelled' }

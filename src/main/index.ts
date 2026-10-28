@@ -223,6 +223,18 @@ function registerIpc(): void {
     return r.canceled || !r.filePath ? null : r.filePath
   })
 
+  // One MP4 per scene: a folder, then a path in it for each file name (names come safe and unique
+  // from sceneFileNames). Returns which of them are already there, so the user can say whether to overwrite.
+  ipcMain.handle('export:chooseFolder', async (_e, names: string[]) => {
+    if (!project) throw new Error('プロジェクトが開かれていません')
+    const dir = join(project.dir, 'exports')
+    await mkdir(dir, { recursive: true })
+    const r = await dialog.showOpenDialog(win!, { title: 'シーンごとに書き出すフォルダ', defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
+    if (r.canceled || !r.filePaths[0]) return null
+    const paths = names.map(n => join(r.filePaths[0], `${n}.mp4`))
+    return { paths, existing: paths.filter(p => existsSync(p)) }
+  })
+
   // Starts in the background and returns at once; progress and the result arrive as export:event.
   ipcMain.handle('export:start', (e, job: ExportJob) => {
     if (!project) throw new Error('プロジェクトが開かれていません')

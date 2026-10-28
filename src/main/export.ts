@@ -7,7 +7,9 @@ import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
+import { chapterText } from '../shared/video'
 import { ffmpegDir } from './ffmpegPath'
+import { probe } from './media'
 
 const binDir = ffmpegDir
 
@@ -31,10 +33,14 @@ export class Exporter {
     const total = job.items.reduce((s, it) => s + dur(it), 0)
     await rm(workDir, { recursive: true, force: true })
     await mkdir(workDir, { recursive: true })
+    // The result is reported only after the work folder is cleaned up and the exporter is free, so a
+    // next export started from it (scene by scene) can't have its files removed under it.
+    let result: ExportEvent | null = null
     try {
       if (!job.items.length) throw new Error('書き出すクリップがありません')
       const enc = encoderArgs(job.fpsStr)
       const segments: string[] = []
+      const segStart: number[] = [0] // with chapters: where each segment starts in the joined file
       let doneSec = 0
       for (const [i, it] of job.items.entries()) {
         const seg = join(workDir, `seg${String(i).padStart(4, '0')}.mp4`)
@@ -51,24 +57,34 @@ export class Exporter {
           await this.ffmpeg(await clipArgs(it, video, job, workDir, i, enc), report)
         }
         segments.push(seg)
+        // With chapters, each segment's real length (whole frames) times them, so they match the file.
+        if (job.chapters) segStart.push((segStart[i] ?? 0) + (await probe(seg)).durationSec)
         doneSec += dur(it)
       }
       const list = join(workDir, 'concat.txt')
       await writeFile(list, segments.map(f => `file '${f.replace(/\\/g, '/')}'`).join('\n'))
       await this.ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', job.outPath], () => {})
       const sizeBytes = (await stat(job.outPath)).size
-      emit({ type: 'done', outPath: job.outPath, elapsedSec: elapsed(), footageSec: total, sizeBytes })
+      result = { type: 'done', outPath: job.outPath, elapsedSec: elapsed(), footageSec: total, sizeBytes }
+      if (job.chapters?.length) {
+        // "<video> チャプター.txt" beside the MP4, ready to paste into a YouTube description.
+        const ch = chapterText(job.chapters.map(c => ({ startSec: segStart[c.item], title: c.title })), segStart[segments.length])
+        const chaptersPath = job.outPath.replace(/\.mp4$/i, '') + ' チャプター.txt'
+        await writeFile(chaptersPath, ch.text, 'utf8')
+        result = { ...result, chaptersPath, chapterCount: job.chapters.length, shortChapters: ch.short }
+      }
     } catch (e) {
       if (e instanceof ExportCancelled || this.cancelled) {
         await rm(job.outPath, { force: true }) // never leave half a file behind
-        emit({ type: 'cancelled' })
+        result = { type: 'cancelled' }
       } else {
-        emit({ type: 'error', message: (e as Error).message })
+        result = { type: 'error', message: (e as Error).message }
       }
     } finally {
-      this.running = false
       this.child = null
       await rm(workDir, { recursive: true, force: true }).catch(() => {})
+      this.running = false
+      if (result) emit(result)
     }
   }
 

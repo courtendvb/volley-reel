@@ -282,7 +282,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
                 return (
                   <button className={`card-toggle${on ? ' on' : ''}`} aria-pressed={on}
                     title={`${on ? 'このマーカーの前にタイトルカードを出す（クリックで出さない）' : 'このマーカーの前にタイトルカードを出さない（クリックで出す）'}${reel.markerCards?.[m] === undefined ? '。今は動画の設定どおり' : ''}`}
-                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>{on ? 'カードあり' : 'カードなし'}</button>
+                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
                 )
               })()}
               <button className="gear" aria-label={`マーカー ${m} のタイトルカードの見た目`} title="マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"

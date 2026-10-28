@@ -63,7 +63,12 @@ export type PlanItem =
 // be played). A clip with two markers is in it twice; walking the groups tells which group each
 // occurrence belongs to. A group with only slides still plays (a scene can be just slides).
 export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem[] {
-  const out: PlanItem[] = []
+  return sceneParts(order, scene, overlay, matches, ourCodes).flatMap(p => p.items)
+}
+
+// planScene by group: each marker group that plays (its card first) and the unmarked clips, in order.
+function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): { group: Group; items: PlanItem[] }[] {
+  const out: { group: Group; items: PlanItem[] }[] = []
   const playable = new Set(order.map(c => c.id))
   const items = (g: Group, ids?: string[]): PlanItem[] => groupRows(scene, g, ids).flatMap((r): PlanItem[] =>
     r.kind === 'slide' ? [slideItem(r.slide)] : playable.has(r.id) ? [{ kind: 'clip', clip: scene.clips[r.id], sceneId: scene.id, group: g }] : [])
@@ -71,13 +76,14 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
     const list = items(g)
     if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
-      out.push({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
+      list.unshift({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
-    out.push(...list)
+    out.push({ group: g, items: list })
   }
   // Unmarked clips (and their slides) only play when the scene uses them all; order is chronological.
   const unmarked = new Set(scene.groups.none)
-  if (scene.scope === 'all') out.push(...items('none', order.filter(c => unmarked.has(c.id)).map(c => c.id)))
+  const rest = scene.scope === 'all' ? items('none', order.filter(c => unmarked.has(c.id)).map(c => c.id)) : []
+  if (rest.length) out.push({ group: 'none', items: rest })
   return out
 }
 
@@ -94,21 +100,74 @@ export function slideCard(s: Slide): Card {
 // Used by both the through-play and the export, so the two never disagree.
 export function planVideo(video: Video, scenes: Record<string, Reel>, orderOf: (s: Reel) => Clip[], overlay: OverlaySettings,
   matches: Record<string, Match>, ourCodes: string[]): PlanItem[] {
-  const out: PlanItem[] = []
-  if (overlay.titleCard.videoCard) out.push({ kind: 'card', card: videoCard(video, scenes, matches, ourCodes), durationSec: overlay.titleCard.durationSec })
+  return planVideoChapters(video, scenes, orderOf, overlay, matches, ourCodes).plan
+}
+
+// Where the video's chapters start (YouTube's chapter list): each scene, and each marker group of a
+// scene with more than one. at is an index into the plan; a scene's first chapter takes in its card,
+// and the first chapter starts the video (YouTube wants 0:00 first), so the opening card is in it.
+export interface Chapter { at: number; title: string }
+
+export function planVideoChapters(video: Video, scenes: Record<string, Reel>, orderOf: (s: Reel) => Clip[], overlay: OverlaySettings,
+  matches: Record<string, Match>, ourCodes: string[]): { plan: PlanItem[]; chapters: Chapter[] } {
+  const plan: PlanItem[] = [], chapters: Chapter[] = []
+  if (overlay.titleCard.videoCard) plan.push({ kind: 'card', card: videoCard(video, scenes, matches, ourCodes), durationSec: overlay.titleCard.durationSec })
   for (const id of video.sceneIds) {
     const s = scenes[id]
     if (!s) continue
     const order = orderOf(s)
-    const items = planScene(order, s, overlay, matches, ourCodes)
-    if (!items.length) continue
-    if (s.sceneCard ?? overlay.titleCard.sceneCards) {
-      const ids = order.map(c => c.id)
-      out.push({ kind: 'card', card: { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, ids, matches, ourCodes), annotations: s.cardAnnotations ?? [] }, durationSec: overlay.titleCard.durationSec })
+    const parts = sceneParts(order, s, overlay, matches, ourCodes)
+    if (!parts.length) continue
+    const card = sceneCard(s, order, overlay, matches, ourCodes)
+    for (const [i, p] of parts.entries()) {
+      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? 'その他' : s.markerNames[p.group] || `マーカー ${p.group}`}`
+      chapters.push({ at: chapters.length ? plan.length : 0, title: name })
+      if (i === 0 && card) plan.push(card)
+      plan.push(...p.items)
     }
-    out.push(...items)
   }
-  return out
+  return { plan, chapters }
+}
+
+// A scene as it plays inside a video: its title card (when on) and then its clips and slides.
+// Nothing when the scene has nothing to play.
+export function planSceneWithCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem[] {
+  const items = planScene(order, s, overlay, matches, ourCodes)
+  const card = sceneCard(s, order, overlay, matches, ourCodes)
+  return items.length && card ? [card, ...items] : items
+}
+
+function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem | null {
+  if (!(s.sceneCard ?? overlay.titleCard.sceneCards)) return null
+  const card: Card = { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [] }
+  return { kind: 'card', card, durationSec: overlay.titleCard.durationSec }
+}
+
+// YouTube's chapter text: "0:00 Title" per line (h:mm:ss past an hour). starts are seconds; the
+// first is always 0:00. YouTube also wants at least 3 chapters of 10 seconds or more: short says
+// which titles are under that (lengths need the video's length, totalSec).
+export function chapterText(chapters: { startSec: number; title: string }[], totalSec: number): { text: string; short: string[] } {
+  const hours = totalSec >= 3600
+  const fmt = (t: number) => {
+    const s = Math.floor(t), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = String(s % 60).padStart(2, '0')
+    return hours ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${Math.floor(s / 60)}:${ss}`
+  }
+  const starts = chapters.map((c, i) => (i === 0 ? 0 : c.startSec))
+  const short = chapters.filter((c, i) => (starts[i + 1] ?? totalSec) - starts[i] < 10).map(c => c.title)
+  return { text: chapters.map((c, i) => `${fmt(starts[i])} ${c.title}`).join('\n') + '\n', short }
+}
+
+// File names for one MP4 per scene: the scene's name with characters Windows won't take replaced,
+// and " (2)", " (3)"… on names already used (Windows ignores case).
+export function sceneFileNames(names: string[]): string[] {
+  const used = new Set<string>()
+  return names.map(n => {
+    const base = n.replace(/[\\/:*?"<>|]/g, '_').replace(/[. ]+$/, '').trim() || 'シーン'
+    let name = base
+    for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} (${i})`
+    used.add(name.toLowerCase())
+    return name
+  })
 }
 
 // The video's opening card: its name, and the match line when the whole video is one match.

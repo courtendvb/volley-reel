@@ -21,7 +21,7 @@ import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { EXPORT_HEIGHT, buildExportJob } from './exportRender'
-import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, slideCard, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
+import { addScene, cardMatch, dropScene, newVideo, planScene, planSceneWithCard, planVideo, planVideoChapters, sceneFileNames, slideCard, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
 import { CardEditBar, CardEditor, SlideEditBar } from './components/CardEditor'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
@@ -569,12 +569,31 @@ export function App() {
     const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
     return planScene(orderOf(only), only, overlay, matches, settings?.ourTeamCodes ?? [])
   }
+  // Each scene of the video with something to play, once, in the video's order: its plan as in the
+  // video (its card, then its clips) and the file name it is saved under.
+  const scenePlans = () => {
+    const { video: v, reels: rs, orderOf: of, overlay: ov, matches: ms, settings: st } = latest.current
+    if (!v) return []
+    const byId = Object.fromEntries(rs.map(s => [s.id, s]))
+    const list = [...new Set(v.sceneIds)].flatMap(id => {
+      const s = byId[id]
+      const plan = s ? planSceneWithCard(s, of(s), ov, ms, st?.ourTeamCodes ?? []) : []
+      return s && plan.some(p => p.kind === 'clip' || p.card.slide) ? [{ name: s.name, plan }] : []
+    })
+    const files = sceneFileNames(list.map(x => x.name))
+    return list.map((x, i) => ({ ...x, file: files[i] }))
+  }
   // Rebuilt when the video, its scenes or the overlay change (planSec and markerPlan read the same state).
   const exportTargets: ExportTarget[] = useMemo(() => {
     if (!video) return []
     const out: ExportTarget[] = []
     const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: `動画「${video.name}」全体`, detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}`, empty: vp.empty })
+    out.push({ key: 'video', label: `動画「${video.name}」全体`, detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}。YouTube のチャプター（.txt）も一緒に`, empty: vp.empty })
+    const each = scenePlans()
+    if (video.sceneIds.length > 1 || each.length > 1) {
+      const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
+      out.push({ key: 'scenes', label: 'シーンごとに 1 本ずつ（シーンの名前で）', detail: `${each.length} 本・${fmtLen(sec)}。フォルダを選ぶと順に書き出す`, empty: !each.length })
+    }
     if (reel) {
       const sp = planSec(currentPlan('scene'))
       out.push({ key: 'scene', label: `シーン「${reel.name}」だけ`, detail: `${sp.clips} クリップ${slidesNote(sp.slides)}・${fmtLen(sp.sec)}`, empty: sp.empty })
@@ -589,10 +608,24 @@ export function App() {
   const exportInfo = `${EXPORT_HEIGHT}p・${overlay.transition.fade ? 'フェードあり' : 'フェードなし'}・${overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? 'タイトルカードあり' : 'タイトルカードなし'}`
   const exportTarget = (key: string) => {
     if (key === 'video') { void startExport(); return }
+    if (key === 'scenes') { void exportScenes(); return }
     const sc = latest.current.reel
     if (!sc) return
     if (key === 'scene') { void startExport(undefined, { plan: currentPlan('scene'), name: `${video?.name ?? sc.name} - ${sc.name}` }); return }
     void exportMarker(sc.id, Number(key.split(':')[1]) as Marker)
+  }
+  // One MP4 per scene, named after it, into a folder picked once. They export one after another:
+  // the export events start the next (sceneRun), and an error or a cancel stops the rest.
+  // dir: the folder without asking (smoke runs only).
+  const exportScenes = async (dir?: string) => {
+    const list = scenePlans()
+    if (!list.length) return
+    const r = dir ? { paths: list.map(x => `${dir}\\${x.file}.mp4`), existing: [] } : await api.chooseExportFolder(list.map(x => x.file))
+    if (!r) return
+    if (r.existing.length && !confirm(`同じ名前のファイルが ${r.existing.length} 本あります。上書きしますか？\n${r.existing.map(p => p.split(/[\\/]/).pop()).join('\n')}`)) return
+    sceneRun.current = { items: list.map((x, i) => ({ name: x.name, plan: x.plan, path: r.paths[i] })), i: 0 }
+    const first = sceneRun.current.items[0]
+    if (!await startExport(first.path, { plan: first.plan, name: first.name })) sceneRun.current = null
   }
   // One marker group of a scene as its own MP4: its card (when on) and its clips, with the video's
   // overlays and objects. A group switched off can still be exported this way.
@@ -997,26 +1030,47 @@ export function App() {
   // The job is built here (PNG layers drawn with the preview's functions) and handed to the main
   // process, which encodes in the background; the app stays usable meanwhile.
   useEffect(() => api.onExportEvent(ev => {
-    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ev.ratio, message: `${ev.item + 1} / ${ev.items} 本目を書き出し中${eta(ev.ratio, ev.elapsedSec)}` }))
-    else if (ev.type === 'done') setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `書き出しました（${Math.round(ev.footageSec)} 秒分を ${Math.round(ev.elapsedSec)} 秒、${(ev.sizeBytes / 1e6).toFixed(1)} MB）` })
-    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${ev.message}` })
-    else setExportState({ status: 'cancelled', ratio: 0, message: '書き出しをキャンセルしました' })
+    // Scene by scene: the bar shows the whole run, the text which scene is being written.
+    const run = sceneRun.current
+    const n = run?.items.length ?? 1, at = run ? `シーン ${run.i + 1} / ${n}「${run.items[run.i].name}」: ` : ''
+    if (ev.type !== 'progress' && ev.type !== 'done') sceneRun.current = null
+    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ((run?.i ?? 0) + ev.ratio) / n, message: `${at}${ev.item + 1} / ${ev.items} 本目を書き出し中${eta(ev.ratio, ev.elapsedSec)}` }))
+    else if (ev.type === 'done' && run && run.i + 1 < n) {
+      run.i++
+      const next = run.items[run.i]
+      void startExportRef.current(next.path, { plan: next.plan, name: next.name }).then(job => { if (!job) sceneRun.current = null })
+    }
+    else if (ev.type === 'done' && run) { sceneRun.current = null; setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `シーンごとに ${n} 本を書き出しました` }) }
+    else if (ev.type === 'done') {
+      // YouTube only shows chapters when there are 3 or more and each is 10 seconds or longer.
+      const short = ev.shortChapters ?? [], few = (ev.chapterCount ?? 0) < 3
+      const why = [few ? `チャプターが ${ev.chapterCount} つだけ` : '', short.length ? `10 秒未満: ${short.join('、')}` : ''].filter(Boolean).join('・')
+      const chapters = !ev.chaptersPath ? '' : `。YouTube のチャプターを「${ev.chaptersPath.split(/[\\/]/).pop()}」に書き出しました${
+        why ? `（${why}。YouTube では 3 つ以上・各 10 秒以上でないとチャプターになりません）` : ''}`
+      setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `書き出しました（${Math.round(ev.footageSec)} 秒分を ${Math.round(ev.elapsedSec)} 秒、${(ev.sizeBytes / 1e6).toFixed(1)} MB）${chapters}` })
+    }
+    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: `${at}書き出しに失敗しました: ${ev.message}${run ? '（残りのシーンは書き出していません）' : ''}` })
+    else setExportState({ status: 'cancelled', ratio: 0, message: `書き出しをキャンセルしました${run ? `（${run.i} / ${n} 本は書き出し済み）` : ''}` })
   }), [])
+  const sceneRun = useRef<{ items: { name: string; plan: PlanItem[]; path: string }[]; i: number } | null>(null)
 
-  // The whole video by default; part of it (one marker group) when a plan and a file name are given.
+  // The whole video by default, with its YouTube chapters (a .txt beside the MP4); part of it (a
+  // scene, one marker group) when a plan and a file name are given.
   const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
-    const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf } = latest.current
-    const plan = part?.plan ?? currentPlan('video')
+    const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf, orderOf: of, settings: st } = latest.current
+    const whole = !part && v ? planVideoChapters(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, st?.ourTeamCodes ?? []) : null
+    const plan = part?.plan ?? whole?.plan ?? []
     if (!v || !plan.some(p => p.kind === 'clip' || p.card.slide)) return null
     const outPath = outPathArg ?? await api.chooseExportPath(part?.name ?? v.name)
     if (!outPath) return null
-    setExportState({ status: 'preparing', ratio: 0, message: 'オーバーレイを準備しています' })
+    // Between the scenes of a scene-by-scene run the bar stays where it is.
+    setExportState(s => ({ status: 'preparing', ratio: sceneRun.current ? s?.ratio ?? 0 : 0, message: 'オーバーレイを準備しています' }))
     try {
       const byId = Object.fromEntries(rs.map(s => [s.id, s]))
       const job = await buildExportJob(plan, ov,
         { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms,
           sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [],
-          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []) }, outPath)
+          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []) }, outPath, whole?.chapters)
       await api.startExport(job)
       return job
     } catch (e) {
@@ -1024,11 +1078,13 @@ export function App() {
       return null
     }
   }, [currentPlan])
+  const startExportRef = useRef(startExport)
+  startExportRef.current = startExport
 
   // ---- dev self-check (VR_SMOKE): only loaded when the main process runs one (see smoke.ts)
   useEffect(() => {
     if (!SMOKE) return
-    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
+    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
     void import('./smoke').then(m => m.installSmoke(host))
   }, [jump, loadProject, playThrough, activateClip, updateReel, updateVideo, overlayData, setOverlay, startExport, currentPlan])
 

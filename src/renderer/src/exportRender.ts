@@ -4,7 +4,7 @@ import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import type { CaptionData, OverlaySettings, ScoreboardData } from '../../shared/overlay'
 import { drawCaption, drawCard, drawScoreboard } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
-import type { PlanItem } from '../../shared/video'
+import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
 import { logoImage, preloadAssets, preloadLogos } from './assets'
@@ -30,7 +30,8 @@ export function exportFormat(clips: Clip[], matches: Record<string, Match>): { w
   return { width, height: EXPORT_HEIGHT, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
 }
 
-export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string): Promise<ExportJob> {
+// chapters: where YouTube chapters start, as plan indexes (planVideoChapters); kept on the job as item indexes.
+export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[]): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
@@ -40,18 +41,20 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
   const slides = plan.flatMap(p => (p.kind === 'card' && p.card.slide?.bg.kind === 'image' ? [p.card.slide.bg.assetId] : []))
   const images = await preloadAssets([...slides, ...all.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
   try {
-    return await buildItems(plan, overlay, d, outPath, W, H, fpsStr, images.lookup)
+    return await buildItems(plan, overlay, d, outPath, W, H, fpsStr, images.lookup, chapters)
   } finally {
     images.release()
   }
 }
 
-async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, W: number, H: number, fpsStr: string, assetImage: ImageLookup): Promise<ExportJob> {
+async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, W: number, H: number, fpsStr: string, assetImage: ImageLookup, chapters?: Chapter[]): Promise<ExportJob> {
   // One canvas for every layer of the job (each layer is drawn, encoded to PNG, then cleared).
   const png = pngOn(new OffscreenCanvas(W, H))
   await preloadLogos(plan.map(p => (p.kind === 'card' ? p.card.opp : null)))
   const items: ExportItem[] = []
+  const firstItem: number[] = [] // per plan index: the job item it starts at (a skipped clip starts at the next)
   for (const p of plan) {
+    firstItem.push(items.length)
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
         drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
@@ -63,7 +66,11 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     if (!r) continue
     items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, p.group, r, overlay, d, W, H, png, assetImage) })
   }
-  return { outPath, width: W, height: H, fpsStr, items, ...(overlay.transition.fade ? { fadeSec: overlay.transition.durationSec } : {}) }
+  // Chapters left with nothing in them (every clip skipped) are dropped.
+  const marks = (chapters ?? []).map(c => ({ item: firstItem[c.at] ?? items.length, title: c.title }))
+    .filter((c, i, all) => c.item < items.length && (all[i + 1]?.item ?? items.length) > c.item)
+  return { outPath, width: W, height: H, fpsStr, items, ...(overlay.transition.fade ? { fadeSec: overlay.transition.durationSec } : {}),
+    ...(marks.length ? { chapters: marks } : {}) }
 }
 
 // One layer for everything shown for the whole clip (auto overlays first, annotations on top),

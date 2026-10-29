@@ -192,7 +192,8 @@ export function ReelPanel(p: Props) {
           <span className="clip-main">
             {multiMatch && <span className="muted">{inf.matchLabel} </span>}
             <span className="muted">S{r.play.setNum} {pad2(r.play.score.home)}-{pad2(r.play.score.away)} </span>
-            <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill}`}>{playLabel(r.play.skill, r.play.effect)}</span>
+            {/* The skill letter and evaluation sign (A#) to keep rows short; the full name on hover. */}
+            <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill} skill-short`} title={playLabel(r.play.skill, r.play.effect)}>{r.play.skill}{r.play.effect}</span>
             {r.play.skill === 'A' && r.combo && <span className="combo" title={r.comboName ?? undefined}> {r.combo}</span>}
           </span>
         )}

@@ -651,9 +651,13 @@ export function installSmoke(h: SmokeHost): void {
     // One marker group alone as an MP4 (its card and its clips).
     let markerExport: unknown = null
     if (opts.videoExportTo) {
+      // Exported with the marker number off: its card shows a slim stripe instead (see -marker1.mp4).
+      const tc = latest.current.overlay.titleCard
+      setOverlay({ ...latest.current.overlay, titleCard: { ...tc, showMarkerNumber: false } }); await sleep(300)
       const job = await exportMarker(a.id, 1, opts.videoExportTo.replace(/\.mp4$/, '-marker1.mp4'))
       await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'marker export')
       markerExport = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind) }
+      setOverlay({ ...latest.current.overlay, titleCard: { ...latest.current.overlay.titleCard, showMarkerNumber: true } }); await sleep(300)
     }
     // One MP4 per scene of the video, one after another, into the export's folder.
     let scenesExport: unknown = null
@@ -992,6 +996,10 @@ export function installSmoke(h: SmokeHost): void {
     const other = anns(1)
     const or = other.find(a => a.kind === 'rect') as { x: number; showFrom?: number } | undefined
 
+    // F / D: the next / previous clip of the scene (from the second clip: back to the first, and on).
+    const keyStep = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })); await sleep(300); return ids.indexOf(latest.current.activeClipId ?? '') }
+    const fdSteps = [await keyStep('d'), await keyStep('f'), await keyStep('F')] // 0, 1, then stays at the last
+
     // A picture copied after the objects (a screenshot) is what Ctrl+V pastes; copying objects again
     // makes Ctrl+V paste objects again.
     await window.api.smokeClipboardImage!('build/icon.png')
@@ -1005,7 +1013,7 @@ export function installSmoke(h: SmokeHost): void {
     const afterObjects = anns(1).filter(a => a.kind === 'image').length
     const pasteAfterCopy = { added: anns(1).length - beforeObjects, images: afterObjects }
     return {
-      pastedImage: { w: +image.w.toFixed(3), h: +image.h.toFixed(3), selected: imageSelected }, pasteAfterCopy,
+      fdSteps, pastedImage: { w: +image.w.toFixed(3), h: +image.h.toFixed(3), selected: imageSelected }, pasteAfterCopy,
       notice, sameCount: same.length, pastedKinds: pasted.map(a => a.kind).sort(), pastedX: pr?.x, pastedShowFromRel: pr?.showFrom !== undefined ? +(pr.showFrom - in1).toFixed(2) : null,
       newGroup: !!pr?.groupId && pr.groupId !== 'G' && pasted.every(a => a.groupId === pr.groupId), selectedPasted,
       otherCount: other.length, otherX: or?.x, otherShowFromRel: or?.showFrom !== undefined ? +(or.showFrom - in2).toFixed(2) : null,
@@ -1034,7 +1042,8 @@ export function installSmoke(h: SmokeHost): void {
 
     await key('a'); await stroke([[0.3, 0.3], [0.4, 0.4], [0.5, 0.5]])
     await key('r'); await stroke([[0.8, 0.4], [0.7, 0.3], [0.6, 0.2]])
-    await key('f'); await stroke([[0.2, 0.6], [0.25, 0.62], [0.3, 0.6], [0.35, 0.65]])
+    document.querySelector<HTMLButtonElement>('[role=radio][title="フリーハンド"]')!.click(); await sleep(80) // freehand has no key
+    await stroke([[0.2, 0.6], [0.25, 0.62], [0.3, 0.6], [0.35, 0.65]])
     await key('t'); await stroke([[0.1, 0.8]])
     const input = await waitFor(() => document.querySelector<HTMLTextAreaElement>('.ann-text-input'), 5000, 'text input')
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'Watch the block')

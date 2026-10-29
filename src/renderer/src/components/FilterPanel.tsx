@@ -68,10 +68,12 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       <Chips label="スキル" values={Object.keys(SKILLS)} selected={f.skills} onChange={skills => set({ skills })} render={k => SKILLS[k]} />
       <Chips label="評価" values={EFFECT_KEYS} selected={f.effects} onChange={effects => set({ effects })}
         render={k => effectHint ? `${k} ${effectHint[k]}` : k} />
-      <div className="filter-row two">
-        <Chips label="セット" values={[1, 2, 3, 4, 5]} selected={f.sets} onChange={sets => set({ sets })} />
-        <Chips label="ローテ" values={[1, 2, 3, 4, 5, 6]} selected={f.rots} onChange={rots => set({ rots })} />
-      </div>
+      <Chips label="セット" values={[1, 2, 3, 4, 5]} selected={f.sets} onChange={sets => set({ sets })} />
+      {/* Rotations by team, whoever made the play: ours, and the opponent's right under it. */}
+      <Chips label="ローテ" values={[1, 2, 3, 4, 5, 6]} selected={f.rots} onChange={rots => set({ rots })}
+        title={() => `${targetCode || '対象チーム'}のローテーション`} />
+      <Chips label="相手ローテ" values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
+        title={() => '相手チームのローテーション'} />
       <div className="filter-row">
         <button className="link" aria-expanded={detailOpen} onClick={() => setDetailOpen(o => !o)}>
           {detailOpen ? '▾' : '▸'} 詳細（テンポ・コンビ・打ち方）{detailCount ? `（${detailCount}）` : ''}</button>

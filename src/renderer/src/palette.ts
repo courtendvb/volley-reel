@@ -38,6 +38,14 @@ export async function removePaletteItem(id: string): Promise<void> {
   set(await api.removePaletteItem(id))
 }
 
+export async function movePaletteItem(id: string, to: number): Promise<void> {
+  set(await api.movePaletteItem(id, to))
+}
+
+export async function lockPaletteItem(id: string, locked: boolean): Promise<void> {
+  set(await api.lockPaletteItem(id, locked))
+}
+
 // The item's objects with new ids (and new group ids), ready to add to a clip or a card.
 export async function usePaletteItem(id: string): Promise<Annotation[]> {
   return freshIds(await api.usePaletteItem(id))

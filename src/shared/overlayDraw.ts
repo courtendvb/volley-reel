@@ -127,8 +127,10 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   const match = s.showMatch && d.match ? d.match : null
   const x = W * L.x, top = H * L.y
   const lr = logo ? logoRatio(logo) : 0 // width / height
+  // Without the number (showMarkerNumber off) its block is a slim accent stripe, as on scene cards.
+  const showNum = s.showMarkerNumber !== false
   const layout = (q: number) => {
-    const numW = measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q
+    const numW = showNum ? measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q : 16 * q
     const plateW = Math.max(...names.map(n => measure(ctx, n, font(28 * q), 0.08 * 28 * q))) + 46 * q
     const logoH = (match ? 22 * q : 0) + (46 + 34 * more) * q
     const matchW = match ? measure(ctx, match, font(12 * q, 400), 0.4 * 12 * q) : 0
@@ -147,8 +149,10 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   const px = x + numW - 6 * q
   fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 14 * q, y + h], [px, y + h]])
   fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
-  const nw = measure(ctx, String(d.marker), numFont, 0)
-  text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
+  if (showNum) {
+    const nw = measure(ctx, String(d.marker), numFont, 0)
+    text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
+  }
   names.forEach((n, i) => text(ctx, n, px + slant + 14 * q, y + h / 2 + (i - more / 2) * 34 * q, nameFont, TEXT, 0.08 * 28 * q))
   if (logo) ctx.drawImage(logo, x + total - logoH * lr, top, logoH * lr, logoH) // as tall as the whole title
   ctx.restore()

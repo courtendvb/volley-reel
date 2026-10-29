@@ -194,7 +194,11 @@ export interface Api {
   // are copied into the library, and into the project again when the object is used.
   getPalette(): Promise<Palette>
   setPaletteColors(colors: string[]): Promise<Palette>
-  savePaletteItem(name: string, annotations: Annotation[]): Promise<Palette>
+  savePaletteItem(name: string, annotations: Annotation[], category?: string | null): Promise<Palette>
+  addPaletteCategory(name: string): Promise<Palette>
+  renamePaletteCategory(id: string, name: string): Promise<Palette>
+  removePaletteCategory(id: string): Promise<Palette> // only an empty one
+  setPaletteItemCategory(id: string, category: string | null): Promise<Palette>
   removePaletteItem(id: string): Promise<Palette> // a locked item is kept
   movePaletteItem(id: string, to: number): Promise<Palette>
   lockPaletteItem(id: string, locked: boolean): Promise<Palette>
@@ -206,6 +210,7 @@ export interface Api {
   smokeRelocate?: (id: string, part: MissingPart, path: string) => Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string }>
   smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
   smokeClipboardImage?: (path: string) => Promise<void>
+  smokeShot?: (path: string) => Promise<void>
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
@@ -216,8 +221,9 @@ export interface Api {
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 
-export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[]; locked?: boolean } // locked: can't be removed
-export interface Palette { colors: string[]; items: PaletteItem[] }
+export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[]; locked?: boolean; category?: string } // locked: can't be removed
+export interface PaletteCategory { id: string; name: string }
+export interface Palette { colors: string[]; items: PaletteItem[]; categories?: PaletteCategory[] } // categories: the tabs, in order
 
 // A picture is copied into assets/ right away; a PDF's pages are rendered by the renderer.
 export type SlideFile = { path: string; name: string; mtimeMs: number } & ({ kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array })

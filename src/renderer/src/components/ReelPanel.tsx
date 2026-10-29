@@ -55,7 +55,7 @@ const DT_SLIDE = 'application/x-vr-slide'
 export function ReelPanel(p: Props) {
   const { reel } = p
   const [dragOver, setDragOver] = useState<{ key: string; after: boolean } | null>(null)
-  const [menu, setMenu] = useState<{ spot: SlideSpot; x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number } | null>(null)
   useEffect(() => {
     if (!menu) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
@@ -130,23 +130,16 @@ export function ReelPanel(p: Props) {
     if (dragging(e, DT_SLIDE)) { onDropSlide(e, g, rows, at); return }
     if (g !== 'none') onDropClip(e, g, rows.slice(0, at).filter(r => r.kind === 'clip').length)
   }
-  const openMenu = (e: MouseEvent, spot: SlideSpot) => {
+  // Slides go in by right-click: on a row, below it; on a group's header, at the top of the group.
+  const openMenu = (e: MouseEvent, spot: SlideSpot, where: string) => {
     e.preventDefault(); e.stopPropagation()
-    setMenu({ spot, x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 130) })
+    setMenu({ spot, where, x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 130) })
   }
-  // Between rows: a thin strip that shows ＋ on hover, to put slides there.
-  const gap = (g: Group, rows: Row[], k: number) => (
-    <div key={`gap${k}`} className="slide-gap">
-      <button title="ここにスライドを入れる（右クリックでも）" aria-label="ここにスライドを入れる" onClick={e => openMenu(e, spotAt(rows, g, k))}>＋</button>
-    </div>
-  )
+  const BELOW = 'この行の下にスライドを入れる', AT_TOP = 'グループの先頭にスライドを入れる'
   const rowsOf = (g: Group, ids: string[]) => {
     const rows = groupRows(reel, g, ids)
     let clipNo = 0
-    return [gap(g, rows, 0), ...rows.flatMap((r, k) => [
-      r.kind === 'clip' ? clipRow(reel.clips[r.id], g, clipNo++, rows, k) : slideRow(r.slide, g, rows, k),
-      gap(g, rows, k + 1),
-    ])]
+    return rows.map((r, k) => (r.kind === 'clip' ? clipRow(reel.clips[r.id], g, clipNo++, rows, k) : slideRow(r.slide, g, rows, k)))
   }
 
   const slideRow = (s: Slide, g: Group, rows: Row[], k: number) => (
@@ -156,7 +149,7 @@ export function ReelPanel(p: Props) {
       onDragStart={e => { e.dataTransfer.setData(DT_SLIDE, s.id); e.dataTransfer.effectAllowed = 'move' }}
       onDragOver={e => { if (!takes(e, g)) return; e.preventDefault(); e.stopPropagation(); setDragOver({ key: `s${s.id}`, after: lower(e) }) }}
       onDrop={e => dropOnRow(e, g, rows, k)}
-      onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1))}
+      onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
       onClick={() => p.onEditSlide(s.id)}
       title="クリックで動画の画面に出して編集（文字・図形を置く・秒数）"
     >
@@ -189,7 +182,7 @@ export function ReelPanel(p: Props) {
           if (dragging(e, DT_SLIDE)) { dropOnRow(e, g, rows, k); return }
           if (g !== 'none') onDropClip(e, g, i + (dragOver?.key === c.id && dragOver.after ? 1 : 0))
         }}
-        onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1))}
+        onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
         onClick={() => p.onActivate(c, g)}
       >
         <span className="grip" aria-hidden title="ドラッグで並べ替え・マーカーのグループへ移動">⠿</span>
@@ -262,7 +255,8 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
         {reel.groupOrder.map(m => (
           <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver?.key === `g${m}` ? ' drop-into' : ''}${lineClass(`h${m}`)}`}
             onDragOver={overGroup(m)} onDrop={e => onDropGroup(e, m)}>
-            <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}>
+            <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}
+              onContextMenu={e => openMenu(e, spotAt(groupRows(reel, m), m, 0), AT_TOP)}>
               <span className="grip" aria-hidden title="ドラッグでグループの順番を変える">⠿</span>
               {/* The number itself switches the group on (its color) or off (grey: not played or exported). */}
               <button className="swatch swatch-toggle" style={reel.markerOff?.[m] ? undefined : { background: MARKER_COLORS[m] }}
@@ -297,7 +291,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
             if (dragging(e, DT_SLIDE)) { const rows = groupRows(reel, 'none', none.map(c => c.id)); onDropSlide(e, 'none', rows, rows.length); return }
             onDropClip(e, 'none')
           }}>
-          <header className="group-head">
+          <header className="group-head" onContextMenu={e => openMenu(e, spotAt(groupRows(reel, 'none', none.map(c => c.id)), 'none', 0), AT_TOP)}>
             <span className="swatch none">–</span>
             <span className="none-title">マーカーなし（一覧の順）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
             <span className="muted">{none.length}</span>
@@ -309,7 +303,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
         <>
           <div className="menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
           <div className="slide-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
-            <div className="slide-menu-title">ここにスライドを入れる</div>
+            <div className="slide-menu-title">{menu.where}</div>
             {([['blank', '無地のスライド', 'タイトルカードと同じ色の無地。文字や図形を置いて説明に使う'],
               ['file', 'PDF・画像を読み込む…', 'PowerPoint から PDF で書き出したもの。全ページが 1 枚ずつ入る'],
               ['frame', '今の画面を静止画に', '動画の今のコマを背景にして、矢印などを描く']] as const).map(([how, label, hint]) => (
@@ -319,7 +313,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           </div>
         </>
       )}
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でタグ（並べ替え用のメモ）、「タグ順」でグループをタグの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行の間の ＋（または右クリック）でスライドを入れる。</p>
+      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でタグ（並べ替え用のメモ）、「タグ順」でグループをタグの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、グループの見出しを右クリックで先頭にスライドを入れる。</p>
     </aside>
   )
 }

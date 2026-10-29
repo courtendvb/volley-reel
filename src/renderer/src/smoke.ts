@@ -29,7 +29,7 @@ export interface SmokeOpts {
   video?: boolean
   obj?: boolean
   copy?: boolean // Ctrl+C / Ctrl+V of objects within a clip and onto another clip
-  slides?: boolean // slides: the ＋ menu, objects on a slide, PDF pages, a frame, through-play, reading again, export
+  slides?: boolean // slides: the right-click menu, objects on a slide, PDF pages, a frame, through-play, reading again, export
   assets?: string[] // with obj / slides: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -171,7 +171,7 @@ export function installSmoke(h: SmokeHost): void {
   // Objects through real pointer, key and form events: a polygon by clicks, a box resized by its
   // corner, an arrow end dragged, a vertex inserted from a midpoint and one deleted, then fill,
   // transparency, dash, arrow heads and a boxed text set from the format panel; optional export.
-  // Slides: a blank one through the ＋ between rows (it opens for editing; a rectangle drawn on it,
+  // Slides: a blank one through the right-click menu (it opens for editing; a rectangle drawn on it,
   // its seconds changed), PDF pages / pictures (copied into the project first) at the group's head,
   // a frame of the video, a drag, the plan and a through-play, a changed file read again, export.
   const smokeSlides = async (res: PlayRef[], opts: SmokeOpts) => {
@@ -188,10 +188,19 @@ export function installSmoke(h: SmokeHost): void {
     const rows = () => groupRows(scene(), 1).map(r => (r.kind === 'clip' ? `clip${ids.indexOf(r.id)}` : r.slide.bg.kind === 'blank' ? 'blank' : r.slide.bg.source ? `file:${r.slide.bg.source.page ?? r.slide.bg.source.name}` : 'frame'))
     const log: Record<string, unknown> = {}
 
-    // The ＋ under the first clip (gaps: head, after clip 0, after clip 1), then 無地のスライド.
-    const gaps = [...document.querySelectorAll<HTMLButtonElement>('.reel-groups .group:first-child .slide-gap button')]
-    log.gaps = gaps.length
-    gaps[1].click(); await sleep(150)
+    // Right-click: on the group's header it offers the top of the group (closed again with Esc); on
+    // the first clip, below it, then 無地のスライド.
+    const rightClick = async (el: Element) => {
+      const b = el.getBoundingClientRect()
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 40, clientY: b.top + b.height / 2 })); await sleep(150)
+    }
+    await rightClick(document.querySelector('.reel-groups .group:first-child .group-head')!)
+    log.headMenu = document.querySelector('.slide-menu-title')?.textContent
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100)
+    log.headMenuClosed = !document.querySelector('.slide-menu')
+    log.gapButtons = document.querySelectorAll('.slide-gap').length // the hover ＋ between rows is gone
+    await rightClick(document.querySelector('.reel-groups .group:first-child .clip-row')!)
+    log.rowMenu = document.querySelector('.slide-menu-title')?.textContent
     const items = [...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].map(b => `${b.textContent}${b.disabled ? '(off)' : ''}`)
     log.menu = items
     ;[...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].find(b => b.textContent === '無地のスライド')!.click()

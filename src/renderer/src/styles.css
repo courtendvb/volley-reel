@@ -509,13 +509,7 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .slide-row:hover { background: var(--warn-bg); }
 .slide-row.active { background: var(--primary-light); }
 .slide-icon { flex: none; color: var(--amber); font-size: 12px; }
-.slide-gap { position: relative; height: 0; z-index: 1; }
-.slide-gap::after { content: ""; position: absolute; left: 0; right: 0; top: -5px; height: 10px; }
-.slide-gap::before { content: ""; position: absolute; left: 8px; right: 8px; top: -1px; height: 2px; background: var(--primary); opacity: 0; pointer-events: none; }
-.slide-gap button { position: absolute; z-index: 1; left: 50%; top: -8px; transform: translateX(-50%); width: 22px; height: 16px; padding: 0; border-radius: 8px;
   font-size: 11px; line-height: 14px; color: var(--primary); border-color: var(--primary); opacity: 0; transition: opacity 0.1s; }
-.slide-gap:hover button, .slide-gap button:focus-visible { opacity: 1; }
-.slide-gap:hover::before { opacity: 0.5; }
 .menu-backdrop { position: fixed; inset: 0; z-index: 50; }
 .slide-menu { position: fixed; z-index: 51; display: flex; flex-direction: column; min-width: 210px; padding: 4px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18); }

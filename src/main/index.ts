@@ -465,7 +465,7 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_VIDEO=1 [VR_SMOKE_EXPORT=<out.mp4>]: videos of shared scenes, cards, undo, export]
 // [VR_SMOKE_OBJ=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.png;b.pdf>]: object handles, polygon
 //  and triangle drawing, edit points, format panel, inserted pictures, export]
-// [VR_SMOKE_SLIDES=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.pdf;b.png>]: the ＋ menu, objects on a slide,
+// [VR_SMOKE_SLIDES=1 [VR_SMOKE_EXPORT=<out.mp4>] [VR_SMOKE_ASSETS=<a.pdf;b.png>]: the right-click menu, objects on a slide,
 //  PDF pages and pictures, a frame, drag, through-play, a changed file read again, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]

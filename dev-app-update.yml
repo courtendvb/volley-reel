@@ -1,0 +1,5 @@
+# Only for VR_UPDATE_TEST=1 in development (src/main/updater.ts): look for updates on a local server
+# instead of the releases repository, e.g. a folder with an installer and a latest.yml claiming a
+# higher version, served on port 8766.
+provider: generic
+url: http://127.0.0.1:8766/

@@ -12,6 +12,7 @@ import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
 import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
 import { Exporter } from './export'
+import { installUpdate, startUpdates } from './updater'
 import { Library } from './library'
 import { Project } from './project'
 import { ffmpegDir } from './ffmpegPath'
@@ -33,6 +34,7 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 let library: Library | null = null
 let project: Project | null = null
 const exporter = new Exporter()
+let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
 
@@ -101,7 +103,7 @@ app.whenReady().then(async () => {
   // with a timeout so a stuck renderer can't keep the window open. A running export is cancelled.
   let flushed = false
   win.on('close', e => {
-    if (flushed || !win || win.webContents.isDestroyed()) return
+    if (flushed || updating || !win || win.webContents.isDestroyed()) return
     e.preventDefault()
     exporter.cancel()
     const done = () => { if (flushed) return; flushed = true; clearTimeout(timer); win?.close() }
@@ -119,6 +121,7 @@ app.whenReady().then(async () => {
     if (process.env.VR_SMOKE_MINIMIZE) win.minimize() // reproduces the hidden-window media pause
     await smoke(win, process.env.VR_SMOKE)
   }
+  startUpdates(win)
 })
 
 app.on('window-all-closed', () => app.quit())
@@ -252,6 +255,9 @@ function registerIpc(): void {
   ipcMain.handle('export:cancel', () => exporter.cancel())
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
+  ipcMain.handle('app:version', () => app.getVersion())
+  // The renderer has saved: no flush on the way out, straight into the installer.
+  ipcMain.handle('update:install', () => { updating = installUpdate() })
 
   const lib = () => { if (!library) throw new Error('先に倉庫を選んでください'); return library }
   const assetsDir = () => { if (!project) throw new Error('プロジェクトが開かれていません'); return join(project.dir, 'assets') }

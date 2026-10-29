@@ -166,6 +166,9 @@ export interface Api {
   startExport(job: ExportJob): Promise<void>
   cancelExport(): Promise<void>
   onExportEvent(cb: (e: ExportEvent) => void): () => void
+  onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
+  installUpdate(): Promise<void> // after saving: restart into the downloaded version
+  appVersion(): Promise<string>
   showInFolder(path: string): Promise<void>
   takeNotices(): Promise<string[]>
   // Images for annotations, kept in the project's assets/ folder. Picking an image copies it there;
@@ -243,6 +246,9 @@ export interface ExportJob {
   fadeSec?: number // fade in and out of black on every item (clips and cards)
   chapters?: { item: number; title: string }[] // YouTube chapters starting at these items: a .txt next to the MP4
 }
+
+// A newer version for an installed copy: found, downloading, then ready to restart into.
+export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
 
 export type ExportEvent =
   | { type: 'progress'; ratio: number; item: number; items: number; elapsedSec: number }

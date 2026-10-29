@@ -91,12 +91,15 @@ button:disabled { opacity: 0.6; cursor: default; }
   padding: 8px 14px; background: var(--surface); border-bottom: 1px solid var(--border);
 }
 .brand { font-size: 15px; margin-right: 6px; }
+.app-version { font-size: 11px; color: var(--faint); margin-left: -6px; }
 .path { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spacer { flex: 1; }
 
 .banner { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--primary-light); }
 .banner progress { width: 240px; }
 .banner.error { background: var(--danger-bg); color: var(--danger-text); cursor: pointer; }
+.banner.update { background: var(--ok-bg); color: var(--ok-text); }
+.banner.update button { padding: 2px 12px; }
 
 .empty { margin: auto; text-align: center; max-width: 460px; }
 .empty h2 { font-size: 18px; font-weight: 600; }

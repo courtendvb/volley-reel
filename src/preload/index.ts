@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Api, ExportEvent, ImportProgress } from '../shared/types'
+import type { Api, ExportEvent, ImportProgress, UpdateEvent } from '../shared/types'
 
 const api: Api = {
   getProject: () => ipcRenderer.invoke('project:get'),
@@ -26,6 +26,13 @@ const api: Api = {
   chooseExportFolder: names => ipcRenderer.invoke('export:chooseFolder', names),
   startExport: job => ipcRenderer.invoke('export:start', job),
   cancelExport: () => ipcRenderer.invoke('export:cancel'),
+  onUpdateEvent: cb => {
+    const h = (_e: unknown, ev: UpdateEvent) => cb(ev)
+    ipcRenderer.on('update:event', h)
+    return () => ipcRenderer.off('update:event', h)
+  },
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  appVersion: () => ipcRenderer.invoke('app:version'),
   onExportEvent: cb => {
     const h = (_e: unknown, ev: ExportEvent) => cb(ev)
     ipcRenderer.on('export:event', h)

@@ -172,6 +172,10 @@ export interface Api {
   // picking a PDF returns its bytes, and the renderer saves page 1 as a PNG.
   pickAsset(): Promise<PickedAsset | null>
   saveAsset(png: Uint8Array): Promise<string>
+  // Ctrl+V: what was copied last (objects in the app, a picture elsewhere), and the picture saved as an asset.
+  clipboardKind(): Promise<'objects' | 'image' | 'other'>
+  markObjectsCopied(): Promise<void>
+  saveClipboardImage(): Promise<{ assetId: string; width: number; height: number } | null>
   readAsset(id: string): Promise<Uint8Array>
   smokePickAsset?: (path: string) => Promise<PickedAsset | null>
   // Slides: files picked as slides (several at once), read again by path when one changes, their
@@ -196,6 +200,7 @@ export interface Api {
   readLogo(code: string): Promise<Uint8Array | null>
   smokeRelocate?: (id: string, part: MissingPart, path: string) => Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string }>
   smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
+  smokeClipboardImage?: (path: string) => Promise<void>
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).

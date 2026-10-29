@@ -199,7 +199,10 @@ export function App() {
   const [updateBusy, setUpdateBusy] = useState(false)
   useEffect(() => {
     void api.appVersion().then(setAppVersion)
-    return api.onUpdateEvent(ev => setUpdate(u => (u?.type === 'ready' ? u : ev)))
+    return api.onUpdateEvent(ev => {
+      if (ev.type === 'error') { setUpdateBusy(false); setUpdateLater(false) }
+      setUpdate(u => (u?.type === 'ready' && ev.type !== 'error' ? u : ev))
+    })
   }, [])
   const restartToUpdate = async () => {
     const st = latest.current.exportState?.status
@@ -1223,6 +1226,15 @@ export function App() {
           新しいバージョン {update.version} の準備ができました
           <button className="primary" disabled={updateBusy} onClick={() => void restartToUpdate()}>再起動して更新</button>
           <button className="link" onClick={() => setUpdateLater(true)} title="閉じても、アプリを終了するときに更新されます">あとで</button>
+        </div>
+      )}
+      {update?.type === 'error' && !updateLater && (
+        // The installer couldn't be started: the download page always works (as installing by hand).
+        <div className="banner update-failed" role="alert">
+          更新を入れられませんでした: {update.message}
+          <button className="primary" onClick={() => void api.updateHelp('page')}>ダウンロードページを開く</button>
+          <button className="link" onClick={() => void api.updateHelp('log')} title="原因を調べるための記録（update.log）。送ってもらえると原因が分かります">記録を見る</button>
+          <button className="link" onClick={() => setUpdateLater(true)}>閉じる</button>
         </div>
       )}
       {error && <div className="banner error" onClick={() => setError(null)}>{error}</div>}

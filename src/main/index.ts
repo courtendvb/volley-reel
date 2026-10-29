@@ -12,7 +12,7 @@ import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
 import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
 import { Exporter } from './export'
-import { installUpdate, startUpdates } from './updater'
+import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './updater'
 import { Library } from './library'
 import { Project } from './project'
 import { ffmpegDir } from './ffmpegPath'
@@ -260,6 +260,7 @@ function registerIpc(): void {
   ipcMain.handle('app:version', () => app.getVersion())
   // The renderer has saved: no flush on the way out, straight into the installer.
   ipcMain.handle('update:install', () => { updating = installUpdate() })
+  ipcMain.handle('update:help', (_e, what: 'page' | 'log') => (what === 'page' ? shell.openExternal(RELEASES_PAGE) : shell.showItemInFolder(updateLogPath())))
 
   const lib = () => { if (!library) throw new Error('先に倉庫を選んでください'); return library }
   const assetsDir = () => { if (!project) throw new Error('プロジェクトが開かれていません'); return join(project.dir, 'assets') }

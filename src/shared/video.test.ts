@@ -75,9 +75,14 @@ describe('videos made of scenes', () => {
 describe('YouTube chapters', () => {
   it('writes m:ss (h:mm:ss past an hour), the first at 0:00, and names chapters under 10 seconds', () => {
     const r = chapterText([{ startSec: 2, title: 'A' }, { startSec: 65.9, title: 'B' }, { startSec: 70, title: 'C' }], 130)
-    expect(r.text).toBe('0:00 A\n1:05 B\n1:10 C\n')
+    expect(r.text.split('\n\n')[0]).toBe('0:00 A\n1:05 B\n1:10 C')
     expect(r.short).toEqual(['B'])
-    expect(chapterText([{ startSec: 0, title: 'A' }, { startSec: 3725, title: 'B' }], 4000).text).toBe('0:00:00 A\n1:02:05 B\n')
+    expect(chapterText([{ startSec: 0, title: 'A' }, { startSec: 3725, title: 'B' }], 4000).text.split('\n\n')[0]).toBe('0:00:00 A\n1:02:05 B')
+  })
+
+  it('adds a link to each chapter, the video ID left as 11 〇 to replace', () => {
+    const r = chapterText([{ startSec: 2, title: 'A' }, { startSec: 65.9, title: 'B' }], 130)
+    expect(r.text.split('\n\n')[1]).toBe('A\nhttps://youtu.be/〇〇〇〇〇〇〇〇〇〇〇?t=0\nB\nhttps://youtu.be/〇〇〇〇〇〇〇〇〇〇〇?t=65\n')
   })
 })
 

@@ -147,6 +147,10 @@ function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Re
 // YouTube's chapter text: "0:00 Title" per line (h:mm:ss past an hour). starts are seconds; the
 // first is always 0:00. YouTube also wants at least 3 chapters of 10 seconds or more: short says
 // which titles are under that (lengths need the video's length, totalSec).
+// After a blank line, each chapter's title and a link to it, with the video's ID left as 〇×11:
+// once the video is up, replacing 〇〇〇〇〇〇〇〇〇〇〇 with its ID makes them work.
+export const VIDEO_ID_MARK = '〇'.repeat(11) // a YouTube video ID is 11 characters
+
 export function chapterText(chapters: { startSec: number; title: string }[], totalSec: number): { text: string; short: string[] } {
   const hours = totalSec >= 3600
   const fmt = (t: number) => {
@@ -155,7 +159,9 @@ export function chapterText(chapters: { startSec: number; title: string }[], tot
   }
   const starts = chapters.map((c, i) => (i === 0 ? 0 : c.startSec))
   const short = chapters.filter((c, i) => (starts[i + 1] ?? totalSec) - starts[i] < 10).map(c => c.title)
-  return { text: chapters.map((c, i) => `${fmt(starts[i])} ${c.title}`).join('\n') + '\n', short }
+  const list = chapters.map((c, i) => `${fmt(starts[i])} ${c.title}`).join('\n')
+  const links = chapters.map((c, i) => `${c.title}\nhttps://youtu.be/${VIDEO_ID_MARK}?t=${Math.floor(starts[i])}`).join('\n')
+  return { text: `${list}\n\n${links}\n`, short }
 }
 
 // File names for one MP4 per scene: the scene's name with characters Windows won't take replaced,

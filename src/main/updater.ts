@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { app, shell, type BrowserWindow } from 'electron'
 import electronUpdater from 'electron-updater'
 import type { UpdateEvent } from '../shared/types'
+import { t } from '../shared/i18n'
 
 const { autoUpdater } = electronUpdater
 export const RELEASES_PAGE = 'https://github.com/courtendvb/volley-reel-releases/releases/latest'
@@ -64,7 +65,7 @@ export function startUpdates(win: BrowserWindow): void {
 // whether the app is quitting for it. With VR_UPDATE_TEST it only says so (it would replace this
 // PC's installed copy).
 export function installUpdate(): boolean {
-  if (!downloaded) { send({ type: 'error', message: 'ダウンロードした更新が見つかりません' }); return false }
+  if (!downloaded) { send({ type: 'error', message: t('ダウンロードした更新が見つかりません') }); return false }
   if (process.env.VR_UPDATE_TEST) { log('info', `test: would start ${downloaded} now`); return false }
   startInstaller(downloaded, true)
   return true
@@ -90,6 +91,6 @@ function openNormally(file: string, why: unknown): void {
     if (!err) { log('info', 'installer opened; quitting'); app.quit(); return }
     installing = false
     log('error', `could not open the installer: ${err}`)
-    send({ type: 'error', message: 'インストーラーを起動できませんでした（セキュリティソフトなどに止められた可能性があります）' })
+    send({ type: 'error', message: t('インストーラーを起動できませんでした（セキュリティソフトなどに止められた可能性があります）') })
   })
 }

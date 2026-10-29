@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
+import { t } from '../../../shared/i18n'
 
 interface Props {
   videos: Video[]
@@ -61,8 +62,8 @@ export function VideoPanel(p: Props) {
   if (!v) {
     return (
       <section className="video-panel">
-        <div className="reel-head"><button className="primary" onClick={p.onNewVideo}>動画を作成</button></div>
-        <p className="muted pad-x">動画はシーンを並べたものです。シーン（マーカーで分けたクリップの集まり）を作って、動画に入れます。</p>
+        <div className="reel-head"><button className="primary" onClick={p.onNewVideo}>{t('動画を作成')}</button></div>
+        <p className="muted pad-x">{t('動画はシーンを並べたものです。シーン（マーカーで分けたクリップの集まり）を作って、動画に入れます。')}</p>
       </section>
     )
   }
@@ -70,19 +71,19 @@ export function VideoPanel(p: Props) {
   return (
     <section className="video-panel">
       <div className="reel-head">
-        <span className="panel-kicker">動画</span>
-        <select value={v.id} onChange={e => p.onSelectVideo(e.target.value)} aria-label="動画">
+        <span className="panel-kicker">{t('動画')}</span>
+        <select value={v.id} onChange={e => p.onSelectVideo(e.target.value)} aria-label={t('動画')}>
           {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
         </select>
-        <button onClick={p.onNewVideo} title="新しい動画">＋</button>
-        <button onClick={() => { if (confirm(`動画「${v.name}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）`)) p.onDeleteVideo(v.id) }} title="動画を削除">削除</button>
+        <button onClick={p.onNewVideo} title={t('新しい動画')}>＋</button>
+        <button onClick={() => { if (confirm(t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) p.onDeleteVideo(v.id) }} title={t('動画を削除')}>{t('削除')}</button>
       </div>
       <div className="reel-name-row">
-        <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label="動画の名前" />
+        <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label={t('動画の名前')} />
         <button className={`card-toggle${p.videoCardOn ? ' on' : ''}`} aria-pressed={p.videoCardOn}
-          title={p.videoCardOn ? '動画の頭に動画名のカードを出す（クリックで出さない）' : '動画の頭に動画名のカードを出さない（クリックで出す）'}
-          onClick={() => p.onVideoCard(!p.videoCardOn)}>カード</button>
-        <button className="gear" aria-label="動画のタイトルカード" title="動画の頭のタイトルカード（動画名）を動画の画面で編集" onClick={p.onEditVideoCard}>⚙</button>
+          title={p.videoCardOn ? t('動画の頭に動画名のカードを出す（クリックで出さない）') : t('動画の頭に動画名のカードを出さない（クリックで出す）')}
+          onClick={() => p.onVideoCard(!p.videoCardOn)}>{t('カード')}</button>
+        <button className="gear" aria-label={t('動画のタイトルカード')} title={t('動画の頭のタイトルカード（動画名）を動画の画面で編集')} onClick={p.onEditVideoCard}>⚙</button>
       </div>
 
       <ol ref={listRef} className="video-scenes" role="list" style={listH ? { maxHeight: listH } : undefined}>
@@ -107,52 +108,52 @@ export function VideoPanel(p: Props) {
                 const to = from < slot ? slot - 1 : slot // moveSceneAt counts the rows without the moved one
                 if (to !== from) p.onChange(moveSceneAt(v, from, to))
               }}>
-              <span className="grip" aria-hidden title="ドラッグで順番を変える">⠿</span>
+              <span className="grip" aria-hidden title={t('ドラッグで順番を変える')}>⠿</span>
               <span className="scene-no">{i + 1}</span>
-              {s ? <InlineTitle className="scene-name" value={s.name} placeholder="（名前なし）" label="シーンの名前" onChange={name => p.onRenameScene(id, name)} />
-                : <span className="scene-name">（削除されたシーン）</span>}
-              {s && usedIn(id) > 1 && <span className="shared" title={`${usedIn(id)} 本の動画で使っています。直すとすべてに反映されます`}>共有 {usedIn(id)}</span>}
-              <span className="muted">{st.clips} 本・{fmtSec(st.sec)}</span>
+              {s ? <InlineTitle className="scene-name" value={s.name} placeholder={t('（名前なし）')} label={t('シーンの名前')} onChange={name => p.onRenameScene(id, name)} />
+                : <span className="scene-name">{t('（削除されたシーン）')}</span>}
+              {s && usedIn(id) > 1 && <span className="shared" title={t('{0} 本の動画で使っています。直すとすべてに反映されます', usedIn(id))}>{t('共有')} {usedIn(id)}</span>}
+              <span className="muted">{st.clips} {t('本・')}{fmtSec(st.sec)}</span>
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
                 {s && (
                   <button className={`card-toggle${p.sceneCardOn(s) ? ' on' : ''}`} aria-pressed={p.sceneCardOn(s)}
-                    title={`${p.sceneCardOn(s) ? 'このシーンの前にタイトルカードを出す（クリックで出さない）' : 'このシーンの前にタイトルカードを出さない（クリックで出す）'}${s.sceneCard === undefined ? '。今は動画の設定どおり' : ''}`}
-                    onClick={() => p.onSceneCard(s, !p.sceneCardOn(s))}>カード</button>
+                    title={`${p.sceneCardOn(s) ? t('このシーンの前にタイトルカードを出す（クリックで出さない）') : t('このシーンの前にタイトルカードを出さない（クリックで出す）')}${s.sceneCard === undefined ? t('。今は動画の設定どおり') : ''}`}
+                    onClick={() => p.onSceneCard(s, !p.sceneCardOn(s))}>{t('カード')}</button>
                 )}
-                {s && <button className="gear" aria-label="シーンのタイトルカードの見た目" title="シーンのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
+                {s && <button className="gear" aria-label={t('シーンのタイトルカードの見た目')} title={t('シーンのタイトルカードの見た目（位置・大きさ）を動画の画面で編集')}
                   onClick={() => p.onEditCard(id)}>⚙</button>}
-                <button title="動画から外す（シーンは残ります）" onClick={() => p.onChange(removeSceneAt(v, i))}>×</button>
+                <button title={t('動画から外す（シーンは残ります）')} onClick={() => p.onChange(removeSceneAt(v, i))}>×</button>
               </span>
             </li>
           )
         })}
-        {!v.sceneIds.length && <li className="muted pad-x">まだシーンがありません</li>}
+        {!v.sceneIds.length && <li className="muted pad-x">{t('まだシーンがありません')}</li>}
       </ol>
-      <div className="list-resize" role="separator" aria-orientation="horizontal" aria-label="シーン一覧の高さ"
-        title="ドラッグでシーン一覧の高さを変える（ダブルクリックで元に戻す）"
+      <div className="list-resize" role="separator" aria-orientation="horizontal" aria-label={t('シーン一覧の高さ')}
+        title={t('ドラッグでシーン一覧の高さを変える（ダブルクリックで元に戻す）')}
         onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}
         onDoubleClick={() => setListH(null)} />
 
       <div className="video-add">
-        <select value="" onChange={e => { if (e.target.value) p.onChange(addScene(v, e.target.value)) }} aria-label="シーンを追加">
-          <option value="">シーンを追加…</option>
-          {p.scenes.map(s => <option key={s.id} value={s.id}>{s.name}{v.sceneIds.includes(s.id) ? '（追加済み）' : ''}</option>)}
+        <select value="" onChange={e => { if (e.target.value) p.onChange(addScene(v, e.target.value)) }} aria-label={t('シーンを追加')}>
+          <option value="">{t('シーンを追加…')}</option>
+          {p.scenes.map(s => <option key={s.id} value={s.id}>{s.name}{v.sceneIds.includes(s.id) ? t('（追加済み）') : ''}</option>)}
         </select>
-        <button onClick={p.onNewScene} title="新しいシーンを作ってこの動画に入れる">新しいシーン</button>
+        <button onClick={p.onNewScene} title={t('新しいシーンを作ってこの動画に入れる')}>{t('新しいシーン')}</button>
       </div>
 
       <div className="reel-controls">
-        <button onClick={p.onOpenOverlay} title="この動画の設定: スコアボード・テロップ・タイトルカード・フェード">⚙ 設定</button>
+        <button onClick={p.onOpenOverlay} title={t('この動画の設定: スコアボード・テロップ・タイトルカード・フェード')}>{t('⚙ 設定')}</button>
         {p.playing
-          ? <button onClick={p.onStop}>■ 停止</button>
-          : <button className="primary" onClick={p.onPlay} disabled={!total.clips}>▶ 動画を再生</button>}
+          ? <button onClick={p.onStop}>{t('■ 停止')}</button>
+          : <button className="primary" onClick={p.onPlay} disabled={!total.clips}>{t('▶ 動画を再生')}</button>}
       </div>
-      <p className="count">{v.sceneIds.length} シーン・{total.clips} クリップ・{fmtSec(total.sec)}（タイトルカードを除く）</p>
+      <p className="count">{v.sceneIds.length} {t('シーン・')}{total.clips} {t('クリップ・')}{fmtSec(total.sec)}{t('（タイトルカードを除く）')}</p>
     </section>
   )
 }
 
 function fmtSec(sec: number): string {
   const s = Math.round(sec)
-  return `${Math.floor(s / 60)}分${String(s % 60).padStart(2, '0')}秒`
+  return t('{0}分{1}秒', Math.floor(s / 60), String(s % 60).padStart(2, '0'))
 }

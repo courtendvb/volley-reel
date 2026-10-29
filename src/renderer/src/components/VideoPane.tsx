@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import type { Match } from '../../../shared/types'
 import { playback, type PlaybackState } from '../playback'
 import { formatTime } from '../format'
+import { t } from '../../../shared/i18n'
 
 // The video sits in a box with its exact aspect ratio, so an overlay (annotations) laid over the
 // box lines up with the picture — normalized 0..1 coordinates map straight onto it.
@@ -49,13 +50,13 @@ function Transport() {
   useEffect(() => playback.subscribe(setS), [])
   return (
       <div className="transport">
-        <button onClick={() => playback.toggle()} title="再生 / 一時停止 (Space)">{s.paused ? '▶' : '❚❚'}</button>
-        <button onClick={() => playback.stepFrames(-1)} title="1フレーム戻る (Shift+←)">◀|</button>
-        <button onClick={() => playback.stepFrames(1)} title="1フレーム進む (Shift+→)">|▶</button>
+        <button onClick={() => playback.toggle()} title={t('再生 / 一時停止 (Space)')}>{s.paused ? '▶' : '❚❚'}</button>
+        <button onClick={() => playback.stepFrames(-1)} title={t('1フレーム戻る (Shift+←)')}>◀|</button>
+        <button onClick={() => playback.stepFrames(1)} title={t('1フレーム進む (Shift+→)')}>|▶</button>
         <input
           type="range" min={0} max={s.duration || 0} step={0.01} value={s.time}
           onChange={e => playback.seek(+e.target.value)}
-          aria-label="再生位置"
+          aria-label={t('再生位置')}
         />
         <span className="time">{formatTime(s.time, true)} / {formatTime(s.duration)}</span>
       </div>

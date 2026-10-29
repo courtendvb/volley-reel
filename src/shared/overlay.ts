@@ -4,6 +4,7 @@ import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { EFFECTS, SKILLS } from './labels'
 import type { ParsedDVW, Play } from './types'
+import { t } from './i18n'
 
 export type Anchor = 'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br'
 
@@ -39,11 +40,11 @@ export interface ClipOverlayOverride {
 }
 
 export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
-  { name: 'ブラック × レッド', theme: { base: '#111111', accent: '#C8102E' } },
-  { name: 'ネイビー × ゴールド', theme: { base: '#0B1F3A', accent: '#C9A227' } },
-  { name: 'チャコール × ボルドー', theme: { base: '#222224', accent: '#7A1F2B' } },
-  { name: 'ブラック × ブルー', theme: { base: '#101418', accent: '#1D4ED8' } },
-  { name: 'ダークグリーン × ライム', theme: { base: '#0F1F17', accent: '#65A30D' } },
+  { name: t('ブラック × レッド'), theme: { base: '#111111', accent: '#C8102E' } },
+  { name: t('ネイビー × ゴールド'), theme: { base: '#0B1F3A', accent: '#C9A227' } },
+  { name: t('チャコール × ボルドー'), theme: { base: '#222224', accent: '#7A1F2B' } },
+  { name: t('ブラック × ブルー'), theme: { base: '#101418', accent: '#1D4ED8' } },
+  { name: t('ダークグリーン × ライム'), theme: { base: '#0F1F17', accent: '#65A30D' } },
 ]
 
 export const DEFAULT_OVERLAY: OverlaySettings = {

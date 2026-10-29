@@ -34,6 +34,8 @@ const api: Api = {
   installUpdate: () => ipcRenderer.invoke('update:install'),
   updateHelp: what => ipcRenderer.invoke('update:help', what),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  lang: ipcRenderer.sendSync('app:lang'),
+  setLanguage: l => ipcRenderer.invoke('app:setLang', l),
   onExportEvent: cb => {
     const h = (_e: unknown, ev: ExportEvent) => cb(ev)
     ipcRenderer.on('export:event', h)

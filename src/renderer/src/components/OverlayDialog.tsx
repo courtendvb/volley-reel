@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { cardBackground, drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
+import { t } from '../../../shared/i18n'
 
 interface Props {
   settings: OverlaySettings
@@ -9,7 +10,7 @@ interface Props {
   sample: { scoreboard: ScoreboardData; caption: CaptionData; card: { marker: number; name: string; match: string | null } }
 }
 
-const ANCHORS: [Anchor, string][] = [['tl', '左上'], ['tc', '上中央'], ['tr', '右上'], ['bl', '左下'], ['bc', '下中央'], ['br', '右下']]
+const ANCHORS: [Anchor, string][] = [['tl', t('左上')], ['tc', t('上中央')], ['tr', t('右上')], ['bl', t('左下')], ['bc', t('下中央')], ['br', t('右下')]]
 const PREVIEW_W = 560, PREVIEW_H = 315
 
 // Reel-wide settings for the automatic overlays (design §3.7): every element separately, plus colors.
@@ -46,8 +47,8 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal overlay-modal" role="dialog" aria-label="動画の設定" onClick={e => e.stopPropagation()}>
-        <h2>動画の設定（スコアボード・テロップ・タイトルカード・フェード）</h2>
+      <div className="modal overlay-modal" role="dialog" aria-label={t('動画の設定')} onClick={e => e.stopPropagation()}>
+        <h2>{t('動画の設定（スコアボード・テロップ・タイトルカード・フェード）')}</h2>
         <div className="ov-body">
           <div className="ov-preview">
             <canvas ref={frame} width={PREVIEW_W * 2} height={PREVIEW_H * 2} style={{ width: PREVIEW_W, height: PREVIEW_H }} />
@@ -56,50 +57,50 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
 
           <div className="ov-settings">
             <section>
-              <span className="field-label">配色</span>
-              <p className="hint">配色はプロジェクト全体の設定です。上部の「設定」で変えます。</p>
+              <span className="field-label">{t('配色')}</span>
+              <p className="hint">{t('配色はプロジェクト全体の設定です。上部の「設定」で変えます。')}</p>
             </section>
 
             <section>
-              <div className="filter-row">{check('スコアボード', s.scoreboard.enabled, v => set('scoreboard', { enabled: v }))}<span className="spacer" />
-                {anchor(s.scoreboard.anchor, v => set('scoreboard', { anchor: v }), 'スコアボードの位置')}{scale(s.scoreboard.scale, v => set('scoreboard', { scale: v }), 'スコアボードのサイズ')}</div>
-              <div className="filter-row indent">{check('セット数', s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}</div>
+              <div className="filter-row">{check(t('スコアボード'), s.scoreboard.enabled, v => set('scoreboard', { enabled: v }))}<span className="spacer" />
+                {anchor(s.scoreboard.anchor, v => set('scoreboard', { anchor: v }), t('スコアボードの位置'))}{scale(s.scoreboard.scale, v => set('scoreboard', { scale: v }), t('スコアボードのサイズ'))}</div>
+              <div className="filter-row indent">{check(t('セット数'), s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}</div>
             </section>
 
             <section>
-              <div className="filter-row">{check('選手テロップ', s.playerCaption.enabled, v => set('playerCaption', { enabled: v }))}<span className="spacer" />
-                {anchor(s.playerCaption.anchor, v => set('playerCaption', { anchor: v }), 'テロップの位置')}{scale(s.playerCaption.scale, v => set('playerCaption', { scale: v }), 'テロップのサイズ')}</div>
+              <div className="filter-row">{check(t('選手テロップ'), s.playerCaption.enabled, v => set('playerCaption', { enabled: v }))}<span className="spacer" />
+                {anchor(s.playerCaption.anchor, v => set('playerCaption', { anchor: v }), t('テロップの位置'))}{scale(s.playerCaption.scale, v => set('playerCaption', { scale: v }), t('テロップのサイズ'))}</div>
               <div className="filter-row indent">
-                {check('背番号', s.playerCaption.showNumber, v => set('playerCaption', { showNumber: v }))}
-                {check('名前', s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
-                {check('スキル', s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
-                {check('評価', s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
+                {check(t('背番号'), s.playerCaption.showNumber, v => set('playerCaption', { showNumber: v }))}
+                {check(t('名前'), s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
+                {check(t('スキル'), s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
+                {check(t('評価'), s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
               </div>
             </section>
 
             <section>
-              <div className="filter-row"><span className="field-label wide">タイトルカード</span>
-                {check('動画の頭（動画名）', !!s.titleCard.videoCard, v => set('titleCard', { videoCard: v }))}
-                {check('シーンの頭（シーン名。動画のシーン一覧の「カード」でシーンごとに変えられる）', s.titleCard.sceneCards, v => set('titleCard', { sceneCards: v }))}
-                {check('マーカーの頭（マーカー名。シーンの「カード」でマーカーごとに変えられる）', s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
-                <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数" title="シーンとマーカーのカードの秒数（一括）"
-                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) set('titleCard', { durationSec: n }) }} /> 秒</label></div>
+              <div className="filter-row"><span className="field-label wide">{t('タイトルカード')}</span>
+                {check(t('動画の頭（動画名）'), !!s.titleCard.videoCard, v => set('titleCard', { videoCard: v }))}
+                {check(t('シーンの頭（シーン名。動画のシーン一覧の「カード」でシーンごとに変えられる）'), s.titleCard.sceneCards, v => set('titleCard', { sceneCards: v }))}
+                {check(t('マーカーの頭（マーカー名。シーンの「カード」でマーカーごとに変えられる）'), s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
+                <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数')} title={t('シーンとマーカーのカードの秒数（一括）')}
+                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) set('titleCard', { durationSec: n }) }} /> {t('秒')}</label></div>
               <div className="filter-row">
-                {check('切り替えでフェード（イン・アウト。クリップとカードの頭と終わり）', s.transition.fade, v => set('transition', { fade: v }))}<span className="spacer" />
-                {s.transition.fade && <label className="check"><input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label="フェードの秒数"
-                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) set('transition', { durationSec: n }) }} /> 秒</label>}</div>
+                {check(t('切り替えでフェード（イン・アウト。クリップとカードの頭と終わり）'), s.transition.fade, v => set('transition', { fade: v }))}<span className="spacer" />
+                {s.transition.fade && <label className="check"><input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label={t('フェードの秒数')}
+                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) set('transition', { durationSec: n }) }} /> {t('秒')}</label>}</div>
               <div className="filter-row indent">
-                {check('マーカー番号', s.titleCard.showMarkerNumber !== false, v => set('titleCard', { showMarkerNumber: v }))}
-                {check('マーカー名', s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
-                {check('試合名', s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}
-                <label className="check" title="すべてのタイトルカードと無地のスライドの背景色">背景
-                  <input type="color" aria-label="カードの背景色" value={cardBackground(s.titleCard, s.theme)} onChange={e => set('titleCard', { background: e.target.value })} /></label>
-                {s.titleCard.background && <button className="link" onClick={() => { const { background: _bg, ...rest } = s.titleCard; onChange({ ...s, titleCard: rest }) }}>配色に戻す</button>}
+                {check(t('マーカー番号'), s.titleCard.showMarkerNumber !== false, v => set('titleCard', { showMarkerNumber: v }))}
+                {check(t('マーカー名'), s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
+                {check(t('試合名'), s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}
+                <label className="check" title={t('すべてのタイトルカードと無地のスライドの背景色')}>{t('背景')}
+                  <input type="color" aria-label={t('カードの背景色')} value={cardBackground(s.titleCard, s.theme)} onChange={e => set('titleCard', { background: e.target.value })} /></label>
+                {s.titleCard.background && <button className="link" onClick={() => { const { background: _bg, ...rest } = s.titleCard; onChange({ ...s, titleCard: rest }) }}>{t('配色に戻す')}</button>}
               </div>
             </section>
           </div>
         </div>
-        <div className="modal-actions"><button className="primary" onClick={onClose}>閉じる</button></div>
+        <div className="modal-actions"><button className="primary" onClick={onClose}>{t('閉じる')}</button></div>
       </div>
     </div>
   )

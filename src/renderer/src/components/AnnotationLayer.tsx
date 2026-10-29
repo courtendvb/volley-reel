@@ -9,9 +9,10 @@ import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
+import { t } from '../../../shared/i18n'
 
 const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AED', scene: '#D97706', video: '#059669' }
-const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: 'マーカー全体', scene: 'シーン全体', video: '動画全体' }
+const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
 
 // A triangle is drawn like a box and stored as a polygon.
 export type Tool = 'select' | AnnotationKind | 'triangle'
@@ -363,10 +364,10 @@ export function AnnotationLayer(p: Props) {
     <div className="ann-layer" style={{ pointerEvents: p.editable ? 'auto' : 'none', cursor }}>
       <canvas ref={canvas} style={{ width: p.size.w, height: p.size.h }} data-testid="ann-canvas"
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onDoubleClick={onDouble} />
-      {path && <div className="ann-hint">クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止</div>}
+      {path && <div className="ann-hint">{t('クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止')}</div>}
       {textEdit && (
         <textarea
-          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト（Alt+Enter で改行）"
+          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder={t('テキスト（Alt+Enter で改行）')}
           rows={Math.max(1, textEdit.value.split('\n').length)}
           style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? textStyle(p.style).color }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}

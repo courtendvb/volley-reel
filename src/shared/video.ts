@@ -6,6 +6,7 @@ import type { Annotation } from './annotation'
 import type { OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
+import { t } from './i18n'
 
 export interface Video {
   id: string
@@ -120,7 +121,7 @@ export function planVideoChapters(video: Video, scenes: Record<string, Reel>, or
     if (!parts.length) continue
     const card = sceneCard(s, order, overlay, matches, ourCodes)
     for (const [i, p] of parts.entries()) {
-      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? 'その他' : s.markerNames[p.group] || `マーカー ${p.group}`}`
+      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('マーカー {0}', p.group)}`
       chapters.push({ at: chapters.length ? plan.length : 0, title: name })
       if (i === 0 && card) plan.push(card)
       plan.push(...p.items)
@@ -162,7 +163,7 @@ export function chapterText(chapters: { startSec: number; title: string }[], tot
 export function sceneFileNames(names: string[]): string[] {
   const used = new Set<string>()
   return names.map(n => {
-    const base = n.replace(/[\\/:*?"<>|]/g, '_').replace(/[. ]+$/, '').trim() || 'シーン'
+    const base = n.replace(/[\\/:*?"<>|]/g, '_').replace(/[. ]+$/, '').trim() || t('シーン')
     let name = base
     for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} (${i})`
     used.add(name.toLowerCase())

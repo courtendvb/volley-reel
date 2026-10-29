@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { snapTime } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 import { composing } from '../keys'
+import { t } from '../../../shared/i18n'
 
 interface Props {
   label: string
@@ -85,9 +86,9 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     return (
       <div className={`trim-object${main ? ' main' : ''}${o.set ? '' : ' whole'}`}
         style={{ left: pct(Math.max(lo, o.from)), width: `calc(${pct(Math.min(hi, o.to))} - ${pct(Math.max(lo, o.from))})` }}
-        title={`${o.label}: ${rel(o.from)} 〜 ${rel(o.to)} 秒`}>
-        <span className="obj-grip from" onPointerDown={grab('from')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title="出る時刻（ドラッグ）" />
-        <span className="obj-grip to" onPointerDown={grab('to')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title="消える時刻（ドラッグ）" />
+        title={t('{0}: {1} 〜 {2} 秒', o.label, rel(o.from), rel(o.to))}>
+        <span className="obj-grip from" onPointerDown={grab('from')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title={t('出る時刻（ドラッグ）')} />
+        <span className="obj-grip to" onPointerDown={grab('to')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title={t('消える時刻（ドラッグ）')} />
       </div>
     )
   }
@@ -98,10 +99,10 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     <div className="trim">
       <div className="trim-head">
         <span className="trim-title">{label}</span>
-        <span className="muted">{(range.out - range.in).toFixed(1)}秒</span>
-        <label className="check muted" title="外すと OUT を過ぎても再生を続け、範囲の外も見られます">
-          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> ループ再生{loop && <Playing />}</label>
-        {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} 本と範囲が重なっています</span>}
+        <span className="muted">{(range.out - range.in).toFixed(1)}{t('秒')}</span>
+        <label className="check muted" title={t('外すと OUT を過ぎても再生を続け、範囲の外も見られます')}>
+          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> {t('ループ再生')}{loop && <Playing />}</label>
+        {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} {t('本と範囲が重なっています')}</span>}
       </div>
 
       <div className="trim-track" ref={track} onPointerMove={onMove} onPointerUp={() => { setDrag(null); objDrag.current = null; setSnapGuide(null) }}
@@ -109,11 +110,11 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         {seconds.map(s => (
           <span key={s} className={`tick${s === 0 ? ' zero' : ''}`} style={{ left: pct(keyTime + s) }}>{s % 2 === 0 ? (s > 0 ? `+${s}` : s) : ''}</span>
         ))}
-        <div className="trim-default" style={{ left: pct(def.in), width: `calc(${pct(def.out)} - ${pct(def.in)})` }} title="初期値の範囲" />
+        <div className="trim-default" style={{ left: pct(def.in), width: `calc(${pct(def.out)} - ${pct(def.in)})` }} title={t('初期値の範囲')} />
         <div className="trim-range" style={{ left: pct(range.in), width: `calc(${pct(range.out)} - ${pct(range.in)})` }} />
-        <div className="trim-key" style={{ left: pct(keyTime) }} title="キープレー" />
-        <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title="IN（ドラッグ）" />
-        <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title="OUT（ドラッグ）" />
+        <div className="trim-key" style={{ left: pct(keyTime) }} title={t('キープレー')} />
+        <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title={t('IN（ドラッグ）')} />
+        <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title={t('OUT（ドラッグ）')} />
         {selected && span(selected, true)}
         <Playhead lo={lo} hi={hi} />
         {snapGuide !== null && <div className="trim-snap" style={{ left: pct(snapGuide) }} />}
@@ -121,8 +122,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
 
       <div className="trim-lanes-head">
         <button className="link" aria-expanded={lanesOpen} onClick={() => setLanesOpen(o => !o)} disabled={!objects.length}>
-          {lanesOpen ? '▾' : '▸'} 図形の表示時間（{objects.length}）</button>
-        <span className="muted small">{selected ? '橙の線の両端をドラッグで、出る時刻・消える時刻' : '図形を選ぶと、その表示時間がバーに出ます'}</span>
+          {lanesOpen ? '▾' : '▸'} {t('図形の表示時間（{0}）', objects.length)}</button>
+        <span className="muted small">{selected ? t('橙の線の両端をドラッグで、出る時刻・消える時刻') : t('図形を選ぶと、その表示時間がバーに出ます')}</span>
       </div>
       {lanesOpen && (
         <div className="trim-lanes">
@@ -144,7 +145,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
           onSet={() => onTrim('in', playback.current.time)} onType={v => onTrim('in', keyTime + v)} onReset={() => onTrim('in', null)} />
         <Edge name="OUT" keyName="]" value={rel(range.out)} overridden={overrides.out}
           onSet={() => onTrim('out', playback.current.time)} onType={v => onTrim('out', keyTime + v)} onReset={() => onTrim('out', null)} />
-        <span className="hint">秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム</span>
+        <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム')}</span>
       </div>
     </div>
   )
@@ -159,10 +160,10 @@ function Edge({ name, keyName, value, overridden, onSet, onType, onReset }: {
   const commit = () => { const v = parseFloat(text); if (isFinite(v)) onType(v); else setText(value) }
   return (
     <span className="trim-edge">
-      <button onClick={onSet} title={`再生位置を ${name} にする (${keyName})`}>{keyName} {name}</button>
-      <input type="number" step={0.1} value={text} aria-label={`${name}（キープレーからの秒）`}
+      <button onClick={onSet} title={t('再生位置を {0} にする ({1})', name, keyName)}>{keyName} {name}</button>
+      <input type="number" step={0.1} value={text} aria-label={t('{0}（キープレーからの秒）', name)}
         onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
-      {overridden ? <button className="link" onClick={onReset}>既定に戻す</button> : <span className="muted small">既定</span>}
+      {overridden ? <button className="link" onClick={onReset}>{t('既定に戻す')}</button> : <span className="muted small">{t('既定')}</span>}
     </span>
   )
 }
@@ -179,5 +180,5 @@ function Playhead({ lo, hi }: { lo: number; hi: number }) {
 function Playing() {
   const [paused, setPaused] = useState(playback.current.paused)
   useEffect(() => playback.subscribe(st => setPaused(st.paused)), [])
-  return paused ? null : <>中</>
+  return paused ? null : <>{t('中')}</>
 }

@@ -17,6 +17,7 @@ import { Library } from './library'
 import { Project } from './project'
 import { ffmpegDir } from './ffmpegPath'
 import { grabFrame } from './media'
+import { getLang, setLang, t, type Lang } from '../shared/i18n'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
 protocol.registerSchemesAsPrivileged([
@@ -39,6 +40,9 @@ let win: BrowserWindow | null = null
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
 
 app.whenReady().then(async () => {
+  // The interface language (設定 → Language); the first start follows Windows' display language.
+  // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
+  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
   protocol.handle('media', serveMedia)
   registerIpc()
 
@@ -133,7 +137,7 @@ function registerIpc(): void {
   ipcMain.handle('library:get', () => library?.info() ?? null)
 
   ipcMain.handle('library:choose', async () => {
-    const r = await dialog.showOpenDialog(win!, { title: '倉庫にするフォルダを選択（空のフォルダか、既存の倉庫）', properties: ['openDirectory', 'createDirectory'] })
+    const r = await dialog.showOpenDialog(win!, { title: t('倉庫にするフォルダを選択（空のフォルダか、既存の倉庫）'), properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
     library = await Library.open(r.filePaths[0])
     project = null
@@ -142,25 +146,25 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('library:scan', async () => {
-    if (!library) throw new Error('先に倉庫を選んでください')
-    const r = await dialog.showOpenDialog(win!, { title: '動画と DVW があるフォルダを選択（複数可）', properties: ['openDirectory', 'multiSelections'] })
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const r = await dialog.showOpenDialog(win!, { title: t('動画と DVW があるフォルダを選択（複数可）'), properties: ['openDirectory', 'multiSelections'] })
     if (r.canceled || !r.filePaths.length) return null
     return library.scan(r.filePaths)
   })
 
   ipcMain.handle('library:importPairs', async (e, pairs: { dvwPath: string; video: string }[]) => {
-    if (!library) throw new Error('先に倉庫を選んでください')
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
     return importPairs(library, pairs, p => e.sender.send('import:progress', p))
   })
 
   ipcMain.handle('project:recent', () => recentProjects())
 
   ipcMain.handle('project:create', async (_e, init: ProjectInit) => {
-    if (!library) throw new Error('先に倉庫を選んでください')
-    const name = init.name.trim() || `${init.ourTeamCodes[0] ?? ''} プロジェクト`.trim()
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const name = init.name.trim() || t('{0} プロジェクト', init.ourTeamCodes[0] ?? '').trim()
     let dir: string
     if (init.chooseFolder) {
-      const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトを作るフォルダを選択（空のフォルダ）', properties: ['openDirectory', 'createDirectory'] })
+      const r = await dialog.showOpenDialog(win!, { title: t('プロジェクトを作るフォルダを選択（空のフォルダ）'), properties: ['openDirectory', 'createDirectory'] })
       if (r.canceled || !r.filePaths[0]) return null
       dir = r.filePaths[0]
     } else {
@@ -175,10 +179,10 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('project:open', async (_e, path?: string) => {
-    if (!library) throw new Error('先に倉庫を選んでください')
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
     let dir = path
     if (!dir) {
-      const r = await dialog.showOpenDialog(win!, { title: 'プロジェクトのフォルダを選択', properties: ['openDirectory'] })
+      const r = await dialog.showOpenDialog(win!, { title: t('プロジェクトのフォルダを選択'), properties: ['openDirectory'] })
       if (r.canceled || !r.filePaths[0]) return null
       dir = r.filePaths[0]
     }
@@ -190,56 +194,56 @@ function registerIpc(): void {
   ipcMain.handle('project:close', () => { project = null })
 
   ipcMain.handle('project:setMatches', async (_e, ids: string[]) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     await project.setMatches(ids)
     return project.info()
   })
 
   ipcMain.handle('match:import', async e => {
-    if (!library) throw new Error('先に倉庫を選んでください')
-    const v = await dialog.showOpenDialog(win!, { title: '試合の動画を選択', properties: ['openFile'],
-      filters: [{ name: '動画', extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] })
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const v = await dialog.showOpenDialog(win!, { title: t('試合の動画を選択'), properties: ['openFile'],
+      filters: [{ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] })
     if (v.canceled || !v.filePaths[0]) return null
-    const d = await dialog.showOpenDialog(win!, { title: 'スカウトファイル（.dvw）を選択', properties: ['openFile'],
+    const d = await dialog.showOpenDialog(win!, { title: t('スカウトファイル（.dvw）を選択'), properties: ['openFile'],
       filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
     if (d.canceled || !d.filePaths[0]) return null
     return library.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
   })
 
   ipcMain.handle('match:relocate', async (e, id: string, part: 'video' | 'dvw') => {
-    if (!library) throw new Error('先に倉庫を選んでください')
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
     const m = library.getMatch(id)
-    if (!m) throw new Error(`試合が見つかりません: ${id}`)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     const r = await dialog.showOpenDialog(win!, part === 'video'
-      ? { title: `${m.name} の動画を選択（元: ${basename(m.sourceVideoPath)}）`, properties: ['openFile'], filters: [{ name: '動画', extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] }
-      : { title: `${m.name} の DVW を選択（元: ${basename(m.dvwPath)}）`, properties: ['openFile'], filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
+      ? { title: t('{0} の動画を選択（元: {1}）', m.name, basename(m.sourceVideoPath)), properties: ['openFile'], filters: [{ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] }
+      : { title: t('{0} の DVW を選択（元: {1}）', m.name, basename(m.dvwPath)), properties: ['openFile'], filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
     if (r.canceled || !r.filePaths[0]) return null
     const note = await library.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p))
     return { library: library.info(), project: project?.info() ?? null, note }
   })
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     await project.saveSettings(s)
     return project.info()
   })
 
   ipcMain.handle('export:choosePath', async (_e, name: string) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     const dir = join(project.dir, 'exports')
     await mkdir(dir, { recursive: true })
     const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'reel'
-    const r = await dialog.showSaveDialog(win!, { title: 'MP4 に書き出す', defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
+    const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
     return r.canceled || !r.filePath ? null : r.filePath
   })
 
   // One MP4 per scene: a folder, then a path in it for each file name (names come safe and unique
   // from sceneFileNames). Returns which of them are already there, so the user can say whether to overwrite.
   ipcMain.handle('export:chooseFolder', async (_e, names: string[]) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     const dir = join(project.dir, 'exports')
     await mkdir(dir, { recursive: true })
-    const r = await dialog.showOpenDialog(win!, { title: 'シーンごとに書き出すフォルダ', defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
+    const r = await dialog.showOpenDialog(win!, { title: t('シーンごとに書き出すフォルダ'), defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
     const paths = names.map(n => join(r.filePaths[0], `${n}.mp4`))
     return { paths, existing: paths.filter(p => existsSync(p)) }
@@ -247,8 +251,8 @@ function registerIpc(): void {
 
   // Starts in the background and returns at once; progress and the result arrive as export:event.
   ipcMain.handle('export:start', (e, job: ExportJob) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
-    if (exporter.running) throw new Error('書き出し中です。終わるか、キャンセルしてからもう一度試してください')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
+    if (exporter.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
     const p = project
     void exporter.run(job, join(p.dir, 'export-work'), id => p.getMatch(id)?.videoPath, ev => {
       if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
@@ -258,12 +262,15 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
   ipcMain.handle('app:version', () => app.getVersion())
+  // The preload reads the language synchronously, so the interface's text is right from its first paint.
+  ipcMain.on('app:lang', e => { e.returnValue = getLang() })
+  ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })
   // The renderer has saved: no flush on the way out, straight into the installer.
   ipcMain.handle('update:install', () => { updating = installUpdate() })
   ipcMain.handle('update:help', (_e, what: 'page' | 'log') => (what === 'page' ? shell.openExternal(RELEASES_PAGE) : shell.showItemInFolder(updateLogPath())))
 
-  const lib = () => { if (!library) throw new Error('先に倉庫を選んでください'); return library }
-  const assetsDir = () => { if (!project) throw new Error('プロジェクトが開かれていません'); return join(project.dir, 'assets') }
+  const lib = () => { if (!library) throw new Error(t('先に倉庫を選んでください')); return library }
+  const assetsDir = () => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return join(project.dir, 'assets') }
   ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
   ipcMain.handle('palette:setColors', (_e, colors: string[]) => lib().setPaletteColors(colors))
   ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[], category: string | null) => lib().savePaletteItem(name, anns, assetsDir(), category))
@@ -277,10 +284,10 @@ function registerIpc(): void {
   ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {
-    if (!library) throw new Error('先に倉庫を選んでください')
+    if (!library) throw new Error(t('先に倉庫を選んでください'))
     const r = await dialog.showOpenDialog(win!, {
-      title: `${code} のロゴを選ぶ`, properties: ['openFile'],
-      filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+      title: t('{0} のロゴを選ぶ', code), properties: ['openFile'],
+      filters: [{ name: t('画像'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
     })
     if (!r.canceled && r.filePaths[0]) await library.setLogo(code, r.filePaths[0])
     return library.logos()
@@ -289,10 +296,10 @@ function registerIpc(): void {
   ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
 
   ipcMain.handle('asset:pick', async () => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     const r = await dialog.showOpenDialog(win!, {
-      title: '画像・PDF を挿入', properties: ['openFile'],
-      filters: [{ name: '画像・PDF', extensions: [...IMAGE_EXT, 'pdf'] }],
+      title: t('画像・PDF を挿入'), properties: ['openFile'],
+      filters: [{ name: t('画像・PDF'), extensions: [...IMAGE_EXT, 'pdf'] }],
     })
     return r.canceled || !r.filePaths[0] ? null : takeAsset(r.filePaths[0])
   })
@@ -314,16 +321,16 @@ function registerIpc(): void {
     return { assetId: await saveAsset(img.toPNG(), 'png'), width, height }
   })
   ipcMain.handle('asset:read', (_e, id: string) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     if (!ASSET_ID.test(id)) throw new Error('bad asset id')
     return readFile(join(project.dir, 'assets', id))
   })
 
   ipcMain.handle('slide:pick', async () => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     const r = await dialog.showOpenDialog(win!, {
-      title: 'スライドを読み込む（PDF・画像。複数選べます）', properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'PDF・画像', extensions: ['pdf', ...IMAGE_EXT] }],
+      title: t('スライドを読み込む（PDF・画像。複数選べます）'), properties: ['openFile', 'multiSelections'],
+      filters: [{ name: t('PDF・画像'), extensions: ['pdf', ...IMAGE_EXT] }],
     })
     // Pictures in name order, numbers by value (スライド2 before スライド10), as exported from PowerPoint.
     const paths = r.canceled ? [] : [...r.filePaths].sort((a, b) => basename(a).localeCompare(basename(b), 'ja', { numeric: true }))
@@ -331,7 +338,7 @@ function registerIpc(): void {
   })
   // Only files slides already came from are read again (the renderer can't name any other file).
   ipcMain.handle('slide:read', async (_e, path: string) => {
-    if (!(await slideSources()).has(path)) throw new Error('スライドの元のファイルではありません')
+    if (!(await slideSources()).has(path)) throw new Error(t('スライドの元のファイルではありません'))
     return takeSlideFile(path)
   })
   ipcMain.handle('slide:times', async (_e, paths: string[]) => {
@@ -342,7 +349,7 @@ function registerIpc(): void {
   })
   ipcMain.handle('slide:frame', async (_e, matchId: string, sec: number) => {
     const file = library?.getMatch(matchId)?.videoPath
-    if (!file || !existsSync(file)) throw new Error('動画が見つかりません')
+    if (!file || !existsSync(file)) throw new Error(t('動画が見つかりません'))
     const dir = assetsDir()
     await mkdir(dir, { recursive: true })
     const id = `${randomUUID()}.png`
@@ -351,14 +358,14 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('video:list', () => project?.listVideos() ?? [])
-  ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveVideo(v) })
+  ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project.saveVideo(v) })
   ipcMain.handle('video:delete', (_e, id: string) => project?.deleteVideo(id))
   ipcMain.handle('reel:list', () => project?.listReels() ?? [])
-  ipcMain.handle('reel:save', (_e, r: Reel) => { if (!project) throw new Error('プロジェクトが開かれていません'); return project.saveReel(r) })
+  ipcMain.handle('reel:save', (_e, r: Reel) => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project.saveReel(r) })
   ipcMain.handle('reel:delete', (_e, id: string) => project?.deleteReel(id))
 
   ipcMain.handle('match:parse', (_e, id: string) => {
-    if (!project) throw new Error('プロジェクトが開かれていません')
+    if (!project) throw new Error(t('プロジェクトが開かれていません'))
     return project.parse(id)
   })
 }
@@ -381,7 +388,7 @@ async function takeAsset(path: string): Promise<PickedAsset> {
   const ext = extname(path).slice(1).toLowerCase()
   const data = await readFile(path)
   if (ext === 'pdf') return { kind: 'pdf', data: new Uint8Array(data), name: basename(path) }
-  if (!IMAGE_EXT.includes(ext)) throw new Error('画像（PNG・JPEG など）か PDF を選んでください')
+  if (!IMAGE_EXT.includes(ext)) throw new Error(t('画像（PNG・JPEG など）か PDF を選んでください'))
   return { kind: 'image', assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext) }
 }
 
@@ -396,7 +403,7 @@ async function slideSources(): Promise<Set<string>> {
 async function takeSlideFile(path: string): Promise<SlideFile> {
   pickedSlides.add(path)
   const ext = extname(path).slice(1).toLowerCase()
-  if (ext !== 'pdf' && !IMAGE_EXT.includes(ext)) throw new Error('PDF か画像（PNG・JPEG など）を選んでください')
+  if (ext !== 'pdf' && !IMAGE_EXT.includes(ext)) throw new Error(t('PDF か画像（PNG・JPEG など）を選んでください'))
   const [data, st] = await Promise.all([readFile(path), stat(path)])
   const base = { path, name: basename(path), mtimeMs: st.mtimeMs }
   if (ext === 'pdf') return { ...base, kind: 'pdf', data: new Uint8Array(data) }
@@ -405,7 +412,7 @@ async function takeSlideFile(path: string): Promise<SlideFile> {
 
 // A copy in the project, so the project keeps working if the original file moves.
 async function saveAsset(data: Uint8Array, ext: string): Promise<string> {
-  if (!project) throw new Error('プロジェクトが開かれていません')
+  if (!project) throw new Error(t('プロジェクトが開かれていません'))
   const dir = join(project.dir, 'assets')
   await mkdir(dir, { recursive: true })
   const id = `${randomUUID()}.${ext}`
@@ -470,7 +477,7 @@ function corruptFirstReel(dir: string): void {
   console.log(`[smoke] corrupted ${f}`)
 }
 
-interface AppSettings { libraryPath?: string; recentProjects?: RecentProject[] }
+interface AppSettings { libraryPath?: string; recentProjects?: RecentProject[]; lang?: Lang }
 
 function readSettings(): AppSettings {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }

@@ -1,3 +1,4 @@
+import type { Lang } from './i18n'
 import type { Annotation } from './annotation'
 // Types shared by main, preload and renderer.
 import type { OverlayTheme } from './overlay'
@@ -170,6 +171,8 @@ export interface Api {
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
   updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
   appVersion(): Promise<string>
+  lang: Lang // the interface language, read once when the window loads
+  setLanguage(l: Lang): Promise<void> // kept for the next start; the window reloads to show it
   showInFolder(path: string): Promise<void>
   takeNotices(): Promise<string[]>
   // Images for annotations, kept in the project's assets/ folder. Picking an image copies it there;

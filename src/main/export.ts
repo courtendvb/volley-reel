@@ -10,6 +10,7 @@ import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
 import { chapterText } from '../shared/video'
 import { ffmpegDir } from './ffmpegPath'
 import { probe } from './media'
+import { t } from '../shared/i18n'
 
 const binDir = ffmpegDir
 
@@ -24,7 +25,7 @@ export class Exporter {
 
   // videoOf maps a match id to the file to read (the playable source or its prepared copy).
   async run(job: ExportJob, workDir: string, videoOf: (matchId: string) => string | undefined, emit: (e: ExportEvent) => void): Promise<void> {
-    if (this.running) throw new Error('書き出し中です。終わるか、キャンセルしてからもう一度試してください')
+    if (this.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
     this.running = true
     this.cancelled = false
     const t0 = Date.now()
@@ -37,7 +38,7 @@ export class Exporter {
     // next export started from it (scene by scene) can't have its files removed under it.
     let result: ExportEvent | null = null
     try {
-      if (!job.items.length) throw new Error('書き出すクリップがありません')
+      if (!job.items.length) throw new Error(t('書き出すクリップがありません'))
       const enc = encoderArgs(job.fpsStr)
       const segments: string[] = []
       const segStart: number[] = [0] // with chapters: where each segment starts in the joined file
@@ -53,7 +54,7 @@ export class Exporter {
             '-vf', `scale=${job.width}:${job.height},format=yuv420p,setsar=1${fades(job.fadeSec, it.durationSec)}`, ...enc, seg], report)
         } else {
           const video = videoOf(it.matchId)
-          if (!video || !existsSync(video)) throw new Error(`動画が見つかりません（試合 ${it.matchId}）`)
+          if (!video || !existsSync(video)) throw new Error(t('動画が見つかりません（試合 {0}）', it.matchId))
           await this.ffmpeg(await clipArgs(it, video, job, workDir, i, enc), report)
         }
         segments.push(seg)
@@ -69,7 +70,7 @@ export class Exporter {
       if (job.chapters?.length) {
         // "<video> チャプター.txt" beside the MP4, ready to paste into a YouTube description.
         const ch = chapterText(job.chapters.map(c => ({ startSec: segStart[c.item], title: c.title })), segStart[segments.length])
-        const chaptersPath = job.outPath.replace(/\.mp4$/i, '') + ' チャプター.txt'
+        const chaptersPath = job.outPath.replace(/\.mp4$/i, '') + t(' チャプター.txt')
         await writeFile(chaptersPath, ch.text, 'utf8')
         result = { ...result, chaptersPath, chapterCount: job.chapters.length, shortChapters: ch.short }
       }
@@ -107,7 +108,7 @@ export class Exporter {
         this.child = null
         if (this.cancelled) reject(new ExportCancelled())
         else if (code === 0) resolve()
-        else reject(new Error(`ffmpeg が失敗しました: ${err.trim().split('\n').slice(-3).join(' / ')}`))
+        else reject(new Error(t('ffmpeg が失敗しました: {0}', err.trim().split('\n').slice(-3).join(' / '))))
       })
     })
   }

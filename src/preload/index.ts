@@ -32,6 +32,7 @@ const api: Api = {
     return () => ipcRenderer.off('update:event', h)
   },
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  updateHelp: what => ipcRenderer.invoke('update:help', what),
   appVersion: () => ipcRenderer.invoke('app:version'),
   onExportEvent: cb => {
     const h = (_e: unknown, ev: ExportEvent) => cb(ev)

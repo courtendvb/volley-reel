@@ -168,6 +168,7 @@ export interface Api {
   onExportEvent(cb: (e: ExportEvent) => void): () => void
   onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
+  updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
   appVersion(): Promise<string>
   showInFolder(path: string): Promise<void>
   takeNotices(): Promise<string[]>
@@ -257,6 +258,7 @@ export interface ExportJob {
 
 // A newer version for an installed copy: found, downloading, then ready to restart into.
 export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
+  | { type: 'error'; message: string } // the update couldn't be installed (the download page still works)
 
 export type ExportEvent =
   | { type: 'progress'; ratio: number; item: number; items: number; elapsedSec: number }

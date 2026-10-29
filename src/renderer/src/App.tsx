@@ -37,6 +37,7 @@ import { VideoPane } from './components/VideoPane'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
+import { t } from '../../shared/i18n'
 
 const api = window.api
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
@@ -184,7 +185,7 @@ export function App() {
       if (allClean()) setSaveState('saved')
     } catch (e) {
       setSaveState('error')
-      setError(`${kind === 'scene' ? 'シーン' : '動画'}を保存できませんでした: ${(e as Error).message}`)
+      setError(t('{0}を保存できませんでした: {1}', kind === 'scene' ? t('シーン') : t('動画'), (e as Error).message))
     }
   }, [])
   const flushAll = useCallback(() => Promise.all([
@@ -206,13 +207,13 @@ export function App() {
   }, [])
   const restartToUpdate = async () => {
     const st = latest.current.exportState?.status
-    if ((st === 'running' || st === 'preparing') && !confirm('書き出し中です。書き出しを中止して再起動しますか？')) return
+    if ((st === 'running' || st === 'preparing') && !confirm(t('書き出し中です。書き出しを中止して再起動しますか？'))) return
     setUpdateBusy(true)
     try {
       await flushAll()
       await api.installUpdate()
     } catch (e) {
-      setError(`更新できませんでした: ${(e as Error).message}`)
+      setError(t('更新できませんでした: {0}', (e as Error).message))
       setUpdateBusy(false)
     }
   }
@@ -370,7 +371,7 @@ export function App() {
   const withReel = useCallback((fn: (r: Reel) => Reel): Reel => {
     const rs = latest.current.reels
     const cur = rs.find(r => r.id === latest.current.reelId)
-    const next = fn(cur ?? newReel(`シーン ${rs.length + 1}`))
+    const next = fn(cur ?? newReel(t('シーン {0}', rs.length + 1)))
     if (cur) record({ kind: 'scene', value: cur })
     const all = cur ? rs.map(r => (r.id === cur.id ? next : r)) : [...rs, next]
     latest.current = { ...latest.current, reels: all, reelId: next.id, reel: next }
@@ -383,7 +384,7 @@ export function App() {
   const placeInVideo = (sceneId: string) => {
     const v = latest.current.video
     if (v) { updateVideo(addScene(v, sceneId)); return }
-    const nv = newVideo(`動画 ${latest.current.videos.length + 1}`, [sceneId])
+    const nv = newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId])
     latest.current = { ...latest.current, videos: [...latest.current.videos, nv], video: nv }
     setVideos(vs => [...vs, nv]); setVideoId(nv.id)
   }
@@ -400,7 +401,7 @@ export function App() {
   }, [withReel])
 
   const createReel = () => {
-    const r = newReel(`シーン ${reels.length + 1}`)
+    const r = newReel(t('シーン {0}', reels.length + 1))
     latest.current = { ...latest.current, reels: [...latest.current.reels, r] }
     setReels(rs => [...rs, r]); setReelId(r.id); setActiveClipId(null)
     placeInVideo(r.id)
@@ -415,7 +416,7 @@ export function App() {
   }
   // A new video starts empty; its scenes are added (or made) for it. Switching videos shows one of its scenes.
   const createVideo = () => {
-    const v = newVideo(`動画 ${videos.length + 1}`, [])
+    const v = newVideo(t('動画 {0}', videos.length + 1), [])
     latest.current = { ...latest.current, videos: [...latest.current.videos, v], video: v }
     setVideos(vs => [...vs, v]); setVideoId(v.id); setReelId(null); setActiveClipId(null)
   }
@@ -589,8 +590,8 @@ export function App() {
     }
     return { sec, clips, slides, empty: !clips && !slides }
   }
-  const slidesNote = (n: number) => (n ? `・スライド ${n}` : '')
-  const fmtLen = (s: number) => `${Math.floor(Math.round(s) / 60)}分${String(Math.round(s) % 60).padStart(2, '0')}秒`
+  const slidesNote = (n: number) => (n ? t('・スライド {0}', n) : '')
+  const fmtLen = (s: number) => t('{0}分{1}秒', Math.floor(Math.round(s) / 60), String(Math.round(s) % 60).padStart(2, '0'))
   const markerPlan = (sc: Reel, m: Marker) => {
     const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
     return planScene(orderOf(only), only, overlay, matches, settings?.ourTeamCodes ?? [])
@@ -614,26 +615,26 @@ export function App() {
     if (!video) return []
     const out: ExportTarget[] = []
     const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: 'すべて書き出し', detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}`, empty: vp.empty,
-      hint: `動画「${video.name}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す` })
+    out.push({ key: 'video', label: t('すべて書き出し'), detail: t('{0} シーン・{1} クリップ{2}・{3}', video.sceneIds.length, vp.clips, slidesNote(vp.slides), fmtLen(vp.sec)), empty: vp.empty,
+      hint: t('動画「{0}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す', video.name) })
     const each = scenePlans()
     if (video.sceneIds.length > 1 || each.length > 1) {
       const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
-      out.push({ key: 'scenes', label: 'シーンごとに書き出し', detail: `${each.length} 本・${fmtLen(sec)}`, empty: !each.length,
-        hint: 'シーンを 1 本ずつ、シーンの名前のファイルに。フォルダを選ぶと順に書き出す' })
+      out.push({ key: 'scenes', label: t('シーンごとに書き出し'), detail: t('{0} 本・{1}', each.length, fmtLen(sec)), empty: !each.length,
+        hint: t('シーンを 1 本ずつ、シーンの名前のファイルに。フォルダを選ぶと順に書き出す') })
     }
     if (reel) {
       const sp = planSec(currentPlan('scene'))
-      out.push({ key: 'scene', label: `シーン「${reel.name}」だけ`, detail: `${sp.clips} クリップ${slidesNote(sp.slides)}・${fmtLen(sp.sec)}`, empty: sp.empty })
+      out.push({ key: 'scene', label: t('シーン「{0}」だけ', reel.name), detail: t('{0} クリップ{1}・{2}', sp.clips, slidesNote(sp.slides), fmtLen(sp.sec)), empty: sp.empty })
       for (const m of reel.groupOrder) {
         if (!reel.groups[m].length && !reel.slides?.some(s => s.group === m)) continue
         const mp = planSec(markerPlan(reel, m))
-        out.push({ key: `marker:${m}`, label: `マーカー ${m}「${reel.markerNames[m] || `マーカー ${m}`}」だけ`, detail: `${mp.clips} クリップ${slidesNote(mp.slides)}・${fmtLen(mp.sec)}`, empty: mp.empty })
+        out.push({ key: `marker:${m}`, label: t('マーカー {0}「{1}」だけ', m, reel.markerNames[m] || t('マーカー {0}', m)), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), fmtLen(mp.sec)), empty: mp.empty })
       }
     }
     return out
   }, [video, reel, reels, overlay, matches, settings, dvws])
-  const exportInfo = `${EXPORT_HEIGHT}p・${overlay.transition.fade ? 'フェードあり' : 'フェードなし'}・${overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? 'タイトルカードあり' : 'タイトルカードなし'}`
+  const exportInfo = t('{0}p・{1}・{2}', EXPORT_HEIGHT, overlay.transition.fade ? t('フェードあり') : t('フェードなし'), overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? t('タイトルカードあり') : t('タイトルカードなし'))
   const exportTarget = (key: string) => {
     if (key === 'video') { void startExport(); return }
     if (key === 'scenes') { void exportScenes(); return }
@@ -650,7 +651,7 @@ export function App() {
     if (!list.length) return
     const r = dir ? { paths: list.map(x => `${dir}\\${x.file}.mp4`), existing: [] } : await api.chooseExportFolder(list.map(x => x.file))
     if (!r) return
-    if (r.existing.length && !confirm(`同じ名前のファイルが ${r.existing.length} 本あります。上書きしますか？\n${r.existing.map(p => p.split(/[\\/]/).pop()).join('\n')}`)) return
+    if (r.existing.length && !confirm(t('同じ名前のファイルが {0} 本あります。上書きしますか？\n{1}', r.existing.length, r.existing.map(p => p.split(/[\\/]/).pop()).join('\n')))) return
     sceneRun.current = { items: list.map((x, i) => ({ name: x.name, plan: x.plan, path: r.paths[i] })), i: 0 }
     const first = sceneRun.current.items[0]
     if (!await startExport(first.path, { plan: first.plan, name: first.name })) sceneRun.current = null
@@ -663,7 +664,7 @@ export function App() {
     if (!sc) return Promise.resolve(null)
     const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
     const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
-    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || `マーカー${m}`}`
+    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('マーカー{0}', m)}`
     return startExport(outPath, { plan, name })
   }
   // The gears: edit a title card over the video window — its title's place and size, and objects on
@@ -763,7 +764,7 @@ export function App() {
     copied.current = { projectPath: latest.current.projectPath, anns: sel.map(a => shiftTimes(a, at === null ? null : -at)) }
     void api.markObjectsCopied() // so Ctrl+V pastes these until something else is copied
 
-    const msg = `図形を ${sel.length} 個コピーしました（Ctrl+V で貼り付け）`
+    const msg = t('図形を {0} 個コピーしました（Ctrl+V で貼り付け）', sel.length)
     setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) // a short note, not one to dismiss
     return true
   }
@@ -803,7 +804,7 @@ export function App() {
         if (f.kind === 'image') { out.push(newSlide({ kind: 'image', assetId: f.assetId, source: { ...source, page: null } })); continue }
         const pages: Slide[] = []
         const total = await pdfPages(f.data, async (n, png, total) => {
-          setProgress({ stage: 'save', message: `${f.name} を読み込んでいます（${n} / ${total} ページ）`, ratio: n / total })
+          setProgress({ stage: 'save', message: t('{0} を読み込んでいます（{1} / {2} ページ）', f.name, n, total), ratio: n / total })
           pages.push(newSlide({ kind: 'image', assetId: await api.saveAsset(png), source: { ...source, page: n } }))
         })
         out.push(...pages.map(s => (s.bg.kind === 'image' && s.bg.source ? { ...s, bg: { ...s.bg, source: { ...s.bg.source, pages: total } } } : s)))
@@ -826,11 +827,11 @@ export function App() {
       } else list = await slidesFrom(files ?? await api.pickSlides())
       if (!list.length) return
       updateScene(sceneId, r => putSlides(r, list, spot))
-      if (how === 'file') { const msg = `スライドを ${list.length} 枚入れました`; setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) }
+      if (how === 'file') { const msg = t('スライドを {0} 枚入れました', list.length); setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) }
       else editCard(sceneId, null, list[0].id)
     } catch (e) {
       setProgress(null)
-      setError(`スライドを入れられませんでした: ${(e as Error).message}`)
+      setError(t('スライドを入れられませんでした: {0}', (e as Error).message))
     }
   }
 
@@ -883,7 +884,7 @@ export function App() {
           else {
             const want = new Set(using.map(s => s.page ?? 1))
             total = await pdfPages(f.data, async (n, png, all) => {
-              setProgress({ stage: 'save', message: `${f.name} を読み直しています（${n} / ${all} ページ）`, ratio: n / all })
+              setProgress({ stage: 'save', message: t('{0} を読み直しています（{1} / {2} ページ）', f.name, n, all), ratio: n / all })
               if (want.has(n)) assets.set(n, await api.saveAsset(png))
             }, Math.max(...want))
             // pdfPages stops at the last page used; the page count comes from the file.
@@ -899,18 +900,18 @@ export function App() {
           }
           if (f.kind === 'pdf' && total) {
             const gone = [...new Set(using.map(s => s.page ?? 1))].filter(n => n > total!).sort((a, b) => a - b)
-            if (gone.length) notes.push(`${name} は ${total} ページになりました。p.${gone.join(', ')} のスライドは前のままです`)
+            if (gone.length) notes.push(t('{0} は {1} ページになりました。p.{2} のスライドは前のままです', name, total, gone.join(', ')))
             const before = Math.max(...using.map(s => s.pages ?? 0))
-            if (before && total > before) notes.push(`${name} のページが ${before} → ${total} に増えました。増えたページは「＋」→「PDF・画像を読み込む」で入れられます`)
+            if (before && total > before) notes.push(t('{0} のページが {1} → {2} に増えました。増えたページは「＋」→「PDF・画像を読み込む」で入れられます', name, before, total))
           }
         } catch (e) {
-          notes.push(`${name} を読み直せませんでした: ${(e as Error).message}`)
+          notes.push(t('{0} を読み直せませんでした: {1}', name, (e as Error).message))
         }
       }
     } finally {
       setProgress(null)
     }
-    setNotice(notes.length ? notes.join(' / ') : 'スライドを読み直しました')
+    setNotice(notes.length ? notes.join(' / ') : t('スライドを読み直しました'))
   }
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
@@ -955,7 +956,7 @@ export function App() {
     const { reel: r, activeClipId: id, matches: ms } = latest.current
     const c = r && id ? r.clips[id] : null
     const onCard = !!cardEditRef.current
-    if (!c && !onCard) { if (tell) setNotice('画像を貼り付けるには、クリップかカードを開いてください'); return null }
+    if (!c && !onCard) { if (tell) setNotice(t('画像を貼り付けるには、クリップかカードを開いてください')); return null }
     try {
       const img = await get()
       if (!img) return null
@@ -1083,25 +1084,24 @@ export function App() {
   useEffect(() => api.onExportEvent(ev => {
     // Scene by scene: the bar shows the whole run, the text which scene is being written.
     const run = sceneRun.current
-    const n = run?.items.length ?? 1, at = run ? `シーン ${run.i + 1} / ${n}「${run.items[run.i].name}」: ` : ''
+    const n = run?.items.length ?? 1, at = run ? t('シーン {0} / {1}「{2}」: ', run.i + 1, n, run.items[run.i].name) : ''
     if (ev.type !== 'progress' && ev.type !== 'done') sceneRun.current = null
-    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ((run?.i ?? 0) + ev.ratio) / n, message: `${at}${ev.item + 1} / ${ev.items} 本目を書き出し中${eta(ev.ratio, ev.elapsedSec)}` }))
+    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ((run?.i ?? 0) + ev.ratio) / n, message: t('{0}{1} / {2} 本目を書き出し中{3}', at, ev.item + 1, ev.items, eta(ev.ratio, ev.elapsedSec)) }))
     else if (ev.type === 'done' && run && run.i + 1 < n) {
       run.i++
       const next = run.items[run.i]
       void startExportRef.current(next.path, { plan: next.plan, name: next.name }).then(job => { if (!job) sceneRun.current = null })
     }
-    else if (ev.type === 'done' && run) { sceneRun.current = null; setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `シーンごとに ${n} 本を書き出しました` }) }
+    else if (ev.type === 'done' && run) { sceneRun.current = null; setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: t('シーンごとに {0} 本を書き出しました', n) }) }
     else if (ev.type === 'done') {
       // YouTube only shows chapters when there are 3 or more and each is 10 seconds or longer.
       const short = ev.shortChapters ?? [], few = (ev.chapterCount ?? 0) < 3
-      const why = [few ? `チャプターが ${ev.chapterCount} つだけ` : '', short.length ? `10 秒未満: ${short.join('、')}` : ''].filter(Boolean).join('・')
-      const chapters = !ev.chaptersPath ? '' : `。YouTube のチャプターを「${ev.chaptersPath.split(/[\\/]/).pop()}」に書き出しました${
-        why ? `（${why}。YouTube では 3 つ以上・各 10 秒以上でないとチャプターになりません）` : ''}`
-      setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `書き出しました（${Math.round(ev.footageSec)} 秒分を ${Math.round(ev.elapsedSec)} 秒、${(ev.sizeBytes / 1e6).toFixed(1)} MB）${chapters}` })
+      const why = [few ? t('チャプターが {0} つだけ', ev.chapterCount) : '', short.length ? t('10 秒未満: {0}', short.join(t('、'))) : ''].filter(Boolean).join(t('・'))
+      const chapters = !ev.chaptersPath ? '' : t('。YouTube のチャプターを「{0}」に書き出しました{1}', ev.chaptersPath.split(/[\\/]/).pop(), why ? t('（{0}。YouTube では 3 つ以上・各 10 秒以上でないとチャプターになりません）', why) : '')
+      setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: t('書き出しました（{0} 秒分を {1} 秒、{2} MB）{3}', Math.round(ev.footageSec), Math.round(ev.elapsedSec), (ev.sizeBytes / 1e6).toFixed(1), chapters) })
     }
-    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: `${at}書き出しに失敗しました: ${ev.message}${run ? '（残りのシーンは書き出していません）' : ''}` })
-    else setExportState({ status: 'cancelled', ratio: 0, message: `書き出しをキャンセルしました${run ? `（${run.i} / ${n} 本は書き出し済み）` : ''}` })
+    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: t('{0}書き出しに失敗しました: {1}{2}', at, ev.message, run ? t('（残りのシーンは書き出していません）') : '') })
+    else setExportState({ status: 'cancelled', ratio: 0, message: t('書き出しをキャンセルしました{0}', run ? t('（{0} / {1} 本は書き出し済み）', run.i, n) : '') })
   }), [])
   const sceneRun = useRef<{ items: { name: string; plan: PlanItem[]; path: string }[]; i: number } | null>(null)
 
@@ -1115,7 +1115,7 @@ export function App() {
     const outPath = outPathArg ?? await api.chooseExportPath(part?.name ?? v.name)
     if (!outPath) return null
     // Between the scenes of a scene-by-scene run the bar stays where it is.
-    setExportState(s => ({ status: 'preparing', ratio: sceneRun.current ? s?.ratio ?? 0 : 0, message: 'オーバーレイを準備しています' }))
+    setExportState(s => ({ status: 'preparing', ratio: sceneRun.current ? s?.ratio ?? 0 : 0, message: t('オーバーレイを準備しています') }))
     try {
       const byId = Object.fromEntries(rs.map(s => [s.id, s]))
       const job = await buildExportJob(plan, ov,
@@ -1125,7 +1125,7 @@ export function App() {
       await api.startExport(job)
       return job
     } catch (e) {
-      setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${(e as Error).message}` })
+      setExportState({ status: 'error', ratio: 0, message: t('書き出しに失敗しました: {0}', (e as Error).message) })
       return null
     }
   }, [currentPlan])
@@ -1164,8 +1164,8 @@ export function App() {
     setScan(null)
     const r = await api.importPairs(pairs)
     setLibrary(await api.getLibrary())
-    if (r.failed.length) setError(`取り込めなかった試合があります: ${r.failed.map(f => `${f.dvwPath.split(/[\\/]/).pop()}（${f.message}）`).join(' / ')}`)
-    else setNotice(`${r.imported.length} 試合を倉庫に取り込みました`)
+    if (r.failed.length) setError(t('取り込めなかった試合があります: {0}', r.failed.map(f => t('{0}（{1}）', f.dvwPath.split(/[\\/]/).pop(), f.message)).join(' / ')))
+    else setNotice(t('{0} 試合を倉庫に取り込みました', r.imported.length))
   })
   const relocate = (id: string, part: MissingPart) => guard(async () => {
     const r = await api.relocateMatch(id, part)
@@ -1205,14 +1205,14 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <strong className="brand">volley-reel</strong>
-        {appVersion && <span className="app-version" title="このアプリのバージョン">v{appVersion}</span>}
-        {project && <button onClick={() => void goHome()} title="倉庫とプロジェクトの一覧に戻る">ホーム</button>}
+        {appVersion && <span className="app-version" title={t('このアプリのバージョン')}>v{appVersion}</span>}
+        {project && <button onClick={() => void goHome()} title={t('倉庫とプロジェクトの一覧に戻る')}>{t('ホーム')}</button>}
         {project && <strong className="project-name" title={project.path}>{project.name}</strong>}
-        {project && <button onClick={() => setPicker('edit')} title="倉庫から試合を足す・外す">試合 {project.matches.length}</button>}
+        {project && <button onClick={() => setPicker('edit')} title={t('倉庫から試合を足す・外す')}>{t('試合')} {project.matches.length}</button>}
         <span className="spacer" />
-        {project && <span className={`save-state ${saveState}`} title="シーンと動画は自動で保存されます">{saveState === 'saved' ? '保存済み' : saveState === 'pending' ? '保存中…' : '保存に失敗'}</span>}
-        <button onClick={() => setShortcutsOpen(true)} title="ショートカット一覧 (?)">ショートカット</button>
-        {project && <button onClick={() => setSettingsOpen(true)}>設定</button>}
+        {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
+        <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
+        {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
 
       {progress && (
@@ -1223,27 +1223,27 @@ export function App() {
       )}
       {update?.type === 'ready' && !updateLater && (
         <div className="banner update" role="status">
-          新しいバージョン {update.version} の準備ができました
-          <button className="primary" disabled={updateBusy} onClick={() => void restartToUpdate()}>再起動して更新</button>
-          <button className="link" onClick={() => setUpdateLater(true)} title="閉じても、アプリを終了するときに更新されます">あとで</button>
+          {t('新しいバージョン')} {update.version} {t('の準備ができました')}
+          <button className="primary" disabled={updateBusy} onClick={() => void restartToUpdate()}>{t('再起動して更新')}</button>
+          <button className="link" onClick={() => setUpdateLater(true)} title={t('閉じても、アプリを終了するときに更新されます')}>{t('あとで')}</button>
         </div>
       )}
       {update?.type === 'error' && !updateLater && (
         // The installer couldn't be started: the download page always works (as installing by hand).
         <div className="banner update-failed" role="alert">
-          更新を入れられませんでした: {update.message}
-          <button className="primary" onClick={() => void api.updateHelp('page')}>ダウンロードページを開く</button>
-          <button className="link" onClick={() => void api.updateHelp('log')} title="原因を調べるための記録（update.log）。送ってもらえると原因が分かります">記録を見る</button>
-          <button className="link" onClick={() => setUpdateLater(true)}>閉じる</button>
+          {t('更新を入れられませんでした:')} {update.message}
+          <button className="primary" onClick={() => void api.updateHelp('page')}>{t('ダウンロードページを開く')}</button>
+          <button className="link" onClick={() => void api.updateHelp('log')} title={t('原因を調べるための記録（update.log）。送ってもらえると原因が分かります')}>{t('記録を見る')}</button>
+          <button className="link" onClick={() => setUpdateLater(true)}>{t('閉じる')}</button>
         </div>
       )}
       {error && <div className="banner error" onClick={() => setError(null)}>{error}</div>}
       {notice && <div className="banner notice" onClick={() => setNotice(null)}>{notice}</div>}
       {staleSlides.length > 0 && (
         <div className="banner slides-stale" role="status">
-          <span>スライドの元のファイルが更新されています: {staleSlides.map(p => p.split(/[\\/]/).pop()).join('、')}</span>
-          <button className="primary" onClick={() => void reloadSlideFiles(staleSlides)}>読み直す</button>
-          <button className="link" onClick={() => void laterSlides()}>あとで</button>
+          <span>{t('スライドの元のファイルが更新されています:')} {staleSlides.map(p => p.split(/[\\/]/).pop()).join(t('、'))}</span>
+          <button className="primary" onClick={() => void reloadSlideFiles(staleSlides)}>{t('読み直す')}</button>
+          <button className="link" onClick={() => void laterSlides()}>{t('あとで')}</button>
         </div>
       )}
       {exportState && (
@@ -1253,11 +1253,11 @@ export function App() {
             <>
               <progress value={exportState.ratio} max={1} />
               <span className="muted">{Math.round(exportState.ratio * 100)}%</span>
-              <button onClick={() => void api.cancelExport()}>キャンセル</button>
+              <button onClick={() => void api.cancelExport()}>{t('キャンセル')}</button>
             </>
           )}
-          {exportState.status === 'done' && exportState.outPath && <button onClick={() => void api.showInFolder(exportState.outPath!)}>フォルダを開く</button>}
-          {exportState.status !== 'running' && exportState.status !== 'preparing' && <button className="link" onClick={() => setExportState(null)}>閉じる</button>}
+          {exportState.status === 'done' && exportState.outPath && <button onClick={() => void api.showInFolder(exportState.outPath!)}>{t('フォルダを開く')}</button>}
+          {exportState.status !== 'running' && exportState.status !== 'preparing' && <button className="link" onClick={() => setExportState(null)}>{t('閉じる')}</button>}
         </div>
       )}
 
@@ -1273,20 +1273,20 @@ export function App() {
           onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)}
           onRelocate={(id, part) => void relocate(id, part)} />
       ) : !project.matches.length ? (
-        <div className="empty"><h2>試合を選びましょう</h2>
-          <p className="muted">倉庫から、このプロジェクトで使う試合を選びます。</p>
-          <button className="primary" onClick={() => setPicker('edit')}>試合を選ぶ</button></div>
+        <div className="empty"><h2>{t('試合を選びましょう')}</h2>
+          <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
+          <button className="primary" onClick={() => setPicker('edit')}>{t('試合を選ぶ')}</button></div>
       ) : (
         <main className="workspace">
           <aside className="sidebar" onPointerDownCapture={() => { focusPane.current = 'list' }}>
-            <select className="match-select" value={scope === 'all' ? '' : matchId ?? ''} aria-label="検索する試合"
+            <select className="match-select" value={scope === 'all' ? '' : matchId ?? ''} aria-label={t('検索する試合')}
               onChange={e => { if (e.target.value) { setScope('match'); setMatchId(e.target.value) } else setScope('all') }}>
-              <option value="">すべての試合（{project.matches.length}）</option>
+              <option value="">{t('すべての試合（{0}）', project.matches.length)}</option>
               {project.matches.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
             {scope === 'all' && project.matches.length > 1 && (
-              <div className="segmented match-order" role="radiogroup" aria-label="試合の並び">
-                {([['old', '古い試合から'], ['new', '新しい試合から']] as const).map(([v, l]) => (
+              <div className="segmented match-order" role="radiogroup" aria-label={t('試合の並び')}>
+                {([['old', t('古い試合から')], ['new', t('新しい試合から')]] as const).map(([v, l]) => (
                   <button key={v} role="radio" aria-checked={matchOrder === v} className={matchOrder === v ? 'on' : ''} onClick={() => setMatchOrder(v)}>{l}</button>
                 ))}
               </div>
@@ -1301,7 +1301,7 @@ export function App() {
             {Object.keys(dvws).length
               ? <PlayList refs={results} matches={matches} showMatch={scope === 'all' && (project?.matches.length ?? 0) > 1}
                   currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
-              : <p className="muted pad">読み込み中…</p>}
+              : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
           <section className="stage">
             {match && (
@@ -1445,7 +1445,8 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
+          onLanguage={l => void (async () => { await flushAll(); await api.setLanguage(l); location.reload() })()} />
       )}
     </div>
   )
@@ -1474,6 +1475,6 @@ function labelMatches(ms: Match[], codes: string[]): Record<string, string> {
 function eta(ratio: number, elapsedSec: number): string {
   if (ratio < 0.03 || elapsedSec < 2) return ''
   const left = Math.max(0, Math.round(elapsedSec / ratio - elapsedSec))
-  return `・残り約 ${left >= 60 ? `${Math.floor(left / 60)}分${left % 60}秒` : `${left}秒`}`
+  return t('・残り約 {0}', left >= 60 ? t('{0}分{1}秒', Math.floor(left / 60), left % 60) : t('{0}秒', left))
 }
 

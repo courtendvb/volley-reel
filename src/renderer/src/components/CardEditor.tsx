@@ -5,6 +5,7 @@ import type { Slide } from '../../../shared/reel'
 import type { Card } from '../../../shared/video'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
+import { t } from '../../../shared/i18n'
 
 interface Props {
   size: { w: number; h: number }
@@ -83,7 +84,7 @@ export function CardEditor({ size, card, settings, onChange, active }: Props) {
 
 const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' => (card.video ? 'videoLayout' : card.marker === null ? 'sceneLayout' : 'markerLayout')
 const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
-const cardKindName = (card: Card) => (card.video ? '動画' : card.marker === null ? 'シーン' : 'マーカー')
+const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('マーカー'))
 
 // Below the video while a card is being edited: whether it is shown, its text (the name unless set;
 // a line break makes a second line), the background of every card, what the pointer edits (the
@@ -99,34 +100,34 @@ export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, sh
   const what = cardKindName(card)
   return (
     <div className="card-edit-bar">
-      <b>{what}のタイトルカード{card.name ? `「${card.name}」` : ''}</b>
-      <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> このカードを出す</label>
-      <label className="check card-title-field" title="カードに出す文字。改行（Enter）で 2 段になる。空にすると名前を出す">文字
-        <textarea aria-label="カードの文字" rows={Math.max(1, Math.min(3, (title || nameTitle).split('\n').length))} value={title} placeholder={nameTitle || '（名前）'}
+      <b>{what}{t('のタイトルカード')}{card.name ? t('「{0}」', card.name) : ''}</b>
+      <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> {t('このカードを出す')}</label>
+      <label className="check card-title-field" title={t('カードに出す文字。改行（Enter）で 2 段になる。空にすると名前を出す')}>{t('文字')}
+        <textarea aria-label={t('カードの文字')} rows={Math.max(1, Math.min(3, (title || nameTitle).split('\n').length))} value={title} placeholder={nameTitle || t('（名前）')}
           onChange={e => onTitle(e.target.value)} /></label>
-      <label className="check" title="すべてのタイトルカードと無地のスライドの背景色（この動画）">背景
-        <input type="color" aria-label="カードの背景色" value={cardBackground(settings.titleCard, settings.theme)}
+      <label className="check" title={t('すべてのタイトルカードと無地のスライドの背景色（この動画）')}>{t('背景')}
+        <input type="color" aria-label={t('カードの背景色')} value={cardBackground(settings.titleCard, settings.theme)}
           onChange={e => onChange({ ...settings, titleCard: { ...settings.titleCard, background: e.target.value } })} /></label>
-      {settings.titleCard.background && <button className="link" title="配色（テーマ）から決まる色に戻す"
-        onClick={() => { const { background: _bg, ...rest } = settings.titleCard; onChange({ ...settings, titleCard: rest }) }}>配色に戻す</button>}
-      <div className="segmented" role="radiogroup" aria-label="カードの編集">
+      {settings.titleCard.background && <button className="link" title={t('配色（テーマ）から決まる色に戻す')}
+        onClick={() => { const { background: _bg, ...rest } = settings.titleCard; onChange({ ...settings, titleCard: rest }) }}>{t('配色に戻す')}</button>}
+      <div className="segmented" role="radiogroup" aria-label={t('カードの編集')}>
         <button role="radio" aria-checked={tool === 'objects'} className={tool === 'objects' ? 'on' : ''} onClick={() => onTool('objects')}
-          title="このカードに文字・画像・図形を置く">図形・文字</button>
+          title={t('このカードに文字・画像・図形を置く')}>{t('図形・文字')}</button>
         <button role="radio" aria-checked={tool === 'title'} className={tool === 'title' ? 'on' : ''} onClick={() => onTool('title')}
-          title={`タイトルの位置と大きさ（この動画のすべての${what}のカード）`}>タイトルの位置</button>
+          title={t('タイトルの位置と大きさ（この動画のすべての{0}のカード）', what)}>{t('タイトルの位置')}</button>
       </div>
       {tool === 'title' && (
         <>
-          <span className="muted">ドラッグで移動、右下の角で大きさ（すべての{what}のカード）</span>
-          <label className="check">大きさ
-            <input type="range" aria-label="タイトルの大きさ" min={30} max={300} step={5} value={Math.round(layout.scale * 100)}
+          <span className="muted">{t('ドラッグで移動、右下の角で大きさ（すべての')}{what}{t('のカード）')}</span>
+          <label className="check">{t('大きさ')}
+            <input type="range" aria-label={t('タイトルの大きさ')} min={30} max={300} step={5} value={Math.round(layout.scale * 100)}
               onChange={e => set({ ...layout, scale: +e.target.value / 100 })} />
             <span>{Math.round(layout.scale * 100)}%</span></label>
-          <button onClick={() => set(def)}>元に戻す</button>
+          <button onClick={() => set(def)}>{t('元に戻す')}</button>
         </>
       )}
       <span className="spacer" />
-      <button className="primary" onClick={onDone}>完了</button>
+      <button className="primary" onClick={onDone}>{t('完了')}</button>
     </div>
   )
 }
@@ -138,14 +139,14 @@ export function SlideEditBar({ slide, onChange, onReload, onDone }: {
   const src = slide.bg.kind === 'image' ? slide.bg.source : undefined
   return (
     <div className="card-edit-bar">
-      <b>スライド{src ? `「${src.name}${src.page ? ` p.${src.page}` : ''}」` : slide.bg.kind === 'blank' ? '（無地）' : '（静止画）'}</b>
-      <label className="check">表示
-        <input type="number" aria-label="スライドを出す秒数" min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 64 }}
-          onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0.5) onChange({ ...slide, durationSec: Math.min(120, n) }) }} />秒</label>
-      <span className="muted">下の道具で文字・図形・画像を置けます</span>
-      {onReload && <button onClick={onReload} title={`${src?.path ?? ''} を読み直す（PowerPoint で直して書き出し直したとき）`}>元のファイルを読み直す</button>}
+      <b>{t('スライド')}{src ? t('「{0}」', `${src.name}${src.page ? ` p.${src.page}` : ''}`) : slide.bg.kind === 'blank' ? t('（無地）') : t('（静止画）')}</b>
+      <label className="check">{t('表示')}
+        <input type="number" aria-label={t('スライドを出す秒数')} min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 64 }}
+          onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0.5) onChange({ ...slide, durationSec: Math.min(120, n) }) }} />{t('秒')}</label>
+      <span className="muted">{t('下の道具で文字・図形・画像を置けます')}</span>
+      {onReload && <button onClick={onReload} title={t('{0} を読み直す（PowerPoint で直して書き出し直したとき）', src?.path ?? '')}>{t('元のファイルを読み直す')}</button>}
       <span className="spacer" />
-      <button className="primary" onClick={onDone}>完了</button>
+      <button className="primary" onClick={onDone}>{t('完了')}</button>
     </div>
   )
 }

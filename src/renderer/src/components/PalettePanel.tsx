@@ -7,6 +7,7 @@ import {
   savePaletteItem, setPaletteItemCategory, usePalette, usePaletteItem,
 } from '../palette'
 import { composing } from '../keys'
+import { t } from '../../../shared/i18n'
 
 const DT_ITEM = 'application/x-vr-palette-item'
 const ALL = 'all' // the すべて tab: every item; saving there leaves the item without a category
@@ -25,16 +26,16 @@ export function PalettePanel(p: {
   const palette = usePalette()
   const [floating, setFloating] = useState(() => load('vr.paletteFloating') === '1')
   useEffect(() => keep('vr.paletteFloating', floating ? '1' : '0'), [floating])
-  const badge = palette.items.length ? `${palette.items.length} 個` : undefined
+  const badge = palette.items.length ? t('{0} 個', palette.items.length) : undefined
   if (!floating) {
-    return <Accordion id="palette" icon="◧" title="パレット" badge={badge}><PaletteBody {...p} wide={false} onFloat={() => setFloating(true)} /></Accordion>
+    return <Accordion id="palette" icon="◧" title={t('パレット')} badge={badge}><PaletteBody {...p} wide={false} onFloat={() => setFloating(true)} /></Accordion>
   }
   return (
     <>
-      <Accordion id="palette" icon="◧" title="パレット" badge={badge}>
-        <p className="muted small">パレットは浮かせて表示しています <button className="link" onClick={() => setFloating(false)}>ここに戻す</button></p>
+      <Accordion id="palette" icon="◧" title={t('パレット')} badge={badge}>
+        <p className="muted small">{t('パレットは浮かせて表示しています')} <button className="link" onClick={() => setFloating(false)}>{t('ここに戻す')}</button></p>
       </Accordion>
-      <FloatingPanel title="パレット" onDock={() => setFloating(false)}>
+      <FloatingPanel title={t('パレット')} onDock={() => setFloating(false)}>
         <PaletteBody {...p} wide onFloat={null} />
       </FloatingPanel>
     </>
@@ -59,7 +60,7 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
     setName('')
   })
   const addTab = () => run(async () => {
-    const after = await addPaletteCategory(`カテゴリ ${cats.length + 1}`)
+    const after = await addPaletteCategory(t('カテゴリ {0}', cats.length + 1))
     const made = after.categories?.[after.categories.length - 1]
     if (made) { setTab(made.id); setRenaming(made.id) }
   })
@@ -79,25 +80,25 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
   return (
     <div className={`palette-body${wide ? ' wide' : ''}`}>
       <div className="ann-row">
-        {disabled ? <span className="muted small">クリップかタイトルカードを開くと、入れたり保存したりできます</span> : selection.length > 0 ? (
+        {disabled ? <span className="muted small">{t('クリップかタイトルカードを開くと、入れたり保存したりできます')}</span> : selection.length > 0 ? (
           <>
-            <input className="palette-name" value={name} placeholder={defaultName(selection)} aria-label="パレットに保存する名前" disabled={disabled || busy}
+            <input className="palette-name" value={name} placeholder={defaultName(selection)} aria-label={t('パレットに保存する名前')} disabled={disabled || busy}
               onChange={e => setName(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && !composing(e)) void save() }} />
             <button disabled={disabled || busy} onClick={() => void save()}
-              title={`選んだ図形（グループごと）をパレットに保存${current === ALL ? '' : `（「${cats.find(c => c.id === current)?.name}」に）`}。ほかのプロジェクトでも使えます`}>選択を保存</button>
+              title={t('選んだ図形（グループごと）をパレットに保存{0}。ほかのプロジェクトでも使えます', current === ALL ? '' : t('（「{0}」に）', cats.find(c => c.id === current)?.name))}>{t('選択を保存')}</button>
           </>
-        ) : <span className="muted small">図形を選ぶと、パレットに保存できます（どのプロジェクトからも使えます）</span>}
+        ) : <span className="muted small">{t('図形を選ぶと、パレットに保存できます（どのプロジェクトからも使えます）')}</span>}
         <span className="spacer" />
-        {onFloat && <button className="link" onClick={onFloat} title="パレットを画面の上に浮かせて、広く使う（動かす・大きさを変える）">⧉ 浮かせる</button>}
+        {onFloat && <button className="link" onClick={onFloat} title={t('パレットを画面の上に浮かせて、広く使う（動かす・大きさを変える）')}>{t('⧉ 浮かせる')}</button>}
       </div>
 
-      <div className="palette-tabs" role="tablist" aria-label="パレットのカテゴリ">
-        {[{ id: ALL, name: 'すべて' }, ...cats].map(c => (
+      <div className="palette-tabs" role="tablist" aria-label={t('パレットのカテゴリ')}>
+        {[{ id: ALL, name: t('すべて') }, ...cats].map(c => (
           <span key={c.id} role="tab" aria-selected={current === c.id} className={`palette-tab${current === c.id ? ' on' : ''}${overTab === c.id ? ' drop-into' : ''}`}
-            title={c.id === ALL ? 'すべてのアイテム（ここに落とすとカテゴリから外す）' : 'ダブルクリックで名前を変える。アイテムをここに落とすとこのカテゴリへ'}
+            title={c.id === ALL ? t('すべてのアイテム（ここに落とすとカテゴリから外す）') : t('ダブルクリックで名前を変える。アイテムをここに落とすとこのカテゴリへ')}
             onClick={() => setTab(c.id)} onDoubleClick={() => { if (c.id !== ALL) setRenaming(c.id) }} {...tabDrop(c.id)}>
             {renaming === c.id ? (
-              <input className="palette-tab-name" autoFocus defaultValue={c.name} aria-label="カテゴリの名前" onClick={e => e.stopPropagation()}
+              <input className="palette-tab-name" autoFocus defaultValue={c.name} aria-label={t('カテゴリの名前')} onClick={e => e.stopPropagation()}
                 onFocus={e => e.currentTarget.select()}
                 onBlur={e => { setRenaming(null); const v = e.currentTarget.value; if (v.trim() && v !== c.name) void run(() => renamePaletteCategory(c.id, v)) }}
                 onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) e.currentTarget.blur(); else if (e.key === 'Escape') { e.currentTarget.value = c.name; e.currentTarget.blur() } }} />
@@ -105,12 +106,12 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
               <>{c.name}<span className="palette-tab-count">{c.id === ALL ? palette.items.length : count(c.id)}</span></>
             )}
             {c.id !== ALL && current === c.id && !count(c.id) && renaming !== c.id && (
-              <button className="link palette-tab-remove" aria-label={`カテゴリ「${c.name}」を削除`} title="空のカテゴリを削除"
+              <button className="link palette-tab-remove" aria-label={t('カテゴリ「{0}」を削除', c.name)} title={t('空のカテゴリを削除')}
                 onClick={e => { e.stopPropagation(); void run(() => removePaletteCategory(c.id)) }}>×</button>
             )}
           </span>
         ))}
-        <button className="link palette-tab-add" disabled={busy} onClick={() => void addTab()} title="カテゴリ（タブ）を足す">＋</button>
+        <button className="link palette-tab-add" disabled={busy} onClick={() => void addTab()} title={t('カテゴリ（タブ）を足す')}>＋</button>
       </div>
 
       {shown.length > 0 && (
@@ -119,7 +120,7 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
             // Drag an item onto another to put it before (left half) or after (right half) that one,
             // or onto a tab to move it to that category.
             <span key={it.id} draggable className={`palette-item${dropAt?.id === it.id ? (dropAt.after ? ' drop-after' : ' drop-before') : ''}`}
-              title={`${it.name}（クリックで入れる・ドラッグで並べ替え、タブに落とすとそのカテゴリへ）`}
+              title={t('{0}（クリックで入れる・ドラッグで並べ替え、タブに落とすとそのカテゴリへ）', it.name)}
               onDragStart={e => { e.dataTransfer.setData(DT_ITEM, it.id); e.dataTransfer.effectAllowed = 'move' }}
               onDragOver={e => {
                 if (!e.dataTransfer.types.includes(DT_ITEM)) return
@@ -136,19 +137,19 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
                 void run(() => movePaletteItem(id, from < slot ? slot - 1 : slot)) // counted without the moved one
               }}
               onDragEnd={() => { setDropAt(null); setOverTab(null) }}>
-              <button className="palette-use" disabled={disabled || busy} aria-label={`${it.name} を入れる`}
+              <button className="palette-use" disabled={disabled || busy} aria-label={t('{0} を入れる', it.name)}
                 onClick={() => void run(async () => onUse((await usePaletteItem(it.id)).map(a => shiftTimes(a, clipIn))))}>
                 <Thumb annotations={it.annotations} big={wide} /><span className="palette-label">{it.name}</span>
               </button>
-              <button className={`palette-lock${it.locked ? ' on' : ''}`} aria-pressed={!!it.locked} aria-label={`${it.name} を保護`} disabled={busy}
-                title={it.locked ? '保護中: 外せません（クリックで保護をやめる）' : '保護する（誤って外さないように）'}
+              <button className={`palette-lock${it.locked ? ' on' : ''}`} aria-pressed={!!it.locked} aria-label={t('{0} を保護', it.name)} disabled={busy}
+                title={it.locked ? t('保護中: 外せません（クリックで保護をやめる）') : t('保護する（誤って外さないように）')}
                 onClick={() => void run(() => lockPaletteItem(it.id, !it.locked))}>{it.locked ? '🔒' : '🔓'}</button>
-              {!it.locked && <button className="link" aria-label={`${it.name} をパレットから外す`} disabled={busy} onClick={() => void run(() => removePaletteItem(it.id))}>×</button>}
+              {!it.locked && <button className="link" aria-label={t('{0} をパレットから外す', it.name)} disabled={busy} onClick={() => void run(() => removePaletteItem(it.id))}>×</button>}
             </span>
           ))}
         </div>
       )}
-      {!shown.length && <p className="muted small">{palette.items.length ? 'このカテゴリにはまだありません（アイテムをタブに落とすと移せます）' : 'まだ何も保存されていません'}</p>}
+      {!shown.length && <p className="muted small">{palette.items.length ? t('このカテゴリにはまだありません（アイテムをタブに落とすと移せます）') : t('まだ何も保存されていません')}</p>}
     </div>
   )
 }
@@ -180,10 +181,10 @@ function FloatingPanel({ title, onDock, children }: { title: string; onDock: () 
   const move = (e: PointerEvent<HTMLDivElement>) => { const d = drag.current; if (d) setRect(r => fit({ ...r, x: e.clientX - d.dx, y: e.clientY - d.dy })) }
   return (
     <div ref={box} className="floating-panel" role="dialog" aria-label={title} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
-      <div className="floating-head" onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null }} title="ドラッグで動かす（右下の角で大きさを変える）">
+      <div className="floating-head" onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null }} title={t('ドラッグで動かす（右下の角で大きさを変える）')}>
         <span className="accordion-icon" aria-hidden>◧</span><b>{title}</b>
         <span className="spacer" />
-        <button className="link" onClick={onDock} title="右の列に戻す">⧉ 戻す</button>
+        <button className="link" onClick={onDock} title={t('右の列に戻す')}>{t('⧉ 戻す')}</button>
       </div>
       <div className="floating-body">{children}</div>
     </div>
@@ -200,8 +201,8 @@ const load = (k: string): string | null => { try { return localStorage.getItem(k
 const keep = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* not kept */ } }
 
 function defaultName(sel: Annotation[]): string {
-  const t = sel.find(a => a.kind === 'text')
-  return t && t.kind === 'text' ? t.text.slice(0, 16) : sel.length > 1 ? `図形 ${sel.length} 個` : 'オブジェクト'
+  const txt = sel.find(a => a.kind === 'text')
+  return txt && txt.kind === 'text' ? txt.text.slice(0, 16) : sel.length > 1 ? t('図形 {0} 個', sel.length) : t('オブジェクト')
 }
 
 // The saved objects scaled to fit a small box (twice as large in the floating palette).

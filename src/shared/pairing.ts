@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Bulk import into the library (v3): pair each DVW with its video by date and team codes.
 // Names are written differently on each side ("2026-10-11 HTH-SMT.dvw" vs "261011HTH-SMT_FM.MP4"),
 // so both are reduced to a date and a set of three-letter codes. Pure, so it is unit-tested.
@@ -61,7 +62,7 @@ export function pairFiles(dvws: DvwInfo[], videos: string[]): Pair[] {
       const codes = codesFromName(v)
       const hits = [dvw.home, dvw.away].filter(c => c && codes.includes(c.toUpperCase())).length
       if (hits === 0 && sameDay.length > 1) continue
-      cands.push({ d, v: i, score: 1 + hits * 2, note: hits === 2 ? '日付とチーム' : hits === 1 ? '日付と片方のチーム' : '日付のみ（要確認）' })
+      cands.push({ d, v: i, score: 1 + hits * 2, note: hits === 2 ? t('日付とチーム') : hits === 1 ? t('日付と片方のチーム') : t('日付のみ（要確認）') })
     }
   })
   cands.sort((a, b) => b.score - a.score)
@@ -74,7 +75,7 @@ export function pairFiles(dvws: DvwInfo[], videos: string[]): Pair[] {
   }
   return dvws.map((dvw, d) => {
     const c = chosen.get(d)
-    return c ? { dvw, video: videos[c.v], score: c.score, note: c.note } : { dvw, video: null, score: 0, note: '動画なし' }
+    return c ? { dvw, video: videos[c.v], score: c.score, note: c.note } : { dvw, video: null, score: 0, note: t('動画なし') }
   })
 }
 

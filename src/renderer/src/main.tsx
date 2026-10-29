@@ -1,3 +1,4 @@
+import './lang' // first: the interface language, before anything translates its text
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'

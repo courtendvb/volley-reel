@@ -1,4 +1,5 @@
 import { THEME_PRESETS, type OverlayTheme } from '../../../shared/overlay'
+import { t } from '../../../shared/i18n'
 
 // Overlay colors: a preset, or base and accent picked freely.
 export function ThemePicker({ value, onChange }: { value: OverlayTheme; onChange: (t: OverlayTheme) => void }) {
@@ -14,8 +15,8 @@ export function ThemePicker({ value, onChange }: { value: OverlayTheme; onChange
         ))}
       </div>
       <div className="filter-row">
-        <label className="check">ベース <input type="color" value={value.base} onChange={e => onChange({ ...value, base: e.target.value.toUpperCase() })} /></label>
-        <label className="check">アクセント <input type="color" value={value.accent} onChange={e => onChange({ ...value, accent: e.target.value.toUpperCase() })} /></label>
+        <label className="check">{t('ベース')} <input type="color" value={value.base} onChange={e => onChange({ ...value, base: e.target.value.toUpperCase() })} /></label>
+        <label className="check">{t('アクセント')} <input type="color" value={value.accent} onChange={e => onChange({ ...value, accent: e.target.value.toUpperCase() })} /></label>
       </div>
     </>
   )

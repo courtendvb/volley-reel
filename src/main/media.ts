@@ -2,6 +2,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { ffmpegDir } from './ffmpegPath'
+import { t } from '../shared/i18n'
 
 const binDir = ffmpegDir
 
@@ -20,7 +21,7 @@ export async function probe(file: string): Promise<VideoInfo> {
   const out = await run(join(binDir(), 'ffprobe.exe'), ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file])
   const j = JSON.parse(out)
   const v = j.streams.find((s: { codec_type: string }) => s.codec_type === 'video')
-  if (!v) throw new Error('動画トラックが見つかりません')
+  if (!v) throw new Error(t('動画トラックが見つかりません'))
   const [n, d] = String(v.r_frame_rate || '0/1').split('/').map(Number)
   return {
     codec: v.codec_name, pixFmt: v.pix_fmt, width: v.width, height: v.height,

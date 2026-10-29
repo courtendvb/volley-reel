@@ -1,16 +1,17 @@
+import { t } from '../../shared/i18n'
 // The app's own look (not the video overlay colors): light / dark and the accent color.
 // Kept on this computer (localStorage), the same in every project.
 export type ThemeMode = 'light' | 'dark' | 'system'
 export interface Appearance { mode: ThemeMode; accent: string }
 
 export const ACCENTS: { name: string; color: string }[] = [
-  { name: 'ブルー', color: '#4B61D1' },
-  { name: 'ティール', color: '#0D9488' },
-  { name: 'グリーン', color: '#16A34A' },
-  { name: 'オレンジ', color: '#EA580C' },
-  { name: 'レッド', color: '#DC2626' },
-  { name: 'パープル', color: '#7C3AED' },
-  { name: 'グレー', color: '#475569' },
+  { name: t('ブルー'), color: '#4B61D1' },
+  { name: t('ティール'), color: '#0D9488' },
+  { name: t('グリーン'), color: '#16A34A' },
+  { name: t('オレンジ'), color: '#EA580C' },
+  { name: t('レッド'), color: '#DC2626' },
+  { name: t('パープル'), color: '#7C3AED' },
+  { name: t('グレー'), color: '#475569' },
 ]
 
 const KEY = 'vr.appearance'

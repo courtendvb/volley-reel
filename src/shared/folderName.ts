@@ -1,8 +1,9 @@
+import { t } from './i18n'
 // A Windows-safe folder name for a project, and the first one not already taken: "name", "name (2)", …
 
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 
-export function folderName(name: string, fallback = 'プロジェクト'): string {
+export function folderName(name: string, fallback = t('プロジェクト')): string {
   const s = name
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_') // characters Windows forbids in a file name
     .replace(/\s+/g, ' ')

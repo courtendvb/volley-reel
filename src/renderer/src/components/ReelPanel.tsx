@@ -7,6 +7,7 @@ import {
 import type { PlayRef } from '../../../shared/filter'
 import { pad2 } from '../format'
 import { InlineTitle } from './InlineTitle'
+import { t } from '../../../shared/i18n'
 
 export interface ClipInfo {
   ref: PlayRef | undefined
@@ -67,8 +68,8 @@ export function ReelPanel(p: Props) {
   if (!reel) {
     return (
       <aside className="reel-panel">
-        <div className="reel-head"><button className="primary" onClick={p.onNewReel}>シーンを作成</button></div>
-        <p className="muted pad">プレー一覧の 1〜5 ボタンか数字キー 1〜5 で、プレーをシーンに入れられます。</p>
+        <div className="reel-head"><button className="primary" onClick={p.onNewReel}>{t('シーンを作成')}</button></div>
+        <p className="muted pad">{t('プレー一覧の 1〜5 ボタンか数字キー 1〜5 で、プレーをシーンに入れられます。')}</p>
       </aside>
     )
   }
@@ -135,7 +136,7 @@ export function ReelPanel(p: Props) {
     e.preventDefault(); e.stopPropagation()
     setMenu({ spot, where, x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 130) })
   }
-  const BELOW = 'この行の下にスライドを入れる', AT_TOP = 'グループの先頭にスライドを入れる'
+  const BELOW = t('この行の下にスライドを入れる'), AT_TOP = t('グループの先頭にスライドを入れる')
   const rowsOf = (g: Group, ids: string[]) => {
     const rows = groupRows(reel, g, ids)
     let clipNo = 0
@@ -151,15 +152,15 @@ export function ReelPanel(p: Props) {
       onDrop={e => dropOnRow(e, g, rows, k)}
       onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
       onClick={() => p.onEditSlide(s.id)}
-      title="クリックで動画の画面に出して編集（文字・図形を置く・秒数）"
+      title={t('クリックで動画の画面に出して編集（文字・図形を置く・秒数）')}
     >
-      <span className="grip" aria-hidden title="ドラッグで並べ替え">⠿</span>
+      <span className="grip" aria-hidden title={t('ドラッグで並べ替え')}>⠿</span>
       <span className="slide-icon" aria-hidden>▣</span>
       <span className="clip-main">{slideLabel(s)}</span>
-      {s.annotations.length > 0 && <span className="muted" title="置いた図形・文字の数">✎{s.annotations.length}</span>}
+      {s.annotations.length > 0 && <span className="muted" title={t('置いた図形・文字の数')}>✎{s.annotations.length}</span>}
       <span className="clip-dur">{s.durationSec.toFixed(1)}s</span>
       <span className="clip-actions" onClick={e => e.stopPropagation()}>
-        <button title="スライドを外す" onClick={() => change(removeSlide(reel, s.id))}>×</button>
+        <button title={t('スライドを外す')} onClick={() => change(removeSlide(reel, s.id))}>×</button>
       </span>
     </div>
   )
@@ -185,9 +186,9 @@ export function ReelPanel(p: Props) {
         onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
         onClick={() => p.onActivate(c, g)}
       >
-        <span className="grip" aria-hidden title="ドラッグで並べ替え・マーカーのグループへ移動">⠿</span>
+        <span className="grip" aria-hidden title={t('ドラッグで並べ替え・マーカーのグループへ移動')}>⠿</span>
         {p.missing.has(c.id) || !r ? (
-          <span className="clip-main missing">プレーが見つかりません（DVW が変更された可能性）</span>
+          <span className="clip-main missing">{t('プレーが見つかりません（DVW が変更された可能性）')}</span>
         ) : (
           <span className="clip-main">
             {multiMatch && <span className="muted">{inf.matchLabel} </span>}
@@ -197,11 +198,11 @@ export function ReelPanel(p: Props) {
             {r.play.skill === 'A' && r.combo && <span className="combo" title={r.comboName ?? undefined}> {r.combo}</span>}
           </span>
         )}
-        {p.overlaps.has(c.id) && <span className="overlap" title="同じ試合の別のクリップと範囲が重なっています">⚠</span>}
+        {p.overlaps.has(c.id) && <span className="overlap" title={t('同じ試合の別のクリップと範囲が重なっています')}>⚠</span>}
         <TagChip tag={c.tag} onChange={t => change(setTag(reel, c.id, t))} />
-        <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? '長さを個別に調整済み' : '初期値の長さ'}>{dur.toFixed(1)}s</span>
+        <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? t('長さを個別に調整済み') : t('初期値の長さ')}>{dur.toFixed(1)}s</span>
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
-          <button title="シーンから外す" onClick={() => change(removeClip(reel, c.id))}>×</button>
+          <button title={t('シーンから外す')} onClick={() => change(removeClip(reel, c.id))}>×</button>
         </span>
       </div>
     )
@@ -213,43 +214,42 @@ export function ReelPanel(p: Props) {
   return (
     <aside className="reel-panel">
       <div className="reel-head">
-        <span className="panel-kicker">シーン</span>
-        <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label="シーン">
+        <span className="panel-kicker">{t('シーン')}</span>
+        <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={t('シーン')}>
           {p.videoSceneIds ? (
             <>
-              <optgroup label="この動画のシーン">
+              <optgroup label={t('この動画のシーン')}>
                 {p.reels.filter(r => p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </optgroup>
-              <optgroup label="ほかのシーン（この動画には入っていない）">
+              <optgroup label={t('ほかのシーン（この動画には入っていない）')}>
                 {p.reels.filter(r => !p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </optgroup>
             </>
           ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <button onClick={() => { if (confirm(`シーン「${reel.name}」を削除しますか？${p.usedIn ? `
-${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動します）`)) p.onDeleteReel(reel.id) }} title="シーンを削除">削除</button>
+        <button onClick={() => { if (confirm(t('シーン「{0}」を削除しますか？{1}（reels/deleted/ に移動します）', reel.name, p.usedIn ? t('\n{0} 本の動画から外れます。', p.usedIn) : ''))) p.onDeleteReel(reel.id) }} title={t('シーンを削除')}>{t('削除')}</button>
       </div>
       {p.videoSceneIds && !p.videoSceneIds.includes(reel.id) && (
-        <p className="hint pad-x">このシーンは今の動画に入っていません <button className="link" onClick={() => p.onAddToVideo(reel.id)}>動画に追加</button></p>
+        <p className="hint pad-x">{t('このシーンは今の動画に入っていません')} <button className="link" onClick={() => p.onAddToVideo(reel.id)}>{t('動画に追加')}</button></p>
       )}
-      <label className="reel-name-row"><span className="field-label">名前</span>
-        <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label="シーンの名前"
-          title="シーンの名前。シーンのタイトルカードに出ます" /></label>
+      <label className="reel-name-row"><span className="field-label">{t('名前')}</span>
+        <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label={t('シーンの名前')}
+          title={t('シーンの名前。シーンのタイトルカードに出ます')} /></label>
 
       <div className="reel-controls">
-        <span className="field-label">再生・書き出し</span>
-        <div className="segmented" role="radiogroup" aria-label="再生・書き出しに使うクリップ">
+        <span className="field-label">{t('再生・書き出し')}</span>
+        <div className="segmented" role="radiogroup" aria-label={t('再生・書き出しに使うクリップ')}>
           <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}
-            title="マーカーの付いたクリップだけを使う（マーカーなしは使わない）">マーカー付きだけ</button>
+            title={t('マーカーの付いたクリップだけを使う（マーカーなしは使わない）')}>{t('マーカー付きだけ')}</button>
           <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}
-            title="マーカーなしのクリップも、マーカーのあとにプレー一覧の順（試合の並び・試合の中は時間順）で使う">全部</button>
+            title={t('マーカーなしのクリップも、マーカーのあとにプレー一覧の順（試合の並び・試合の中は時間順）で使う')}>{t('全部')}</button>
         </div>
         {p.playing
-          ? <button onClick={p.onStop}>■ 停止</button>
-          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title="このシーンだけを再生">▶ シーンを再生</button>}
+          ? <button onClick={p.onStop}>{t('■ 停止')}</button>
+          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title={t('このシーンだけを再生')}>{t('▶ シーンを再生')}</button>}
       </div>
       {Object.values(reel.clips).some(c => !c.mode) && <Legacy d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />}
-      <p className="count">{p.orderCount} クリップ{reel.slides?.length ? `・スライド ${reel.slides.length}` : ''}・{formatDur(p.orderSec)}（マーカー付き {marked} / 全 {Object.keys(reel.clips).length}）</p>
+      <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatDur(p.orderSec)}{t('（マーカー付き {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
         onDragEnd={() => setDragOver(null)}>
@@ -258,29 +258,29 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
             onDragOver={overGroup(m)} onDrop={e => onDropGroup(e, m)}>
             <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}
               onContextMenu={e => openMenu(e, spotAt(groupRows(reel, m), m, 0), AT_TOP)}>
-              <span className="grip" aria-hidden title="ドラッグでグループの順番を変える">⠿</span>
+              <span className="grip" aria-hidden title={t('ドラッグでグループの順番を変える')}>⠿</span>
               {/* The number itself switches the group on (its color) or off (grey: not played or exported). */}
               <button className="swatch swatch-toggle" style={reel.markerOff?.[m] ? undefined : { background: MARKER_COLORS[m] }}
-                aria-pressed={!reel.markerOff?.[m]} aria-label={`マーカー ${m} を使う`}
-                title={reel.markerOff?.[m] ? 'オフ: 再生・書き出しに使わない（クリックでオン）' : 'オン: 再生・書き出しに使う（クリックでオフ）'}
+                aria-pressed={!reel.markerOff?.[m]} aria-label={t('マーカー {0} を使う', m)}
+                title={reel.markerOff?.[m] ? t('オフ: 再生・書き出しに使わない（クリックでオン）') : t('オン: 再生・書き出しに使う（クリックでオフ）')}
                 onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>{m}</button>
-              <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={`マーカー ${m}`} label={`マーカー ${m} の名前`}
+              <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={t('マーカー {0}', m)} label={t('マーカー {0} の名前', m)}
                 onChange={v => change(renameMarker(reel, m, v))} />
-              {reel.markerOff?.[m] && <span className="excluded-note" title="番号をクリックするとオンに戻ります">オフ（使わない）</span>}
+              {reel.markerOff?.[m] && <span className="excluded-note" title={t('番号をクリックするとオンに戻ります')}>{t('オフ（使わない）')}</span>}
               <span className="muted">{reel.groups[m].length}</span>
               {reel.groups[m].some(id => reel.clips[id]?.tag) && (
-                <button className="tag-sort" title="このグループのクリップをタグの順に並べる（タグなしは最後。Ctrl+Z で戻せる）"
-                  onClick={() => change(sortByTag(reel, m))}>タグ順</button>
+                <button className="tag-sort" title={t('このグループのクリップをタグの順に並べる（タグなしは最後。Ctrl+Z で戻せる）')}
+                  onClick={() => change(sortByTag(reel, m))}>{t('タグ順')}</button>
               )}
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
                 return (
                   <button className={`card-toggle${on ? ' on' : ''}`} aria-pressed={on}
-                    title={`${on ? 'このマーカーの前にタイトルカードを出す（クリックで出さない）' : 'このマーカーの前にタイトルカードを出さない（クリックで出す）'}${reel.markerCards?.[m] === undefined ? '。今は動画の設定どおり' : ''}`}
-                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>カード</button>
+                    title={`${on ? t('このマーカーの前にタイトルカードを出す（クリックで出さない）') : t('このマーカーの前にタイトルカードを出さない（クリックで出す）')}${reel.markerCards?.[m] === undefined ? t('。今は動画の設定どおり') : ''}`}
+                    onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>{t('カード')}</button>
                 )
               })()}
-              <button className="gear" aria-label={`マーカー ${m} のタイトルカードの見た目`} title="マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集"
+              <button className="gear" aria-label={t('マーカー {0} のタイトルカードの見た目', m)} title={t('マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集')}
                 onClick={() => p.onEditCard(m)}>⚙</button>
             </header>
             {rowsOf(m, reel.groups[m])}
@@ -294,7 +294,7 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           }}>
           <header className="group-head" onContextMenu={e => openMenu(e, spotAt(groupRows(reel, 'none', none.map(c => c.id)), 'none', 0), AT_TOP)}>
             <span className="swatch none">–</span>
-            <span className="none-title">マーカーなし（一覧の順）{reel.scope === 'marked' && <span className="excluded-note" title="上の「再生・書き出し」を「全部」にすると使われます"> 使わない（「マーカー付きだけ」のため）</span>}</span>
+            <span className="none-title">{t('マーカーなし（一覧の順）')}{reel.scope === 'marked' && <span className="excluded-note" title={t('上の「再生・書き出し」を「全部」にすると使われます')}> {t('使わない（「マーカー付きだけ」のため）')}</span>}</span>
             <span className="muted">{none.length}</span>
           </header>
           {rowsOf('none', none.map(c => c.id))}
@@ -305,16 +305,16 @@ ${p.usedIn} 本の動画から外れます。` : ''}（reels/deleted/ に移動�
           <div className="menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
           <div className="slide-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
             <div className="slide-menu-title">{menu.where}</div>
-            {([['blank', '無地のスライド', 'タイトルカードと同じ色の無地。文字や図形を置いて説明に使う'],
-              ['file', 'PDF・画像を読み込む…', 'PowerPoint から PDF で書き出したもの。全ページが 1 枚ずつ入る'],
-              ['frame', '今の画面を静止画に', '動画の今のコマを背景にして、矢印などを描く']] as const).map(([how, label, hint]) => (
+            {([['blank', t('無地のスライド'), t('タイトルカードと同じ色の無地。文字や図形を置いて説明に使う')],
+              ['file', t('PDF・画像を読み込む…'), t('PowerPoint から PDF で書き出したもの。全ページが 1 枚ずつ入る')],
+              ['frame', t('今の画面を静止画に'), t('動画の今のコマを背景にして、矢印などを描く')]] as const).map(([how, label, hint]) => (
               <button key={how} role="menuitem" title={hint} disabled={how === 'frame' && !p.canFrame}
                 onClick={() => { setMenu(null); p.onSlide(menu.spot, how) }}>{label}</button>
             ))}
           </div>
         </>
       )}
-      <p className="hint pad-x">数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でタグ（並べ替え用のメモ）、「タグ順」でグループをタグの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、グループの見出しを右クリックで先頭にスライドを入れる。</p>
+      <p className="hint pad-x">{t('数字キー 1〜5 で選択中のクリップにマーカー（複数付けられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でタグ（並べ替え用のメモ）、「タグ順」でグループをタグの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、グループの見出しを右クリックで先頭にスライドを入れる。')}</p>
     </aside>
   )
 }
@@ -324,7 +324,7 @@ function TagChip({ tag, onChange }: { tag: string | undefined; onChange: (t: str
   const [editing, setEditing] = useState(false)
   if (editing) {
     return (
-      <input className="tag-input" autoFocus defaultValue={tag ?? ''} maxLength={TAG_MAX} aria-label="タグ"
+      <input className="tag-input" autoFocus defaultValue={tag ?? ''} maxLength={TAG_MAX} aria-label={t('タグ')}
         onClick={e => e.stopPropagation()} onFocus={e => e.currentTarget.select()}
         onBlur={e => { setEditing(false); onChange(e.currentTarget.value) }}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { e.currentTarget.value = tag ?? ''; e.currentTarget.blur() } }} />
@@ -332,7 +332,7 @@ function TagChip({ tag, onChange }: { tag: string | undefined; onChange: (t: str
   }
   return (
     <button className={`tag-chip${tag ? '' : ' empty'}`} style={tag ? tagColor(tag) : undefined}
-      title={tag ? `タグ「${tag}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません` : 'タグを付ける（並べ替え用のメモ。Shift+1〜5 でも付けられる）'}
+      title={tag ? t('タグ「{0}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません', tag) : t('タグを付ける（並べ替え用のメモ。Shift+1〜5 でも付けられる）')}
       onClick={e => { e.stopPropagation(); setEditing(true) }}>{tag || '＋'}</button>
   )
 }
@@ -348,10 +348,10 @@ function tagColor(tag: string) {
 }
 
 function slideLabel(s: Slide): string {
-  if (s.bg.kind === 'blank') return 'スライド（無地）'
+  if (s.bg.kind === 'blank') return t('スライド（無地）')
   const src = s.bg.source
-  if (!src) return 'スライド（静止画）'
-  return `スライド ${src.name}${src.page ? ` p.${src.page}` : ''}`
+  if (!src) return t('スライド（静止画）')
+  return t('スライド {0}{1}', src.name, src.page ? ` p.${src.page}` : '')
 }
 
 // Clips added before each clip carried its own cut (design §3.5) follow the scene's mode select.
@@ -359,12 +359,12 @@ function slideLabel(s: Slide): string {
 function Legacy({ d, onChange }: { d: RangeDefaults; onChange: (d: RangeDefaults) => void }) {
   return (
     <div className="reel-defaults">
-      <span title="切り出しの指定がない（以前に入れた）クリップの長さ">
-        以前のクリップ <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label="長さの初期値">
-          <option value="rally">ラリー全体</option>
-          <option value="keyplay">キープレー中心</option>
+      <span title={t('切り出しの指定がない（以前に入れた）クリップの長さ')}>
+        {t('以前のクリップ')} <select value={d.mode} onChange={e => onChange({ ...d, mode: e.target.value as RangeDefaults['mode'] })} aria-label={t('長さの初期値')}>
+          <option value="rally">{t('ラリー全体')}</option>
+          <option value="keyplay">{t('キープレー中心')}</option>
         </select>
-        {d.mode === 'rally' && <> サーブ −<SecInput v={d.rallyLead} label="サーブの何秒前から" onChange={n => onChange({ ...d, rallyLead: n })} />秒</>}
+        {d.mode === 'rally' && <> {t('サーブ −')}<SecInput v={d.rallyLead} label={t('サーブの何秒前から')} onChange={n => onChange({ ...d, rallyLead: n })} />{t('秒')}</>}
       </span>
     </div>
   )
@@ -379,5 +379,5 @@ export function SecInput({ v, label, onChange, disabled }: { v: number; label: s
 
 function formatDur(sec: number): string {
   const s = Math.round(sec)
-  return `${Math.floor(s / 60)}分${String(s % 60).padStart(2, '0')}秒`
+  return t('{0}分{1}秒', Math.floor(s / 60), String(s % 60).padStart(2, '0'))
 }

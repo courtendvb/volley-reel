@@ -108,7 +108,9 @@ function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() 
 // Loaded with a dynamic import only on a self-check run, so normal use never runs or parses it.
 export function installSmoke(h: SmokeHost): void {
   const { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
-  window.__smoke = async (opts: SmokeOpts) => {
+  // A failure's stack is logged here: only its message reaches the main process.
+  window.__smoke = (opts: SmokeOpts) => run(opts).catch(e => { console.error(`[smoke stack] ${(e as Error).stack}`); throw e })
+  const run = async (opts: SmokeOpts) => {
     if (opts.home) return smokeHome(opts)
     if (opts.m8?.startsWith('relocate:')) return smokeRelocate(opts.m8.slice('relocate:'.length))
     const p = await api.getProject()

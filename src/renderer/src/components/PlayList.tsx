@@ -5,6 +5,7 @@ import { MARKER_COLORS, type Marker } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
+import { t } from '../../../shared/i18n'
 
 const ROW = 30 // px; fixed so the list can be windowed
 
@@ -68,7 +69,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
     if (it.kind === 'match') {
       rows.push(
         <div key={`m:${it.matchId}`} className="play-match-head" style={{ top: i * ROW, height: ROW }} role="listitem">
-          <b>{matches[it.matchId]?.name ?? it.matchId}</b><span className="muted">{it.count.toLocaleString()} プレー</span>
+          <b>{matches[it.matchId]?.name ?? it.matchId}</b><span className="muted">{it.count.toLocaleString()} {t('プレー')}</span>
         </div>,
       )
       continue
@@ -87,7 +88,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
   return (
     <div className="play-list" ref={box} role="list" onScroll={e => setScrollTop(e.currentTarget.scrollTop)}>
       {refs.length === 0
-        ? <p className="muted pad">条件に合うプレーがありません</p>
+        ? <p className="muted pad">{t('条件に合うプレーがありません')}</p>
         : <div style={{ height: items.length * ROW, position: 'relative' }}>{rows}</div>}
     </div>
   )
@@ -103,7 +104,7 @@ const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump
   return (
     <div role="listitem" style={{ top, height: ROW }}
       className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${marks === '' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
-      title={`映像 ${formatTime(videoTime)}${marks === '' ? '・シーンに入っています（マーカーなし）' : ''}`}>
+      title={t('映像 {0}{1}', formatTime(videoTime), marks === '' ? t('・シーンに入っています（マーカーなし）') : '')}>
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
@@ -114,7 +115,7 @@ const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump
           const on = !!marks && marks.split(',').includes(String(m))
           return (
             <button key={m} className={`mark${on ? ' on' : ''}`} style={on ? { background: MARKER_COLORS[m], borderColor: MARKER_COLORS[m] } : undefined}
-              title={on ? `マーカー ${m} を外す` : `今のシーンにマーカー ${m} で入れる（ほかのマーカーと同時にも付けられます）`}
+              title={on ? t('マーカー {0} を外す', m) : t('今のシーンにマーカー {0} で入れる（ほかのマーカーと同時にも付けられます）', m)}
               onClick={e => { e.stopPropagation(); onMark(r, m) }}>{m}</button>
           )
         })}

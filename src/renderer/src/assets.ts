@@ -1,6 +1,7 @@
 // Images for image annotations: decoded once per asset and shared by the preview and the export.
 // A PDF is inserted as a picture of its first page, rendered here with pdf.js and saved as a PNG.
 import type { ImageLookup } from '../../shared/annotation'
+import { t } from '../../shared/i18n'
 
 const api = window.api
 // Decoded pictures take width × height × 4 bytes each (a phone photo is ~48 MB), so: they are
@@ -123,7 +124,7 @@ export async function insertAsset(path?: string): Promise<{ assetId: string; wid
   if (!picked) return null
   const assetId = picked.kind === 'image' ? picked.assetId : await api.saveAsset(await pdfFirstPage(picked.data))
   const bmp = await load(assetId)
-  if (!bmp) throw new Error('画像を読み込めませんでした')
+  if (!bmp) throw new Error(t('画像を読み込めませんでした'))
   return { assetId, width: bmp.width, height: bmp.height }
 }
 
@@ -131,7 +132,7 @@ export async function insertAsset(path?: string): Promise<{ assetId: string; wid
 async function pdfFirstPage(data: Uint8Array): Promise<Uint8Array> {
   let first: Uint8Array | null = null
   await pdfPages(data, async (_n, png) => { first = png }, 1)
-  if (!first) throw new Error('PDF を画像にできませんでした')
+  if (!first) throw new Error(t('PDF を画像にできませんでした'))
   return first
 }
 
@@ -152,7 +153,7 @@ export async function pdfPages(data: Uint8Array, each: (page: number, png: Uint8
       ctx.fillStyle = '#FFFFFF' // PDF pages are paper: transparent areas would show the video
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       await page.render({ canvas, canvasContext: ctx, viewport }).promise
-      const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error('PDF を画像にできませんでした'))), 'image/png'))
+      const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error(t('PDF を画像にできませんでした')))), 'image/png'))
       await each(n, new Uint8Array(await blob.arrayBuffer()), doc.numPages)
       page.cleanup()
     }

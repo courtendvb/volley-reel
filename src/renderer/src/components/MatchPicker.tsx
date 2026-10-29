@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Match } from '../../../shared/types'
 import { formatTime } from '../format'
+import { t } from '../../../shared/i18n'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -41,25 +42,25 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal picker-modal" role="dialog" aria-label="試合を選ぶ" onClick={e => e.stopPropagation()}>
-        <h2>{mode === 'create' ? '新しいプロジェクト' : 'プロジェクトの試合'}</h2>
+      <div className="modal picker-modal" role="dialog" aria-label={t('試合を選ぶ')} onClick={e => e.stopPropagation()}>
+        <h2>{mode === 'create' ? t('新しいプロジェクト') : t('プロジェクトの試合')}</h2>
         <div className="picker-fields">
           {mode === 'create' && (
-            <label className="field"><span className="field-label">名前</span>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="例: 2026-27 前半ハイライト" /></label>
+            <label className="field"><span className="field-label">{t('名前')}</span>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder={t('例: 2026-27 前半ハイライト')} /></label>
           )}
-          <label className="field"><span className="field-label">対象チーム</span>
-            <select aria-label="対象チーム" value={code} onChange={e => setCode(e.target.value)}>
-              <option value="">チームを選ぶ…</option>
-              {teams.map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}（${t.n}試合）`}</option>)}
+          <label className="field"><span className="field-label">{t('対象チーム')}</span>
+            <select aria-label={t('対象チーム')} value={code} onChange={e => setCode(e.target.value)}>
+              <option value="">{t('チームを選ぶ…')}</option>
+              {teams.map(tm => <option key={tm.code} value={tm.code}>{t('{0} — {1}（{2}試合）', tm.code, tm.name, tm.n)}</option>)}
             </select></label>
-          <p className="hint">倉庫にある試合のチーム（DVW の [3TEAMS]）から 1 つ選びます。このチームが出ている試合を抽出し、プロジェクトの中では、ホームでもアウェイでもこのチームを「自チーム」として扱います（相手チームの分析なら相手を選びます）。</p>
+          <p className="hint">{t('倉庫にある試合のチーム（DVW の [3TEAMS]）から 1 つ選びます。このチームが出ている試合を抽出し、プロジェクトの中では、ホームでもアウェイでもこのチームを「自チーム」として扱います（相手チームの分析なら相手を選びます）。')}</p>
         </div>
         <div className="filter-row">
-          <span className="count"><b>{selected.size}</b> 試合を選択中（候補 {candidates.length}）</span>
+          <span className="count"><b>{selected.size}</b> {t('試合を選択中（候補 {0}）', candidates.length)}</span>
           <span className="spacer" />
           <button className="link" onClick={() => setSelected(s => { const n = new Set(s); for (const m of candidates) { if (all) n.delete(m.id); else n.add(m.id) } return n })}>
-            {all ? '候補をすべて外す' : '候補をすべて選ぶ'}
+            {all ? t('候補をすべて外す') : t('候補をすべて選ぶ')}
           </button>
         </div>
         <div className="match-table picker" role="list">
@@ -72,17 +73,17 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
               <span className="muted dur">{formatTime(m.durationSec)}</span>
             </label>
           ))}
-          {!candidates.length && <p className="muted pad">このチームの試合は倉庫にありません</p>}
+          {!candidates.length && <p className="muted pad">{t('このチームの試合は倉庫にありません')}</p>}
         </div>
         <div className="modal-actions">
-          <button onClick={onClose}>キャンセル</button>
+          <button onClick={onClose}>{t('キャンセル')}</button>
           {mode === 'create' && (
             <button disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected], chooseFolder: true })}
-              title="倉庫の外など、置く場所を自分で選んで作ります">場所を選んで作成…</button>
+              title={t('倉庫の外など、置く場所を自分で選んで作ります')}>{t('場所を選んで作成…')}</button>
           )}
           <button className="primary" disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected] })}
-            title={mode === 'create' ? '倉庫の projects フォルダに、プロジェクト名のフォルダを作ります' : undefined}>
-            {mode === 'create' ? '作成' : '保存'}
+            title={mode === 'create' ? t('倉庫の projects フォルダに、プロジェクト名のフォルダを作ります') : undefined}>
+            {mode === 'create' ? t('作成') : t('保存')}
           </button>
         </div>
       </div>

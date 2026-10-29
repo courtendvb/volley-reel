@@ -11,11 +11,12 @@ import type { Annotation } from '../shared/annotation'
 import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Palette, ParsedDVW, ScanResult } from '../shared/types'
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
+import { t } from '../shared/i18n'
 
 const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
 const cleanCode = (code: string) => {
   const c = code.trim().toUpperCase()
-  if (!/^[A-Z0-9]{1,8}$/.test(c)) throw new Error(`チームコードが不正です: ${code}`)
+  if (!/^[A-Z0-9]{1,8}$/.test(c)) throw new Error(t('チームコードが不正です: {0}', code))
   return c
 }
 
@@ -55,7 +56,7 @@ export class Library {
     }
     const p = await this.palette()
     const known = category && p.categories?.some(c => c.id === category) ? category : null
-    const item = { id: randomUUID(), name: name.trim() || 'オブジェクト', createdAt: new Date().toISOString(), annotations, ...(known ? { category: known } : {}) }
+    const item = { id: randomUUID(), name: name.trim() || t('オブジェクト'), createdAt: new Date().toISOString(), annotations, ...(known ? { category: known } : {}) }
     return this.savePalette({ ...p, items: [item, ...p.items] })
   }
 
@@ -78,7 +79,7 @@ export class Library {
   // Categories: the palette's tabs. Items without one show only under すべて.
   async addPaletteCategory(name: string): Promise<Palette> {
     const p = await this.palette()
-    return this.savePalette({ ...p, categories: [...(p.categories ?? []), { id: randomUUID(), name: name.trim() || 'カテゴリ' }] })
+    return this.savePalette({ ...p, categories: [...(p.categories ?? []), { id: randomUUID(), name: name.trim() || t('カテゴリ') }] })
   }
 
   async renamePaletteCategory(id: string, name: string): Promise<Palette> {
@@ -119,7 +120,7 @@ export class Library {
   // The item's objects for a project: their pictures copied into its assets/ when missing.
   async usePaletteItem(id: string, projectAssets: string): Promise<Annotation[]> {
     const item = (await this.palette()).items.find(i => i.id === id)
-    if (!item) throw new Error('パレットに見つかりません')
+    if (!item) throw new Error(t('パレットに見つかりません'))
     await mkdir(projectAssets, { recursive: true })
     for (const a of item.annotations) {
       if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
@@ -143,7 +144,7 @@ export class Library {
 
   async setLogo(code: string, file: string): Promise<void> {
     const ext = extname(file).slice(1).toLowerCase().replace('jpeg', 'jpg')
-    if (!LOGO_EXT.includes(ext)) throw new Error('ロゴは画像（PNG・JPEG・WebP など）を選んでください')
+    if (!LOGO_EXT.includes(ext)) throw new Error(t('ロゴは画像（PNG・JPEG・WebP など）を選んでください'))
     await this.removeLogo(code)
     await mkdir(join(this.dir, 'logos'), { recursive: true })
     await copyFile(file, join(this.dir, 'logos', `${cleanCode(code)}.${ext}`))
@@ -168,10 +169,10 @@ export class Library {
       if (!f.endsWith('.json')) continue
       try {
         const { data: m, fromBackup } = await readJSON<Match>(join(dir, 'matches', f))
-        if (fromBackup) lib.notices.push(`試合「${m.name}」のファイルが読めなかったため、1つ前の保存から復元しました`)
+        if (fromBackup) lib.notices.push(t('試合「{0}」のファイルが読めなかったため、1つ前の保存から復元しました', m.name))
         lib.matches.set(m.id, m)
       } catch {
-        lib.notices.push(`試合のファイル ${f} が読めませんでした（ファイルはそのまま残しています）`)
+        lib.notices.push(t('試合のファイル {0} が読めませんでした（ファイルはそのまま残しています）', f))
       }
     }
     return lib
@@ -196,31 +197,31 @@ export class Library {
   // (and prepared again when it needs it); a DVW must parse and have plays. Returns a note for the user.
   async relocate(id: string, part: MissingPart, path: string, progress: (p: ImportProgress) => void): Promise<string> {
     const m = this.matches.get(id)
-    if (!m) throw new Error(`試合が見つかりません: ${id}`)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     let next: Match, note: string
     if (part === 'dvw') {
       const dvw = parseDVW(await readFile(path, 'latin1'))
-      if (!dvw.plays.length) throw new Error(`${basename(path)} にプレーがありません`)
+      if (!dvw.plays.length) throw new Error(t('{0} にプレーがありません', basename(path)))
       const codes = dvw.teams.map(t => t.code).join('-'), was = m.teams.map(t => t.code).join('-')
       next = { ...m, dvwPath: path }
-      note = codes === was ? `${m.name}: DVW の場所を更新しました` : `${m.name}: DVW の場所を更新しました（チームが ${was} から ${codes} に変わっています。別の試合でないか確認してください）`
+      note = codes === was ? t('{0}: DVW の場所を更新しました', m.name) : t('{0}: DVW の場所を更新しました（チームが {1} から {2} に変わっています。別の試合でないか確認してください）', m.name, was, codes)
     } else {
-      progress({ stage: 'probe', message: `${basename(path)} を確認しています` })
+      progress({ stage: 'probe', message: t('{0} を確認しています', basename(path)) })
       const info = await probe(path)
       const reason = prepareReason(info)
       let playable = path
       if (reason) {
         playable = join(this.dir, 'cache', `${safeId(id)}.mp4`)
-        const what = reason === 'reencode' ? '再生できる形式に変換' : '音声トラックを除去'
-        progress({ stage: 'prepare', message: `${what}しています`, ratio: 0 })
-        await prepare(path, playable, reason, info.durationSec, ratio => progress({ stage: 'prepare', message: `${what}しています`, ratio }))
+        const what = reason === 'reencode' ? t('再生できる形式に変換') : t('音声トラックを除去')
+        progress({ stage: 'prepare', message: t('{0}しています', what), ratio: 0 })
+        await prepare(path, playable, reason, info.durationSec, ratio => progress({ stage: 'prepare', message: t('{0}しています', what), ratio }))
       }
       next = { ...m, sourceVideoPath: path, videoPath: playable, fps: info.fps, fpsStr: info.fpsStr, durationSec: info.durationSec, width: info.width, height: info.height }
       note = Math.abs(info.durationSec - m.durationSec) > 2
-        ? `${m.name}: 動画の場所を更新しました（長さが ${fmt(m.durationSec)} から ${fmt(info.durationSec)} に変わっています。別の動画でないか確認してください）`
-        : `${m.name}: 動画の場所を更新しました`
+        ? t('{0}: 動画の場所を更新しました（長さが {1} から {2} に変わっています。別の動画でないか確認してください）', m.name, fmt(m.durationSec), fmt(info.durationSec))
+        : t('{0}: 動画の場所を更新しました', m.name)
     }
-    progress({ stage: 'save', message: '保存しています' })
+    progress({ stage: 'save', message: t('保存しています') })
     await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
     this.matches.set(id, next)
     return note
@@ -241,8 +242,8 @@ export class Library {
   // Parsed every time from the DVW; plays are never saved (design §6).
   async parse(id: string): Promise<ParsedDVW> {
     const m = this.matches.get(id)
-    if (!m) throw new Error(`試合が見つかりません: ${id}`)
-    if (!existsSync(m.dvwPath)) throw new Error(`${m.name}: DVW が見つかりません（${m.dvwPath}）`)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
     return parseDVW(await readFile(m.dvwPath, 'latin1'))
   }
 
@@ -261,26 +262,26 @@ export class Library {
     const existing = this.findBySources(videoPath, dvwPath)
     if (existing) return existing
     const dvw = parseDVW(await readFile(dvwPath, 'latin1'))
-    if (!dvw.plays.length) throw new Error(`${basename(dvwPath)} にプレーがありません`)
+    if (!dvw.plays.length) throw new Error(t('{0} にプレーがありません', basename(dvwPath)))
 
-    progress({ stage: 'probe', message: `${basename(videoPath)} を確認しています` })
+    progress({ stage: 'probe', message: t('{0} を確認しています', basename(videoPath)) })
     const info = await probe(videoPath)
     const id = randomUUID()
     const reason = prepareReason(info)
     let playable = videoPath
     if (reason) {
       playable = join(this.dir, 'cache', `${id}.mp4`)
-      const what = reason === 'reencode' ? '再生できる形式に変換' : '音声トラックを除去'
-      progress({ stage: 'prepare', message: `${what}しています（${info.codec}/${info.pixFmt}, audio=${info.audio.join(',') || 'none'}）`, ratio: 0 })
-      await prepare(videoPath, playable, reason, info.durationSec, ratio => progress({ stage: 'prepare', message: `${what}しています`, ratio }))
+      const what = reason === 'reencode' ? t('再生できる形式に変換') : t('音声トラックを除去')
+      progress({ stage: 'prepare', message: t('{0}しています（{1}/{2}, audio={3}）', what, info.codec, info.pixFmt, info.audio.join(',') || 'none'), ratio: 0 })
+      await prepare(videoPath, playable, reason, info.durationSec, ratio => progress({ stage: 'prepare', message: t('{0}しています', what), ratio }))
     }
 
     const warnings: string[] = []
     const first = dvw.plays[0].time, last = dvw.plays[dvw.plays.length - 1].time
     if (last > info.durationSec) {
-      warnings.push(`DVW の時刻（${fmt(first)}〜${fmt(last)}）が動画の長さ（${fmt(info.durationSec)}）を超えています。別の動画かオフセットのずれの可能性があります`)
+      warnings.push(t('DVW の時刻（{0}〜{1}）が動画の長さ（{2}）を超えています。別の動画かオフセットのずれの可能性があります', fmt(first), fmt(last), fmt(info.durationSec)))
     }
-    if (dvw.allHome) warnings.push('全プレーがホーム側で入力されています（全部ホーム入力）。チームの区別はできません')
+    if (dvw.allHome) warnings.push(t('全プレーがホーム側で入力されています（全部ホーム入力）。チームの区別はできません'))
 
     const [home, away] = dvw.teams
     const date = matchDate(dvw.date, dvwPath)
@@ -302,7 +303,7 @@ export class Library {
       warnings,
       importedAt: new Date().toISOString(),
     }
-    progress({ stage: 'save', message: '保存しています' })
+    progress({ stage: 'save', message: t('保存しています') })
     await writeJSON(join(this.dir, 'matches', `${id}.json`), match)
     this.matches.set(id, match)
     return match

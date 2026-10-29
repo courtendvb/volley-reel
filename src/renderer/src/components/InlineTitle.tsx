@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { composing } from '../keys'
+import { t } from '../../../shared/i18n'
 
 // A title shown as text; clicking it turns it into a field to edit in place (Enter / Escape / leaving it ends).
 export function InlineTitle({ value, placeholder, label, onChange, className = '' }: {
@@ -15,7 +16,7 @@ export function InlineTitle({ value, placeholder, label, onChange, className = '
     )
   }
   return (
-    <span className={`inline-title-text ${className}${value ? '' : ' muted'}`} title="クリックで名前を編集"
+    <span className={`inline-title-text ${className}${value ? '' : ' muted'}`} title={t('クリックで名前を編集')}
       onClick={e => { e.stopPropagation(); setEditing(true) }}>{value || placeholder}</span>
   )
 }

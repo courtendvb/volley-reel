@@ -588,11 +588,13 @@ export function App() {
     if (!video) return []
     const out: ExportTarget[] = []
     const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: `動画「${video.name}」全体`, detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}。YouTube のチャプター（.txt）も一緒に`, empty: vp.empty })
+    out.push({ key: 'video', label: 'すべて書き出し', detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}`, empty: vp.empty,
+      hint: `動画「${video.name}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す` })
     const each = scenePlans()
     if (video.sceneIds.length > 1 || each.length > 1) {
       const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
-      out.push({ key: 'scenes', label: 'シーンごとに 1 本ずつ（シーンの名前で）', detail: `${each.length} 本・${fmtLen(sec)}。フォルダを選ぶと順に書き出す`, empty: !each.length })
+      out.push({ key: 'scenes', label: 'シーンごとに書き出し', detail: `${each.length} 本・${fmtLen(sec)}`, empty: !each.length,
+        hint: 'シーンを 1 本ずつ、シーンの名前のファイルに。フォルダを選ぶと順に書き出す' })
     }
     if (reel) {
       const sp = planSec(currentPlan('scene'))
@@ -733,6 +735,8 @@ export function App() {
     const sel = paletteSelRef.current, at = editInNow()
     if (!sel.length || at === undefined) return false
     copied.current = { projectPath: latest.current.projectPath, anns: sel.map(a => shiftTimes(a, at === null ? null : -at)) }
+    void api.markObjectsCopied() // so Ctrl+V pastes these until something else is copied
+
     const msg = `図形を ${sel.length} 個コピーしました（Ctrl+V で貼り付け）`
     setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) // a short note, not one to dismiss
     return true
@@ -919,13 +923,15 @@ export function App() {
   }, [applyScoped])
 
   // Puts a picture (or page 1 of a PDF) in the middle of the frame, 30% of its width.
-  const insertImage = useCallback(async (path?: string): Promise<string | null> => {
+  // A picture (from get) in the middle of the open clip or card, selected to move or resize.
+  // tell: say so when nothing is open to put it on (a paste can come at any time).
+  const placeImage = useCallback(async (get: () => Promise<{ assetId: string; width: number; height: number } | null>, tell = false): Promise<string | null> => {
     const { reel: r, activeClipId: id, matches: ms } = latest.current
     const c = r && id ? r.clips[id] : null
     const onCard = !!cardEditRef.current
-    if (!c && !onCard) return null
+    if (!c && !onCard) { if (tell) setNotice('画像を貼り付けるには、クリップかカードを開いてください'); return null }
     try {
-      const img = await insertAsset(path)
+      const img = await get()
       if (!img) return null
       const m = c ? ms[c.matchId] : undefined
       const frame = m?.width && m.height ? m.width / m.height : 16 / 9
@@ -944,6 +950,9 @@ export function App() {
       return null
     }
   }, [setAnns, setCardAnns])
+  const insertImage = useCallback((path?: string) => placeImage(() => insertAsset(path)), [placeImage])
+  // Ctrl+V with a picture on the system clipboard (a screenshot, an image copied elsewhere).
+  const pasteImage = useCallback(() => placeImage(() => api.saveClipboardImage(), true), [placeImage])
 
   const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
     const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
@@ -957,6 +966,8 @@ export function App() {
   copyObjectsRef.current = copyObjects
   const pasteObjectsRef = useRef(pasteObjects)
   pasteObjectsRef.current = pasteObjects
+  const pasteImageRef = useRef(pasteImage)
+  pasteImageRef.current = pasteImage
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
@@ -965,7 +976,12 @@ export function App() {
         const k = e.key.toLowerCase()
         if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo') }
         else if (k === 'c' && !e.shiftKey && !window.getSelection()?.toString()) { if (copyObjectsRef.current()) e.preventDefault() }
-        else if (k === 'v' && !e.shiftKey) { if (pasteObjectsRef.current()) e.preventDefault() }
+        else if (k === 'v' && !e.shiftKey) {
+          // Whatever was copied last: a picture from elsewhere, or objects copied here (they leave a
+          // mark on the system clipboard, so a screenshot taken after them wins).
+          e.preventDefault()
+          void api.clipboardKind().then(kind => { if (kind === 'image') void pasteImageRef.current(); else pasteObjectsRef.current() })
+        }
         else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); undoRedo('redo') }
         return
       }

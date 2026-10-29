@@ -6,6 +6,7 @@ export interface ExportTarget {
   label: string
   detail: string // what it holds, e.g. "3 シーン・12 クリップ・2分10秒"
   empty: boolean // nothing to export
+  hint?: string // more about it, on hover (the row itself stays one short line)
 }
 
 interface Props {
@@ -30,7 +31,7 @@ export function ExportPanel({ targets, info, state, onExport, onCancel, onShowFi
       <div className="export-body">
         <div className="export-targets" role="radiogroup" aria-label="書き出す範囲">
           {targets.map(t => (
-            <label key={t.key} className={`export-target${t.key === chosen?.key ? ' on' : ''}${t.empty ? ' empty' : ''}`}>
+            <label key={t.key} className={`export-target${t.key === chosen?.key ? ' on' : ''}${t.empty ? ' empty' : ''}`} title={t.hint}>
               <input type="radio" name="export-target" checked={t.key === chosen?.key} disabled={t.empty || busy} onChange={() => setPick(t.key)} />
               <span className="export-label">{t.label}</span>
               <span className="export-detail">{t.detail}</span>

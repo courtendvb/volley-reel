@@ -991,7 +991,21 @@ export function installSmoke(h: SmokeHost): void {
     await ctrl('v')
     const other = anns(1)
     const or = other.find(a => a.kind === 'rect') as { x: number; showFrom?: number } | undefined
+
+    // A picture copied after the objects (a screenshot) is what Ctrl+V pastes; copying objects again
+    // makes Ctrl+V paste objects again.
+    await window.api.smokeClipboardImage!('build/icon.png')
+    await ctrl('v')
+    const image = await waitFor(() => anns(1).find(a => a.kind === 'image') ?? null, 10000, 'pasted image') as { id: string; w: number; h: number }
+    const imageSelected = latest.current.selectedAnn === image.id
+    setSelectedAnn(anns(1).find(a => a.kind === 'rect')!.id); await sleep(300) // the pasted rect (and its group)
+    await ctrl('c')
+    const beforeObjects = anns(1).length
+    await ctrl('v'); await sleep(300)
+    const afterObjects = anns(1).filter(a => a.kind === 'image').length
+    const pasteAfterCopy = { added: anns(1).length - beforeObjects, images: afterObjects }
     return {
+      pastedImage: { w: +image.w.toFixed(3), h: +image.h.toFixed(3), selected: imageSelected }, pasteAfterCopy,
       notice, sameCount: same.length, pastedKinds: pasted.map(a => a.kind).sort(), pastedX: pr?.x, pastedShowFromRel: pr?.showFrom !== undefined ? +(pr.showFrom - in1).toFixed(2) : null,
       newGroup: !!pr?.groupId && pr.groupId !== 'G' && pasted.every(a => a.groupId === pr.groupId), selectedPasted,
       otherCount: other.length, otherX: or?.x, otherShowFromRel: or?.showFrom !== undefined ? +(or.showFrom - in2).toFixed(2) : null,

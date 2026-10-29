@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
-import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from 'electron'
+import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
@@ -63,6 +63,11 @@ app.whenReady().then(async () => {
       return { library: library!.info(), project: project?.info() ?? null, note }
     })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
+    // An image file put on the system clipboard as a picture, as a screenshot leaves it.
+    ipcMain.handle('smoke:clipboardImage', async (_e, path: string) => {
+      const png = nativeImage.createFromPath(resolve(path)).toPNG()
+      await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })])
+    })
     ipcMain.handle('smoke:createProject', async (_e, dir: string, init: ProjectInit) => {
       await mkdir(dir, { recursive: true })
       project = await Project.create(dir, library!, init)
@@ -277,6 +282,22 @@ function registerIpc(): void {
     return r.canceled || !r.filePaths[0] ? null : takeAsset(r.filePaths[0])
   })
   ipcMain.handle('asset:save', (_e, png: Uint8Array) => saveAsset(png, 'png'))
+  // Ctrl+V: what the system clipboard holds. Copying objects in the app leaves OBJECTS_MARK there,
+  // so whatever was copied last (objects here, or a screenshot / picture elsewhere) is what pastes.
+  ipcMain.handle('clipboard:kind', async () => {
+    if ((await clipboard.readText().catch(() => '')) === OBJECTS_MARK) return 'objects'
+    return (await clipboardPicture()) ? 'image' : 'other'
+  })
+  ipcMain.handle('clipboard:markObjects', () => clipboard.writeText(OBJECTS_MARK))
+  // The clipboard's picture saved into the project's assets as a PNG (like a picked image).
+  ipcMain.handle('clipboard:saveImage', async () => {
+    const blob = await clipboardPicture()
+    if (!blob) return null
+    const img = nativeImage.createFromBuffer(Buffer.from(await blob.arrayBuffer()))
+    if (img.isEmpty()) return null
+    const { width, height } = img.getSize()
+    return { assetId: await saveAsset(img.toPNG(), 'png'), width, height }
+  })
   ipcMain.handle('asset:read', (_e, id: string) => {
     if (!project) throw new Error('プロジェクトが開かれていません')
     if (!ASSET_ID.test(id)) throw new Error('bad asset id')
@@ -329,6 +350,17 @@ function registerIpc(): void {
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 const ASSET_ID = /^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/
+const OBJECTS_MARK = '[volley-reel: objects copied]' // on the system clipboard after copying objects
+
+// The picture on the system clipboard (a screenshot, an image copied in a browser or PowerPoint), or null.
+async function clipboardPicture(): Promise<Blob | null> {
+  const items = await clipboard.read().catch(() => [])
+  for (const it of items) {
+    const type = it.types.find(t => t === 'image/png') ?? it.types.find(t => t.startsWith('image/'))
+    if (type) return (await it.getType(type)) as Blob
+  }
+  return null
+}
 
 async function takeAsset(path: string): Promise<PickedAsset> {
   const ext = extname(path).slice(1).toLowerCase()

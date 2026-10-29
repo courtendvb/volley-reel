@@ -16,6 +16,12 @@ interface Props {
 // kept in step with this field. Typing creates it, clearing the field removes it.
 export function HeadlineBar({ annotations, onChange, onFormat, style, disabled, clipIn }: Props) {
   const quick = annotations.find(a => a.kind === 'text' && a.quick) as Extract<Annotation, { kind: 'text' }> | undefined
+  // Setting when it shows also selects it, so the timeline below draws its bar to adjust.
+  const setTimes = (patch: { showFrom?: number; showTo?: number }) => {
+    if (!quick) return
+    onChange(annotations.map(a => (a.id === quick.id ? { ...quick, ...patch } : a)))
+    onFormat(quick.id)
+  }
   const setText = (text: string) => {
     if (!text) { if (quick) onChange(annotations.filter(a => a.id !== quick.id)); return }
     if (quick) { onChange(annotations.map(a => (a.id === quick.id ? { ...quick, text } : a))); return }
@@ -30,8 +36,8 @@ export function HeadlineBar({ annotations, onChange, onFormat, style, disabled, 
       {quick && (
         <span className="headline-times">
           <span className="muted">{quick.showFrom === undefined ? '最初' : `${(quick.showFrom - clipIn).toFixed(1)}秒`} 〜 {quick.showTo === undefined ? '最後' : `${(quick.showTo - clipIn).toFixed(1)}秒`}</span>
-          <button disabled={disabled} title="今の再生位置から見出しを出す" onClick={() => onChange(annotations.map(a => (a.id === quick.id ? { ...quick, showFrom: playback.current.time } : a)))}>ここから表示</button>
-          <button disabled={disabled} title="今の再生位置で見出しを消す" onClick={() => onChange(annotations.map(a => (a.id === quick.id ? { ...quick, showTo: playback.current.time } : a)))}>ここで消す</button>
+          <button disabled={disabled} title="今の再生位置から見出しを出す（下のバーで調整できる）" onClick={() => setTimes({ showFrom: playback.current.time })}>ここから表示</button>
+          <button disabled={disabled} title="今の再生位置で見出しを消す（下のバーで調整できる）" onClick={() => setTimes({ showTo: playback.current.time })}>ここで消す</button>
           {(quick.showFrom !== undefined || quick.showTo !== undefined) && (
             <button className="link" disabled={disabled} title="クリップの最初から最後まで出す"
               onClick={() => { const { showFrom: _f, showTo: _t, ...rest } = quick; onChange(annotations.map(a => (a.id === quick.id ? rest as Annotation : a))) }}>全体</button>

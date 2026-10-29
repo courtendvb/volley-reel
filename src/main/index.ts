@@ -65,6 +65,8 @@ app.whenReady().then(async () => {
       return { library: library!.info(), project: project?.info() ?? null, note }
     })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
+    // A screenshot of the window in the middle of a run (the run's own one is taken at its end).
+    ipcMain.handle('smoke:shot', async (_e, name: string) => { await writeFile(join(dirname(process.env.VR_SMOKE!), basename(name)), (await win!.webContents.capturePage()).toPNG()) }) // next to the run's own screenshot
     // An image file put on the system clipboard as a picture, as a screenshot leaves it.
     ipcMain.handle('smoke:clipboardImage', async (_e, path: string) => {
       const png = nativeImage.createFromPath(resolve(path)).toPNG()
@@ -263,7 +265,11 @@ function registerIpc(): void {
   const assetsDir = () => { if (!project) throw new Error('プロジェクトが開かれていません'); return join(project.dir, 'assets') }
   ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
   ipcMain.handle('palette:setColors', (_e, colors: string[]) => lib().setPaletteColors(colors))
-  ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[]) => lib().savePaletteItem(name, anns, assetsDir()))
+  ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[], category: string | null) => lib().savePaletteItem(name, anns, assetsDir(), category))
+  ipcMain.handle('palette:addCategory', (_e, name: string) => lib().addPaletteCategory(name))
+  ipcMain.handle('palette:renameCategory', (_e, id: string, name: string) => lib().renamePaletteCategory(id, name))
+  ipcMain.handle('palette:removeCategory', (_e, id: string) => lib().removePaletteCategory(id))
+  ipcMain.handle('palette:setCategory', (_e, id: string, category: string | null) => lib().setPaletteItemCategory(id, category))
   ipcMain.handle('palette:remove', (_e, id: string) => lib().removePaletteItem(id))
   ipcMain.handle('palette:move', (_e, id: string, to: number) => lib().movePaletteItem(id, to))
   ipcMain.handle('palette:lock', (_e, id: string, locked: boolean) => lib().lockPaletteItem(id, locked))

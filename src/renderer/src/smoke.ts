@@ -1012,8 +1012,42 @@ export function installSmoke(h: SmokeHost): void {
     await ctrl('v'); await sleep(300)
     const afterObjects = anns(1).filter(a => a.kind === 'image').length
     const pasteAfterCopy = { added: anns(1).length - beforeObjects, images: afterObjects }
+
+    // Palette tabs and floating (the smoke library's palette): a new tab named 矢印, the rect saved
+    // into it, the picture saved under すべて then dragged onto 矢印, the panel floated and docked again.
+    const q = <T extends Element>(s: string) => document.querySelector<T>(s)
+    const tabs = () => [...document.querySelectorAll('.palette-tab')].map(t => `${t.textContent}${t.classList.contains('on') ? '*' : ''}`)
+    const head = q<HTMLButtonElement>('[data-accordion=palette] .accordion-head')!
+    if (head.getAttribute('aria-expanded') !== 'true') { head.click(); await sleep(200) }
+    q<HTMLButtonElement>('.palette-tab-add')!.click()
+    const tabInput = await waitFor(() => q<HTMLInputElement>('.palette-tab-name'), 5000, 'tab name')
+    tabInput.value = '矢印'; tabInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(400)
+    const saveSel = async (id: string) => {
+      setSelectedAnn(id); await sleep(300)
+      ;[...document.querySelectorAll<HTMLButtonElement>('.palette-body button')].find(b => b.textContent === '選択を保存')!.click(); await sleep(500)
+    }
+    await saveSel(anns(1).find(a => a.kind === 'rect')!.id)
+    const inArrowTab = [...document.querySelectorAll('.palette-item .palette-label')].map(e => e.textContent)
+    ;[...document.querySelectorAll<HTMLElement>('.palette-tab')].find(t => t.textContent?.startsWith('すべて'))!.click(); await sleep(200)
+    await saveSel(image.id)
+    const tabsBefore = tabs()
+    // Drag the newest item (the picture, first under すべて) onto the 矢印 tab.
+    const dt = new DataTransfer()
+    q('.palette-item')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
+    const arrowTab = [...document.querySelectorAll<HTMLElement>('.palette-tab')].find(t => t.textContent?.startsWith('矢印'))!
+    arrowTab.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    arrowTab.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); await sleep(500)
+    const tabsAfterDrop = tabs()
+    ;[...document.querySelectorAll<HTMLButtonElement>('.palette-body button')].find(b => b.textContent === '⧉ 浮かせる')!.click(); await sleep(500)
+    const fp = q<HTMLElement>('.floating-panel')
+    const floated = fp ? { w: fp.offsetWidth, h: fp.offsetHeight, tabs: tabs(), thumbs: [...fp.querySelectorAll('.palette-thumb.big')].length } : null
+    ;[...document.querySelectorAll<HTMLElement>('.floating-panel .palette-tab')].find(t => t.textContent?.startsWith('矢印'))?.click(); await sleep(300)
+    await window.api.smokeShot!('palette-float.png')
+    ;[...document.querySelectorAll<HTMLButtonElement>('.floating-head button')].find(b => b.textContent === '⧉ 戻す')!.click(); await sleep(300)
+    ;[...document.querySelectorAll<HTMLElement>('.palette-tab')].find(t => t.textContent?.startsWith('すべて'))?.click() // leave the tab as it was
+    const palette = { inArrowTab, tabsBefore, tabsAfterDrop, floated, docked: !q('.floating-panel') }
     return {
-      fdSteps, pastedImage: { w: +image.w.toFixed(3), h: +image.h.toFixed(3), selected: imageSelected }, pasteAfterCopy,
+      palette, fdSteps, pastedImage: { w: +image.w.toFixed(3), h: +image.h.toFixed(3), selected: imageSelected }, pasteAfterCopy,
       notice, sameCount: same.length, pastedKinds: pasted.map(a => a.kind).sort(), pastedX: pr?.x, pastedShowFromRel: pr?.showFrom !== undefined ? +(pr.showFrom - in1).toFixed(2) : null,
       newGroup: !!pr?.groupId && pr.groupId !== 'G' && pasted.every(a => a.groupId === pr.groupId), selectedPasted,
       otherCount: other.length, otherX: or?.x, otherShowFromRel: or?.showFrom !== undefined ? +(or.showFrom - in2).toFixed(2) : null,

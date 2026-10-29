@@ -30,7 +30,8 @@ export class Library {
     const f = join(this.dir, 'palette.json')
     if (!existsSync(f)) return { colors: [], items: [] }
     const { data } = await readJSON<Partial<Palette>>(f)
-    return { colors: Array.isArray(data.colors) ? data.colors : [], items: Array.isArray(data.items) ? data.items : [] }
+    return { colors: Array.isArray(data.colors) ? data.colors : [], items: Array.isArray(data.items) ? data.items : [],
+      categories: Array.isArray(data.categories) ? data.categories : [] }
   }
 
   private async savePalette(p: Palette): Promise<Palette> {
@@ -44,7 +45,7 @@ export class Library {
   }
 
   // Saves objects; pictures are copied from the project's assets so other projects can use them.
-  async savePaletteItem(name: string, annotations: Annotation[], projectAssets: string): Promise<Palette> {
+  async savePaletteItem(name: string, annotations: Annotation[], projectAssets: string, category: string | null = null): Promise<Palette> {
     const dir = join(this.dir, 'palette-assets')
     await mkdir(dir, { recursive: true })
     for (const a of annotations) {
@@ -53,7 +54,8 @@ export class Library {
       if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
     }
     const p = await this.palette()
-    const item = { id: randomUUID(), name: name.trim() || 'オブジェクト', createdAt: new Date().toISOString(), annotations }
+    const known = category && p.categories?.some(c => c.id === category) ? category : null
+    const item = { id: randomUUID(), name: name.trim() || 'オブジェクト', createdAt: new Date().toISOString(), annotations, ...(known ? { category: known } : {}) }
     return this.savePalette({ ...p, items: [item, ...p.items] })
   }
 
@@ -71,6 +73,37 @@ export class Library {
     const rest = p.items.filter(i => i.id !== id)
     rest.splice(Math.max(0, Math.min(to, rest.length)), 0, item)
     return this.savePalette({ ...p, items: rest })
+  }
+
+  // Categories: the palette's tabs. Items without one show only under すべて.
+  async addPaletteCategory(name: string): Promise<Palette> {
+    const p = await this.palette()
+    return this.savePalette({ ...p, categories: [...(p.categories ?? []), { id: randomUUID(), name: name.trim() || 'カテゴリ' }] })
+  }
+
+  async renamePaletteCategory(id: string, name: string): Promise<Palette> {
+    const p = await this.palette()
+    if (!name.trim()) return p
+    return this.savePalette({ ...p, categories: (p.categories ?? []).map(c => (c.id === id ? { ...c, name: name.trim() } : c)) })
+  }
+
+  // Only an empty category goes, so removing a tab never takes items with it.
+  async removePaletteCategory(id: string): Promise<Palette> {
+    const p = await this.palette()
+    if (p.items.some(i => i.category === id)) return p
+    return this.savePalette({ ...p, categories: (p.categories ?? []).filter(c => c.id !== id) })
+  }
+
+  // null: no category (under すべて only).
+  async setPaletteItemCategory(id: string, category: string | null): Promise<Palette> {
+    const p = await this.palette()
+    if (category && !p.categories?.some(c => c.id === category)) return p
+    const items = p.items.map(i => {
+      if (i.id !== id) return i
+      const { category: _, ...rest } = i
+      return category ? { ...rest, category } : rest
+    })
+    return this.savePalette({ ...p, items })
   }
 
   async lockPaletteItem(id: string, locked: boolean): Promise<Palette> {

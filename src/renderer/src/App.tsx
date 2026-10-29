@@ -588,11 +588,13 @@ export function App() {
     if (!video) return []
     const out: ExportTarget[] = []
     const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: `動画「${video.name}」全体`, detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}。YouTube のチャプター（.txt）も一緒に`, empty: vp.empty })
+    out.push({ key: 'video', label: 'すべて書き出し', detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ${slidesNote(vp.slides)}・${fmtLen(vp.sec)}`, empty: vp.empty,
+      hint: `動画「${video.name}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す` })
     const each = scenePlans()
     if (video.sceneIds.length > 1 || each.length > 1) {
       const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
-      out.push({ key: 'scenes', label: 'シーンごとに 1 本ずつ（シーンの名前で）', detail: `${each.length} 本・${fmtLen(sec)}。フォルダを選ぶと順に書き出す`, empty: !each.length })
+      out.push({ key: 'scenes', label: 'シーンごとに書き出し', detail: `${each.length} 本・${fmtLen(sec)}`, empty: !each.length,
+        hint: 'シーンを 1 本ずつ、シーンの名前のファイルに。フォルダを選ぶと順に書き出す' })
     }
     if (reel) {
       const sp = planSec(currentPlan('scene'))

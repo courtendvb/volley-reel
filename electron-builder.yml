@@ -36,3 +36,10 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: volley-reel
   artifactName: volley-reel-setup-${version}.${ext}
+# Updates for installed copies (src/main/updater.ts): `npm run release` uploads the installer and
+# latest.yml to this public repository's releases; the app's source stays in the private one.
+publish:
+  provider: github
+  owner: courtendvb
+  repo: volley-reel-releases
+  releaseType: release # published at once (a draft would not be seen by the apps)

@@ -5,7 +5,7 @@ import {
   DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
-import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
+import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile, UpdateEvent } from '../../shared/types'
 import { FilterPanel, type Scope } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo, type SlideHow } from './components/ReelPanel'
@@ -190,6 +190,29 @@ export function App() {
   const flushAll = useCallback(() => Promise.all([
     ...latest.current.reels.map(r => saveNow('scene', r)), ...latest.current.videos.map(v => saveNow('video', v)),
   ]), [saveNow])
+
+  // Updates (installed copies): the main process finds and downloads a newer version; once it is
+  // ready a banner offers to restart into it, after saving everything here.
+  const [appVersion, setAppVersion] = useState('')
+  const [update, setUpdate] = useState<UpdateEvent | null>(null)
+  const [updateLater, setUpdateLater] = useState(false)
+  const [updateBusy, setUpdateBusy] = useState(false)
+  useEffect(() => {
+    void api.appVersion().then(setAppVersion)
+    return api.onUpdateEvent(ev => setUpdate(u => (u?.type === 'ready' ? u : ev)))
+  }, [])
+  const restartToUpdate = async () => {
+    const st = latest.current.exportState?.status
+    if ((st === 'running' || st === 'preparing') && !confirm('書き出し中です。書き出しを中止して再起動しますか？')) return
+    setUpdateBusy(true)
+    try {
+      await flushAll()
+      await api.installUpdate()
+    } catch (e) {
+      setError(`更新できませんでした: ${(e as Error).message}`)
+      setUpdateBusy(false)
+    }
+  }
   useEffect(() => {
     const dirty = [
       ...reels.filter(r => saved.current.get(`scene:${r.id}`) !== r).map(r => ['scene', r] as const),
@@ -1179,6 +1202,7 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <strong className="brand">volley-reel</strong>
+        {appVersion && <span className="app-version" title="このアプリのバージョン">v{appVersion}</span>}
         {project && <button onClick={() => void goHome()} title="倉庫とプロジェクトの一覧に戻る">ホーム</button>}
         {project && <strong className="project-name" title={project.path}>{project.name}</strong>}
         {project && <button onClick={() => setPicker('edit')} title="倉庫から試合を足す・外す">試合 {project.matches.length}</button>}
@@ -1192,6 +1216,13 @@ export function App() {
         <div className="banner">
           {progress.message}
           {progress.ratio != null && <progress value={progress.ratio} max={1} />}
+        </div>
+      )}
+      {update?.type === 'ready' && !updateLater && (
+        <div className="banner update" role="status">
+          新しいバージョン {update.version} の準備ができました
+          <button className="primary" disabled={updateBusy} onClick={() => void restartToUpdate()}>再起動して更新</button>
+          <button className="link" onClick={() => setUpdateLater(true)} title="閉じても、アプリを終了するときに更新されます">あとで</button>
         </div>
       )}
       {error && <div className="banner error" onClick={() => setError(null)}>{error}</div>}

@@ -259,6 +259,8 @@ function registerIpc(): void {
   ipcMain.handle('palette:setColors', (_e, colors: string[]) => lib().setPaletteColors(colors))
   ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[]) => lib().savePaletteItem(name, anns, assetsDir()))
   ipcMain.handle('palette:remove', (_e, id: string) => lib().removePaletteItem(id))
+  ipcMain.handle('palette:move', (_e, id: string, to: number) => lib().movePaletteItem(id, to))
+  ipcMain.handle('palette:lock', (_e, id: string, locked: boolean) => lib().lockPaletteItem(id, locked))
   ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {

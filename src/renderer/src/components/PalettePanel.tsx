@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Accordion } from './Accordion'
 import { bounds, drawAnnotation, shiftTimes, type Annotation } from '../../../shared/annotation'
 import { assetImage, subscribeAssets } from '../assets'
-import { removePaletteItem, savePaletteItem, usePalette, usePaletteItem } from '../palette'
+import { lockPaletteItem, movePaletteItem, removePaletteItem, savePaletteItem, usePalette, usePaletteItem } from '../palette'
 import { composing } from '../keys'
+
+const DT_ITEM = 'application/x-vr-palette-item'
 
 // Saved objects to reuse (in the library, so every project has them): save the selection (with its
 // group) under a name, put a saved one on the clip or card, or drop it. Folds away under its header.
@@ -18,6 +20,7 @@ export function PalettePanel({ selection, onUse, disabled, clipIn }: {
   const palette = usePalette()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null) // where a dragged item will land
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
   const save = () => run(async () => {
     const clean = selection.map(a => shiftTimes(a, clipIn === null ? null : -clipIn))
@@ -37,14 +40,34 @@ export function PalettePanel({ selection, onUse, disabled, clipIn }: {
         ) : <span className="muted small">図形を選ぶと、パレットに保存できます（どのプロジェクトからも使えます）</span>}
       </div>
       {palette.items.length > 0 && (
-        <div className="palette-items">
-          {palette.items.map(it => (
-            <span key={it.id} className="palette-item" title={`${it.name}（クリックで入れる）`}>
+        <div className="palette-items" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropAt(null) }}>
+          {palette.items.map((it, i) => (
+            // Drag an item onto another to put it before (left half) or after (right half) that one.
+            <span key={it.id} draggable className={`palette-item${dropAt?.id === it.id ? (dropAt.after ? ' drop-after' : ' drop-before') : ''}`}
+              title={`${it.name}（クリックで入れる・ドラッグで並べ替え）`}
+              onDragStart={e => { e.dataTransfer.setData(DT_ITEM, it.id); e.dataTransfer.effectAllowed = 'move' }}
+              onDragOver={e => {
+                if (!e.dataTransfer.types.includes(DT_ITEM)) return
+                e.preventDefault()
+                const b = e.currentTarget.getBoundingClientRect()
+                setDropAt({ id: it.id, after: e.clientX > b.left + b.width / 2 })
+              }}
+              onDrop={e => {
+                const id = e.dataTransfer.getData(DT_ITEM), after = dropAt?.id === it.id && dropAt.after
+                setDropAt(null)
+                const from = palette.items.findIndex(x => x.id === id), slot = i + (after ? 1 : 0)
+                if (from < 0 || from === slot || from + 1 === slot) return
+                void run(() => movePaletteItem(id, from < slot ? slot - 1 : slot)) // counted without the moved one
+              }}
+              onDragEnd={() => setDropAt(null)}>
               <button className="palette-use" disabled={disabled || busy} aria-label={`${it.name} を入れる`}
                 onClick={() => void run(async () => onUse((await usePaletteItem(it.id)).map(a => shiftTimes(a, clipIn))))}>
                 <Thumb annotations={it.annotations} /><span className="palette-label">{it.name}</span>
               </button>
-              <button className="link" aria-label={`${it.name} をパレットから外す`} disabled={busy} onClick={() => void run(() => removePaletteItem(it.id))}>×</button>
+              <button className={`palette-lock${it.locked ? ' on' : ''}`} aria-pressed={!!it.locked} aria-label={`${it.name} を保護`} disabled={busy}
+                title={it.locked ? '保護中: 外せません（クリックで保護をやめる）' : '保護する（誤って外さないように）'}
+                onClick={() => void run(() => lockPaletteItem(it.id, !it.locked))}>{it.locked ? '🔒' : '🔓'}</button>
+              {!it.locked && <button className="link" aria-label={`${it.name} をパレットから外す`} disabled={busy} onClick={() => void run(() => removePaletteItem(it.id))}>×</button>}
             </span>
           ))}
         </div>

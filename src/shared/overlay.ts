@@ -19,6 +19,7 @@ export interface OverlaySettings {
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
+    showMarkerNumber?: boolean // the marker's number on its cards; missing = shown
     markerLayout?: CardLayout; sceneLayout?: CardLayout
     videoCard?: boolean; videoLayout?: CardLayout // videoCard: an opening card with the video's name
     background?: string } // the cards' (and blank slides') background; missing = a darker shade of the theme's base

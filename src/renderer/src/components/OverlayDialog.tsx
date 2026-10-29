@@ -89,6 +89,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {s.transition.fade && <label className="check"><input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label="フェードの秒数"
                   onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) set('transition', { durationSec: n }) }} /> 秒</label>}</div>
               <div className="filter-row indent">
+                {check('マーカー番号', s.titleCard.showMarkerNumber !== false, v => set('titleCard', { showMarkerNumber: v }))}
                 {check('マーカー名', s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
                 {check('試合名', s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}
                 <label className="check" title="すべてのタイトルカードと無地のスライドの背景色">背景

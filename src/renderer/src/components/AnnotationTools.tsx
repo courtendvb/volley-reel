@@ -36,7 +36,7 @@ interface Props {
 const TOOLS: [Tool, string, string, string][] = [
   ['select', '選択', 'V', '選択・移動・頂点の編集'], ['text', 'T', 'T', 'テキスト'], ['arrow', '↗', 'A', '矢印'],
   ['circle', '○', 'C', '円'], ['rect', '□', 'R', '四角'], ['triangle', '△', 'G', '三角形'], ['polyline', '⌇', 'L', '折れ線（クリックで頂点）'],
-  ['polygon', '⬠', 'P', '多角形（クリックで頂点）'], ['freehand', '✎', 'F', 'フリーハンド'],
+  ['polygon', '⬠', 'P', '多角形（クリックで頂点）'], ['freehand', '✎', '', 'フリーハンド'], // no key: F and D step through the scene's clips
 ]
 export const KIND_LABEL: Record<Annotation['kind'], string> = {
   text: 'テキスト', arrow: '矢印', circle: '円', rect: '四角', freehand: 'フリーハンド', polyline: '折れ線', polygon: '多角形', image: '画像',
@@ -78,7 +78,7 @@ export function AnnotationTools(p: Props) {
       <div className="ann-row">
         <div className="segmented" role="radiogroup" aria-label="注釈ツール">
           {TOOLS.map(([t, label, key, title]) => (
-            <button key={t} role="radio" aria-checked={p.tool === t} className={p.tool === t ? 'on' : ''} title={`${title} (${key})`}
+            <button key={t} role="radio" aria-checked={p.tool === t} className={p.tool === t ? 'on' : ''} title={key ? `${title} (${key})` : title}
               onClick={() => p.onTool(t)} disabled={p.disabled}>{label}</button>
           ))}
         </div>

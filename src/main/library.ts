@@ -57,9 +57,30 @@ export class Library {
     return this.savePalette({ ...p, items: [item, ...p.items] })
   }
 
+  // A locked item stays until it is unlocked.
   async removePaletteItem(id: string): Promise<Palette> {
     const p = await this.palette()
-    return this.savePalette({ ...p, items: p.items.filter(i => i.id !== id) })
+    return this.savePalette({ ...p, items: p.items.filter(i => i.id !== id || i.locked) })
+  }
+
+  // Puts an item at `to` (counted among the others), for the order the palette shows.
+  async movePaletteItem(id: string, to: number): Promise<Palette> {
+    const p = await this.palette()
+    const item = p.items.find(i => i.id === id)
+    if (!item) return p
+    const rest = p.items.filter(i => i.id !== id)
+    rest.splice(Math.max(0, Math.min(to, rest.length)), 0, item)
+    return this.savePalette({ ...p, items: rest })
+  }
+
+  async lockPaletteItem(id: string, locked: boolean): Promise<Palette> {
+    const p = await this.palette()
+    const items = p.items.map(i => {
+      if (i.id !== id) return i
+      const { locked: _, ...rest } = i
+      return locked ? { ...rest, locked: true } : rest
+    })
+    return this.savePalette({ ...p, items })
   }
 
   // The item's objects for a project: their pictures copied into its assets/ when missing.

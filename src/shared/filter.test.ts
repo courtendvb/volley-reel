@@ -58,9 +58,13 @@ describe('filters', () => {
     expect(r.map(x => `${x.matchId}${x.play.code.slice(0, 6)}`)).toEqual(['Aa01RQ+', 'B*01RQ#']) // opponents at home and away
   })
 
-  it('use the rotation of the team that made the play', () => {
-    expect(applyFilter(refs(), { ...EMPTY_FILTER, rots: [3] }).every(x => x.matchId === 'A' && x.play.side === 'a')).toBe(true)
-    expect(applyFilter(refs(), { ...EMPTY_FILTER, team: 'our', rots: [2] }).map(x => x.matchId)).toEqual(['B'])
+  it('filter by our rotation and the opponent rotation, whoever made the play', () => {
+    // A: HTH at home in rotation 1, OPP in 3. B: HTH away in rotation 2, XYZ at home in 5.
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, rots: [1] }).map(x => x.matchId)).toEqual(['A', 'A', 'A'])
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, rots: [2] }).map(x => x.matchId)).toEqual(['B', 'B', 'B'])
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, oppRots: [5] }).map(x => x.matchId)).toEqual(['B', 'B', 'B'])
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, rots: [1], oppRots: [5] })).toEqual([])
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, team: 'opp', rots: [1], oppRots: [3] }).map(x => x.play.code.slice(0, 4))).toEqual(['a01R', 'a01A'])
   })
 
   it('keep all-home plays when filtering by team, since their team is unknown', () => {

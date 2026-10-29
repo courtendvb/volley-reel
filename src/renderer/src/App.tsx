@@ -969,6 +969,18 @@ export function App() {
   const pasteImageRef = useRef(pasteImage)
   pasteImageRef.current = pasteImage
   useEffect(() => {
+    // The clip below (down) or above in the scene editor's rows, opened like a click on it.
+    const stepClip = (down: boolean) => {
+      const r = latest.current.reel
+      if (!r) return
+      const rows = [...r.groupOrder.flatMap(g => r.groups[g].map(id => ({ id, g: g as Group }))),
+        ...chronological(r, r.groups.none, whenIn(r)).map(c => ({ id: c.id, g: 'none' as Group }))]
+      const a = latest.current.activeClipId, ag = latest.current.activeGroup
+      let i = rows.findIndex(x => x.id === a && (ag === null || x.g === ag))
+      if (i < 0) i = rows.findIndex(x => x.id === a)
+      const next = rows[down ? i + 1 : i < 0 ? 0 : i - 1]
+      if (next) activateClip(r.clips[next.id], next.g)
+    }
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
       if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || settingsOpen || composing(e)) return
@@ -991,15 +1003,12 @@ export function App() {
       else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && focusPane.current === 'scene') {
         // Up / Down in the scene editor (last clicked): the clip above / below, opened like a click on it.
         e.preventDefault()
-        const r = latest.current.reel
-        if (!r) return
-        const rows = [...r.groupOrder.flatMap(g => r.groups[g].map(id => ({ id, g: g as Group }))),
-          ...chronological(r, r.groups.none, whenIn(r)).map(c => ({ id: c.id, g: 'none' as Group }))]
-        const a = latest.current.activeClipId, ag = latest.current.activeGroup
-        let i = rows.findIndex(x => x.id === a && (ag === null || x.g === ag))
-        if (i < 0) i = rows.findIndex(x => x.id === a)
-        const next = rows[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
-        if (next) activateClip(r.clips[next.id], next.g)
+        stepClip(e.key === 'ArrowDown')
+      }
+      else if (/^[fd]$/i.test(e.key) && !e.shiftKey && latest.current.reel && !cardEditRef.current) {
+        // F / D: the next / previous clip of the scene, from anywhere (the clip loops while it is edited).
+        e.preventDefault()
+        stepClip(e.key.toLowerCase() === 'f')
       }
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         // Up / Down: the previous / next play in the left list (played like a click on it).
@@ -1012,8 +1021,8 @@ export function App() {
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
       else if (e.key === 'Escape') playback.stopSequence()
-      else if ((latest.current.activeClipId || cardEditRef.current) && /^[vtacrfglp]$/i.test(e.key)) {
-        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand', g: 'triangle', l: 'polyline', p: 'polygon' }
+      else if ((latest.current.activeClipId || cardEditRef.current) && /^[vtacrglp]$/i.test(e.key)) {
+        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', g: 'triangle', l: 'polyline', p: 'polygon' }
         setAnnTool(tools[e.key.toLowerCase()])
       }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {

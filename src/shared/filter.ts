@@ -12,7 +12,8 @@ export interface PlayRef {
   teamCode: string
   personKey: string // the DataVolley player key (home/away and the "-a" suffix already merged)
   name: string
-  rot: number | null // rotation of the team that made the play
+  ourRot: number | null // our team's rotation at the play (home's when our side can't be known)
+  oppRot: number | null // the other team's rotation
   tempo: string | null // the type letter (H, M, Q, T, U, N, O)
   combo: string | null // attack combination (attacks) or setter call (sets), e.g. "X5", "K1"
   comboName: string | null // its name from the file's tables, e.g. "QUICK TEMPO A"
@@ -25,7 +26,8 @@ export interface PlayFilter {
   skills: string[] // empty = any
   effects: string[]
   sets: number[]
-  rots: number[]
+  rots: number[] // our team's rotation
+  oppRots: number[] // the opponent's rotation
   startZone: number | null
   endZone: number | null
   tempos: string[] // detailed search
@@ -34,7 +36,7 @@ export interface PlayFilter {
 }
 
 export const EMPTY_FILTER: PlayFilter = {
-  team: 'all', person: null, skills: [], effects: [], sets: [], rots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
+  team: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
 }
 
 // The parts of a scout code after the skill and effect: *07AQ#X5~36BH1 → tempo Q, combo X5, hit H.
@@ -57,6 +59,9 @@ export function ourSide(teams: [Team, Team], codes: string[]): Side | null {
 
 export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSettings): PlayRef[] {
   const our = dvw.allHome ? null : ourSide(dvw.teams, settings.ourTeamCodes)
+  // Rotations by team, not by who made the play. Where our side can't be known, home counts as ours
+  // (all-home input scouts the home team).
+  const ourHome = our !== 'a'
   return dvw.plays.map(p => ({
     matchId,
     play: p,
@@ -65,7 +70,8 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
     teamCode: dvw.allHome ? '—' : (p.side === '*' ? dvw.teams[0] : dvw.teams[1]).code,
     personKey: p.playerKey,
     name: displayName(dvw.players, p.side, p.jersey),
-    rot: p.side === '*' ? p.homeRot : p.awayRot,
+    ourRot: ourHome ? p.homeRot : p.awayRot,
+    oppRot: ourHome ? p.awayRot : p.homeRot,
     ...detailOf(p.code, p.skill, dvw.codeNames ?? {}),
   }))
 }
@@ -101,7 +107,8 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.skills.length && !f.skills.includes(p.skill)) return false
     if (f.effects.length && !f.effects.includes(p.effect)) return false
     if (f.sets.length && !f.sets.includes(p.setNum)) return false
-    if (f.rots.length && (r.rot === null || !f.rots.includes(r.rot))) return false
+    if (f.rots.length && (r.ourRot === null || !f.rots.includes(r.ourRot))) return false
+    if (f.oppRots?.length && (r.oppRot === null || !f.oppRots.includes(r.oppRot))) return false
     if (f.startZone !== null && p.startZone !== f.startZone) return false
     if (f.tempos?.length && (!r.tempo || !f.tempos.includes(r.tempo))) return false
     if (f.combos?.length && (!r.combo || !f.combos.includes(r.combo))) return false

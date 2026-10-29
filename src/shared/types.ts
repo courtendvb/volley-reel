@@ -192,7 +192,9 @@ export interface Api {
   getPalette(): Promise<Palette>
   setPaletteColors(colors: string[]): Promise<Palette>
   savePaletteItem(name: string, annotations: Annotation[]): Promise<Palette>
-  removePaletteItem(id: string): Promise<Palette>
+  removePaletteItem(id: string): Promise<Palette> // a locked item is kept
+  movePaletteItem(id: string, to: number): Promise<Palette>
+  lockPaletteItem(id: string, locked: boolean): Promise<Palette>
   usePaletteItem(id: string): Promise<Annotation[]> // its objects, with their pictures now in the project
   listLogos(): Promise<Record<string, string>>
   pickLogo(code: string): Promise<Record<string, string>>
@@ -211,7 +213,7 @@ export interface Api {
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 
-export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[] }
+export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[]; locked?: boolean } // locked: can't be removed
 export interface Palette { colors: string[]; items: PaletteItem[] }
 
 // A picture is copied into assets/ right away; a PDF's pages are rendered by the renderer.

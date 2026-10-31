@@ -36,6 +36,12 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッド')}</label>
       <label className="check" title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')}>
         <input type="checkbox" checked={s.playZones} onChange={e => onStyle({ ...s, playZones: e.target.checked })} /> {t('プレーのゾーン')}</label>
+      <select value={s.detail} aria-label={t('ゾーンの細かさ')} disabled={!s.playZones}
+        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体')}
+        onChange={e => onStyle({ ...s, detail: e.target.value === 'sub' ? 'sub' : 'zone' })}>
+        <option value="zone">{t('ゾーン')}</option>
+        <option value="sub">{t('サブゾーン')}</option>
+      </select>
       <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前（第1セット）')}
         <select value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
           <option value="*">{home.name || home.code}</option>

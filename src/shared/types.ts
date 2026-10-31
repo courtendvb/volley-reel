@@ -39,6 +39,8 @@ export interface Play {
   awayRot: number | null
   startZone: number | null
   endZone: number | null
+  startSub: string | null // A–D within the start zone, from where the scout clicked (not coded)
+  endSub: string | null // A–D within the end zone: as coded, else from where the scout clicked
   rallyId: number | null
 }
 

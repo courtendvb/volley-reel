@@ -744,4 +744,7 @@ export const EN: Record<string, string> = {
   "画像を上下左右逆にする（反対側から見た図のとき）": "Turn the picture upside down (for a view from the other side)",
   "180°回転": "Rotate 180°",
   "透明度": "Transparency",
+  "ゾーンの細かさ": "Zone detail",
+  "サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体": "Sub-zones: light the zone's quarter A–D and draw the arrow between their middles. Where the DVW has no sub-zone, the whole zone",
+  "サブゾーン": "Sub-zone",
 }

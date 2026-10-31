@@ -116,7 +116,7 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, detail: detail === 'sub' ? 'sub' : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
 
@@ -131,7 +131,8 @@ export function App() {
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
   }
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
-  const courtZones = useMemo(() => (match?.court && selectedPlay ? playZones(selectedPlay, match.court) : null), [match?.court, selectedPlay])
+  const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
+  const courtZones = useMemo(() => (match?.court && selectedPlay ? playZones(selectedPlay, match.court, nextPlay) : null), [match?.court, selectedPlay, nextPlay])
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)

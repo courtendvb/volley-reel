@@ -1056,6 +1056,14 @@ export function installSmoke(h: SmokeHost): void {
     await api.smokeShot!('court.png')
     setSelect(t('手前（第1セット）'), fitted.nearSet1 === '*' ? 'a' : '*')
     const swapped = await until(async () => { const c = await savedCourt(); return c && c.nearSet1 !== fitted.nearSet1 ? c : null }, 10000, 'near side saved')
+    // Sub-zones, on the set before the attack: from where it was set to where the attack started.
+    setSelect(t('ゾーンの細かさ'), 'sub'); await sleep(150)
+    const setRef = res.find(x => x.matchId === r.matchId && x.play.id === r.play.id - 1 && x.play.skill === 'E')
+    if (setRef) { jump(setRef); await sleep(500) }
+    const dvwPlays = latest.current.dvwsRef![r.matchId].plays
+    const setZones = setRef ? playZones(setRef.play, swapped, dvwPlays[setRef.play.id + 1]) : null
+    await api.smokeShot!('court-sub.png')
+    const detail = JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}').detail
 
     // A heatmap-like picture on the clip, laid on the near half through the format panel's select,
     // one corner dragged, then drawn the way the export draws it.
@@ -1093,6 +1101,7 @@ export function installSmoke(h: SmokeHost): void {
     const mid = dragged.reduce((m, p) => [m[0] + p[0] / 4, m[1] + p[1] / 4], [0, 0])
     const b = heat()!
     return { play: `${r.play.code} set ${r.play.setNum}`, corner0: fitted.corners[0], handlesOnTop, afterDone, zones: zones1, nearSet1: swapped.nearSet1, zonesSwapped: playZones(r.play, swapped),
+      set: setRef ? { code: setRef.play.code, zones: setZones } : null, detail,
       heatmap: { onCourt, corner1Moved: +(dragged[1][0] - qx).toFixed(3), exportInside: alpha(mid[0], mid[1]), exportOutside: alpha(b.x + 0.005, b.y + 0.005) } }
   }
 

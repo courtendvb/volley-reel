@@ -9,6 +9,9 @@
 //
 // An image annotation shows a picture (or page 1 of a PDF, rendered to PNG) stored in the project's
 // assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
+// With a quad its four corners are placed one by one, so the picture (a heatmap from analysis
+// software, say) lies on the court with the camera's perspective; x, y, w, h are then its bounds.
+import { homography, project } from './court'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
@@ -47,8 +50,12 @@ export type Annotation = Base & (
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number } & Fillable)
   // crop: the part of the picture shown (fractions of its width / height); missing = all of it.
-  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop }
+  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop; quad?: Quad }
 )
+
+// Corners of a picture laid with perspective: top-left, top-right, bottom-left, bottom-right of the picture.
+export type Quad = [[number, number], [number, number], [number, number], [number, number]]
+type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
 
 export type ImageLookup = (assetId: string) => CanvasImageSource | null
 export interface Crop { x: number; y: number; w: number; h: number }
@@ -90,10 +97,26 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: a.x + dx, y: a.y + dy }
     case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy }
-    case 'circle': case 'rect': case 'image': return { ...a, x: a.x + dx, y: a.y + dy }
+    case 'image': return a.quad ? withQuad(a, a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad) : { ...a, x: a.x + dx, y: a.y + dy }
+    case 'circle': case 'rect': return { ...a, x: a.x + dx, y: a.y + dy }
     default: return { ...a, points: a.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }
   }
 }
+
+// A picture laid on these corners (null: flat again, in its bounds).
+export function withQuad(a: ImageAnnotation, quad: Quad | null): ImageAnnotation {
+  const { quad: _q, ...rest } = a
+  if (!quad) return rest
+  const xs = quad.map(p => p[0]), ys = quad.map(p => p[1])
+  const x = Math.min(...xs), y = Math.min(...ys)
+  return { ...rest, quad, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+
+// The corners of the picture's box, to start laying it with perspective from where it is.
+export const boxQuad = (b: Rect): Quad => [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]
+
+// The quad's outline in drawing order.
+const quadRing = (q: Quad): [number, number][] => [q[0], q[1], q[3], q[2]]
 
 // Moves show / hide times by delta seconds; null drops them (the object shows the whole time).
 export function shiftTimes(a: Annotation, delta: number | null): Annotation {
@@ -194,6 +217,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
     if (a.kind === 'arrow') { if (nearPath([[a.x1, a.y1], [a.x2, a.y2]], false, a.width)) return a; continue }
     if (a.kind === 'freehand' || a.kind === 'polyline') { if (nearPath(a.points, false, a.width)) return a; continue }
     if (a.kind === 'polygon') { if (nearPath(a.points, true, a.width) || (a.fill && pointInPolygon(x, y, a.points))) return a; continue }
+    if (a.kind === 'image' && a.quad) { if (nearPath(quadRing(a.quad), true, 0) || pointInPolygon(x, y, quadRing(a.quad))) return a; continue }
     const b = bounds(ctx, a, W, H)
     if (x >= b.x - tx && x <= b.x + b.w + tx && y >= b.y - ty && y <= b.y + b.h + ty) return a
   }
@@ -214,13 +238,16 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       const img = images?.(a.assetId) ?? null
       if (img) {
         const c = a.crop, iw = (img as { width: number }).width, ih = (img as { height: number }).height
-        if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
+        const src = c ? { x: c.x * iw, y: c.y * ih, w: c.w * iw, h: c.h * ih } : { x: 0, y: 0, w: iw, h: ih }
+        if (a.quad) drawWarped(ctx, img, src, a.quad.map(([x, y]) => [x * W, y * H]) as Quad)
+        else if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
         else ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H)
         break
       }
       // Not loaded (yet): a placeholder, so the object can still be seen and picked.
       ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(148,163,184,0.9)'
-      ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H)
+      if (a.quad) { ctx.beginPath(); for (const [x, y] of quadRing(a.quad)) ctx.lineTo(x * W, y * H); ctx.closePath(); ctx.stroke() }
+      else ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H)
       break
     }
     case 'arrow': {
@@ -255,6 +282,59 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
     }
   }
   ctx.restore()
+}
+
+// Canvas has no perspective transform, so the picture is cut into a mesh of small triangles, each
+// drawn with the affine transform that puts it where the perspective map sends its corners. Each
+// triangle is clipped a little larger than itself so no seams show between them.
+export const WARP_STEPS = 16
+
+function drawWarped(ctx: Ctx, img: CanvasImageSource, src: { x: number; y: number; w: number; h: number }, quad: Quad, n = WARP_STEPS): void {
+  const pt = ([x, y]: [number, number]) => ({ x, y })
+  const hm = homography([pt(quad[0]), pt(quad[1]), pt(quad[2]), pt(quad[3])])
+  const dst: { x: number; y: number }[][] = []
+  for (let i = 0; i <= n; i++) { dst.push([]); for (let j = 0; j <= n; j++) dst[i].push(project(hm, j / n, i / n)) }
+  const sp = (i: number, j: number) => ({ x: src.x + (j / n) * src.w, y: src.y + (i / n) * src.h })
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const cell = { x: src.x + (j / n) * src.w, y: src.y + (i / n) * src.h, w: src.w / n, h: src.h / n }
+      drawTriangle(ctx, img, cell, [sp(i, j), sp(i, j + 1), sp(i + 1, j)], [dst[i][j], dst[i][j + 1], dst[i + 1][j]])
+      drawTriangle(ctx, img, cell, [sp(i + 1, j + 1), sp(i + 1, j), sp(i, j + 1)], [dst[i + 1][j + 1], dst[i + 1][j], dst[i][j + 1]])
+    }
+  }
+}
+
+type P = { x: number; y: number }
+function drawTriangle(ctx: Ctx, img: CanvasImageSource, cell: { x: number; y: number; w: number; h: number }, s: [P, P, P], d: [P, P, P]): void {
+  const m = affine(s, d)
+  if (!m) return
+  const cx = (d[0].x + d[1].x + d[2].x) / 3, cy = (d[0].y + d[1].y + d[2].y) / 3
+  ctx.save()
+  ctx.beginPath()
+  for (const p of d) {
+    const dx = p.x - cx, dy = p.y - cy, len = Math.hypot(dx, dy) || 1
+    ctx.lineTo(p.x + (dx / len) * 0.7, p.y + (dy / len) * 0.7)
+  }
+  ctx.closePath()
+  ctx.clip()
+  ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5])
+  // A pixel of margin around the cell, so the edges of each triangle have picture under them.
+  const iw = (img as { width: number }).width, ih = (img as { height: number }).height
+  const x0 = Math.max(0, Math.floor(cell.x - 1)), y0 = Math.max(0, Math.floor(cell.y - 1))
+  const w = Math.min(iw - x0, Math.ceil(cell.w + 2)), h = Math.min(ih - y0, Math.ceil(cell.h + 2))
+  if (w > 0 && h > 0) ctx.drawImage(img, x0, y0, w, h, x0, y0, w, h)
+  ctx.restore()
+}
+
+// The affine map (canvas transform order a, b, c, d, e, f) taking triangle s onto triangle d.
+export function affine(s: [P, P, P], d: [P, P, P]): [number, number, number, number, number, number] | null {
+  const dx1 = s[1].x - s[0].x, dy1 = s[1].y - s[0].y, dx2 = s[2].x - s[0].x, dy2 = s[2].y - s[0].y
+  const det = dx1 * dy2 - dx2 * dy1
+  if (Math.abs(det) < 1e-12) return null
+  const du1 = d[1].x - d[0].x, dv1 = d[1].y - d[0].y, du2 = d[2].x - d[0].x, dv2 = d[2].y - d[0].y
+  const a = (du1 * dy2 - du2 * dy1) / det, c = (du2 * dx1 - du1 * dx2) / det
+  const b = (dv1 * dy2 - dv2 * dy1) / det, dd = (dv2 * dx1 - dv1 * dx2) / det
+  return [a, b, c, dd, d[0].x - a * s[0].x - c * s[0].y, d[0].y - b * s[0].x - dd * s[0].y]
 }
 
 // Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
@@ -318,7 +398,8 @@ export function roundCoords(a: Annotation): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: r(a.x), y: r(a.y) }
     case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2) }
-    case 'circle': case 'rect': case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
+    case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}) }
+    case 'circle': case 'rect': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
     default: return { ...a, points: a.points.map(([x, y]) => [r(x), r(y)] as [number, number]) }
   }
 }

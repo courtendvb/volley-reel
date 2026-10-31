@@ -15,6 +15,7 @@ const api: Api = {
   importMatch: () => ipcRenderer.invoke('match:import'),
   relocateMatch: (id, part) => ipcRenderer.invoke('match:relocate', id, part),
   parseMatch: id => ipcRenderer.invoke('match:parse', id),
+  setMatchCourt: (id, court) => ipcRenderer.invoke('match:setCourt', id, court),
   saveSettings: s => ipcRenderer.invoke('project:saveSettings', s),
   listReels: () => ipcRenderer.invoke('reel:list'),
   listVideos: () => ipcRenderer.invoke('video:list'),

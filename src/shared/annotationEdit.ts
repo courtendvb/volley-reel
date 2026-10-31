@@ -1,7 +1,7 @@
 // Editing annotation geometry with handles (v3 step 3): arrow ends, 8-way box resize, and
 // Office-style "edit points" for polylines, polygons and freehand — drag a vertex, drag a midpoint
 // to insert one, delete one. Pure functions on normalized coordinates, so they are unit-tested.
-import { isPoints, normalizeBox, type Annotation, type PointsAnnotation } from './annotation'
+import { isPoints, normalizeBox, withQuad, type Annotation, type PointsAnnotation, type Quad } from './annotation'
 
 export type HandleKind = 'end' | 'resize' | 'vertex' | 'mid'
 export interface Handle { id: string; kind: HandleKind; x: number; y: number }
@@ -18,7 +18,8 @@ export const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
 export function handlesOf(a: Annotation, editPoints = false): Handle[] {
   switch (a.kind) {
     case 'arrow': return [{ id: 'p1', kind: 'end', x: a.x1, y: a.y1 }, { id: 'p2', kind: 'end', x: a.x2, y: a.y2 }]
-    case 'rect': case 'circle': case 'image': return boxHandles(a)
+    case 'image': return a.quad ? a.quad.map(([x, y], i) => ({ id: `q${i}`, kind: 'vertex' as const, x, y })) : boxHandles(a)
+    case 'rect': case 'circle': return boxHandles(a)
     case 'text': return []
     default: {
       if (!editPoints) return boxHandles(pointsBox(a.points))
@@ -73,6 +74,11 @@ export function toPolygon(a: Annotation): Annotation {
 export function dragHandle(a: Annotation, id: string, x: number, y: number, opts: { keepAspect?: boolean } = {}): { a: Annotation; id: string } {
   if (a.kind === 'arrow') return { a: id === 'p1' ? { ...a, x1: x, y1: y } : { ...a, x2: x, y2: y }, id }
   if (a.kind === 'rect' || a.kind === 'circle') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !!opts.keepAspect) }, id }
+  // A picture laid with perspective: each corner moves on its own.
+  if (a.kind === 'image' && a.quad) {
+    const i = Number(id.slice(1))
+    return { a: id[0] === 'q' && a.quad[i] ? withQuad(a, a.quad.map((p, j) => (j === i ? [x, y] : p)) as Quad) : a, id }
+  }
   // Pictures keep their proportions at the corners unless Shift is held (Office does the same).
   if (a.kind === 'image') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !opts.keepAspect) }, id }
   if (!isPoints(a)) return { a, id }

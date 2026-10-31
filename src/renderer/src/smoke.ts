@@ -3,7 +3,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel, type SlideSpot } from '../../shared/reel'
 import type { ExportJob, LibraryInfo, Match, ParsedDVW, ProjectInfo, ProjectSettings, ScanResult, SlideFile } from '../../shared/types'
-import type { Annotation } from '../../shared/annotation'
+import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import { mergeScoped, scopeOf, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { overlaySettings, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
 import { newVideo, type PlanItem, type Video } from '../../shared/video'
@@ -16,6 +16,9 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { findPhoto } from '../../shared/pack'
+import { courtQuad, playZones } from '../../shared/court'
+import { assetImage } from './assets'
+import { t } from '../../shared/i18n'
 
 export interface SmokeOpts {
   play: number
@@ -35,6 +38,7 @@ export interface SmokeOpts {
   assets?: string[] // with obj / slides: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
+  court?: boolean // the court grid fitted through its bar and corner handles
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
@@ -131,6 +135,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
+    if (opts.court) return smokeCourt(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1010,6 +1015,85 @@ export function installSmoke(h: SmokeHost): void {
     revert?.click()
     await waitFor(() => tiles().mine === 0 || null, 10000, 'photo removed')
     return { pack: packs.map(p => `${p.id}:${p.players.length}`), focusName, before, image: { w: +image.w.toFixed(3), h: +image.h.toFixed(3) }, setFor: `#${bare.jersey} ${bare.lastName}`, afterSet, afterRevert: tiles() }
+  }
+
+  // Court grid: fitted from its bar, one corner dragged on the canvas, saved with the match; the
+  // near side swapped; an attack's start and end zones lit.
+  const smokeCourt = async (res: PlayRef[]) => {
+    const r = res.find(x => x.play.skill === 'A' && x.play.startZone && x.play.endZone) ?? res.find(x => x.play.startZone && x.play.endZone)
+    if (!r) throw new Error('no play with start and end zones')
+    jump(r)
+    const bar = await waitFor(() => document.querySelector<HTMLElement>('.court-bar'), 20000, 'court bar')
+    const button = (label: string) => [...bar.querySelectorAll('button')].find(b => b.textContent === label) ?? null
+    const until = async <T,>(get: () => Promise<T | null>, ms: number, label: string): Promise<T> => {
+      for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
+    }
+    const savedCourt = async () => (await api.getProject())?.matches.find(m => m.id === r.matchId)?.court ?? null
+    if (await savedCourt()) { // left from an earlier run: removed through the gear menu first
+      bar.querySelector<HTMLButtonElement>('.ov-gear')!.click(); await sleep(100)
+      button(t('この試合のグリッドを消す'))!.click()
+      await until(async () => (await savedCourt()) ? null : true, 10000, 'old fit removed')
+    }
+    ;(await waitFor(() => button(t('グリッドを合わせる')), 10000, 'fit button')).click()
+    const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=court-canvas]'), 10000, 'court canvas')
+    const box = canvas.getBoundingClientRect()
+    const pt = (x: number, y: number) => ({ clientX: box.left + x * box.width, clientY: box.top + y * box.height, bubbles: true, pointerId: 1 })
+    const from = (await until(savedCourt, 10000, 'first fit')).corners[0], to = { x: 0.3, y: 0.3 }
+    canvas.dispatchEvent(new PointerEvent('pointerdown', pt(from.x, from.y))); await sleep(30)
+    for (const f of [0.3, 0.6, 1]) { canvas.dispatchEvent(new PointerEvent('pointermove', pt(from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f))); await sleep(20) }
+    canvas.dispatchEvent(new PointerEvent('pointerup', pt(to.x, to.y))); await sleep(100)
+    const fitted = await until(async () => { const c = await savedCourt(); return c && Math.abs(c.corners[0].x - to.x) < 0.01 && Math.abs(c.corners[0].y - to.y) < 0.01 ? c : null }, 10000, 'dragged corner saved')
+    const handlesOnTop = getComputedStyle(canvas).pointerEvents
+    button(t('完了'))!.click(); await sleep(150)
+    const afterDone = getComputedStyle(document.querySelector<HTMLCanvasElement>('[data-testid=court-canvas]')!).pointerEvents
+    const setSelect = (label: string, value: string) => {
+      const el = bar.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(el, value)
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    await sleep(150)
+    const zones1 = playZones(r.play, fitted)
+    await api.smokeShot!('court.png')
+    setSelect(t('手前（第1セット）'), fitted.nearSet1 === '*' ? 'a' : '*')
+    const swapped = await until(async () => { const c = await savedCourt(); return c && c.nearSet1 !== fitted.nearSet1 ? c : null }, 10000, 'near side saved')
+
+    // A heatmap-like picture on the clip, laid on the near half through the format panel's select,
+    // one corner dragged, then drawn the way the export draws it.
+    const { reel: built, ids } = addClips(newReel('court smoke'), [{ matchId: r.matchId, play: r.play }])
+    setReels(rs => [...rs, built]); setReelId(built.id)
+    await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'court reel')
+    activateClip(built.clips[ids[0]]); await sleep(400)
+    const pic = document.createElement('canvas'); pic.width = 300; pic.height = 300
+    const g = pic.getContext('2d')!
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { g.fillStyle = `hsl(${(i * 3 + j) * 30}, 90%, 50%)`; g.fillRect(j * 100, i * 100, 100, 100) }
+    const assetId = await api.saveAsset(new Uint8Array(await (await new Promise<Blob>(ok => pic.toBlob(b => ok(b!), 'image/png'))).arrayBuffer()))
+    setAnns([{ id: 'heat', kind: 'image', color: '#FFFFFF', x: 0.35, y: 0.3, w: 0.3, h: 0.3, assetId }])
+    setSelectedAnn('heat'); await sleep(400)
+    const persp = await waitFor(() => document.querySelector<HTMLSelectElement>('select.persp'), 10000, 'perspective select')
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(persp, 'near')
+    persp.dispatchEvent(new Event('change', { bubbles: true }))
+    const heat = () => latest.current.reel!.clips[ids[0]].annotations.find(a => a.id === 'heat') as Extract<Annotation, { kind: 'image' }> | undefined
+    const laid = await waitFor(() => heat()?.quad ?? null, 10000, 'laid on the court')
+    const want = courtQuad(swapped.corners, 'near')
+    const onCourt = laid.every((p, i) => Math.abs(p[0] - want[i][0]) < 1e-3 && Math.abs(p[1] - want[i][1]) < 1e-3)
+    const annCanvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 10000, 'ann canvas')
+    const ab = annCanvas.getBoundingClientRect()
+    const apt = (x: number, y: number) => ({ clientX: ab.left + x * ab.width, clientY: ab.top + y * ab.height, bubbles: true, pointerId: 1 })
+    const [qx, qy] = laid[1]
+    annCanvas.dispatchEvent(new PointerEvent('pointerdown', apt(qx, qy))); await sleep(30)
+    annCanvas.dispatchEvent(new PointerEvent('pointermove', apt(qx + 0.02, qy - 0.02))); await sleep(30)
+    annCanvas.dispatchEvent(new PointerEvent('pointerup', apt(qx + 0.02, qy - 0.02))); await sleep(200)
+    const dragged = heat()!.quad!
+    await api.smokeShot!('court-heatmap.png')
+    // As in the export: an offscreen canvas at 1280 × 720.
+    const W = 1280, H = 720, off = new OffscreenCanvas(W, H), octx = off.getContext('2d')!
+    await waitFor(() => assetImage(assetId), 10000, 'picture loaded')
+    drawAnnotation(octx, heat()!, W, H, assetImage)
+    const alpha = (x: number, y: number) => octx.getImageData(Math.round(x * W), Math.round(y * H), 1, 1).data[3]
+    const mid = dragged.reduce((m, p) => [m[0] + p[0] / 4, m[1] + p[1] / 4], [0, 0])
+    const b = heat()!
+    return { play: `${r.play.code} set ${r.play.setNum}`, corner0: fitted.corners[0], handlesOnTop, afterDone, zones: zones1, nearSet1: swapped.nearSet1, zonesSwapped: playZones(r.play, swapped),
+      heatmap: { onCourt, corner1Moved: +(dragged[1][0] - qx).toFixed(3), exportInside: alpha(mid[0], mid[1]), exportOutside: alpha(b.x + 0.005, b.y + 0.005) } }
   }
 
   const smokeCopy = async (res: PlayRef[]) => {

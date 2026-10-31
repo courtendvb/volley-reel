@@ -275,6 +275,8 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .ann-sel { font-weight: 600; }
 
 .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
+.court-layer { position: absolute; inset: 0; display: block; touch-action: none; }
+.court-bar select { margin-left: 4px; }
 .overlay-modal { width: min(1060px, 96vw); }
 .ov-body { display: flex; gap: 18px; min-height: 0; overflow-y: auto; }
 .ov-preview { flex: none; display: flex; flex-direction: column; gap: 8px; }

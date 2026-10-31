@@ -107,6 +107,9 @@ export function parseDVW(text: string): ParsedDVW {
       awayRot: rA,
       startZone: zone(code.charAt(9)),
       endZone: zone(code.charAt(10)),
+      // A set's coded zone is where it was set from, and its first click is that spot.
+      startSub: clickSub(c[4], zone(code.charAt(9))),
+      endSub: /[A-D]/.test(code.charAt(11)) ? code.charAt(11) : clickSub(skill === 'E' ? c[4] : c[6], zone(code.charAt(10))),
       rallyId: rally ? rally.id : null,
     })
   }
@@ -138,4 +141,30 @@ function parseDate(s: string | undefined): string | null {
 
 function zone(ch: string): number | null {
   return ch >= '1' && ch <= '9' ? +ch : null
+}
+
+// Where the scout clicked (start and end columns on serves, sets and attacks): a 100 × 100 grid
+// as row * 100 + column + 1, seen by the player's team from behind its own end line. Columns span
+// 4 m-units across (the court is 0.5–3.5), rows 7 along (court 0.5–6.5, net at 3.5). Checked against
+// the coded zones and sub-zones of a season's files: 87–97% agree.
+export function clickPoint(raw: string | undefined): { u: number; v: number } | null {
+  const i = parseInt(raw ?? '')
+  if (!(i > 0)) return null
+  const row = Math.floor((i - 1) / 100), col = (i - 1) % 100
+  return { u: (((col + 0.5) * 4) / 100 - 0.5) / 3, v: (((row + 0.5) * 7) / 100 - 0.5) / 6 } // v: own end line 0, net 0.5
+}
+
+const OWN = [[5, 6, 1], [7, 8, 9], [4, 3, 2]] // from the own end line toward the net, left to right
+const OPP = [[2, 3, 4], [9, 8, 7], [1, 6, 5]] // from the net toward the far end line
+
+// The sub-zone of a click, when it falls in the coded zone (else the click and the code disagree).
+// Own half: A back right, B front right, C front left, D back left; the other half is the same
+// seen from its own side.
+function clickSub(raw: string | undefined, coded: number | null): string | null {
+  const p = clickPoint(raw)
+  if (!p || coded === null || p.u < 0 || p.u >= 1 || p.v < 0 || p.v >= 1) return null
+  const c = Math.floor(p.u * 3), r = Math.floor(p.v * 6), su = p.u * 3 - c, sv = p.v * 6 - r
+  if ((r < 3 ? OWN[r][c] : OPP[r - 3][c]) !== coded) return null
+  if (r < 3) return sv < 0.5 ? (su < 0.5 ? 'D' : 'A') : (su < 0.5 ? 'C' : 'B')
+  return sv < 0.5 ? (su < 0.5 ? 'B' : 'C') : (su < 0.5 ? 'A' : 'D')
 }

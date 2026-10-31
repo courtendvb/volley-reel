@@ -44,15 +44,15 @@ describe('sides', () => {
 
 describe('playZones', () => {
   it('serve: from the server\'s side to the other', () => {
-    expect(playZones(play('*01SQ-~~~16A'), fit)).toEqual({ start: { row: 5, col: 2 }, end: { row: 0, col: 1 }, endSub: 'A' })
+    expect(playZones(play('*01SQ-~~~16A'), fit)).toEqual({ start: { row: 5, col: 2 }, end: { row: 0, col: 1 } })
   })
 
   it('reception: the serve comes from the other side', () => {
-    expect(playZones(play('a09RQ+~~~16AR'), fit)).toEqual({ start: { row: 5, col: 2 }, end: { row: 0, col: 1 }, endSub: 'A' })
+    expect(playZones(play('a09RQ+~~~16AR'), fit)).toEqual({ start: { row: 5, col: 2 }, end: { row: 0, col: 1 } })
   })
 
   it('attack from the far side in set 1 lands near', () => {
-    expect(playZones(play('a01AQ#PA~36BH1'), fit)).toEqual({ start: { row: 2, col: 1 }, end: { row: 5, col: 1 }, endSub: 'B' })
+    expect(playZones(play('a01AQ#PA~36BH1'), fit)).toEqual({ start: { row: 2, col: 1 }, end: { row: 5, col: 1 } })
   })
 
   it('follows the side change in set 2', () => {
@@ -60,7 +60,7 @@ describe('playZones', () => {
   })
 
   it('set: start only; missing zones are null', () => {
-    expect(playZones(play('*05EH#~~~3'), fit)).toEqual({ start: { row: 3, col: 1 }, end: null, endSub: null })
-    expect(playZones(play('*05AH#'), fit)).toEqual({ start: null, end: null, endSub: null })
+    expect(playZones(play('*05EH#~~~3'), fit)).toEqual({ start: { row: 3, col: 1 }, end: null })
+    expect(playZones(play('*05AH#'), fit)).toEqual({ start: null, end: null })
   })
 })

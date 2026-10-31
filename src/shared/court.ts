@@ -1,5 +1,5 @@
 // Court grid (from CourtEnd Vision): the whole court fitted to the video by its four corners and
-// split 3 × 6 into zones 1–9 for each side, drawn with perspective. The selected play's DVW start
+// split 3 × 6 into zones 1–9 for each side (the DVW's zone layout), drawn with perspective. The selected play's DVW start
 // and end zones are lit on it. Pure: the draw function takes a canvas context, no DOM access.
 import type { Play, Side } from './types'
 
@@ -30,10 +30,6 @@ export const ZONE_NUMBERS: number[][] = [
   [5, 6, 1],
 ]
 
-// Sub-zones A–D: where each letter sits in a cell (du, dv), as players on that side see it.
-const SUB_NEAR: Record<string, [number, number]> = { A: [0.75, 0.75], B: [0.75, 0.25], C: [0.25, 0.25], D: [0.25, 0.75] }
-const SUB_FAR: Record<string, [number, number]> = { A: [0.25, 0.25], B: [0.25, 0.75], C: [0.75, 0.75], D: [0.75, 0.25] }
-
 // ---- geometry -------------------------------------------------------------------------------
 
 export interface Homography { a: number; b: number; c: number; d: number; e: number; f: number; g: number; h: number }
@@ -61,6 +57,17 @@ export function project(H: Homography, u: number, v: number): Pt {
   return { x: (H.a * u + H.b * v + H.c) / w, y: (H.d * u + H.e * v + H.f) / w }
 }
 
+// Where to lay a picture of the court (a heatmap, say): the whole court, or the near or far half,
+// as corners of the picture (top-left, top-right, bottom-left, bottom-right). A half is laid with
+// the net at the top of the picture for the near side and at the bottom for the far side.
+export type CourtPart = 'full' | 'near' | 'far'
+export function courtQuad(corners: CourtFit['corners'], part: CourtPart): [[number, number], [number, number], [number, number], [number, number]] {
+  const H = homography(corners)
+  const [v0, v1] = part === 'full' ? [0, 1] : part === 'near' ? [0.5, 1] : [0, 0.5]
+  const at = (u: number, v: number): [number, number] => { const p = project(H, u, v); return [p.x, p.y] }
+  return [at(0, v0), at(1, v0), at(0, v1), at(1, v1)]
+}
+
 // ---- which side, which cell -----------------------------------------------------------------
 
 // The team on the near side for a rally: swapped every set, and in set 5 once a team has 8.
@@ -86,39 +93,32 @@ export function zoneCell(zone: number, near: boolean): Cell | null {
 export interface PlayZones {
   start: Cell | null
   end: Cell | null
-  endSub: string | null // A–D within the end cell
 }
 
 // Start and end zones on the court. Serve and attack go from the player's side to the other one;
 // reception, dig and block are logged with the ball coming from the other side. A set stays on
 // the player's side, so only its start is shown.
-export function playZones(play: Pick<Play, 'code' | 'skill' | 'side' | 'startZone' | 'endZone' | 'setNum' | 'score'>, fit: CourtFit): PlayZones {
+export function playZones(play: Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'setNum' | 'score'>, fit: CourtFit): PlayZones {
   const ownNear = nearSide(fit, play) === play.side
   const fromOwn = play.skill === 'S' || play.skill === 'A' || play.skill === 'E'
   const startNear = fromOwn ? ownNear : !ownNear
   const start = play.startZone ? zoneCell(play.startZone, startNear) : null
-  if (play.skill === 'E') return { start, end: null, endSub: null }
-  const end = play.endZone ? zoneCell(play.endZone, !startNear) : null
-  const sub = play.code.charAt(11).toUpperCase()
-  return { start, end, endSub: end && 'ABCD'.includes(sub) && sub ? sub : null }
+  if (play.skill === 'E') return { start, end: null }
+  return { start, end: play.endZone ? zoneCell(play.endZone, !startNear) : null }
 }
 
 // ---- drawing ---------------------------------------------------------------------------------
-
-export type SubZones = 'off' | 'lines' | 'labels'
 
 export interface GridStyle {
   grid: boolean
   color: string
   opacity: number // 0..1
   lineWidth: number
-  zoneNumbers: boolean
-  subZones: SubZones
   playZones: boolean
 }
 
 export const DEFAULT_GRID_STYLE: GridStyle = {
-  grid: true, color: '#FFFFFF', opacity: 0.7, lineWidth: 2, zoneNumbers: false, subZones: 'off', playZones: true,
+  grid: true, color: '#FFFFFF', opacity: 0.7, lineWidth: 2, playZones: true,
 }
 
 const START_COLOR = '#22C55E'
@@ -128,25 +128,20 @@ const END_COLOR = '#EF4444'
 export function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null): void {
   const H = homography(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt])
   const at = (u: number, v: number) => project(H, u, v)
-  const cellPath = (c: Cell, du0 = 0, dv0 = 0, du1 = 1, dv1 = 1) => {
-    const u0 = (c.col + du0) / COLS, u1 = (c.col + du1) / COLS, v0 = (c.row + dv0) / ROWS, v1 = (c.row + dv1) / ROWS
+  const cellPath = (c: Cell) => {
+    const u0 = c.col / COLS, u1 = (c.col + 1) / COLS, v0 = c.row / ROWS, v1 = (c.row + 1) / ROWS
     const pts = [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)]
     ctx.beginPath()
     ctx.moveTo(pts[0].x, pts[0].y)
     for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y)
     ctx.closePath()
   }
-  const cellHeight = (c: Cell) => { const u = (c.col + 0.5) / COLS, a = at(u, c.row / ROWS), b = at(u, (c.row + 1) / ROWS); return Math.hypot(b.x - a.x, b.y - a.y) }
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
   if (style.playZones && zones) {
     ctx.save()
     if (zones.start) { ctx.globalAlpha = 0.35; ctx.fillStyle = START_COLOR; cellPath(zones.start); ctx.fill() }
-    if (zones.end) {
-      ctx.globalAlpha = 0.3; ctx.fillStyle = END_COLOR; cellPath(zones.end); ctx.fill()
-      const s = zones.endSub ? subOffset(zones.end, zones.endSub) : null
-      if (s) { ctx.globalAlpha = 0.45; cellPath(zones.end, s[0] - 0.25, s[1] - 0.25, s[0] + 0.25, s[1] + 0.25); ctx.fill() }
-    }
+    if (zones.end) { ctx.globalAlpha = 0.35; ctx.fillStyle = END_COLOR; cellPath(zones.end); ctx.fill() }
     ctx.restore()
   }
 
@@ -154,7 +149,6 @@ export function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number, f
     ctx.save()
     ctx.globalAlpha = style.opacity
     ctx.strokeStyle = style.color
-    ctx.fillStyle = style.color
     ctx.lineCap = 'round'
     ctx.lineWidth = style.lineWidth
     for (let col = 0; col <= COLS; col++) line(at(col / COLS, 0), at(col / COLS, 1))
@@ -165,50 +159,14 @@ export function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number, f
       line(at(0, row / ROWS), at(1, row / ROWS))
     }
     ctx.setLineDash([])
-    if (style.subZones !== 'off') {
-      ctx.lineWidth = Math.max(0.5, style.lineWidth * 0.5)
-      ctx.setLineDash([5, 4])
-      for (let row = 0; row < ROWS; row++) {
-        for (let col = 0; col < COLS; col++) {
-          line(at((col + 0.5) / COLS, row / ROWS), at((col + 0.5) / COLS, (row + 1) / ROWS))
-          line(at(col / COLS, (row + 0.5) / ROWS), at((col + 1) / COLS, (row + 0.5) / ROWS))
-        }
-      }
-      ctx.setLineDash([])
-    }
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const c = { row, col }, ch = cellHeight(c)
-        if (style.zoneNumbers) {
-          const p = at((col + 0.5) / COLS, (row + 0.5) / ROWS)
-          ctx.font = `bold ${Math.max(14, Math.min(102, ch * 0.5 + 2))}px 'Segoe UI', Arial, sans-serif`
-          ctx.fillText(String(ZONE_NUMBERS[row][col]), p.x, p.y)
-        }
-        if (style.subZones === 'labels') {
-          ctx.font = `${Math.max(8, Math.min(36, ch * 0.22))}px 'Segoe UI', Arial, sans-serif`
-          for (const letter of 'ABCD') {
-            const [du, dv] = subOffset(c, letter)!
-            const p = at((col + du) / COLS, (row + dv) / ROWS)
-            ctx.fillText(letter, p.x, p.y)
-          }
-        }
-      }
-    }
     ctx.restore()
   }
 
   if (style.playZones && zones?.start && zones.end) {
-    const s = zones.endSub ? subOffset(zones.end, zones.endSub) : null
     const a = at((zones.start.col + 0.5) / COLS, (zones.start.row + 0.5) / ROWS)
-    const b = at((zones.end.col + (s ? s[0] : 0.5)) / COLS, (zones.end.row + (s ? s[1] : 0.5)) / ROWS)
+    const b = at((zones.end.col + 0.5) / COLS, (zones.end.row + 0.5) / ROWS)
     drawArrow(ctx, a, b, Math.max(3, w / 320))
   }
-}
-
-function subOffset(c: Cell, letter: string): [number, number] | null {
-  return (c.row < HALF ? SUB_FAR : SUB_NEAR)[letter] ?? null
 }
 
 function drawArrow(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, width: number): void {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DEFAULT_CORNERS, type CourtFit, type GridStyle, type SubZones } from '../../../shared/court'
+import { DEFAULT_CORNERS, type CourtFit, type GridStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
@@ -11,8 +11,6 @@ interface Props {
   onFitting: (on: boolean) => void
   onFit: (fit: CourtFit | null) => void
 }
-
-const SUBS: [SubZones, string][] = [['off', t('なし')], ['lines', t('線')], ['labels', t('線と文字')]]
 
 // The court grid for the match on screen: fit its corners, what to show, which team is near.
 export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }: Props) {
@@ -38,11 +36,6 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッド')}</label>
       <label className="check" title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')}>
         <input type="checkbox" checked={s.playZones} onChange={e => onStyle({ ...s, playZones: e.target.checked })} /> {t('プレーのゾーン')}</label>
-      <label className="check"><input type="checkbox" checked={s.zoneNumbers} onChange={e => onStyle({ ...s, zoneNumbers: e.target.checked })} /> {t('ゾーン番号')}</label>
-      <label className="check">{t('サブゾーン')}
-        <select value={s.subZones} aria-label={t('サブゾーン')} onChange={e => onStyle({ ...s, subZones: e.target.value as SubZones })}>
-          {SUBS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select></label>
       <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前（第1セット）')}
         <select value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
           <option value="*">{home.name || home.code}</option>

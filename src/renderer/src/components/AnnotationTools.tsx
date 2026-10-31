@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import {
-  COLORS, DEFAULT_TEXT_BOX, applyStyle, hasFill, isPoints, withGroups,
+  COLORS, DEFAULT_TEXT_BOX, applyStyle, boxQuad, hasFill, isPoints, withGroups, withQuad,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
 import { forgetColor, rememberColor, usePalette } from '../palette'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
+import { courtQuad, type CourtFit, type CourtPart } from '../../../shared/court'
 import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
 import { t } from '../../../shared/i18n'
 
@@ -30,6 +31,7 @@ interface Props {
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
   onInsertImage: () => void
+  court?: CourtFit['corners'] | null // the clip's match has its court fitted: pictures can be laid on it
   clip: { in: number; out: number }
   disabled: boolean // during through-play
 }
@@ -108,8 +110,8 @@ export function AnnotationTools(p: Props) {
             }))}>{t('グループ解除')}</button>
         )}
         {sel?.kind === 'image' && (
-          <button className={p.cropping ? 'on' : ''} aria-pressed={p.cropping} disabled={p.disabled}
-            title={t('枠のつまみで切り取る範囲、画像のドラッグで位置、ホイールか ＋／− で拡大・縮小')}
+          <button className={p.cropping ? 'on' : ''} aria-pressed={p.cropping} disabled={p.disabled || !!sel.quad}
+            title={sel.quad ? t('遠近をつけた画像はトリミングできません（遠近なしに戻してから）') : t('枠のつまみで切り取る範囲、画像のドラッグで位置、ホイールか ＋／− で拡大・縮小')}
             onClick={() => p.onCropping(!p.cropping)}>{t('トリミング')}</button>
         )}
         {sel?.kind === 'image' && p.cropping && (
@@ -118,6 +120,31 @@ export function AnnotationTools(p: Props) {
             <button aria-label={t('画像を縮小')} title={t('画像を縮小（枠より小さくはならない）')} onClick={() => update(zoomCrop(sel, 1 / 1.15))}>−</button>
             {sel.crop && <button className="link" title={t('切り取りをやめて、画像全体を表示する')}
               onClick={() => { const { crop: _c, ...rest } = sel; update({ ...rest, ...fullRect(sel) }) }}>{t('元の画像に戻す')}</button>}
+          </>
+        )}
+        {sel?.kind === 'image' && !p.cropping && (
+          <>
+            {/* Perspective: the picture's four corners dragged one by one, or laid on the fitted court. */}
+            <select className="persp" value={sel.quad ? 'on' : 'off'} disabled={p.disabled} aria-label={t('遠近')}
+              title={p.court ? t('画像の四隅を別々に動かして遠近をつけます。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）') : t('画像の四隅を別々に動かして遠近をつけます。コートのグリッドを合わせてあれば、コートにも合わせられます')}
+              onChange={e => {
+                const v = e.target.value
+                if (v === 'off') update(withQuad(sel, null))
+                else if (v === 'here') update(withQuad(sel, boxQuad(sel)))
+                else if (p.court) update(withQuad(sel, courtQuad(p.court, v as CourtPart)))
+              }}>
+              <option value="off">{t('遠近なし')}</option>
+              {sel.quad ? <option value="on">{t('遠近あり（四隅をドラッグ）')}</option> : <option value="here">{t('遠近をつける（この位置で）')}</option>}
+              <option value="full" disabled={!p.court}>{t('コート全体に合わせる')}</option>
+              <option value="near" disabled={!p.court}>{t('手前のコートに合わせる')}</option>
+              <option value="far" disabled={!p.court}>{t('奥のコートに合わせる')}</option>
+            </select>
+            {sel.quad && (
+              <button disabled={p.disabled} title={t('画像を上下左右逆にする（反対側から見た図のとき）')}
+                onClick={() => { const q = sel.quad!; update(withQuad(sel, [q[3], q[2], q[1], q[0]])) }}>{t('180°回転')}</button>
+            )}
+            <Pct label={t('透明度')} value={1 - (sel.opacity ?? 1)} disabled={p.disabled}
+              onChange={x => update(x > 0 ? { ...sel, opacity: Math.round((1 - x) * 100) / 100 } : (({ opacity: _o, ...rest }) => rest)(sel))} />
           </>
         )}
         <span className="muted small">{sel ? t('{0}{1} を編集中', KIND_LABEL[sel.kind], sel.kind === 'text' ? t('「{0}」', sel.text) : '') : t('次に描く図形の書式')}</span>

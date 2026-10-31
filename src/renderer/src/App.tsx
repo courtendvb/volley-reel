@@ -116,7 +116,7 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
 
@@ -1416,6 +1416,7 @@ export function App() {
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
+                court={matches[active.matchId]?.court?.corners ?? null}
               />
             )}
             {!cardEdit && active && activeInfo?.ref && active.matchId === matchId && (

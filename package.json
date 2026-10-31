@@ -30,6 +30,7 @@
   },
   "author": "courtendvb",
   "dependencies": {
-    "electron-updater": "6.8.10"
+    "electron-updater": "6.8.10",
+    "fflate": "0.8.2"
   }
 }

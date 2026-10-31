@@ -1,0 +1,28 @@
+import { useState } from 'react'
+import { importPack, removePack, usePacks } from '../packs'
+import { t } from '../../../shared/i18n'
+
+// Add-on packs (.vrpack) in the library: read one in, or take one out. Saved at once, like the logos.
+export function AddonPacks() {
+  const packs = usePacks()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError(null)
+    try { await fn() } catch (e) { setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) } finally { setBusy(false) }
+  }
+  return (
+    <div className="logo-table">
+      {packs.map(p => (
+        <div key={p.id} className="logo-row">
+          <b>{p.name}</b>
+          <span className="muted logo-name">{t('選手写真 {0} 人', p.players.length)}</span>
+          <button className="link" disabled={busy} onClick={() => void run(() => removePack(p.id))}>{t('外す')}</button>
+        </div>
+      ))}
+      {!packs.length && <p className="muted small">{t('アドオンは入っていません')}</p>}
+      <div><button disabled={busy} onClick={() => void run(importPack)}>{t('パックを読み込む…')}</button></div>
+      {error && <p className="pack-error small">{error}</p>}
+    </div>
+  )
+}

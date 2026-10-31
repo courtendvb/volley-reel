@@ -419,6 +419,15 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .logo-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
 .logo-row .logo-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logo-thumb { width: 64px; height: 40px; border-radius: 4px; background: #1E293B; flex: none; }
+.pack-error { color: var(--danger-text); margin: 0; }
+.photo-search { width: 100%; margin-bottom: 6px; }
+.photo-focus, .photo-team { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.photo-grid { display: flex; flex-wrap: wrap; gap: 6px; max-height: 220px; overflow-y: auto; }
+.photo-pick { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px; width: 64px; font-size: 11px; }
+.photo-thumb { width: 48px; height: 60px; border-radius: 4px; background: #334155; }
+.photo-name, .photo-sub { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-sub { font-size: 10px; }
+.photo-none { font-size: 11px; padding: 2px 6px; border: 1px dashed var(--border-strong); border-radius: 4px; opacity: 0.7; }
 .ann-tools select.scope-scene { border-color: #D97706; color: var(--amber); }
 .ann-tools select.scope-video { border-color: #059669; color: var(--skill-r); }
 .headline-bar { flex: none; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; }

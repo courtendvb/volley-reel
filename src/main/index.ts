@@ -68,6 +68,7 @@ app.whenReady().then(async () => {
       const note = await library!.relocate(id, part, path, () => {})
       return { library: library!.info(), project: project?.info() ?? null, note }
     })
+    ipcMain.handle('smoke:importPack', async (_e, path: string) => { await library!.importPack(path); return library!.packs() })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     // A screenshot of the window in the middle of a run (the run's own one is taken at its end).
     ipcMain.handle('smoke:shot', async (_e, name: string) => { await writeFile(join(dirname(process.env.VR_SMOKE!), basename(name)), (await win!.webContents.capturePage()).toPNG()) }) // next to the run's own screenshot
@@ -294,6 +295,23 @@ function registerIpc(): void {
   })
   ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
   ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
+  // Add-on packs: read from a .vrpack the user picks, kept in the library for every project.
+  ipcMain.handle('pack:list', () => library?.packs() ?? [])
+  ipcMain.handle('pack:import', async () => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: t('アドオンのパックを読み込む'), properties: ['openFile'],
+      filters: [{ name: t('volley-reel パック'), extensions: ['vrpack', 'zip'] }],
+    })
+    if (!r.canceled && r.filePaths[0]) await lib().importPack(r.filePaths[0])
+    return lib().packs()
+  })
+  ipcMain.handle('pack:remove', async (_e, id: string) => { await lib().removePack(id); return lib().packs() })
+  ipcMain.handle('pack:readPhoto', (_e, id: string, photo: string) => lib().readPackPhoto(id, photo))
+  ipcMain.handle('pack:usePhoto', async (_e, id: string, photo: string) => {
+    const { assetId, path } = await lib().usePackPhoto(id, photo, assetsDir())
+    const { width, height } = nativeImage.createFromPath(path).getSize()
+    return { assetId, width: width || 3, height: height || 4 } // unreadable size: a portrait frame
+  })
 
   ipcMain.handle('asset:pick', async () => {
     if (!project) throw new Error(t('プロジェクトが開かれていません'))

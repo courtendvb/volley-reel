@@ -25,6 +25,7 @@ import { addScene, cardMatch, dropScene, newVideo, planScene, planSceneWithCard,
 import { CardEditBar, CardEditor, SlideEditBar } from './components/CardEditor'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
+import { PlayerPhotos } from './components/PlayerPhotos'
 import { ExportPanel, type ExportTarget } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
@@ -1426,6 +1427,10 @@ export function App() {
             />
             <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem}
               clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} />
+            <PlayerPhotos dvw={!cardEditCard && active ? dvws[active.matchId] ?? null : null}
+              focus={!cardEditCard && activeInfo?.ref ? { side: activeInfo.ref.play.side, jersey: activeInfo.ref.play.jersey } : null}
+              disabled={!cardEditCard && !(active && activeInfo?.range)}
+              onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
             <ExportPanel targets={exportTargets} info={exportInfo} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
           </div>

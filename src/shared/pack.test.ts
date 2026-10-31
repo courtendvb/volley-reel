@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest'
+import { findPhoto, fit, matchesQuery, readManifest, type PackInfo, type PackPlayer } from './pack'
+import type { Player } from './types'
+
+const player = (o: Partial<Player>): Player => ({ key: 'X', side: '*', jersey: 1, lastName: '', firstName: '', ...o })
+const pp = (o: Partial<PackPlayer>): PackPlayer => ({ team: 'SUN', lastName: '', photo: 'a.jpg', ...o })
+
+describe('readManifest', () => {
+  it('keeps usable players and normalizes them', () => {
+    const m = readManifest({
+      format: 'volley-reel-pack', version: 1, id: 'vleague-2026', name: 'V.League 2026',
+      players: [
+        { team: 'sun', jersey: '7', lastName: ' YAMADA ', photo: 'yamada.jpg', label: '山田 太郎' },
+        { team: 'SUN', lastName: 'NOPHOTO', photo: '' },
+        { team: 'SUN', lastName: 'ESCAPE', photo: '../evil.jpg' },
+        { team: 'SUN', lastName: 'WEBP', photo: 'a.webp' },
+      ],
+    })
+    expect(m?.players).toEqual([{ team: 'SUN', jersey: 7, lastName: 'YAMADA', label: '山田 太郎', photo: 'yamada.jpg' }])
+  })
+
+  it('rejects another format, version or a bad id', () => {
+    const ok = { format: 'volley-reel-pack', version: 1, id: 'a', name: 'A', players: [] }
+    expect(readManifest(ok)).not.toBeNull()
+    expect(readManifest({ ...ok, version: 2 })).toBeNull()
+    expect(readManifest({ ...ok, format: 'x' })).toBeNull()
+    expect(readManifest({ ...ok, id: '../a' })).toBeNull()
+    expect(readManifest(null)).toBeNull()
+  })
+})
+
+describe('fit / findPhoto', () => {
+  it('an ID is enough, whatever the team code (and the scrimmage -a is ignored)', () => {
+    expect(fit(pp({ team: 'OTHER', ids: ['YAM-TAR-01-a'] }), player({ key: 'YAM-TAR-01' }), 'SUN')).toBe(100)
+  })
+
+  it('otherwise the team must match', () => {
+    expect(fit(pp({ lastName: 'YAMADA', jersey: 7 }), player({ lastName: 'YAMADA', jersey: 7 }), 'PAN')).toBe(0)
+    expect(fit(pp({ teams: ['PAN'], lastName: 'YAMADA' }), player({ lastName: 'Yamada' }), 'pan')).toBe(10)
+  })
+
+  it('names match ignoring case, spaces and hyphens; jersey counts too', () => {
+    expect(fit(pp({ lastName: 'Van-Dijk' }), player({ lastName: 'VAN DIJK' }), 'SUN')).toBe(10)
+    expect(fit(pp({ lastName: 'OHNO', jersey: 3 }), player({ lastName: 'ONO', jersey: 3 }), 'SUN')).toBe(5)
+  })
+
+  it('a teammate with the same surname but another first name is not the player', () => {
+    expect(fit(pp({ lastName: 'SATO', firstName: 'Ken' }), player({ lastName: 'SATO', firstName: 'Yuki' }), 'SUN')).toBe(0)
+  })
+
+  it('picks the best fit, and nothing when two fit equally', () => {
+    const packs: PackInfo[] = [{ id: 'p', name: 'P', players: [
+      pp({ lastName: 'SATO', firstName: 'Ken', jersey: 4, photo: 'ken.jpg' }),
+      pp({ lastName: 'SATO', firstName: 'Yuki', jersey: 9, photo: 'yuki.jpg' }),
+      pp({ lastName: 'ITO', photo: 'ito1.jpg' }), pp({ lastName: 'ITO', photo: 'ito2.jpg' }),
+    ] }]
+    expect(findPhoto(packs, player({ lastName: 'SATO', firstName: 'Yuki', jersey: 9 }), 'SUN')?.player.photo).toBe('yuki.jpg')
+    expect(findPhoto(packs, player({ lastName: 'SATO', jersey: 4 }), 'SUN')?.player.photo).toBe('ken.jpg')
+    expect(findPhoto(packs, player({ lastName: 'ITO' }), 'SUN')).toBeNull()
+    expect(findPhoto(packs, player({ lastName: 'KATO' }), 'SUN')).toBeNull()
+  })
+})
+
+describe('matchesQuery', () => {
+  it('every word must appear in the label, names, team or jersey', () => {
+    const p = pp({ lastName: 'YAMADA', firstName: 'Taro', label: '山田 太郎', jersey: 7 })
+    expect(matchesQuery(p, 'yamada sun')).toBe(true)
+    expect(matchesQuery(p, '山田')).toBe(true)
+    expect(matchesQuery(p, 'yamada pan')).toBe(false)
+  })
+})

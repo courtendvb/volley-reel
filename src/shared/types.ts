@@ -2,6 +2,7 @@ import type { Lang } from './i18n'
 import type { Annotation } from './annotation'
 // Types shared by main, preload and renderer.
 import type { OverlayTheme } from './overlay'
+import type { PackInfo } from './pack'
 import type { Reel } from './reel'
 import type { Video } from './video'
 
@@ -211,6 +212,12 @@ export interface Api {
   pickLogo(code: string): Promise<Record<string, string>>
   removeLogo(code: string): Promise<Record<string, string>>
   readLogo(code: string): Promise<Uint8Array | null>
+  listPacks(): Promise<PackInfo[]>
+  importPack(): Promise<PackInfo[]> // asks for a .vrpack; the packs after
+  removePack(id: string): Promise<PackInfo[]>
+  readPackPhoto(id: string, photo: string): Promise<Uint8Array>
+  usePackPhoto(id: string, photo: string): Promise<{ assetId: string; width: number; height: number }> // copied into the project
+  smokeImportPack?: (path: string) => Promise<PackInfo[]>
   smokeRelocate?: (id: string, part: MissingPart, path: string) => Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string }>
   smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
   smokeClipboardImage?: (path: string) => Promise<void>

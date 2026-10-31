@@ -41,7 +41,11 @@ describe('fit / findPhoto', () => {
 
   it('names match ignoring case, spaces and hyphens; jersey counts too', () => {
     expect(fit(pp({ lastName: 'Van-Dijk' }), player({ lastName: 'VAN DIJK' }), 'SUN')).toBe(10)
-    expect(fit(pp({ lastName: 'OHNO', jersey: 3 }), player({ lastName: 'ONO', jersey: 3 }), 'SUN')).toBe(5)
+    expect(fit(pp({ lastName: 'ARAI', jersey: 7 }), player({ lastName: 'Arai', jersey: 7 }), 'SUN')).toBe(15)
+  })
+
+  it('a jersey alone is not enough: another surname is another person', () => {
+    expect(fit(pp({ lastName: 'YANAGITA', jersey: 2 }), player({ lastName: 'HIGUCHI', jersey: 2 }), 'SUN')).toBe(0)
   })
 
   it('a teammate with the same surname but another first name is not the player', () => {

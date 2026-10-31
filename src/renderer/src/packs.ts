@@ -19,6 +19,8 @@ export function usePacks(): PackInfo[] {
   return p
 }
 
+// For the self-check, after it changed the packs from the main process.
+export async function refreshPacks(): Promise<void> { loaded = true; set(await api.listPacks()) }
 export async function importPack(): Promise<void> { photos.clear(); set(await api.importPack()) }
 export async function removePack(id: string): Promise<void> { set(await api.removePack(id)) }
 export async function setPlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.setPlayerPhoto(tg)) }

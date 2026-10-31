@@ -552,6 +552,7 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 //  PDF pages and pictures, a frame, drag, through-play, a changed file read again, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
+// [VR_SMOKE_PHOTOS=<pack.vrpack>: read a pack in, put the play's player's photo on a clip, set and remove one]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
@@ -581,6 +582,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,
       assets: process.env.VR_SMOKE_ASSETS?.split(';'),
       logo: process.env.VR_SMOKE_LOGO,
+      photos: process.env.VR_SMOKE_PHOTOS,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }

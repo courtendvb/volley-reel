@@ -56,19 +56,16 @@ export function readManifest(raw: unknown): PackManifest | null {
 const norm = (s: string | undefined) => (s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 // How well a pack player fits a scouted one; 0 = not this person. Player IDs differ between scouts,
-// so an ID is enough on its own, and otherwise the team must match and then the name and jersey count.
+// so an ID is enough on its own; otherwise team and surname must both match (a jersey alone would put
+// a teammate's face on a player), and the first name and jersey tell same-surname players apart.
 export function fit(pp: PackPlayer, p: Player, teamCode: string): number {
   if (pp.ids?.some(id => id.replace(/-a$/i, '').toUpperCase() === p.key.toUpperCase())) return 100
   const code = teamCode.toUpperCase()
   if (pp.team !== code && !pp.teams?.includes(code)) return 0
-  let s = 0
-  if (norm(pp.lastName) && norm(pp.lastName) === norm(p.lastName)) {
-    s += 10
-    const a = norm(pp.firstName), b = norm(p.firstName)
-    if (a && b) s += a === b ? 3 : a[0] === b[0] ? 1 : -10 // another first name: a teammate with the same surname
-  }
-  if (pp.jersey !== undefined && pp.jersey === p.jersey) s += 5
-  return s
+  if (!norm(pp.lastName) || norm(pp.lastName) !== norm(p.lastName)) return 0
+  const a = norm(pp.firstName), b = norm(p.firstName)
+  if (a && b && a[0] !== b[0]) return 0 // another first name: a teammate with the same surname
+  return 10 + (a && b ? (a === b ? 3 : 1) : 0) + (pp.jersey !== undefined && pp.jersey === p.jersey ? 5 : 0)
 }
 
 export interface PackPhoto { pack: string; player: PackPlayer }

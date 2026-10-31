@@ -124,7 +124,8 @@ npm run typecheck
 `↺` で自分の写真を外すと、リーグのパックの写真に戻ります。
 
 写真の当て方: DVW の選手ID がパックの `ids` にあれば、それで決めます。
-なければ、チームコード（`team` か `teams`）が合うことを条件に、姓・名・背番号で決めます。
+なければ、チームコード（`team` か `teams`）と姓の両方が合うことを条件にします。同じ姓の選手がいるときは、名と背番号で見分けます。
+背番号だけでは決めません（別の選手の顔が出ないように）。つづりが違って合わない選手は `ids` に選手ID を足すか、アプリの `✎` で写真を足してください。
 姓は大文字小文字・空白・ハイフンを無視して比べます。同点の候補が2人いるときは、どちらも出しません。
 
 パックの作り方: フォルダに `players.csv`（UTF-8。Excel では「CSV UTF-8」で保存）と `photos/` を用意して、次を実行します。
@@ -175,7 +176,7 @@ npm run release
 GitHub Actions（`.github/workflows/ci.yml`）が push と PR ごとに型チェック・単体テスト・ビルドを行う。以下の自己チェックは手元で実行する。自己チェックのコードは `src/renderer/src/smoke.ts` にあり、`VR_SMOKE` のときだけ読み込まれる（通常の起動では読み込まない）。`VR_SMOKE_M8=relink` が書き換える DVW は一時フォルダ内のコピーに限る（それ以外は拒否）。`VR_SMOKE_M8=relocate:<新しい DVW>` で、移動した DVW の表示と指し直しを確認する。
 
 試合を取り込み、絞り込み結果の n 番目に飛んで、ウィンドウのスクリーンショットを保存して終了する
-（`VR_SMOKE_SETTINGS=1` で設定ダイアログも開く、`VR_SMOKE_KEYS=3,1,0` でキー入力、`VR_SMOKE_TRIM=1` でループと IN/OUT の操作を確認、`VR_SMOKE_ANN=1` で注釈の描画・移動・表示時刻を確認、`VR_SMOKE_COPY=1` で図形のコピー・貼り付けと、クリップボードの画像の貼り付けを確認（Windows のクリップボードを書き換える）、`VR_SMOKE_OV=1`（または `dialog`）でオーバーレイを確認、`VR_SMOKE_EXPORT=<出力.mp4>` で書き出し・フレーム確認・キャンセルを確認、`VR_SMOKE_M8=relink|flush-write|report|undo`（と `VR_SMOKE_CORRUPT=1`）で再リンク・終了時保存・復元・元に戻すを確認、`VR_SMOKE_VIDEO=1`（と `VR_SMOKE_EXPORT`）で動画・共有シーン・元に戻す・書き出しを確認、`VR_SMOKE_OBJ=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<画像;PDF>`）で図形・三角形・頂点の編集・書式・画像の挿入・書き出しを確認、`VR_SMOKE_SLIDES=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<PDF;画像>`）でスライドの右クリックのメニュー・スライドの図形・PDF のページ・静止画・ドラッグ・通し再生・元のファイルの読み直し・書き出しを確認（ファイルはプロジェクトにコピーして使う）（`VR_SMOKE_MEM=<秒>` を足すと再生中のメモリ・CPU・描画回数を測る）、`VR_LIBRARY=<倉庫> VR_SMOKE_HOME=scan|import-create|home|picker|auto-create VR_SMOKE_FOLDERS="<フォルダ>;…"` で倉庫とプロジェクト作成を確認、
+（`VR_SMOKE_SETTINGS=1` で設定ダイアログも開く、`VR_SMOKE_KEYS=3,1,0` でキー入力、`VR_SMOKE_TRIM=1` でループと IN/OUT の操作を確認、`VR_SMOKE_ANN=1` で注釈の描画・移動・表示時刻を確認、`VR_SMOKE_COPY=1` で図形のコピー・貼り付けと、クリップボードの画像の貼り付けを確認（Windows のクリップボードを書き換える）、`VR_SMOKE_PHOTOS=<パック.vrpack>`（と `VR_SMOKE_SCOPE=all`）でパックの読み込み・選手写真の挿入・自分の写真の追加と取り消しを確認（パックに、試合に出た選手がいること）、`VR_SMOKE_OV=1`（または `dialog`）でオーバーレイを確認、`VR_SMOKE_EXPORT=<出力.mp4>` で書き出し・フレーム確認・キャンセルを確認、`VR_SMOKE_M8=relink|flush-write|report|undo`（と `VR_SMOKE_CORRUPT=1`）で再リンク・終了時保存・復元・元に戻すを確認、`VR_SMOKE_VIDEO=1`（と `VR_SMOKE_EXPORT`）で動画・共有シーン・元に戻す・書き出しを確認、`VR_SMOKE_OBJ=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<画像;PDF>`）で図形・三角形・頂点の編集・書式・画像の挿入・書き出しを確認、`VR_SMOKE_SLIDES=1`（と `VR_SMOKE_EXPORT`、`VR_SMOKE_ASSETS=<PDF;画像>`）でスライドの右クリックのメニュー・スライドの図形・PDF のページ・静止画・ドラッグ・通し再生・元のファイルの読み直し・書き出しを確認（ファイルはプロジェクトにコピーして使う）（`VR_SMOKE_MEM=<秒>` を足すと再生中のメモリ・CPU・描画回数を測る）、`VR_LIBRARY=<倉庫> VR_SMOKE_HOME=scan|import-create|home|picker|auto-create VR_SMOKE_FOLDERS="<フォルダ>;…"` で倉庫とプロジェクト作成を確認、
 `VR_SMOKE_REEL='{"markers":[2,1,null],"scope":"all"}'` で結果からリールを作って通し再生し、切り替え時間を測る）。試合は `;` 区切りで複数指定できる。
 
 ```bash

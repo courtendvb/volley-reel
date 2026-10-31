@@ -14,6 +14,8 @@ import type { Tool } from './components/AnnotationLayer'
 import { assetStats, forgetLogo } from './assets'
 import { canvasStats } from './canvas'
 import { playback } from './playback'
+import { refreshPacks } from './packs'
+import { findPhoto } from '../../shared/pack'
 
 export interface SmokeOpts {
   play: number
@@ -32,6 +34,7 @@ export interface SmokeOpts {
   slides?: boolean // slides: the right-click menu, objects on a slide, PDF pages, a frame, through-play, reading again, export
   assets?: string[] // with obj / slides: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
+  photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
@@ -127,6 +130,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.trim) return smokeTrim(res)
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
+    if (opts.photos) return smokePhotos(res, opts.photos)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -970,6 +974,44 @@ export function installSmoke(h: SmokeHost): void {
   // give the arrow a show-from time, and read canvas pixels on either side of it.
   // Ctrl+C on one of a grouped pair copies the pair (not the circle beside it); Ctrl+V on the same clip steps off the
   // originals, on another clip lands in place with the show time moved to that clip's IN.
+  // Player photos (add-on packs): a pack read in, the play's player found in it and put on the clip
+  // by a click; a photo set for a player the pack has none for, then taken off with ↺.
+  const smokePhotos = async (res: PlayRef[], packFile: string) => {
+    const packs = await api.smokeImportPack!(packFile)
+    await refreshPacks()
+    const inPack = (x: PlayRef) => {
+      const d = latest.current.dvwsRef![x.matchId], pl = d.players[`${x.play.side}${x.play.jersey}`]
+      return !!pl && !!findPhoto(packs, pl, d.teams[x.play.side === '*' ? 0 : 1].code)
+    }
+    const r = res.find(x => x.play.rallyId !== null && inPack(x))
+    if (!r) throw new Error('no play by a player in the pack')
+    const { reel: built, ids } = addClips(newReel('photo smoke'), [{ matchId: r.matchId, play: r.play }])
+    setReels(rs => [...rs, built]); setReelId(built.id)
+    await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'photo reel')
+    activateClip(built.clips[ids[0]]); await sleep(400)
+    const panel = await waitFor(() => document.querySelector<HTMLElement>('[data-accordion="player-photos"]'), 10000, 'photo panel')
+    if (!panel.classList.contains('open')) { panel.querySelector<HTMLButtonElement>('.accordion-head')!.click(); await sleep(200) }
+    const focus = await waitFor(() => panel.querySelector<HTMLButtonElement>('.photo-focus .photo-pick'), 10000, 'focused player photo')
+    const focusName = focus.querySelector('.photo-name')?.textContent
+    const tiles = () => ({ photos: panel.querySelectorAll('.photo-team .photo-pick').length, none: panel.querySelectorAll('.photo-team .photo-none').length, mine: panel.querySelectorAll('.photo-team .photo-pick.mine').length })
+    const before = tiles()
+    focus.click()
+    const image = await waitFor(() => latest.current.reel!.clips[ids[0]].annotations.find(a => a.kind === 'image') ?? null, 10000, 'inserted photo') as { w: number; h: number }
+
+    // A player with no photo: one set for them (the file dialog is skipped), then removed by ↺.
+    const d = latest.current.dvwsRef![r.matchId], side = r.play.side, i = side === '*' ? 0 : 1
+    const bare = Object.values(d.players).find(p => p.side === side && !findPhoto(packs, p, d.teams[i].code))!
+    const tg = { key: bare.key, team: d.teams[i].code, jersey: bare.jersey, lastName: bare.lastName, firstName: bare.firstName }
+    await api.smokeSetPhoto!(tg, 'build/icon.png')
+    await refreshPacks(); await sleep(300)
+    const afterSet = tiles()
+    await api.smokeShot!('photos.png')
+    const revert = panel.querySelector<HTMLButtonElement>('.photo-team .photo-cell .photo-edits .photo-edit:nth-child(2)')
+    revert?.click()
+    await waitFor(() => tiles().mine === 0 || null, 10000, 'photo removed')
+    return { pack: packs.map(p => `${p.id}:${p.players.length}`), focusName, before, image: { w: +image.w.toFixed(3), h: +image.h.toFixed(3) }, setFor: `#${bare.jersey} ${bare.lastName}`, afterSet, afterRevert: tiles() }
+  }
+
   const smokeCopy = async (res: PlayRef[]) => {
     const [p1, p2] = res.filter(x => x.play.rallyId !== null)
     const { reel: built, ids } = addClips(newReel('copy smoke'), [p1, p2].map(x => ({ matchId: x.matchId, play: x.play })))

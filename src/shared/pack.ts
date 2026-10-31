@@ -73,12 +73,30 @@ export function fit(pp: PackPlayer, p: Player, teamCode: string): number {
 
 export interface PackPhoto { pack: string; player: PackPlayer }
 
+// Photos added or replaced in the app go to this pack of the user's own (not a league's), so reading
+// a league pack in again keeps them; one that fits a player wins over any league pack's.
+export const LOCAL_PACK = 'local'
+
+// The player a photo is set for in the app: the scouted player and their team's code.
+export interface PhotoTarget { key: string; team: string; jersey: number; lastName: string; firstName: string; label?: string } // label: kept from a league pack's photo
+
+export function localEntry(tg: PhotoTarget, photo: string): PackPlayer {
+  return { team: tg.team.toUpperCase(), jersey: tg.jersey, lastName: tg.lastName, ...(tg.firstName ? { firstName: tg.firstName } : {}), ...(tg.label ? { label: tg.label } : {}), ids: [tg.key], photo }
+}
+
+// A local entry made for this player (by ID, or by team, surname and jersey): replaced by a new photo.
+export function isFor(pp: PackPlayer, tg: PhotoTarget): boolean {
+  return !!pp.ids?.some(id => id.toUpperCase() === tg.key.toUpperCase())
+    || (pp.team === tg.team.toUpperCase() && norm(pp.lastName) === norm(tg.lastName) && pp.jersey === tg.jersey)
+}
+
 // The photo that best fits a scouted player, across every pack; null when none fits or two fit equally.
 export function findPhoto(packs: PackInfo[], p: Player, teamCode: string): PackPhoto | null {
   let best: PackPhoto | null = null, top = 0, tie = false
   for (const pk of packs) {
     for (const pp of pk.players) {
-      const s = fit(pp, p, teamCode)
+      let s = fit(pp, p, teamCode)
+      if (s > 0 && pk.id === LOCAL_PACK) s += 1000
       if (s > top) { best = { pack: pk.id, player: pp }; top = s; tie = false } else if (s && s === top) tie = true
     }
   }

@@ -1,7 +1,7 @@
 // Add-on packs (kept in the library, shared by every project) and their photos, decoded once for
 // the picker's thumbnails.
 import { useEffect, useState } from 'react'
-import type { PackInfo } from '../../shared/pack'
+import type { PackInfo, PhotoTarget } from '../../shared/pack'
 
 const api = window.api
 let current: PackInfo[] = []
@@ -21,6 +21,8 @@ export function usePacks(): PackInfo[] {
 
 export async function importPack(): Promise<void> { photos.clear(); set(await api.importPack()) }
 export async function removePack(id: string): Promise<void> { set(await api.removePack(id)) }
+export async function setPlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.setPlayerPhoto(tg)) }
+export async function removePlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.removePlayerPhoto(tg)) }
 
 // Thumbnails are small: decoded at most 160 px on the long side.
 const photos = new Map<string, Promise<ImageBitmap | null>>()

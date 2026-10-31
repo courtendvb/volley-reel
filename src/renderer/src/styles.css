@@ -427,6 +427,12 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .photo-thumb { width: 48px; height: 60px; border-radius: 4px; background: #334155; }
 .photo-name, .photo-sub { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .photo-sub { font-size: 10px; }
+.photo-cell { position: relative; display: inline-flex; }
+.photo-edits { position: absolute; top: 1px; right: 1px; display: flex; gap: 1px; }
+.photo-cell > .photo-edit { margin-left: 2px; }
+.photo-edit { padding: 0 4px; font-size: 10px; line-height: 16px; min-width: 0; opacity: 0.55; }
+.photo-cell:hover .photo-edit { opacity: 1; }
+.photo-pick.mine { outline: 1px solid var(--accent); }
 .photo-none { font-size: 11px; padding: 2px 6px; border: 1px dashed var(--border-strong); border-radius: 4px; opacity: 0.7; }
 .ann-tools select.scope-scene { border-color: #D97706; color: var(--amber); }
 .ann-tools select.scope-video { border-color: #059669; color: var(--skill-r); }

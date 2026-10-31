@@ -7,7 +7,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
-import { PACK_PHOTO, readManifest, type PackInfo, type PackManifest } from '../shared/pack'
+import { LOCAL_PACK, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
 import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Palette, ParsedDVW, ScanResult } from '../shared/types'
@@ -189,6 +189,7 @@ export class Library {
     let m: PackManifest | null = null
     try { m = readManifest(JSON.parse(strFromU8(zip[at]))) } catch { /* reported below */ }
     if (!m) throw new Error(t('パックの manifest.json が読めません（形式・バージョン・id を確かめてください）'))
+    if (m.id === LOCAL_PACK) throw new Error(t('id「{0}」はアプリが使うため、パックには使えません', LOCAL_PACK))
     const players = m.players.filter(p => zip[`${root}photos/${p.photo}`])
     if (!players.length) throw new Error(t('パックに使える写真がありません'))
     const tmp = join(this.dir, 'addons', `.${m.id}-${randomUUID()}`), to = join(this.dir, 'addons', m.id)
@@ -198,6 +199,36 @@ export class Library {
     await rm(to, { recursive: true, force: true })
     await rename(tmp, to)
     return { id: m.id, name: m.name, players }
+  }
+
+  // Photos set in the app: kept in addons/local/ (shared/pack.ts LOCAL_PACK), one per player; a new
+  // one replaces the player's old one, file and all.
+  private async localPlayers(): Promise<PackInfo['players']> {
+    return (await this.packs()).find(p => p.id === LOCAL_PACK)?.players ?? []
+  }
+
+  private async saveLocal(players: PackInfo['players']): Promise<void> {
+    const dir = join(this.dir, 'addons', LOCAL_PACK)
+    if (!players.length) { await rm(dir, { recursive: true, force: true }); return }
+    await writeJSON(join(dir, 'manifest.json'), { format: 'volley-reel-pack', version: 1, id: LOCAL_PACK, name: LOCAL_PACK, players })
+  }
+
+  async setPlayerPhoto(tg: PhotoTarget, file: string): Promise<void> {
+    const ext = extname(file).slice(1).toLowerCase().replace('jpeg', 'jpg')
+    if (ext !== 'png' && ext !== 'jpg') throw new Error(t('写真は PNG か JPEG を選んでください'))
+    const dir = join(this.dir, 'addons', LOCAL_PACK, 'photos')
+    await mkdir(dir, { recursive: true })
+    const photo = `${randomUUID()}.${ext}`
+    await copyFile(file, join(dir, photo))
+    const old = await this.localPlayers()
+    await this.saveLocal([...old.filter(pp => !isFor(pp, tg)), localEntry(tg, photo)])
+    for (const pp of old.filter(pp => isFor(pp, tg))) await rm(join(dir, pp.photo), { force: true })
+  }
+
+  async removePlayerPhoto(tg: PhotoTarget): Promise<void> {
+    const old = await this.localPlayers()
+    await this.saveLocal(old.filter(pp => !isFor(pp, tg)))
+    for (const pp of old.filter(pp => isFor(pp, tg))) await rm(join(this.dir, 'addons', LOCAL_PACK, 'photos', pp.photo), { force: true })
   }
 
   async removePack(id: string): Promise<void> {

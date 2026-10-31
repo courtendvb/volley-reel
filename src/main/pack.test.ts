@@ -49,4 +49,20 @@ describe('Library packs', () => {
     const notZip = join(dir, 'x.vrpack'); writeFileSync(notZip, 'hello')
     await expect(lib.importPack(notZip)).rejects.toThrow()
   })
+
+  it('keeps one photo per player set in the app, apart from league packs', async () => {
+    const lib = await Library.open(join(dir, 'lib'))
+    const tg = { key: 'YAN-YUR-02', team: 'HTH', jersey: 2, lastName: 'YANAKITA', firstName: 'Yuri' }
+    const a = join(dir, 'a.jpg'), b = join(dir, 'b.png'); writeFileSync(a, png); writeFileSync(b, png)
+    await lib.setPlayerPhoto(tg, a)
+    await lib.setPlayerPhoto(tg, b) // replaces the first, file and all
+    const local = (await lib.packs()).find(p => p.id === 'local')!
+    expect(local.players).toHaveLength(1)
+    expect(local.players[0].photo).toMatch(/\.png$/)
+    expect(readdirSync(join(dir, 'lib', 'addons', 'local', 'photos'))).toEqual([local.players[0].photo])
+    await expect(lib.importPack(pack({ 'manifest.json': manifest({ id: 'local' }), 'photos/a.png': png }))).rejects.toThrow()
+    await expect(lib.setPlayerPhoto(tg, join(dir, 'p.vrpack'))).rejects.toThrow()
+    await lib.removePlayerPhoto(tg)
+    expect(await lib.packs()).toEqual([])
+  })
 })

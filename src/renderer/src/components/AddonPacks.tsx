@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LOCAL_PACK } from '../../../shared/pack'
 import { importPack, removePack, usePacks } from '../packs'
 import { t } from '../../../shared/i18n'
 
@@ -15,7 +16,7 @@ export function AddonPacks() {
     <div className="logo-table">
       {packs.map(p => (
         <div key={p.id} className="logo-row">
-          <b>{p.name}</b>
+          <b>{p.id === LOCAL_PACK ? t('自分で足した写真') : p.name}</b>
           <span className="muted logo-name">{t('選手写真 {0} 人', p.players.length)}</span>
           <button className="link" disabled={busy} onClick={() => void run(() => removePack(p.id))}>{t('外す')}</button>
         </div>

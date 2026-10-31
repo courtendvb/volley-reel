@@ -8,6 +8,7 @@ import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
 import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
+import type { PhotoTarget } from '../shared/pack'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
 import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
@@ -68,6 +69,7 @@ app.whenReady().then(async () => {
       const note = await library!.relocate(id, part, path, () => {})
       return { library: library!.info(), project: project?.info() ?? null, note }
     })
+    ipcMain.handle('smoke:setPhoto', async (_e, tg: PhotoTarget, path: string) => { await library!.setPlayerPhoto(tg, path); return library!.packs() })
     ipcMain.handle('smoke:importPack', async (_e, path: string) => { await library!.importPack(path); return library!.packs() })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     // A screenshot of the window in the middle of a run (the run's own one is taken at its end).
@@ -306,6 +308,15 @@ function registerIpc(): void {
     return lib().packs()
   })
   ipcMain.handle('pack:remove', async (_e, id: string) => { await lib().removePack(id); return lib().packs() })
+  ipcMain.handle('pack:setPhoto', async (_e, tg: PhotoTarget) => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: t('{0} の写真を選ぶ', tg.label ?? tg.lastName), properties: ['openFile'],
+      filters: [{ name: t('写真'), extensions: ['png', 'jpg', 'jpeg'] }],
+    })
+    if (!r.canceled && r.filePaths[0]) await lib().setPlayerPhoto(tg, r.filePaths[0])
+    return lib().packs()
+  })
+  ipcMain.handle('pack:removePhoto', async (_e, tg: PhotoTarget) => { await lib().removePlayerPhoto(tg); return lib().packs() })
   ipcMain.handle('pack:readPhoto', (_e, id: string, photo: string) => lib().readPackPhoto(id, photo))
   ipcMain.handle('pack:usePhoto', async (_e, id: string, photo: string) => {
     const { assetId, path } = await lib().usePackPhoto(id, photo, assetsDir())

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findPhoto, fit, matchesQuery, readManifest, type PackInfo, type PackPlayer } from './pack'
+import { LOCAL_PACK, findPhoto, fit, isFor, localEntry, matchesQuery, readManifest, type PackInfo, type PackPlayer } from './pack'
 import type { Player } from './types'
 
 const player = (o: Partial<Player>): Player => ({ key: 'X', side: '*', jersey: 1, lastName: '', firstName: '', ...o })
@@ -58,6 +58,25 @@ describe('fit / findPhoto', () => {
     expect(findPhoto(packs, player({ lastName: 'SATO', jersey: 4 }), 'SUN')?.player.photo).toBe('ken.jpg')
     expect(findPhoto(packs, player({ lastName: 'ITO' }), 'SUN')).toBeNull()
     expect(findPhoto(packs, player({ lastName: 'KATO' }), 'SUN')).toBeNull()
+  })
+})
+
+describe('photos added in the app', () => {
+  const tg = { key: 'YAN-YUR-02', team: 'hth', jersey: 2, lastName: 'YANAKITA', firstName: 'Yuri' }
+
+  it('win over a league pack, and still fit by team and name where the ID differs', () => {
+    const packs: PackInfo[] = [
+      { id: 'league', name: 'L', players: [pp({ team: 'HTH', ids: ['YAN-YUR-02'], lastName: 'YANAKITA', photo: 'league.jpg' })] },
+      { id: LOCAL_PACK, name: 'local', players: [localEntry(tg, 'mine.jpg')] },
+    ]
+    expect(findPhoto(packs, player({ key: 'YAN-YUR-02', lastName: 'YANAKITA', jersey: 2 }), 'HTH')?.player.photo).toBe('mine.jpg')
+    expect(findPhoto(packs, player({ key: 'OTHER-ID', lastName: 'Yanakita', firstName: 'Yuri', jersey: 2 }), 'HTH')?.player.photo).toBe('mine.jpg')
+  })
+
+  it('a new photo replaces the entry made for the same player', () => {
+    expect(isFor(localEntry(tg, 'a.jpg'), tg)).toBe(true)
+    expect(isFor(pp({ team: 'HTH', lastName: 'yanakita', jersey: 2 }), { ...tg, key: 'X' })).toBe(true)
+    expect(isFor(pp({ team: 'HTH', lastName: 'YANAKITA', jersey: 3 }), { ...tg, key: 'X' })).toBe(false)
   })
 })
 

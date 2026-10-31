@@ -3,9 +3,11 @@
 // scout fix in the DVW shows up on the next read. Projects pick matches from here by id.
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
+import { LOCAL_PACK, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
 import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Palette, ParsedDVW, ScanResult } from '../shared/types'
@@ -158,6 +160,100 @@ export class Library {
   async readLogo(code: string): Promise<Uint8Array | null> {
     const f = (await this.logos())[cleanCode(code)]
     return f ? new Uint8Array(await readFile(join(this.dir, 'logos', f))) : null
+  }
+
+  // Add-on packs (shared/pack.ts): addons/<id>/manifest.json and photos/, one folder per pack.
+  async packs(): Promise<PackInfo[]> {
+    const dir = join(this.dir, 'addons')
+    if (!existsSync(dir)) return []
+    const out: PackInfo[] = []
+    for (const id of await readdir(dir)) {
+      const f = join(dir, id, 'manifest.json')
+      if (!existsSync(f)) continue
+      try {
+        const m = readManifest(JSON.parse(await readFile(f, 'utf8')))
+        if (m && m.id === id) out.push({ id: m.id, name: m.name, players: m.players })
+      } catch { /* an unreadable pack is left out */ }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  // Reads a .vrpack (a zip) into addons/<id>/, replacing a pack with the same id. Only manifest.json
+  // and the photos it names are taken; the manifest may sit in one top folder (a zipped folder).
+  async importPack(file: string): Promise<PackInfo> {
+    let zip: Record<string, Uint8Array>
+    try { zip = unzipSync(new Uint8Array(await readFile(file))) } catch { throw new Error(t('パックを開けませんでした（.vrpack ではないようです）')) }
+    const at = Object.keys(zip).find(k => /^([^/]+\/)?manifest\.json$/.test(k))
+    if (!at) throw new Error(t('パックに manifest.json がありません'))
+    const root = at.slice(0, -'manifest.json'.length)
+    let m: PackManifest | null = null
+    try { m = readManifest(JSON.parse(strFromU8(zip[at]))) } catch { /* reported below */ }
+    if (!m) throw new Error(t('パックの manifest.json が読めません（形式・バージョン・id を確かめてください）'))
+    if (m.id === LOCAL_PACK) throw new Error(t('id「{0}」はアプリが使うため、パックには使えません', LOCAL_PACK))
+    const players = m.players.filter(p => zip[`${root}photos/${p.photo}`])
+    if (!players.length) throw new Error(t('パックに使える写真がありません'))
+    const tmp = join(this.dir, 'addons', `.${m.id}-${randomUUID()}`), to = join(this.dir, 'addons', m.id)
+    await mkdir(join(tmp, 'photos'), { recursive: true })
+    for (const photo of new Set(players.map(p => p.photo))) await writeFile(join(tmp, 'photos', photo), zip[`${root}photos/${photo}`])
+    await writeJSON(join(tmp, 'manifest.json'), { ...m, players })
+    await rm(to, { recursive: true, force: true })
+    await rename(tmp, to)
+    return { id: m.id, name: m.name, players }
+  }
+
+  // Photos set in the app: kept in addons/local/ (shared/pack.ts LOCAL_PACK), one per player; a new
+  // one replaces the player's old one, file and all.
+  private async localPlayers(): Promise<PackInfo['players']> {
+    return (await this.packs()).find(p => p.id === LOCAL_PACK)?.players ?? []
+  }
+
+  private async saveLocal(players: PackInfo['players']): Promise<void> {
+    const dir = join(this.dir, 'addons', LOCAL_PACK)
+    if (!players.length) { await rm(dir, { recursive: true, force: true }); return }
+    await writeJSON(join(dir, 'manifest.json'), { format: 'volley-reel-pack', version: 1, id: LOCAL_PACK, name: LOCAL_PACK, players })
+  }
+
+  async setPlayerPhoto(tg: PhotoTarget, file: string): Promise<void> {
+    const ext = extname(file).slice(1).toLowerCase().replace('jpeg', 'jpg')
+    if (ext !== 'png' && ext !== 'jpg') throw new Error(t('写真は PNG か JPEG を選んでください'))
+    const dir = join(this.dir, 'addons', LOCAL_PACK, 'photos')
+    await mkdir(dir, { recursive: true })
+    const photo = `${randomUUID()}.${ext}`
+    await copyFile(file, join(dir, photo))
+    const old = await this.localPlayers()
+    await this.saveLocal([...old.filter(pp => !isFor(pp, tg)), localEntry(tg, photo)])
+    for (const pp of old.filter(pp => isFor(pp, tg))) await rm(join(dir, pp.photo), { force: true })
+  }
+
+  async removePlayerPhoto(tg: PhotoTarget): Promise<void> {
+    const old = await this.localPlayers()
+    await this.saveLocal(old.filter(pp => !isFor(pp, tg)))
+    for (const pp of old.filter(pp => isFor(pp, tg))) await rm(join(this.dir, 'addons', LOCAL_PACK, 'photos', pp.photo), { force: true })
+  }
+
+  async removePack(id: string): Promise<void> {
+    if (!/^[a-z0-9_-]{1,40}$/.test(id)) return
+    await rm(join(this.dir, 'addons', id), { recursive: true, force: true })
+  }
+
+  private packPhotoPath(id: string, photo: string): string {
+    if (!/^[a-z0-9_-]{1,40}$/.test(id) || !PACK_PHOTO.test(photo)) throw new Error(t('写真が見つかりません'))
+    const f = join(this.dir, 'addons', id, 'photos', photo)
+    if (!existsSync(f)) throw new Error(t('写真が見つかりません'))
+    return f
+  }
+
+  async readPackPhoto(id: string, photo: string): Promise<Uint8Array> {
+    return new Uint8Array(await readFile(this.packPhotoPath(id, photo)))
+  }
+
+  // The photo copied into the project's assets (a project keeps its own pictures); its asset id.
+  async usePackPhoto(id: string, photo: string, projectAssets: string): Promise<{ assetId: string; path: string }> {
+    const from = this.packPhotoPath(id, photo)
+    const assetId = `${randomUUID()}.${extname(photo).slice(1).toLowerCase().replace('jpeg', 'jpg')}`
+    await mkdir(projectAssets, { recursive: true })
+    await copyFile(from, join(projectAssets, assetId))
+    return { assetId, path: from }
   }
 
   static async open(dir: string): Promise<Library> {

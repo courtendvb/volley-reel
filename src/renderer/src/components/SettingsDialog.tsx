@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
 import { ACCENTS, applyAppearance, loadAppearance, type Appearance, type ThemeMode } from '../appearance'
+import { AddonPacks } from './AddonPacks'
 import { TeamLogos } from './TeamLogos'
 import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
@@ -15,7 +16,7 @@ interface Props {
   onLanguage: (l: Lang) => void // saves the edits, then shows the app in that language
 }
 
-// 自チームのチームコード、オーバーレイの配色、チームのロゴ (design §3.2), and the app's own look.
+// 自チームのチームコード、オーバーレイの配色、チームのロゴ (design §3.2), add-on packs, and the app's own look.
 export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClose, onLanguage }: Props) {
   const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
   const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
@@ -58,6 +59,12 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <span className="field-label wide">{t('チームのロゴ（タイトルカード）')}</span>
           <TeamLogos teams={teams} />
           <p className="hint">{t('1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。')}</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">{t('アドオン')}</span>
+          <AddonPacks />
+          <p className="hint">{t('リーグの選手写真などを別ファイル（.vrpack）で足します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。写真は右の「選手写真」から入れます。')}</p>
         </section>
 
         <section>

@@ -8,6 +8,7 @@ import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
 import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
+import type { PhotoTarget } from '../shared/pack'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
 import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
@@ -68,6 +69,8 @@ app.whenReady().then(async () => {
       const note = await library!.relocate(id, part, path, () => {})
       return { library: library!.info(), project: project?.info() ?? null, note }
     })
+    ipcMain.handle('smoke:setPhoto', async (_e, tg: PhotoTarget, path: string) => { await library!.setPlayerPhoto(tg, path); return library!.packs() })
+    ipcMain.handle('smoke:importPack', async (_e, path: string) => { await library!.importPack(path); return library!.packs() })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     // A screenshot of the window in the middle of a run (the run's own one is taken at its end).
     ipcMain.handle('smoke:shot', async (_e, name: string) => { await writeFile(join(dirname(process.env.VR_SMOKE!), basename(name)), (await win!.webContents.capturePage()).toPNG()) }) // next to the run's own screenshot
@@ -294,6 +297,32 @@ function registerIpc(): void {
   })
   ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
   ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
+  // Add-on packs: read from a .vrpack the user picks, kept in the library for every project.
+  ipcMain.handle('pack:list', () => library?.packs() ?? [])
+  ipcMain.handle('pack:import', async () => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: t('アドオンのパックを読み込む'), properties: ['openFile'],
+      filters: [{ name: t('volley-reel パック'), extensions: ['vrpack', 'zip'] }],
+    })
+    if (!r.canceled && r.filePaths[0]) await lib().importPack(r.filePaths[0])
+    return lib().packs()
+  })
+  ipcMain.handle('pack:remove', async (_e, id: string) => { await lib().removePack(id); return lib().packs() })
+  ipcMain.handle('pack:setPhoto', async (_e, tg: PhotoTarget) => {
+    const r = await dialog.showOpenDialog(win!, {
+      title: t('{0} の写真を選ぶ', tg.label ?? tg.lastName), properties: ['openFile'],
+      filters: [{ name: t('写真'), extensions: ['png', 'jpg', 'jpeg'] }],
+    })
+    if (!r.canceled && r.filePaths[0]) await lib().setPlayerPhoto(tg, r.filePaths[0])
+    return lib().packs()
+  })
+  ipcMain.handle('pack:removePhoto', async (_e, tg: PhotoTarget) => { await lib().removePlayerPhoto(tg); return lib().packs() })
+  ipcMain.handle('pack:readPhoto', (_e, id: string, photo: string) => lib().readPackPhoto(id, photo))
+  ipcMain.handle('pack:usePhoto', async (_e, id: string, photo: string) => {
+    const { assetId, path } = await lib().usePackPhoto(id, photo, assetsDir())
+    const { width, height } = nativeImage.createFromPath(path).getSize()
+    return { assetId, width: width || 3, height: height || 4 } // unreadable size: a portrait frame
+  })
 
   ipcMain.handle('asset:pick', async () => {
     if (!project) throw new Error(t('プロジェクトが開かれていません'))
@@ -523,6 +552,7 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 //  PDF pages and pictures, a frame, drag, through-play, a changed file read again, export]
 // [VR_SMOKE_HOME=<step>: library and project flow from the home screen; VR_LIBRARY=<dir>]
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
+// [VR_SMOKE_PHOTOS=<pack.vrpack>: read a pack in, put the play's player's photo on a clip, set and remove one]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
@@ -552,6 +582,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,
       assets: process.env.VR_SMOKE_ASSETS?.split(';'),
       logo: process.env.VR_SMOKE_LOGO,
+      photos: process.env.VR_SMOKE_PHOTOS,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }

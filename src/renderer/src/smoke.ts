@@ -135,7 +135,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
-    if (opts.court) return smokeCourt(res)
+    if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1019,7 +1019,7 @@ export function installSmoke(h: SmokeHost): void {
 
   // Court grid: fitted from its bar, one corner dragged on the canvas, saved with the match; the
   // near side swapped; an attack's start and end zones lit.
-  const smokeCourt = async (res: PlayRef[]) => {
+  const smokeCourt = async (res: PlayRef[], exportTo?: string) => {
     const r = res.find(x => x.play.skill === 'A' && x.play.startZone && x.play.endZone) ?? res.find(x => x.play.startZone && x.play.endZone)
     if (!r) throw new Error('no play with start and end zones')
     jump(r)
@@ -1092,6 +1092,17 @@ export function installSmoke(h: SmokeHost): void {
     annCanvas.dispatchEvent(new PointerEvent('pointermove', apt(qx + 0.02, qy - 0.02))); await sleep(30)
     annCanvas.dispatchEvent(new PointerEvent('pointerup', apt(qx + 0.02, qy - 0.02))); await sleep(200)
     const dragged = heat()!.quad!
+    // The transparency slider with the real mouse and keys: a drag, a click, then → (moves the
+    // slider, not the video) and ↓ (stays on the slider, not the next play).
+    const opacity = () => heat()?.opacity ?? 1
+    const slider = () => [...document.querySelectorAll<HTMLInputElement>('.ann-tools input[type=range]')].find(i => i.getAttribute('aria-label') === t('透明度'))!
+    const sr = slider().getBoundingClientRect(), sy = sr.top + sr.height / 2
+    await api.smokeDrag!([[sr.left + 4, sy], [sr.left + sr.width * 0.25, sy], [sr.left + sr.width * 0.5, sy]]); await sleep(300)
+    const dragged50 = opacity()
+    await api.smokeDrag!([[sr.left + sr.width * 0.75, sy]]); await sleep(300)
+    const clicked = opacity(), t0 = playback.current.time, play0 = latest.current.selected?.playId
+    await api.smokeKey!('Right'); await sleep(150); await api.smokeKey!('Right'); await sleep(150); await api.smokeKey!('Down'); await sleep(300)
+    const transparency = { dragged50, clicked, afterKeys: opacity(), videoMoved: +(playback.current.time - t0).toFixed(2), samePlay: latest.current.selected?.playId === play0, stillSelected: latest.current.selectedAnn === 'heat' }
     await api.smokeShot!('court-heatmap.png')
     // As in the export: an offscreen canvas at 1280 × 720.
     const W = 1280, H = 720, off = new OffscreenCanvas(W, H), octx = off.getContext('2d')!
@@ -1100,8 +1111,28 @@ export function installSmoke(h: SmokeHost): void {
     const alpha = (x: number, y: number) => octx.getImageData(Math.round(x * W), Math.round(y * H), 1, 1).data[3]
     const mid = dragged.reduce((m, p) => [m[0] + p[0] / 4, m[1] + p[1] / 4], [0, 0])
     const b = heat()!
+
+    // With VR_SMOKE_EXPORT: the scene in a video, "コート（書き出し）" ticked in the clip's row, exported.
+    let exported: unknown = null
+    if (exportTo) {
+      updateReel(toggleMarker(latest.current.reel!, ids[0], 1)) // the scene plays marked clips only
+      await waitFor(() => latest.current.order.length === 1 || null, 10000, 'marked clip')
+      const v = newVideo('court smoke', [built.id])
+      setVideos(vs => [...vs, v]); setVideoId(v.id)
+      await waitFor(() => latest.current.video?.id === v.id || null, 10000, 'court video')
+      activateClip(latest.current.reel!.clips[ids[0]]); await sleep(400)
+      const box = await waitFor(() => [...document.querySelectorAll<HTMLLabelElement>('.clip-overlay label')].find(l => l.textContent?.includes(t('コート（書き出し）')))?.querySelector('input') ?? null, 10000, 'court export box')
+      if (!box.checked) box.click()
+      await waitFor(() => latest.current.overlay.court.enabled || null, 10000, 'court export on')
+      const job = await startExport(exportTo)
+      if (!job) throw new Error('court export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'court export done')
+      const clip = job.items.find(it => it.kind === 'clip')
+      exported = { state: latest.current.exportState?.status, path: exportTo, wholeLayer: clip?.kind === 'clip' ? clip.layers.filter(l => l.from === undefined).length : 0 }
+    }
     return { play: `${r.play.code} set ${r.play.setNum}`, corner0: fitted.corners[0], handlesOnTop, afterDone, zones: zones1, nearSet1: swapped.nearSet1, zonesSwapped: playZones(r.play, swapped),
       set: setRef ? { code: setRef.play.code, zones: setZones } : null, detail,
+      transparency, exported,
       heatmap: { onCourt, corner1Moved: +(dragged[1][0] - qx).toFixed(3), exportInside: alpha(mid[0], mid[1]), exportOutside: alpha(b.x + 0.005, b.y + 0.005) } }
   }
 

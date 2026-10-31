@@ -131,7 +131,7 @@ export interface GridStyle {
   grid: boolean
   color: string
   opacity: number // 0..1
-  lineWidth: number
+  lineWidth: number // px at 720p, scaled with the picture like the annotations
   playZones: boolean
   detail: 'zone' | 'sub' // the play's zones as whole zones, or their sub-zones where the DVW has them
 }
@@ -144,7 +144,9 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 // The grid and the play's zones over a w × h picture.
-export function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null): void {
+type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null): void {
   const H = homography(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt])
   const at = (u: number, v: number) => project(H, u, v)
   // A spot's sub-zone, when shown: [du0, dv0] of its quarter of the cell.
@@ -175,11 +177,12 @@ export function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number, f
     ctx.globalAlpha = style.opacity
     ctx.strokeStyle = style.color
     ctx.lineCap = 'round'
-    ctx.lineWidth = style.lineWidth
+    const lw = (style.lineWidth * h) / 720
+    ctx.lineWidth = lw
     for (let col = 0; col <= COLS; col++) line(at(col / COLS, 0), at(col / COLS, 1))
     for (let row = 0; row <= ROWS; row++) {
       const net = row === HALF
-      ctx.lineWidth = net ? style.lineWidth * 2.5 : style.lineWidth
+      ctx.lineWidth = net ? lw * 2.5 : lw
       ctx.setLineDash(net ? [12, 6] : [])
       line(at(0, row / ROWS), at(1, row / ROWS))
     }
@@ -195,7 +198,7 @@ export function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number, f
   }
 }
 
-function drawArrow(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, width: number): void {
+function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {
   const len = Math.hypot(b.x - a.x, b.y - a.y)
   if (len < 1) return
   const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, head = Math.min(len * 0.4, width * 5)

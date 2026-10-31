@@ -35,6 +35,9 @@ import { MatchPicker } from './components/MatchPicker'
 import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
+import { CourtLayer } from './components/CourtLayer'
+import { CourtBar } from './components/CourtBar'
+import { DEFAULT_GRID_STYLE, playZones, type CourtFit, type GridStyle } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
@@ -112,11 +115,23 @@ export function App() {
   const [recent, setRecent] = useState<RecentProject[]>([])
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
+  // The court grid's look is this computer's, for every match; the corners belong to each match.
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') } } catch { return DEFAULT_GRID_STYLE } })
+  useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
+  const [courtFitting, setCourtFitting] = useState(false)
 
   const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
   const match = matchId ? matches[matchId] ?? null : null
   const reel = reels.find(r => r.id === reelId) ?? null
   const video = videos.find(v => v.id === videoId) ?? null
+  useEffect(() => setCourtFitting(false), [matchId])
+  // Shown at once, then saved to the match in the library.
+  const setCourt = (id: string, court: CourtFit | null) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
+    void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
+  const courtZones = useMemo(() => (match?.court && selectedPlay ? playZones(selectedPlay, match.court) : null), [match?.court, selectedPlay])
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)
@@ -1320,8 +1335,13 @@ export function App() {
                     </>
                   )
                 }
+                const court = match.court && (
+                  <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} fitting={courtFitting}
+                    onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })} />
+                )
                 return (
                   <>
+                    {!courtFitting && court}
                     <OverlayLayer size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
                       caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
                     {here && active && (
@@ -1332,6 +1352,7 @@ export function App() {
                       />
                     )}
                     {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
+                    {courtFitting && court}
                   </>
                 )
               }} />
@@ -1353,6 +1374,10 @@ export function App() {
                 editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setCardAnns} onInsertImage={() => void insertImage()} clip={{ in: 0, out: 0 }} disabled={false}
               />
+            )}
+            {!cardEdit && match && (
+              <CourtBar match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
+                onFit={fit => setCourt(match.id, fit)} />
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
               <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}

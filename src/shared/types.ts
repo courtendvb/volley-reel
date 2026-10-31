@@ -1,5 +1,6 @@
 import type { Lang } from './i18n'
 import type { Annotation } from './annotation'
+import type { CourtFit } from './court'
 // Types shared by main, preload and renderer.
 import type { OverlayTheme } from './overlay'
 import type { PackInfo, PhotoTarget } from './pack'
@@ -77,6 +78,7 @@ export interface Match {
   allHome: boolean
   warnings: string[]
   importedAt: string
+  court?: CourtFit // the court grid fitted to this video (missing: not fitted yet)
 }
 
 export interface ProjectSettings {
@@ -156,6 +158,7 @@ export interface Api {
   closeProject(): Promise<void>
   setProjectMatches(ids: string[]): Promise<ProjectInfo>
   parseMatch(id: string): Promise<ParsedDVW>
+  setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
   saveReel(r: Reel): Promise<void>

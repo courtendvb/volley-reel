@@ -10,6 +10,7 @@ import { parseDVW } from '../shared/dvw'
 import { LOCAL_PACK, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
+import type { CourtFit } from '../shared/court'
 import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Palette, ParsedDVW, ScanResult } from '../shared/types'
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
@@ -321,6 +322,17 @@ export class Library {
     await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
     this.matches.set(id, next)
     return note
+  }
+
+  async setCourt(id: string, court: CourtFit | null): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (court && !(court.corners?.length === 4 && court.corners.every(p => Number.isFinite(p?.x) && Number.isFinite(p?.y)) && (court.nearSet1 === '*' || court.nearSet1 === 'a')))
+      throw new Error(t('コートの四隅が不正です'))
+    const { court: _old, ...rest } = m
+    const next: Match = court ? { ...rest, court } : rest
+    await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
+    this.matches.set(id, next)
   }
 
   list(): Match[] {

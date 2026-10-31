@@ -16,6 +16,8 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { findPhoto } from '../../shared/pack'
+import { playZones } from '../../shared/court'
+import { t } from '../../shared/i18n'
 
 export interface SmokeOpts {
   play: number
@@ -35,6 +37,7 @@ export interface SmokeOpts {
   assets?: string[] // with obj / slides: image / PDF files to insert
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
+  court?: boolean // the court grid fitted through its bar and corner handles
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
@@ -131,6 +134,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
+    if (opts.court) return smokeCourt(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1010,6 +1014,50 @@ export function installSmoke(h: SmokeHost): void {
     revert?.click()
     await waitFor(() => tiles().mine === 0 || null, 10000, 'photo removed')
     return { pack: packs.map(p => `${p.id}:${p.players.length}`), focusName, before, image: { w: +image.w.toFixed(3), h: +image.h.toFixed(3) }, setFor: `#${bare.jersey} ${bare.lastName}`, afterSet, afterRevert: tiles() }
+  }
+
+  // Court grid: fitted from its bar, one corner dragged on the canvas, saved with the match; the
+  // near side swapped; an attack's start and end zones lit with zone numbers and sub-zones shown.
+  const smokeCourt = async (res: PlayRef[]) => {
+    const r = res.find(x => x.play.skill === 'A' && x.play.startZone && x.play.endZone) ?? res.find(x => x.play.startZone && x.play.endZone)
+    if (!r) throw new Error('no play with start and end zones')
+    jump(r)
+    const bar = await waitFor(() => document.querySelector<HTMLElement>('.court-bar'), 20000, 'court bar')
+    const button = (label: string) => [...bar.querySelectorAll('button')].find(b => b.textContent === label) ?? null
+    const until = async <T,>(get: () => Promise<T | null>, ms: number, label: string): Promise<T> => {
+      for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
+    }
+    const savedCourt = async () => (await api.getProject())?.matches.find(m => m.id === r.matchId)?.court ?? null
+    if (await savedCourt()) { // left from an earlier run: removed through the gear menu first
+      bar.querySelector<HTMLButtonElement>('.ov-gear')!.click(); await sleep(100)
+      button(t('この試合のグリッドを消す'))!.click()
+      await until(async () => (await savedCourt()) ? null : true, 10000, 'old fit removed')
+    }
+    ;(await waitFor(() => button(t('グリッドを合わせる')), 10000, 'fit button')).click()
+    const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=court-canvas]'), 10000, 'court canvas')
+    const box = canvas.getBoundingClientRect()
+    const pt = (x: number, y: number) => ({ clientX: box.left + x * box.width, clientY: box.top + y * box.height, bubbles: true, pointerId: 1 })
+    const from = (await until(savedCourt, 10000, 'first fit')).corners[0], to = { x: 0.3, y: 0.3 }
+    canvas.dispatchEvent(new PointerEvent('pointerdown', pt(from.x, from.y))); await sleep(30)
+    for (const f of [0.3, 0.6, 1]) { canvas.dispatchEvent(new PointerEvent('pointermove', pt(from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f))); await sleep(20) }
+    canvas.dispatchEvent(new PointerEvent('pointerup', pt(to.x, to.y))); await sleep(100)
+    const fitted = await until(async () => { const c = await savedCourt(); return c && Math.abs(c.corners[0].x - to.x) < 0.01 && Math.abs(c.corners[0].y - to.y) < 0.01 ? c : null }, 10000, 'dragged corner saved')
+    const handlesOnTop = getComputedStyle(canvas).pointerEvents
+    button(t('完了'))!.click(); await sleep(150)
+    const afterDone = getComputedStyle(document.querySelector<HTMLCanvasElement>('[data-testid=court-canvas]')!).pointerEvents
+    const setSelect = (label: string, value: string) => {
+      const el = bar.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(el, value)
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    const zoneBox = [...bar.querySelectorAll('label')].find(l => l.textContent?.includes(t('ゾーン番号')))!.querySelector('input')!
+    if (!zoneBox.checked) zoneBox.click()
+    setSelect(t('サブゾーン'), 'labels'); await sleep(150)
+    const zones1 = playZones(r.play, fitted)
+    await api.smokeShot!('court.png')
+    setSelect(t('手前（第1セット）'), fitted.nearSet1 === '*' ? 'a' : '*')
+    const swapped = await until(async () => { const c = await savedCourt(); return c && c.nearSet1 !== fitted.nearSet1 ? c : null }, 10000, 'near side saved')
+    return { play: `${r.play.code} set ${r.play.setNum}`, corner0: fitted.corners[0], handlesOnTop, afterDone, zones: zones1, nearSet1: swapped.nearSet1, zonesSwapped: playZones(r.play, swapped) }
   }
 
   const smokeCopy = async (res: PlayRef[]) => {

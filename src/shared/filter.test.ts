@@ -155,4 +155,17 @@ describe('rally context', () => {
     expect(codes({ skills: ['A'], prevSkills: ['F'], prevSkipSet: true })).toEqual(['a11AM-', 'a02AH#'])
     expect(codes({ skills: ['A'], prevSkills: ['D'], prevSkipSet: true })).toEqual(['*23AH#', 'a03AH#'])
   })
+
+  it('matches the play just after, and nothing after a rally ends', () => {
+    expect(codes({ skills: ['S'], nextSkills: ['R'], nextEffects: ['#'] })).toEqual(['*21SM-'])
+    expect(codes({ skills: ['A'], nextSkills: ['D'], nextTeam: 'opp' })).toEqual(['a03AU+'])
+    expect(codes({ skills: ['A'], nextTeam: 'opp' })).toEqual(['a03AU+', 'a11AM-', '*23AH#', 'a18AU!']) // the kills end their rallies
+    expect(codes({ nextSkills: ['F'], nextTeam: 'opp' })).toEqual(['*10DU/', '*05RQ/']) // overpasses played back as freeballs
+  })
+
+  it('looks past the set to the attack a reception led to', () => {
+    expect(codes({ skills: ['R'], nextSkills: ['A'] })).toEqual([])
+    expect(codes({ skills: ['R'], nextSkills: ['A'], nextEffects: ['+', '!'], nextSkipSet: true })).toEqual(['a14RM#', 'a18RM+'])
+    expect(codes({ skills: ['R'], prevSkills: ['S'], nextSkills: ['A'], nextSkipSet: true })).toEqual(['a14RM#', 'a18RM+'])
+  })
 })

@@ -38,11 +38,16 @@ export interface PlayFilter {
   prevEffects: string[]
   prevTeam: 'any' | 'same' | 'opp' // relative to the play's own team
   prevSkipSet: boolean // look past the team's own set: the reception or dig an attack came from
+  nextSkills: string[] // the contact just after, the same way
+  nextEffects: string[]
+  nextTeam: 'any' | 'same' | 'opp'
+  nextSkipSet: boolean // look past the team's own set: the attack a reception or dig led to
 }
 
 export const EMPTY_FILTER: PlayFilter = {
   team: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
   phase: 'all', prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
+  nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
 
 // The parts of a scout code after the skill and effect: *07AQ#X5~36BH1 → tempo Q, combo X5, hit H.
@@ -121,25 +126,27 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.hits?.length && (!r.hit || !f.hits.includes(r.hit))) return false
     if (f.endZone !== null && p.endZone !== f.endZone) return false
     if (f.phase && f.phase !== 'all' && p.phase !== f.phase[0]) return false
-    return !hasPrev(f) || prevMatches(r, f)
+    return nearMatches(r, r.play.before, f.prevSkills, f.prevEffects, f.prevTeam, f.prevSkipSet)
+      && nearMatches(r, r.play.after, f.nextSkills, f.nextEffects, f.nextTeam, f.nextSkipSet)
   })
 }
 
-const hasPrev = (f: PlayFilter) => !!(f.prevSkills?.length || f.prevEffects?.length || (f.prevTeam && f.prevTeam !== 'any'))
-
-// A serve has no previous play, so any previous-play condition drops it. All-home plays pass the
-// team condition, as with the team filter.
-export function prevCode(p: Play, skipSet: boolean): string | null {
-  const [c, d] = p.before
+// The contact next to a play (codes from p.before or p.after), past the team's own set if asked.
+export function nearCode(p: Play, codes: string[], skipSet: boolean): string | null {
+  const [c, d] = codes
   return (skipSet && c?.[3] === 'E' && c[0] === p.side ? d : c) ?? null
 }
 
-function prevMatches(r: PlayRef, f: PlayFilter): boolean {
-  const c = prevCode(r.play, !!f.prevSkipSet)
+// With no condition anything passes; otherwise a play with nothing there (a serve has nothing
+// before, a rally's last play nothing after) fails. All-home plays pass the team condition, as with
+// the team filter.
+function nearMatches(r: PlayRef, codes: string[], skills: string[] = [], effects: string[] = [], team: string = 'any', skipSet = false): boolean {
+  if (!skills.length && !effects.length && team === 'any') return true
+  const c = nearCode(r.play, codes, skipSet)
   if (!c) return false
-  if (f.prevSkills?.length && !f.prevSkills.includes(c[3])) return false
-  if (f.prevEffects?.length && !f.prevEffects.includes(c[5])) return false
-  return !f.prevTeam || f.prevTeam === 'any' || r.side === null || (c[0] === r.side) === (f.prevTeam === 'same')
+  if (skills.length && !skills.includes(c[3])) return false
+  if (effects.length && !effects.includes(c[5])) return false
+  return team === 'any' || r.side === null || (c[0] === r.side) === (team === 'same')
 }
 
 export interface Person {

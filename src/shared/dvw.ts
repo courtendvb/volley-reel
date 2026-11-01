@@ -15,7 +15,12 @@ export function parseDVW(text: string): ParsedDVW {
   let homeRot: number | null = null
   let awayRot: number | null = null
   let rally: Rally | null = null
-  let contacts: { code: string; side: Side; skill: string }[] = [] // the rally so far, freeballs included
+  let contacts: { code: string; side: Side; skill: string; play?: Play }[] = [] // the rally so far, freeballs included
+  // Each contact is the next one for the two before it.
+  const touch = (x: { code: string; side: Side; skill: string; play?: Play }) => {
+    for (const y of contacts.slice(-2)) y.play?.after.push(x.code)
+    contacts.push(x)
+  }
   const codeNames: Record<string, string> = {}
 
   for (const raw of text.split(/\r?\n/)) {
@@ -78,7 +83,7 @@ export function parseDVW(text: string): ParsedDVW {
     if (isNaN(jersey) || isNaN(time)) continue
     const side = code.charAt(0) as Side
     // Freeballs are not plays (ids stay as they were), only context for the next one.
-    if (skill === 'F') { if (rally) contacts.push({ code, side, skill }); continue }
+    if (skill === 'F') { if (rally) touch({ code, side, skill }); continue }
 
     let rH: number | null = parseInt(c[9])
     if (!isNaN(rH)) homeRot = rH; else rH = homeRot
@@ -93,7 +98,7 @@ export function parseDVW(text: string): ParsedDVW {
     if (rally) rally.lastActionTime = Math.max(rally.lastActionTime, time)
 
     const p = players[`${side}${jersey}`]
-    plays.push({
+    const play: Play = {
       id: plays.length,
       fingerprint: `${setNum}|${score.home}-${score.away}|${code}|${time}`,
       code,
@@ -116,8 +121,10 @@ export function parseDVW(text: string): ParsedDVW {
       rallyId: rally ? rally.id : null,
       before: rally ? contacts.slice(-2).map(x => x.code).reverse() : [],
       phase: rally && skill !== 'S' ? phaseOf(contacts, side, skill) : null,
-    })
-    if (rally) contacts.push({ code, side, skill })
+      after: [],
+    }
+    plays.push(play)
+    if (rally) touch({ code, side, skill, play })
   }
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })

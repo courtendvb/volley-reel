@@ -230,6 +230,8 @@ export interface Api {
   smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
   smokeClipboardImage?: (path: string) => Promise<void>
   smokeShot?: (path: string) => Promise<void>
+  smokeDrag?: (points: [number, number][]) => Promise<void> // real mouse: press, move through, release
+  smokeKey?: (key: string) => Promise<void> // a real key press
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).

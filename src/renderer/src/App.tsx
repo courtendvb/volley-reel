@@ -119,6 +119,8 @@ export function App() {
   const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, detail: detail === 'sub' ? 'sub' : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
+  const gridStyleRef = useRef(gridStyle)
+  gridStyleRef.current = gridStyle
 
   const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
   const match = matchId ? matches[matchId] ?? null : null
@@ -1028,6 +1030,9 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
       if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || settingsOpen || composing(e)) return
+      // A slider in a panel (transparency, opacity…) moves with the arrow keys; only the seek bar
+      // leaves them to the shortcuts, so ← → still step the video after it is clicked.
+      if (t instanceof HTMLInputElement && t.type === 'range' && !t.closest('.transport') && /^(Arrow|Page|Home$|End$)/.test(e.key)) return
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         const k = e.key.toLowerCase()
         if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo') }
@@ -1138,7 +1143,12 @@ export function App() {
       const job = await buildExportJob(plan, ov,
         { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms,
           sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [],
-          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []) }, outPath, whole?.chapters)
+          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []),
+          court: c => {
+            const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
+            return fit && play ? { fit, zones: playZones(play, fit, plays![c.playId + 1]) } : null
+          },
+          courtStyle: gridStyleRef.current }, outPath, whole?.chapters)
       await api.startExport(job)
       return job
     } catch (e) {

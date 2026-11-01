@@ -74,6 +74,15 @@ app.whenReady().then(async () => {
     ipcMain.handle('smoke:importPack', async (_e, path: string) => { await library!.importPack(path); return library!.packs() })
     ipcMain.handle('smoke:setLogo', async (_e, code: string, path: string) => { await library!.setLogo(code, path); return library!.logos() })
     // A screenshot of the window in the middle of a run (the run's own one is taken at its end).
+    ipcMain.handle('smoke:drag', async (_e, pts: [number, number][]) => {
+      const wc = win!.webContents, at = (p: [number, number]) => ({ x: Math.round(p[0]), y: Math.round(p[1]) })
+      wc.sendInputEvent({ type: 'mouseMove', ...at(pts[0]) })
+      wc.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...at(pts[0]) })
+      for (const p of pts.slice(1)) { await new Promise(r => setTimeout(r, 40)); wc.sendInputEvent({ type: 'mouseMove', button: 'left', modifiers: ['leftbuttondown'], ...at(p) }) }
+      await new Promise(r => setTimeout(r, 40))
+      wc.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...at(pts[pts.length - 1]) })
+    })
+    ipcMain.handle('smoke:key', async (_e, key: string) => { const wc = win!.webContents; wc.sendInputEvent({ type: 'keyDown', keyCode: key }); wc.sendInputEvent({ type: 'keyUp', keyCode: key }) })
     ipcMain.handle('smoke:shot', async (_e, name: string) => { await writeFile(join(dirname(process.env.VR_SMOKE!), basename(name)), (await win!.webContents.capturePage()).toPNG()) }) // next to the run's own screenshot
     // An image file put on the system clipboard as a picture, as a screenshot leaves it.
     ipcMain.handle('smoke:clipboardImage', async (_e, path: string) => {
@@ -561,7 +570,8 @@ async function importPairs(lib: Library, pairs: { dvwPath: string; video: string
 // [VR_SMOKE_M8=relink|flush-write|report|undo] [VR_SMOKE_CORRUPT=1: break the first reel file before loading] [VR_SMOKE_MINIMIZE=1]
 // [VR_SMOKE_PHOTOS=<pack.vrpack>: read a pack in, put the play's player's photo on a clip, set and remove one]
 // [VR_SMOKE_COURT=1: fit the court grid by dragging a corner, save it with the match, swap the near side, light a play's zones,
-//  lay a picture on the near half with perspective and drag a corner]
+//  lay a picture on the near half with perspective and drag a corner, move its transparency slider with the real
+//  mouse and keys; with VR_SMOKE_EXPORT=<out.mp4> also export the clip with the court]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 async function smoke(w: BrowserWindow, outPng: string): Promise<void> {

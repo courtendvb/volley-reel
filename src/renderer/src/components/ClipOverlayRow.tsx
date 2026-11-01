@@ -45,6 +45,8 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       </select>
       <label className="check"><input type="checkbox" checked={!o?.playerCaption?.hidden}
         onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> {t('テロップ')}</label>
+      <label className="check" title={t('コートのグリッドとプレーのゾーンを書き出しに入れる（この動画のすべてのクリップ。見た目は動画の下の「コート」の設定。コートを合わせた試合だけ）')}>
+        <input type="checkbox" checked={s.court.enabled} onChange={e => onOverlay({ ...s, court: { enabled: e.target.checked } })} /> {t('コート（書き出し）')}</label>
       <input className="ov-text" value={name} placeholder={autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <input className="ov-text wide" value={line} placeholder={autoLine} aria-label={t('テロップの2行目（空欄で自動）')}

@@ -7,6 +7,7 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
+import { drawCourt, type CourtFit, type GridStyle, type PlayZones } from '../../shared/court'
 import { logoImage, preloadAssets, preloadLogos } from './assets'
 
 export const EXPORT_HEIGHT = 720
@@ -18,6 +19,8 @@ interface Deps {
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
   markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
+  court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null } | null // the clip's fitted court and its play's zones
+  courtStyle?: GridStyle // the grid's look, as in the player
 }
 
 // 720p at the source aspect, at the source frame rate when every match shares one (else 30).
@@ -73,7 +76,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     ...(marks.length ? { chapters: marks } : {}) }
 }
 
-// One layer for everything shown for the whole clip (auto overlays first, annotations on top),
+// One layer for everything shown for the whole clip (the court, auto overlays, annotations on top),
 // plus one per distinct show/hide window, switched by ffmpeg's enable='between(t,a,b)'.
 async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: number; out: number }, overlay: OverlaySettings, d: Deps, W: number, H: number,
   png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
@@ -81,6 +84,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const o = c.overlayOverride
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
+  const court = overlay.court.enabled && d.courtStyle ? d.court?.(c) ?? null : null
   const window = (a: Annotation) => ({ from: Math.max(0, (a.showFrom ?? r.in) - r.in), to: Math.min(r.out, a.showTo ?? r.out) - r.in })
   const fades = (a: Annotation) => !!(a.fadeIn || a.fadeOut)
   // Objects shown for the whole clip without a fade share one layer; the rest go by window (and fade).
@@ -90,9 +94,11 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
   const layers: ExportLayer[] = []
   const always = anns.filter(whole)
-  if (showSb || showCap || always.length) {
+  if (court || showSb || showCap || always.length) {
     layers.push({
       png: await png(ctx => {
+        // The court lies on the floor: under the scoreboard, the caption and every object.
+        if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, overlay.theme)
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, overlay.theme)
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)

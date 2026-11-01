@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import type { Match } from '../../../shared/types'
 import { playback, type PlaybackState } from '../playback'
 import { formatTime } from '../format'
+import { toggleMaximized, useMaximized } from '../maximize'
 import { t } from '../../../shared/i18n'
 
 // The video sits in a box with its exact aspect ratio, so an overlay (annotations) laid over the
@@ -48,6 +49,7 @@ export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: {
 function Transport() {
   const [s, setS] = useState<PlaybackState>(playback.current)
   useEffect(() => playback.subscribe(setS), [])
+  const max = useMaximized()
   return (
       <div className="transport">
         <button onClick={() => playback.toggle()} title={t('再生 / 一時停止 (Space)')}>{s.paused ? '▶' : '❚❚'}</button>
@@ -59,6 +61,8 @@ function Transport() {
           aria-label={t('再生位置')}
         />
         <span className="time">{formatTime(s.time, true)} / {formatTime(s.duration)}</span>
+        {max && s.seq && <button onClick={() => playback.stopSequence()} title={t('通し再生を止める')}>■</button>}
+        <button className="maximize" aria-pressed={max} onClick={() => void toggleMaximized()} title={max ? t('元の大きさに戻す (M / Esc)') : t('動画を最大化 (M)')}>{max ? '🗗' : '⛶'}</button>
       </div>
   )
 }

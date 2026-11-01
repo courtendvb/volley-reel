@@ -145,6 +145,13 @@ button:disabled { opacity: 0.6; cursor: default; }
 .transport { display: flex; align-items: center; gap: 8px; }
 .transport input[type=range] { flex: 1; accent-color: var(--primary); }
 .transport .time { font-variant-numeric: tabular-nums; color: var(--sub); min-width: 150px; text-align: right; }
+/* Maximized (maximize.ts): the stage fills the screen with only the video pane and its transport. */
+.stage:fullscreen { background: #000; padding: 0; gap: 0; }
+.stage:fullscreen > :not(.video-pane) { display: none; }
+.stage:fullscreen .video-pane { gap: 0; }
+.stage:fullscreen .transport { padding: 6px 12px; background: #111; }
+.stage:fullscreen .transport button { background: #222; color: #EEE; border-color: #333; }
+.stage:fullscreen .transport .time { color: #AAA; }
 
 input[type=text], input:not([type]) {
   font: inherit; color: inherit; background: var(--surface);

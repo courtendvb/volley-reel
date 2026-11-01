@@ -31,6 +31,7 @@ interface Props {
   onActivate: (c: Clip, g: Group) => void // g: the group row it was clicked in
   playing: boolean
   onPlayThrough: () => void
+  onPlayMax: () => void // the same, maximized
   onStop: () => void
   orderCount: number
   orderSec: number
@@ -246,7 +247,8 @@ export function ReelPanel(p: Props) {
         </div>
         {p.playing
           ? <button onClick={p.onStop}>{t('■ 停止')}</button>
-          : <button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title={t('このシーンだけを再生')}>{t('▶ シーンを再生')}</button>}
+          : <><button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title={t('このシーンだけを再生')}>{t('▶ シーンを再生')}</button>
+            <button onClick={p.onPlayMax} disabled={!p.orderCount && !reel.slides?.length} title={t('最大化して再生（終わると元に戻る）')} aria-label={t('最大化して再生')}>⛶</button></>}
       </div>
       {Object.values(reel.clips).some(c => !c.mode) && <Legacy d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />}
       <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatDur(p.orderSec)}{t('（マーカー付き {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>

@@ -26,6 +26,7 @@ interface Props {
   onOpenOverlay: () => void
   playing: boolean
   onPlay: () => void
+  onPlayMax: () => void // the same, maximized
   onStop: () => void
 }
 
@@ -146,7 +147,8 @@ export function VideoPanel(p: Props) {
         <button onClick={p.onOpenOverlay} title={t('この動画の設定: スコアボード・テロップ・タイトルカード・フェード')}>{t('⚙ 設定')}</button>
         {p.playing
           ? <button onClick={p.onStop}>{t('■ 停止')}</button>
-          : <button className="primary" onClick={p.onPlay} disabled={!total.clips}>{t('▶ 動画を再生')}</button>}
+          : <><button className="primary" onClick={p.onPlay} disabled={!total.clips}>{t('▶ 動画を再生')}</button>
+            <button onClick={p.onPlayMax} disabled={!total.clips} title={t('最大化して再生（終わると元に戻る）')} aria-label={t('最大化して再生')}>⛶</button></>}
       </div>
       <p className="count">{v.sceneIds.length} {t('シーン・')}{total.clips} {t('クリップ・')}{fmtSec(total.sec)}{t('（タイトルカードを除く）')}</p>
     </section>

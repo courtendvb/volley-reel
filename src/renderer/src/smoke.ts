@@ -39,6 +39,7 @@ export interface SmokeOpts {
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
+  maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -132,6 +133,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
+    if (opts.maximize) return smokeMaximize(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1011,6 +1013,40 @@ export function installSmoke(h: SmokeHost): void {
     revert?.click()
     await waitFor(() => tiles().mine === 0 || null, 10000, 'photo removed')
     return { pack: packs.map(p => `${p.id}:${p.players.length}`), focusName, before, image: { w: +image.w.toFixed(3), h: +image.h.toFixed(3) }, setFor: `#${bare.jersey} ${bare.lastName}`, afterSet, afterRevert: tiles() }
+  }
+
+  // The video maximized: M fills the screen with the video (bigger box, the other bars hidden), Esc
+  // leaves it without stopping a through-play; the scene's ⛶ plays it maximized and leaves when it ends.
+  const smokeMaximize = async (res: PlayRef[]) => {
+    const { reel: added } = addClips(newReel('max smoke'), res.slice(0, 2).map(r => ({ matchId: r.matchId, play: r.play })))
+    const built = { ...added, scope: 'all' as const }
+    setReels(rs => [...rs, built]); setReelId(built.id)
+    await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'max reel')
+    const box = () => document.querySelector<HTMLElement>('.video-box')!.getBoundingClientRect().width
+    const shown = (sel: string) => !!document.querySelector<HTMLElement>(sel)?.offsetParent
+    const full = () => document.fullscreenElement?.classList.contains('stage') ?? false
+    const before = box()
+    await api.smokeKey!('M')
+    await waitFor(() => (full() && box() > before) || null, 5000, 'maximized by M')
+    await sleep(300)
+    const maxed = { boxBefore: Math.round(before), boxAfter: Math.round(box()), courtBarHidden: !shown('.court-bar'), transport: shown('.transport') }
+    await api.smokeShot!('maximized.png')
+    playThrough('scene', 0)
+    await waitFor(() => playback.current.seq || null, 10000, 'playing')
+    await api.smokeKey!('Escape')
+    await waitFor(() => !full() || null, 5000, 'Esc leaves it')
+    await sleep(300)
+    const escKeepsPlaying = !!playback.current.seq
+    playback.stopSequence(); await sleep(300)
+    const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.reel-controls button')].find(b => b.getAttribute('aria-label') === t('最大化して再生')) ?? null, 5000, 'play maximized button')
+    const r = btn.getBoundingClientRect()
+    await api.smokeDrag!([[r.left + r.width / 2, r.top + r.height / 2]])
+    await waitFor(() => (full() && playback.current.seq) || null, 10000, 'playing maximized')
+    await sleep(1500)
+    await api.smokeShot!('maximized-playing.png')
+    const t0 = Date.now()
+    await waitFor(() => (!playback.current.seq && !full()) || null, 90000, 'back after the play ends')
+    return { maximize: { ...maxed, escKeepsPlaying, leftAfterSec: +((Date.now() - t0) / 1000).toFixed(1), clips: Object.keys(built.clips).length } }
   }
 
   // The caption's photo: off by default; on, a play whose player has a photo shows it above a

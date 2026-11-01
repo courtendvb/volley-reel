@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CORNERS, homography, nearSide, playZones, project, zoneCell, type CourtFit } from './court'
+import { DEFAULT_CORNERS, homography, nearSide, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -72,11 +72,20 @@ describe('playZones', () => {
 
   it("serve: from the server's side to the other", () => {
     // Away serves in set 1 with home near: from the far side to the near one.
-    expect(playZones(serve, fit)).toEqual({ start: { cell: { row: 0, col: 2 }, sub: null }, end: { cell: { row: 4, col: 1 }, sub: 'A' } })
+    // Zone 5 behind the far end line: the camera's right of 1-9-6-7-5.
+    expect(playZones(serve, fit)).toEqual({ start: { cell: { row: -1, col: 4 }, sub: null, behind: true }, end: { cell: { row: 4, col: 1 }, sub: 'A' } })
+  })
+
+  it('serve zones behind the end line: 1-9-6-7-5 from the zone 1 side', () => {
+    expect([1, 9, 6, 7, 5].map(z => serveSpot(z, false)?.cell.col)).toEqual([0, 1, 2, 3, 4]) // far: zone 1 on the camera's left
+    expect([1, 9, 6, 7, 5].map(z => serveSpot(z, true)?.cell.col)).toEqual([4, 3, 2, 1, 0]) // near: on the right
+    expect(serveSpot(1, true)?.cell.row).toBe(6)
+    expect(serveSpot(8, true)).toBeNull() // not a serve zone: the court's own cell is lit instead
+    expect(playZones({ ...serve, startZone: 8 }, fit).start).toEqual({ cell: { row: 1, col: 1 }, sub: null })
   })
 
   it('reception and dig: the ball comes from the other side', () => {
-    expect(cellOf(playZones(reception, fit))).toEqual([{ row: 0, col: 2 }, { row: 4, col: 1 }])
+    expect(cellOf(playZones(reception, fit))).toEqual([{ row: -1, col: 4 }, { row: 4, col: 1 }]) // served from behind the far end line
     expect(cellOf(playZones(dig, fit))).toEqual([{ row: 3, col: 0 }, { row: 0, col: 0 }])
   })
 

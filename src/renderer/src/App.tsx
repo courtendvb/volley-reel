@@ -41,6 +41,7 @@ import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
 import { captionPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
+import { playMaximized } from './maximize'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -989,13 +990,13 @@ export function App() {
               sceneCardOn={s => s.sceneCard ?? overlay.titleCard.sceneCards}
               onSceneCard={(s, on) => updateReel({ ...s, sceneCard: on, updatedAt: new Date().toISOString() })}
               onRenameScene={(id, name) => { const r = latest.current.reels.find(x => x.id === id); if (r && r.name !== name) updateReel({ ...r, name, updatedAt: new Date().toISOString() }) }}
-              onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onStop={() => playback.stopSequence()}
+              onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onPlayMax={() => void playMaximized(() => playThrough('video', 0))} onStop={() => playback.stopSequence()}
             />
             <ReelPanel
               reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
               onNewReel={createReel} onDeleteReel={id => void deleteReel(id)} onChange={updateReel}
               info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
-              onActivate={(c, g) => { if (cardEditRef.current?.slideId) { setCardEdit(null); setSelectedAnn(null) } activateClip(c, g) }} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onStop={() => playback.stopSequence()}
+              onActivate={(c, g) => { if (cardEditRef.current?.slideId) { setCardEdit(null); setSelectedAnn(null) } activateClip(c, g) }} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onPlayMax={() => void playMaximized(() => playThrough('scene', 0))} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
               videoSceneIds={video?.sceneIds ?? null} onAddToVideo={id => { if (video) updateVideo(addScene(video, id)) }}
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}

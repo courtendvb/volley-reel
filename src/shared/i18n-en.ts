@@ -772,4 +772,10 @@ export const EN: Record<string, string> = {
   "条件の名前": "Name for these conditions",
   "アプリに同梱": "Shipped with the app",
   "写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）": "Photo (from the player packs; above a caption at the bottom, below one at the top)",
+  "元の大きさに戻す (M / Esc)": "Back to normal size (M / Esc)",
+  "動画を最大化 (M)": "Maximize the video (M)",
+  "最大化して再生（終わると元に戻る）": "Play maximized (back to normal when it ends)",
+  "最大化して再生": "Play maximized",
+  "動画を最大化 / 元に戻す": "Maximize the video / back to normal",
+  "通し再生を止める（最大化中は元の大きさに戻すだけ）": "Stop the through-play (while maximized, only back to normal size)",
 }

@@ -8,6 +8,7 @@ import type { PlayRef } from '../../../shared/filter'
 import type { Tool } from '../components/AnnotationLayer'
 import { composing } from '../keys'
 import { playback } from '../playback'
+import { isMaximized, setMaximized, toggleMaximized } from '../maximize'
 import type { AppLatest } from './appState'
 
 const api = window.api
@@ -98,7 +99,8 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
-      else if (e.key === 'Escape') playback.stopSequence()
+      else if (e.key === 'Escape') { if (isMaximized()) void setMaximized(false); else playback.stopSequence() } // maximized: Esc only leaves it
+      else if (/^m$/i.test(e.key) && !e.shiftKey) { e.preventDefault(); void toggleMaximized() }
       else if ((latest.activeClipId || h.editingCard()) && /^[vtacrglp]$/i.test(e.key)) h.setAnnTool(TOOLS[e.key.toLowerCase()])
       else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.selectedAnn) {
         const sel = latest.selectedAnn, now = h.scopedNow()

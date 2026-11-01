@@ -89,3 +89,70 @@ describe('filters', () => {
     expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZone: 4 })).toHaveLength(0)
   })
 })
+
+// Real scout lines (players renumbered): a reception attack, a dig and a block cover in transition,
+// and an overpass played back as a freeball.
+const R = parseDVW(dvw('HTH', 'OPP', ['TAN-TAR-02', 'TANAKA', 'Taro'], ['SMI-JOH-95', 'SMITH', 'John'], `
+*21SM-~~~68A;;;;0650;-1-1;7348;13.59.15;1;1;2;1;1427;;
+a14RM#~~~68AL;;;;;;;13.59.17;1;1;2;1;1430;;
+a17EU+KBB~3B;;;;4662;-1-1;3487;13.59.18;1;1;2;1;1430;;
+a03AU+P9~95DH2;;r;;3384;-1-1;8683;13.59.18;1;1;2;1;1432;;
+*10DU/~~~95D;;;;;;;13.59.21;1;1;2;1;1433;;
+a15FH+~~~~3A;;;;;;;13.59.22;1;1;2;1;1436;;
+a17EM+~~F~3A;;;;4263;-1-1;4815;13.59.24;1;1;2;1;1436;;
+a11AM-PV~42AT4;;s;;4717;-1-1;5913;13.59.25;1;1;2;1;1438;;
+*23BM+~~~~2B~4;;;;;;;13.59.27;1;1;2;1;1440;;
+*23DO-~~~~6D;;;;;;;13.59.28;1;1;2;1;1441;;
+*07EH+~~B~6D;;;;1240;-1-1;4968;13.59.28;1;1;2;1;1441;;
+*23AH#P4~21DH3;p;p;;4770;-1-1;8936;13.59.29;1;1;2;1;1442;;
+a15BH=~~~~4B~3;p;;;;;;13.59.31;1;1;2;1;1444;;
+*p01:00;;;;;;;13.59.41;1;1;2;1;1454;;
+*21SM-~~~66C;;;;0650;-1-1;8055;14.00.52;1;1;2;1;1466;;
+a18RM+~~~66CL;;;;;;;14.00.54;1;1;2;1;1468;;
+a17EU+KAP~3B;;;;4758;-1-1;3544;14.00.55;1;1;2;1;1469;;
+a18AU!P8~85BH4;;r;;3344;-1-1;8068;14.00.56;1;1;2;1;1469;;
+*15BU+~~~~3~~4;;;;;;;14.00.58;1;1;2;1;1472;;
+a14DU+~~~~5D;;;;;;;14.00.59;1;1;2;1;1473;;
+a17EH+~~F~3A;;;;4263;-1-1;4815;14.01.00;1;1;2;1;1474;;
+a03AH#P4~45AH2;s;s;;4717;-1-1;5913;14.01.01;1;1;2;1;1475;;
+ap00:01;;;;;;;14.01.11;1;1;2;1;1485;;
+a11SQ/~~~65B;;;;0650;-1-1;7969;14.01.26;1;1;1;1;1500;;
+*05RQ/~~~65BR;;;;;;;14.01.29;1;1;1;1;1503;;
+a02FH!~~~~8C;;;;;;;14.01.30;1;1;1;1;1505;;
+a06EH+~~F~8C;;;;3442;-1-1;4714;14.01.32;1;1;1;1;1506;;
+a02AH#P1~45CH2;p;p;;4717;-1-1;8282;14.01.32;1;1;1;1;1506;;
+ap00:02;;;;;;;14.01.42;1;1;1;1;1516;;
+`))
+
+describe('rally context', () => {
+  const rr = () => buildRefs('R', R, settings)
+  const codes = (f: Partial<typeof EMPTY_FILTER>) => applyFilter(rr(), { ...EMPTY_FILTER, ...f }).map(x => x.play.code.slice(0, 6))
+
+  it('tells reception attacks from transition attacks the way the scout column does', () => {
+    const attacks = R.plays.filter(p => p.skill === 'A')
+    expect(attacks.map(p => p.phase)).toEqual(['r', 't', 't', 'r', 't', 't']) // column 3: r s p r s p
+    expect(codes({ skills: ['A'], phase: 'reception' })).toEqual(['a03AU+', 'a18AU!'])
+    expect(codes({ skills: ['A'], phase: 'transition' })).toEqual(['a11AM-', '*23AH#', 'a03AH#', 'a02AH#'])
+  })
+
+  it('puts the reception and its set in the reception phase, and nothing for a serve', () => {
+    expect(codes({ phase: 'reception', skills: ['R', 'E'] })).toEqual(['a14RM#', 'a17EU+', 'a18RM+', 'a17EU+', '*05RQ/'])
+    expect(codes({ phase: 'reception', skills: ['S'] })).toEqual([])
+    expect(R.plays.filter(p => p.skill === 'S').map(p => p.phase)).toEqual([null, null, null])
+  })
+
+  it('matches the play just before, freeballs included', () => {
+    expect(codes({ skills: ['D'], prevSkills: ['A'], prevTeam: 'opp' })).toEqual(['*10DU/'])
+    expect(codes({ skills: ['E'], prevSkills: ['D'] })).toEqual(['*07EH+', 'a17EH+'])
+    expect(codes({ skills: ['E'], prevSkills: ['F'], prevTeam: 'same' })).toEqual(['a17EM+', 'a06EH+'])
+    expect(codes({ prevSkills: ['B'], prevTeam: 'opp' })).toEqual(['a14DU+']) // the cover after our attack was blocked
+    expect(codes({ skills: ['S'], prevSkills: ['A'] })).toEqual([])
+  })
+
+  it('looks past the set to what an attack came from', () => {
+    expect(codes({ skills: ['A'], prevSkills: ['R'], prevEffects: ['#'] })).toEqual([])
+    expect(codes({ skills: ['A'], prevSkills: ['R'], prevEffects: ['#'], prevSkipSet: true })).toEqual(['a03AU+'])
+    expect(codes({ skills: ['A'], prevSkills: ['F'], prevSkipSet: true })).toEqual(['a11AM-', 'a02AH#'])
+    expect(codes({ skills: ['A'], prevSkills: ['D'], prevSkipSet: true })).toEqual(['*23AH#', 'a03AH#'])
+  })
+})

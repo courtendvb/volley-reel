@@ -33,10 +33,16 @@ export interface PlayFilter {
   tempos: string[] // detailed search
   combos: string[]
   hits: string[]
+  phase: 'all' | 'reception' | 'transition' // dvw.ts phaseOf; serves are neither
+  prevSkills: string[] // the contact just before in the rally (F: freeball)
+  prevEffects: string[]
+  prevTeam: 'any' | 'same' | 'opp' // relative to the play's own team
+  prevSkipSet: boolean // look past the team's own set: the reception or dig an attack came from
 }
 
 export const EMPTY_FILTER: PlayFilter = {
   team: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
+  phase: 'all', prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
 }
 
 // The parts of a scout code after the skill and effect: *07AQ#X5~36BH1 → tempo Q, combo X5, hit H.
@@ -114,8 +120,26 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.combos?.length && (!r.combo || !f.combos.includes(r.combo))) return false
     if (f.hits?.length && (!r.hit || !f.hits.includes(r.hit))) return false
     if (f.endZone !== null && p.endZone !== f.endZone) return false
-    return true
+    if (f.phase && f.phase !== 'all' && p.phase !== f.phase[0]) return false
+    return !hasPrev(f) || prevMatches(r, f)
   })
+}
+
+const hasPrev = (f: PlayFilter) => !!(f.prevSkills?.length || f.prevEffects?.length || (f.prevTeam && f.prevTeam !== 'any'))
+
+// A serve has no previous play, so any previous-play condition drops it. All-home plays pass the
+// team condition, as with the team filter.
+export function prevCode(p: Play, skipSet: boolean): string | null {
+  const [c, d] = p.before
+  return (skipSet && c?.[3] === 'E' && c[0] === p.side ? d : c) ?? null
+}
+
+function prevMatches(r: PlayRef, f: PlayFilter): boolean {
+  const c = prevCode(r.play, !!f.prevSkipSet)
+  if (!c) return false
+  if (f.prevSkills?.length && !f.prevSkills.includes(c[3])) return false
+  if (f.prevEffects?.length && !f.prevEffects.includes(c[5])) return false
+  return !f.prevTeam || f.prevTeam === 'any' || r.side === null || (c[0] === r.side) === (f.prevTeam === 'same')
 }
 
 export interface Person {

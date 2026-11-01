@@ -24,6 +24,7 @@ interface Props {
 }
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
+const PREV_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
 export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, onAddAll }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
@@ -32,6 +33,8 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
   const comboName = (code: string) => details.combos.find(c => c.code === code)?.name
+  const prevOpen = f.prevSkills.length > 0 || f.prevEffects.length > 0 || f.prevTeam !== 'any'
+  const prevHint = f.prevSkills.length === 1 ? EFFECTS[f.prevSkills[0]] : null
 
   return (
     <div className="filters">
@@ -75,6 +78,24 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         title={() => t('{0}のローテーション', targetCode || t('対象チーム'))} />
       <Chips label={t('相手ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
         title={() => t('相手チームのローテーション')} />
+      <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
+        <label className="field-label">{t('局面')}</label>
+        <Segmented value={f.phase} onChange={phase => set({ phase })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />
+      </div>
+      <Chips label={t('直前')} values={Object.keys(PREV_SKILLS)} selected={f.prevSkills} onChange={prevSkills => set({ prevSkills })}
+        render={k => PREV_SKILLS[k]} title={() => t('同じラリーで一つ前のプレー（フリーボールも数えます）')} />
+      {prevOpen && (
+        <div className="filter-detail">
+          <Chips label={t('直前評価')} values={EFFECT_KEYS} selected={f.prevEffects} onChange={prevEffects => set({ prevEffects })}
+            render={k => prevHint ? `${k} ${prevHint[k]}` : k} />
+          <div className="filter-row">
+            <label className="field-label">{t('直前チーム')}</label>
+            <Segmented value={f.prevTeam} onChange={prevTeam => set({ prevTeam })} options={[['any', t('どちらでも')], ['same', t('同じチーム')], ['opp', t('相手')]]} />
+          </div>
+          <label className="check" title={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')}>
+            <input type="checkbox" checked={f.prevSkipSet} onChange={e => set({ prevSkipSet: e.target.checked })} /> {t('トスは飛ばす')}</label>
+        </div>
+      )}
       <div className="filter-row">
         <button className="link" aria-expanded={detailOpen} onClick={() => setDetailOpen(o => !o)}>
           {detailOpen ? '▾' : '▸'} {t('詳細（テンポ・コンビ・打ち方）')}{detailCount ? t('（{0}）', detailCount) : ''}</button>

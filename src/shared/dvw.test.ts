@@ -91,4 +91,13 @@ describe.skipIf(!dir || !existsSync(dir))('real DVW files', () => {
     expect(a.rallies.length).toBeGreaterThan(0)
     expect(b.plays.map(p => p.fingerprint)).toEqual(a.plays.map(p => p.fingerprint))
   })
+  // Column 3 on attack lines is DataVolley's own phase: r reception, s / p transition.
+  it.each(files)('%s: reception and transition attacks agree with the scout column', f => {
+    const text = readFileSync(join(dir!, f), 'latin1')
+    const cols = text.split(/\r?\n/).map(l => l.trim().split(';'))
+      .filter(c => /^[*a]\d\dA/.test(c[0]) && !isNaN(parseFloat(c[12]))).map(c => c[2])
+    const ours = parseDVW(text).plays.filter(p => p.skill === 'A').map(p => p.phase)
+    expect(ours.length).toBe(cols.length)
+    expect(ours.map((ph, i) => (ph && cols[i] ? `${ph}${cols[i] === 'r' ? 'r' : 't'}` : 'ok')).filter(x => x !== 'ok' && x[0] !== x[1])).toEqual([])
+  })
 })

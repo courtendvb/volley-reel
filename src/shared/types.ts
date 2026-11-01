@@ -42,6 +42,8 @@ export interface Play {
   startSub: string | null // A–D within the start zone, from where the scout clicked (not coded)
   endSub: string | null // A–D within the end zone: as coded, else from where the scout clicked
   rallyId: number | null
+  before: string[] // codes of the last two contacts before this one in the rally, latest first, freeballs included
+  phase: 'r' | 't' | null // reception phase or transition (dvw.ts phaseOf); null for serves
 }
 
 export interface Rally {

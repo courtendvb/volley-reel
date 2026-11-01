@@ -15,6 +15,12 @@ export function parseDVW(text: string): ParsedDVW {
   let homeRot: number | null = null
   let awayRot: number | null = null
   let rally: Rally | null = null
+  let contacts: { code: string; side: Side; skill: string; play?: Play }[] = [] // the rally so far, freeballs included
+  // Each contact is the next one for the two before it.
+  const touch = (x: { code: string; side: Side; skill: string; play?: Play }) => {
+    for (const y of contacts.slice(-2)) y.play?.after.push(x.code)
+    contacts.push(x)
+  }
   const codeNames: Record<string, string> = {}
 
   for (const raw of text.split(/\r?\n/)) {
@@ -56,7 +62,7 @@ export function parseDVW(text: string): ParsedDVW {
       else if (score.away > score.home) sets.away++
       setsEnded++
       score = { home: 0, away: 0 }
-      rally = null
+      rally = null; contacts = []
       continue
     }
     if (/^[*a]p\d/i.test(code)) {
@@ -66,15 +72,18 @@ export function parseDVW(text: string): ParsedDVW {
       const wonBy: Side = next.home > score.home ? '*' : next.away > score.away ? 'a' : (code[0].toLowerCase() as Side)
       if (rally) { rally.pointTime = isNaN(time) ? null : time; rally.wonBy = wonBy }
       score = next
-      rally = null
+      rally = null; contacts = []
       continue
     }
 
     const skill = code.charAt(3)
-    if (!'SRABDE'.includes(skill)) continue
+    if (!'SRABDEF'.includes(skill)) continue
     const jersey = parseInt(code.substring(1, 3))
     // Fixed skip rule: no jersey (team codes like "a$$") or no video time.
     if (isNaN(jersey) || isNaN(time)) continue
+    const side = code.charAt(0) as Side
+    // Freeballs are not plays (ids stay as they were), only context for the next one.
+    if (skill === 'F') { if (rally) touch({ code, side, skill }); continue }
 
     let rH: number | null = parseInt(c[9])
     if (!isNaN(rH)) homeRot = rH; else rH = homeRot
@@ -84,13 +93,12 @@ export function parseDVW(text: string): ParsedDVW {
     const setNum = setsEnded + 1
     if (skill === 'S') {
       rally = { id: rallies.length, setNum, serveTime: time, lastActionTime: time, pointTime: null, wonBy: null }
-      rallies.push(rally)
+      rallies.push(rally); contacts = []
     }
     if (rally) rally.lastActionTime = Math.max(rally.lastActionTime, time)
 
-    const side = code.charAt(0) as Side
     const p = players[`${side}${jersey}`]
-    plays.push({
+    const play: Play = {
       id: plays.length,
       fingerprint: `${setNum}|${score.home}-${score.away}|${code}|${time}`,
       code,
@@ -111,12 +119,27 @@ export function parseDVW(text: string): ParsedDVW {
       startSub: clickSub(c[4], zone(code.charAt(9))),
       endSub: /[A-D]/.test(code.charAt(11)) ? code.charAt(11) : clickSub(skill === 'E' ? c[4] : c[6], zone(code.charAt(10))),
       rallyId: rally ? rally.id : null,
-    })
+      before: rally ? contacts.slice(-2).map(x => x.code).reverse() : [],
+      phase: rally && skill !== 'S' ? phaseOf(contacts, side, skill) : null,
+      after: [],
+    }
+    plays.push(play)
+    if (rally) touch({ code, side, skill, play })
   }
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })
   const allHome = plays.length > 0 && plays.every(p => p.side === '*')
   return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames }
+}
+
+// Reception phase: the receiving team's contacts from its reception until the ball goes to the other
+// side (the reception attack and its set). Everything else after the serve is transition. Agrees
+// with the r / s / p column DataVolley writes on attacks, in every attack of a season's files.
+// Stopping at an attack or block as well keeps all-home files (one side for both teams) right.
+function phaseOf(contacts: { side: Side; skill: string }[], side: Side, skill: string): 'r' | 't' {
+  if (skill === 'R') return 'r'
+  for (let i = contacts.length - 1; i >= 0 && contacts[i].side === side && !'AB'.includes(contacts[i].skill); i--) if (contacts[i].skill === 'R') return 'r'
+  return 't'
 }
 
 // Same person across matches: DataVolley player ID with the scrimmage "-a" suffix removed.

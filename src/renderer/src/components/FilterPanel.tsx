@@ -24,6 +24,7 @@ interface Props {
 }
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
+const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
 export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, onAddAll }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
@@ -75,6 +76,14 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         title={() => t('{0}のローテーション', targetCode || t('対象チーム'))} />
       <Chips label={t('相手ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
         title={() => t('相手チームのローテーション')} />
+      <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
+        <label className="field-label">{t('局面')}</label>
+        <Segmented value={f.phase} onChange={phase => set({ phase })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />
+      </div>
+      <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）')}
+        skipTitle={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')} />
+      <Near f={f} set={set} which="next" label={t('直後')} title={t('同じラリーで一つ後のプレー（フリーボールも数えます）。ラリー最後のプレーは入りません')}
+        skipTitle={t('直後が自チームのトスなら、その次のプレーで探します。レセプションからのアタックの結果など')} />
       <div className="filter-row">
         <button className="link" aria-expanded={detailOpen} onClick={() => setDetailOpen(o => !o)}>
           {detailOpen ? '▾' : '▸'} {t('詳細（テンポ・コンビ・打ち方）')}{detailCount ? t('（{0}）', detailCount) : ''}</button>
@@ -109,6 +118,30 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           title={shown === total ? t('条件で絞り込んでから追加してください') : undefined}>{t('結果をシーンに追加')}</button>
       </div>
     </div>
+  )
+}
+
+// The play just before or just after: its skill, and once that is used, its evaluation and team.
+function Near({ f, set, which, label, title, skipTitle }: { f: PlayFilter; set: (p: Partial<PlayFilter>) => void; which: 'prev' | 'next'; label: string; title: string; skipTitle: string }) {
+  const put = (s: string, v: unknown) => set({ [`${which}${s}`]: v } as Partial<PlayFilter>)
+  const skills = f[`${which}Skills`], effects = f[`${which}Effects`], team = f[`${which}Team`], skipSet = f[`${which}SkipSet`]
+  const hint = skills.length === 1 ? EFFECTS[skills[0]] : null
+  return (
+    <>
+      <Chips label={label} values={Object.keys(NEAR_SKILLS)} selected={skills} onChange={v => put('Skills', v)} render={s => NEAR_SKILLS[s]} title={() => title} />
+      {(skills.length > 0 || effects.length > 0 || team !== 'any') && (
+        <div className="filter-detail">
+          <Chips label={t('{0}評価', label)} values={EFFECT_KEYS} selected={effects} onChange={v => put('Effects', v)}
+            render={e => hint ? `${e} ${hint[e]}` : e} />
+          <div className="filter-row">
+            <label className="field-label">{t('{0}チーム', label)}</label>
+            <Segmented value={team} onChange={v => put('Team', v)} options={[['any', t('どちらでも')], ['same', t('同じチーム')], ['opp', t('相手')]]} />
+          </div>
+          <label className="check" title={skipTitle}>
+            <input type="checkbox" checked={skipSet} onChange={e => put('SkipSet', e.target.checked)} /> {t('トスは飛ばす')}</label>
+        </div>
+      )}
+    </>
   )
 }
 

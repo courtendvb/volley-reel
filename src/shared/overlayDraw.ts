@@ -95,14 +95,13 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
 
 type Photo = CanvasImageSource & { width: number; height: number }
 
-// The photo on a plate of the caption's colors, lined up with the caption's side (left, center or
-// right), with an accent edge on the side that faces it.
+// The photo as it is (cut-outs keep their transparent background), lined up with the caption's side
+// (left, center or right), with an accent edge on the side that faces it.
 function drawCaptionPhoto(ctx: Ctx, photo: Photo, a: Anchor, cap: Box, k: number, theme: OverlayTheme): void {
   const ph = 132 * k, pw = ph * (photo.width / photo.height), gap = 6 * k, edge = 3 * k
   const x = a[1] === 'l' ? cap.x : a[1] === 'r' ? cap.x + cap.w - pw : cap.x + (cap.w - pw) / 2
   const below = a[0] === 't'
   const y = below ? cap.y + cap.h + gap : cap.y - gap - ph
-  fillRect(ctx, mix(theme.base, '#FFFFFF', 0.06), x, y, pw, ph)
   ctx.drawImage(photo, x, y, pw, ph)
   fillRect(ctx, theme.accent, x, below ? y : y + ph - edge, pw, edge)
 }

@@ -2,7 +2,7 @@
 // league's data. A pack is a zip with manifest.json and photos/; it is read into the library's
 // addons/<id>/ and taken out again as a whole. Today a pack holds player photos, picked from a list
 // and put on a clip or card as a picture.
-import type { Player } from './types'
+import type { ParsedDVW, Play, Player } from './types'
 
 export interface PackPlayer {
   team: string // team code as scouted (e.g. 'SUN'); teams: other codes the same team is scouted under
@@ -23,7 +23,8 @@ export interface PackManifest {
   players: PackPlayer[]
 }
 
-export interface PackInfo { id: string; name: string; players: PackPlayer[] }
+// bundled: shipped with the app (resources/packs), read-only; a pack of the same id in the library wins.
+export interface PackInfo { id: string; name: string; players: PackPlayer[]; bundled?: true }
 
 export const PACK_PHOTO = /^[A-Za-z0-9_.-]{1,80}\.(png|jpg|jpeg)$/i // PNG or JPEG: what the app reads sizes of
 const PACK_ID = /^[a-z0-9_-]{1,40}$/
@@ -98,6 +99,14 @@ export function findPhoto(packs: PackInfo[], p: Player, teamCode: string): PackP
     }
   }
   return tie ? null : best
+}
+
+// The photo for a play's player on the caption: the player as scouted, and their team's code.
+export function captionPhoto(packs: PackInfo[], dvw: ParsedDVW, play: Play): { pack: string; photo: string } | null {
+  const p = dvw.players[`${play.side}${play.jersey}`]
+  if (!p) return null
+  const hit = findPhoto(packs, p, dvw.teams[play.side === '*' ? 0 : 1].code)
+  return hit ? { pack: hit.pack, photo: hit.player.photo } : null
 }
 
 // For the picker's search box: the label, the names and the team code.

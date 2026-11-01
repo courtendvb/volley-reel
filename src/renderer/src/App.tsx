@@ -39,6 +39,8 @@ import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
+import { captionPhoto } from '../../shared/pack'
+import { usePacks } from './packs'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -69,6 +71,7 @@ export function App() {
   const [matchOrder, setMatchOrder] = useState<'old' | 'new'>(() => { try { return localStorage.getItem('vr.matchOrder') === 'new' ? 'new' : 'old' } catch { return 'old' } })
   useEffect(() => { try { localStorage.setItem('vr.matchOrder', matchOrder) } catch { /* not kept */ } }, [matchOrder])
   const [filter, setFilter] = useState<PlayFilter>(EMPTY_FILTER)
+  const packs = usePacks() // player photos, for the caption's photo
   const [selected, setSelected] = useState<PlayKey | null>(null)
   const [reels, setReels] = useState<Reel[]>([])
   const [reelId, setReelId] = useState<string | null>(null)
@@ -466,8 +469,9 @@ export function App() {
   const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData } | null => {
     const d = c ? dvws[c.matchId] : null, play = c && d ? d.plays[c.playId] : null
     if (!c || !d || !play) return null
-    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption) }
-  }, [dvws, settings, overlay])
+    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption)
+    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+  }, [dvws, settings, overlay, packs])
   const activeOverlay = overlayData(active)
   const activeMarker = reel && active ? markerFor(reel, active.id, activeGroup) : null
   const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? {

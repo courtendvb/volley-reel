@@ -49,6 +49,9 @@ app.whenReady().then(async () => {
   registerIpc()
 
   const libPath = process.env.VR_LIBRARY || (process.env.VR_PROJECT ? join(dirname(process.env.VR_PROJECT), 'vr-smoke-library') : readSettings().libraryPath)
+  // Packs shipped with the app: resources/packs when installed, vendor/packs in development. A
+  // self-check reads them only when given (VR_PACKS_DIR), so its results don't depend on them.
+  Library.bundledPacks = process.env.VR_PACKS_DIR || (process.env.VR_SMOKE ? null : app.isPackaged ? join(process.resourcesPath, 'packs') : join(app.getAppPath(), 'vendor', 'packs'))
   if (libPath) library = await Library.open(libPath)
   const last = process.env.VR_PROJECT
   if (process.env.VR_SMOKE && process.env.VR_SMOKE_CORRUPT && last) corruptFirstReel(last)
@@ -604,6 +607,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       photos: process.env.VR_SMOKE_PHOTOS,
       court: !!process.env.VR_SMOKE_COURT,
       savedFilters: !!process.env.VR_SMOKE_SAVEDFILTERS,
+      captionPhoto: !!process.env.VR_SMOKE_CAPTIONPHOTO,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }

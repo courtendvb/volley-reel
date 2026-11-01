@@ -21,6 +21,9 @@ extraResources:
     filter:
       - LICENSE
       - README.txt
+  # League player photos (shared/pack.ts), shipped with the app; not in the repository (vendor/).
+  - from: vendor/packs
+    to: packs
 asar: true
 win:
   target:

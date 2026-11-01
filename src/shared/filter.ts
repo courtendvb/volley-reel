@@ -50,6 +50,46 @@ export const EMPTY_FILTER: PlayFilter = {
   nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
 
+// Search conditions kept under a name in the project, to put back with one click.
+export interface SavedFilter {
+  id: string
+  name: string
+  filter: PlayFilter
+}
+
+// A filter read back from project.json: each condition takes the shape it has in EMPTY_FILTER, and
+// anything missing or of the wrong kind falls back to "any" (also for conditions added later).
+const CHOICES: Partial<Record<keyof PlayFilter, readonly string[]>> = {
+  team: ['all', 'our', 'opp'], phase: ['all', 'reception', 'transition'], prevTeam: ['any', 'same', 'opp'], nextTeam: ['any', 'same', 'opp'],
+}
+const NUMBERS = new Set<keyof PlayFilter>(['sets', 'rots', 'oppRots', 'startZone', 'endZone'])
+
+export function cleanFilter(x: unknown): PlayFilter {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+  const ok = (k: keyof PlayFilter, v: unknown) => (NUMBERS.has(k) ? Number.isInteger(v) : typeof v === 'string' && v !== '')
+  const out: Record<string, unknown> = {}
+  for (const [key, empty] of Object.entries(EMPTY_FILTER)) {
+    const k = key as keyof PlayFilter, v = o[k]
+    out[k] = CHOICES[k] ? (CHOICES[k]!.includes(v as string) ? v : empty)
+      : Array.isArray(empty) ? (Array.isArray(v) ? v.filter(e => ok(k, e)) : [])
+      : typeof empty === 'boolean' ? v === true
+      : ok(k, v) ? v : null
+  }
+  return out as unknown as PlayFilter
+}
+
+export function cleanSavedFilters(x: unknown): SavedFilter[] {
+  if (!Array.isArray(x)) return []
+  return x.filter(s => s && typeof s === 'object' && typeof s.id === 'string' && typeof s.name === 'string' && s.name.trim())
+    .map(s => ({ id: s.id, name: s.name.trim(), filter: cleanFilter(s.filter) }))
+}
+
+// Same conditions, whatever order the chips were picked in.
+export function sameFilter(a: PlayFilter, b: PlayFilter): boolean {
+  const key = (f: PlayFilter) => JSON.stringify(Object.entries(cleanFilter(f)).map(([k, v]) => [k, Array.isArray(v) ? [...v].sort() : v]))
+  return key(a) === key(b)
+}
+
 // The parts of a scout code after the skill and effect: *07AQ#X5~36BH1 → tempo Q, combo X5, hit H.
 export function codeDetail(code: string, skill: string): { tempo: string | null; combo: string | null; hit: string | null } {
   const at = (i: number) => { const ch = code[i]; return ch && ch !== '~' ? ch : null }

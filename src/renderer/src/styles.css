@@ -170,6 +170,7 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { padding: 1px 8px; font-size: 12px; border-radius: 999px; }
 .chip.on { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+.saved-filter-name { width: 140px; padding: 1px 8px; font-size: 12px; border-radius: 999px; }
 
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); display: flex; align-items: center; justify-content: center; z-index: 10; }
 .modal { background: var(--surface); border-radius: 10px; width: min(760px, 92vw); max-height: 86vh; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; }

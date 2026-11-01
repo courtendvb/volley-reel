@@ -1,6 +1,7 @@
 import type { Lang } from './i18n'
 import type { Annotation } from './annotation'
 import type { CourtFit } from './court'
+import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
 import type { OverlayTheme } from './overlay'
 import type { PackInfo, PhotoTarget } from './pack'
@@ -89,6 +90,7 @@ export interface Match {
 export interface ProjectSettings {
   ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
   theme?: OverlayTheme // overlay colors for the whole project (scoreboard, captions, title cards); missing = each video's own
+  filters?: SavedFilter[] // search conditions saved under a name, in the order they were saved
 }
 
 export interface ProjectInfo {

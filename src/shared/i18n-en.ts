@@ -764,4 +764,10 @@ export const EN: Record<string, string> = {
   "サブゾーン": "Sub-zone",
   "コートのグリッドとプレーのゾーンを書き出しに入れる（この動画のすべてのクリップ。見た目は動画の下の「コート」の設定。コートを合わせた試合だけ）": "Put the court grid and the play's zones in the export (every clip of this video; the look is set under \"Court\" below the video; only matches with a fitted court)",
   "コート（書き出し）": "Court (export)",
+  "保存条件": "Saved",
+  "クリックでこの条件にする（右クリックで外す）": "Click to use these conditions (right-click to remove)",
+  "条件を選んでから保存してください": "Pick some conditions first",
+  "今の条件に名前を付けて保存": "Save the current conditions under a name",
+  "＋ 今の条件を保存": "+ Save conditions",
+  "条件の名前": "Name for these conditions",
 }

@@ -603,6 +603,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       logo: process.env.VR_SMOKE_LOGO,
       photos: process.env.VR_SMOKE_PHOTOS,
       court: !!process.env.VR_SMOKE_COURT,
+      savedFilters: !!process.env.VR_SMOKE_SAVEDFILTERS,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }

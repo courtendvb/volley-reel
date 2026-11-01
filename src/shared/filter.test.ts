@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { EMPTY_FILTER, applyFilter, buildRefs, listPeople, ourSide } from './filter'
+import { EMPTY_FILTER, applyFilter, buildRefs, cleanFilter, cleanSavedFilters, listPeople, ourSide, sameFilter } from './filter'
 import type { ProjectSettings } from './types'
 
 // Two made-up matches: HTH at home in A, away in B (same player, other side, "-a" style ID in B).
@@ -167,5 +167,26 @@ describe('rally context', () => {
     expect(codes({ skills: ['R'], nextSkills: ['A'] })).toEqual([])
     expect(codes({ skills: ['R'], nextSkills: ['A'], nextEffects: ['+', '!'], nextSkipSet: true })).toEqual(['a14RM#', 'a18RM+'])
     expect(codes({ skills: ['R'], prevSkills: ['S'], nextSkills: ['A'], nextSkipSet: true })).toEqual(['a14RM#', 'a18RM+'])
+  })
+})
+
+describe('saved filters', () => {
+  it('reads back what was saved, and anything broken as "any"', () => {
+    const f = { ...EMPTY_FILTER, team: 'our' as const, skills: ['A'], effects: ['#'], startZone: 4, phase: 'transition' as const, prevSkills: ['D'], prevSkipSet: true }
+    expect(cleanFilter(JSON.parse(JSON.stringify(f)))).toEqual(f)
+    expect(cleanFilter({ team: 'x', skills: 'A', sets: [1, 'two', 2.5], endZone: '3', nextSkipSet: 'yes', phase: 'serve' })).toEqual({ ...EMPTY_FILTER, sets: [1] })
+    expect(cleanFilter(null)).toEqual(EMPTY_FILTER)
+  })
+
+  it('drops entries without an id or a name', () => {
+    const list = cleanSavedFilters([{ id: 'a', name: ' レセプション A ', filter: { skills: ['R'] } }, { id: 'b', name: '  ' }, { name: 'x' }, 3])
+    expect(list).toEqual([{ id: 'a', name: 'レセプション A', filter: { ...EMPTY_FILTER, skills: ['R'] } }])
+    expect(cleanSavedFilters('nope')).toEqual([])
+  })
+
+  it('treats the same chips in another order as the same conditions', () => {
+    expect(sameFilter({ ...EMPTY_FILTER, rots: [1, 3] }, { ...EMPTY_FILTER, rots: [3, 1] })).toBe(true)
+    expect(sameFilter({ ...EMPTY_FILTER, rots: [1] }, { ...EMPTY_FILTER, oppRots: [1] })).toBe(false)
+    expect(sameFilter({ ...EMPTY_FILTER, person: 'TAN-TAR-02' }, EMPTY_FILTER)).toBe(false)
   })
 })

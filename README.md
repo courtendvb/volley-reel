@@ -150,7 +150,7 @@ node scripts/svleague-roster.mjs --out <フォルダ>/players.csv
 外国籍の選手は、最初の語を名、残りを姓とします（例: `MARTINEZ CAMPOS` / `Daniel`）。
 **写真は取り込みません。** サイトの写真は利用規約で無断の複製・頒布が禁じられているため、`photo` 列は空のままです。使ってよい写真（クラブから提供されたものなど）を `photos/` に入れ、`photo` 列を埋めてください。
 同じ `--out` でもう一度実行すると名簿だけを新しくし、埋めた `photo` と `ids` は同じ選手のものを残します。
-DVW のチームコードがわからないチーム（`hokkaidoys`・`suntory`・`fkagoshima`）はサイトの名前のまま書き出すので、`--codes suntory=SUN,hokkaidoys=XXX` のように指定してください。女子は `--list https://www.svleague.jp/team/sv/women/` で、女子チームのコードは `--codes` で指定します。
+男子 12 チームのチームコードはスクリプトに入っています。新しいチームなど、コードがわからないチームはサイトの名前のまま書き出して知らせるので、`--codes <サイトの名前>=<コード>` で指定してください。女子は `--list https://www.svleague.jp/team/sv/women/` で、女子チームのコードは `--codes` で指定します。
 写真は `photos/` に `<チームコード>_<背番号>.png`（または `.jpg`）の名前で置けば、`photo` 列が空でも `make-pack.mjs` がその選手に紐づけます（例: `HTH_7.jpg`）。
 `make-pack.mjs` は、写真のない行を何も言わずに飛ばします（件数だけ表示します）。
 

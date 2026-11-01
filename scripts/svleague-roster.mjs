@@ -3,7 +3,7 @@
 // taken: the site's terms forbid copying them without permission, so the photo column stays empty
 // for pictures you are allowed to use. Run again (same --out) to refresh the roster: the photo and
 // ids already filled in are kept for players still listed.
-//   node scripts/svleague-roster.mjs [--list <team list URL>] [--out players.csv] [--codes suntory=SUN,...]
+//   node scripts/svleague-roster.mjs [--list <team list URL>] [--out players.csv] [--codes team=CODE,...]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
@@ -19,6 +19,7 @@ const ORIGIN = new URL(LIST).origin
 const CODES = {
   hiroshima: ['HTH', 'HTA'], voreas: ['VOR'], osakab: ['BLU'], stingsaichi: ['JTK'], sakai: ['SAK'],
   tokyogb: ['TGB'], trshizuoka: ['TOR'], matsumototd: ['VCN'], wdnagoya: ['WDN'],
+  suntory: ['SUN'], hokkaidoys: ['HYS'], fkagoshima: ['FGK'],
 }
 for (const pair of (opt('codes') ?? '').split(',').filter(Boolean)) {
   const [team, codes] = pair.split('=')

@@ -1,6 +1,7 @@
 // Court grid (from CourtEnd Vision): the whole court fitted to the video by its four corners and
 // split 3 × 6 into zones 1–9 for each side (the DVW's zone layout), drawn with perspective. The
-// selected play's DVW start and end zones — or their sub-zones A–D — are lit on it. Pure: the draw function takes a canvas context, no DOM access.
+// selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
+// zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
 import type { Play, Side } from './types'
 
 export interface Pt { x: number; y: number }
@@ -34,6 +35,13 @@ export const ZONE_NUMBERS: number[][] = [
 // camera. Each team's half reads the same from its own side, so the far half is the near one turned.
 const SUB_NEAR: Record<string, [number, number]> = { A: [0.75, 0.75], B: [0.75, 0.25], C: [0.25, 0.25], D: [0.25, 0.75] }
 const SUB_FAR: Record<string, [number, number]> = { A: [0.25, 0.25], B: [0.25, 0.75], C: [0.75, 0.75], D: [0.75, 0.25] }
+
+// Serve start zones: behind the end line in five, 1-9-6-7-5 from the zone 1 side. In order from the
+// camera's left: the far side has zone 1 on the left, the near side on the right. The strip is one
+// zone row deep.
+export const SERVE_COLS = 5
+const SERVE_FAR = [1, 9, 6, 7, 5]
+const SERVE_NEAR = [5, 7, 6, 9, 1]
 
 export function subCenter(c: Cell, sub: string): [number, number] | null {
   return (c.row < HALF ? SUB_FAR : SUB_NEAR)[sub] ?? null
@@ -99,7 +107,21 @@ export function zoneCell(zone: number, near: boolean): Cell | null {
   return null
 }
 
-export interface Spot { cell: Cell; sub: string | null } // sub: A–D when known
+// sub: A–D when known. behind: a serve zone behind the end line (row -1 far, ROWS near; col 0–4 of SERVE_COLS).
+export interface Spot { cell: Cell; sub: string | null; behind?: true }
+
+export function serveSpot(zone: number, near: boolean): Spot | null {
+  const col = (near ? SERVE_NEAR : SERVE_FAR).indexOf(zone)
+  return col >= 0 ? { cell: { row: near ? ROWS : -1, col }, sub: null, behind: true } : null
+}
+
+// A spot's area in court units (u across, v far to near), its quarter when the sub-zone is shown.
+function spotArea(s: Spot, sub: boolean): { u0: number; v0: number; du: number; dv: number } {
+  if (s.behind) return { u0: s.cell.col / SERVE_COLS, v0: s.cell.row / ROWS, du: 1 / SERVE_COLS, dv: 1 / ROWS }
+  const m = sub && s.sub ? subCenter(s.cell, s.sub) : null
+  const k = m ? 0.5 : 1
+  return { u0: (s.cell.col + (m ? m[0] - 0.25 : 0)) / COLS, v0: (s.cell.row + (m ? m[1] - 0.25 : 0)) / ROWS, du: k / COLS, dv: k / ROWS }
+}
 export interface PlayZones {
   start: Spot | null
   end: Spot | null
@@ -122,7 +144,9 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
     return { start: spot(play.endZone, play.endSub, ownNear), end: hit ? spot(hit.startZone, hit.startSub, ownNear) : null }
   }
   const startNear = play.skill === 'S' || play.skill === 'A' ? ownNear : !ownNear
-  return { start: spot(play.startZone, play.startSub, startNear), end: spot(play.endZone, play.endSub, !startNear) }
+  // A serve starts behind the end line, and so does the reception of it.
+  const served = (play.skill === 'S' || play.skill === 'R') && play.startZone ? serveSpot(play.startZone, startNear) : null
+  return { start: served ?? spot(play.startZone, play.startSub, startNear), end: spot(play.endZone, play.endSub, !startNear) }
 }
 
 // ---- drawing ---------------------------------------------------------------------------------
@@ -149,14 +173,9 @@ type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null): void {
   const H = homography(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt])
   const at = (u: number, v: number) => project(H, u, v)
-  // A spot's sub-zone, when shown: [du0, dv0] of its quarter of the cell.
-  const quarter = (s: Spot): [number, number] | null => {
-    const m = style.detail === 'sub' && s.sub ? subCenter(s.cell, s.sub) : null
-    return m ? [m[0] - 0.25, m[1] - 0.25] : null
-  }
+  const area = (s: Spot) => spotArea(s, style.detail === 'sub')
   const spotPath = (s: Spot) => {
-    const q = quarter(s), c = s.cell, size = q ? 0.5 : 1
-    const u0 = (c.col + (q?.[0] ?? 0)) / COLS, u1 = u0 + size / COLS, v0 = (c.row + (q?.[1] ?? 0)) / ROWS, v1 = v0 + size / ROWS
+    const { u0, v0, du, dv } = area(s), u1 = u0 + du, v1 = v0 + dv
     const pts = [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)]
     ctx.beginPath()
     ctx.moveTo(pts[0].x, pts[0].y)
@@ -192,7 +211,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
 
   if (style.playZones && zones?.start && zones.end) {
     // From the middle of the lit zone or sub-zone to the middle of the other.
-    const mid = (s: Spot) => { const q = quarter(s), d = q ? 0.25 : 0.5; return at((s.cell.col + (q?.[0] ?? 0) + d) / COLS, (s.cell.row + (q?.[1] ?? 0) + d) / ROWS) }
+    const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
     const a = mid(zones.start), b = mid(zones.end)
     drawArrow(ctx, a, b, Math.max(3, w / 320))
   }

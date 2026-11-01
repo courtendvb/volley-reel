@@ -140,6 +140,19 @@ node scripts/make-pack.mjs <フォルダ> --id vleague-2026 --name "V.League 202
 `label` は一覧での表示名（例: 山田 太郎）、`ids` と `teams` は `;` 区切りで複数書けます。写真は PNG か JPEG を使います。
 選手の写真には肖像権があるため、パックはアプリとは別に、使ってよい範囲の人にだけ配ってください。
 
+SV.LEAGUE の選手名簿から `players.csv` を作る:
+
+```
+node scripts/svleague-roster.mjs --out <フォルダ>/players.csv
+```
+
+公式サイトのチームごとの選手一覧から、チームコード・背番号・ローマ字の名前（DVW の書き方に合わせる）・日本語の名前（`label`）・ポジションを書き出します。
+外国籍の選手は、最初の語を名、残りを姓とします（例: `MARTINEZ CAMPOS` / `Daniel`）。
+**写真は取り込みません。** サイトの写真は利用規約で無断の複製・頒布が禁じられているため、`photo` 列は空のままです。使ってよい写真（クラブから提供されたものなど）を `photos/` に入れ、`photo` 列を埋めてください。
+同じ `--out` でもう一度実行すると名簿だけを新しくし、埋めた `photo` と `ids` は同じ選手のものを残します。
+DVW のチームコードがわからないチーム（`hokkaidoys`・`suntory`・`fkagoshima`）はサイトの名前のまま書き出すので、`--codes suntory=SUN,hokkaidoys=XXX` のように指定してください。女子は `--list https://www.svleague.jp/team/sv/women/` で、女子チームのコードは `--codes` で指定します。
+`make-pack.mjs` は、`photo` 列が空の行を何も言わずに飛ばします（件数だけ表示します）。
+
 ## インストーラーを作る
 
 ```bash

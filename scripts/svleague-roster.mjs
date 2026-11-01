@@ -14,11 +14,11 @@ const OUT = opt('out') ?? 'players.csv'
 const ORIGIN = new URL(LIST).origin
 
 // Site team (in its URLs) → DVW team code, as the scouts write it; teams = other codes for the team
-// (HTA: Hiroshima's own scrimmage files). Teams missing here keep their site name in upper case and
+// (HTA: Hiroshima's own scrimmage files; VCN: Matsumoto's code as VC Nagano, in older DVWs). Teams missing here keep their site name in upper case and
 // are reported: give their code with --codes.
 const CODES = {
   hiroshima: ['HTH', 'HTA'], voreas: ['VOR'], osakab: ['BLU'], stingsaichi: ['JTK'], sakai: ['SAK'],
-  tokyogb: ['TGB'], trshizuoka: ['TOR'], matsumototd: ['VCN'], wdnagoya: ['WDN'],
+  tokyogb: ['TGB'], trshizuoka: ['TOR'], matsumototd: ['SMT', 'VCN'], wdnagoya: ['WDN'],
   suntory: ['SUN'], hokkaidoys: ['HYS'], fkagoshima: ['FGK'],
 }
 for (const pair of (opt('codes') ?? '').split(',').filter(Boolean)) {

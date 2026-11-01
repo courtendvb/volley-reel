@@ -2,14 +2,13 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { EMPTY_FILTER, sameFilter, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel, type SlideSpot } from '../../shared/reel'
-import type { ExportJob, LibraryInfo, Match, ParsedDVW, ProjectInfo, ProjectSettings, ScanResult, SlideFile } from '../../shared/types'
+import type { ExportJob, LibraryInfo, ProjectInfo, ScanResult, SlideFile } from '../../shared/types'
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import { mergeScoped, scopeOf, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
-import { overlaySettings, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
+import { overlaySettings, type OverlaySettings } from '../../shared/overlay'
 import { newVideo, type PlanItem, type Video } from '../../shared/video'
 import type { Scope } from './components/FilterPanel'
-import type { PlayKey } from './components/PlayList'
-import type { ClipInfo, SlideHow } from './components/ReelPanel'
+import type { SlideHow } from './components/ReelPanel'
 import type { Tool } from './components/AnnotationLayer'
 import { assetStats, forgetLogo } from './assets'
 import { canvasStats } from './canvas'
@@ -19,6 +18,7 @@ import { findPhoto } from '../../shared/pack'
 import { courtQuad, playZones } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
+import type { AppLatest } from './app/appState'
 
 export interface SmokeOpts {
   play: number
@@ -59,15 +59,7 @@ export interface SmokeHost {
   extraSelRef: RefObject<string[]>
   insertImage: (path?: string) => Promise<string | null>
   jump: (r: PlayRef) => void
-  latest: RefObject<{
-    results: PlayRef[]; filter: PlayFilter; matches: Record<string, Match>; reels: Reel[]; reelId: string | null; reel: Reel | null
-    selected: PlayKey | null; activeClipId: string | null; order: Clip[]; clipInfo: (c: Clip) => ClipInfo; selectedAnn: string | null
-    overlay: OverlaySettings; settings: ProjectSettings | undefined; videos: Video[]; videoId: string | null; video: Video | null
-    orderOf: (s: Reel) => Clip[]; infoFor: (c: Clip, scene: Reel | null) => ClipInfo
-    overlayData: null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null)
-    exportState: null | { status: string; ratio: number; message: string; outPath?: string }; notice: string | null
-    dvwsRef: null | Record<string, ParsedDVW>; library: LibraryInfo | null; projectPath: string | null; activeGroup: Group | null
-  }>
+  latest: RefObject<AppLatest>
   loadProject: (p: ProjectInfo | null) => Promise<void>
   overlapsRef: RefObject<Map<string, string[]>>
   playThrough: (target: 'video' | 'scene', startAt?: number) => void

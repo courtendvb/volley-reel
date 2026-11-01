@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { composing } from './keys'
-import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
-import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile, UpdateEvent } from '../../shared/types'
+import type { ImportProgress, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
 import { FilterPanel, type Scope } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo, type SlideHow } from './components/ReelPanel'
@@ -20,20 +19,18 @@ import { captionData, overlaySettings, scoreboardData, type CaptionData, type Ov
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
-import { EXPORT_HEIGHT, buildExportJob } from './exportRender'
-import { addScene, cardMatch, dropScene, newVideo, planScene, planSceneWithCard, planVideo, planVideoChapters, sceneFileNames, slideCard, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
+import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, slideCard, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
 import { CardEditBar, CardEditor, SlideEditBar } from './components/CardEditor'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
 import { PlayerPhotos } from './components/PlayerPhotos'
-import { ExportPanel, type ExportTarget } from './components/ExportPanel'
+import { ExportPanel } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { Home, MissingNote } from './components/Home'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
 import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
-import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
@@ -42,31 +39,21 @@ import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
+import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
+import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
+import { useUpdates } from './app/useUpdates'
+import { useUndo } from './app/useUndo'
+import { usePlaySearch } from './app/usePlaySearch'
+import { useSlideFiles } from './app/useSlideFiles'
+import { useExport } from './app/useExport'
+import { useShortcuts } from './app/useShortcuts'
+import { Banners } from './app/Banners'
 
 const api = window.api
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
 const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
 
-// Clips whose play can't be found in the DVW, per scene object and DVW set (relink walks every clip).
-// The marker group a clip is worked on in: the one it was opened from if it is still in it, else its
-// first marker (null when it has none, so there are no marker-wide objects to show).
-function markerFor(r: Reel, clipId: string, preferred: Group | null): Marker | null {
-  if (preferred && preferred !== 'none' && r.groups[preferred].includes(clipId)) return preferred
-  return markersOf(r, clipId)[0] ?? null
-}
-
-const missingMemo = new WeakMap<Reel, { dvws: Record<string, ParsedDVW>; missing: Set<string> }>()
-function missingOf(r: Reel, dvws: Record<string, ParsedDVW>): Set<string> {
-  const hit = missingMemo.get(r)
-  if (hit && hit.dvws === dvws) return hit.missing
-  const missing = relink(r, dvws).missing
-  missingMemo.set(r, { dvws, missing })
-  return missing
-}
-const SAVE_DELAY_MS = 400
-const UNDO_MERGE_MS = 600
-const UNDO_LIMIT = 100
 
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
@@ -106,7 +93,6 @@ export function App() {
   const toggleExtra = useCallback((id: string) => setExtraSel(xs => (xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])), [])
   useEffect(() => { setEditPoints(false); setCropping(false) }, [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
-  const [exportState, setExportState] = useState<{ status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string } | null>(null)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -168,12 +154,11 @@ export function App() {
     // new pointers are written; the rest are clean as loaded.
     const relinked = listed.map(r => relink(r, parsed))
     const loaded = relinked.map(x => x.reel)
-    saved.current = new Map<string, object>([
-      ...relinked.filter(x => !x.changed).map(x => [`scene:${x.reel.id}`, x.reel] as const),
-      ...vids.map(v => [`video:${v.id}`, v] as const),
+    markSaved([
+      ...relinked.filter(x => !x.changed).map(x => [`scene:${x.reel.id}`, x.reel] as [string, object]),
+      ...vids.map(v => [`video:${v.id}`, v] as [string, object]),
     ])
-    savedJson.current = new Map([...saved.current].map(([k, o]) => [k, JSON.stringify(o)] as const))
-    undoStack.current = []; redoStack.current = []
+    clearHistory()
     setReels(loaded)
     void checkSlideFiles(loaded)
     setVideos(vids)
@@ -183,109 +168,19 @@ export function App() {
     setReelId(id => (id && loaded.some(r => r.id === id) ? id : loaded[0]?.id ?? null))
   }, [])
 
-  // Autosave: any reel whose JSON differs from what was last written is saved shortly after.
-  // Closing the window flushes whatever is still pending (see the main process's close handler).
-  // The last saved object per "scene:id" / "video:id" (unchanged = the same object) and its JSON.
-  const saved = useRef(new Map<string, object>())
-  const savedJson = useRef(new Map<string, string>())
-  const [saveState, setSaveState] = useState<'saved' | 'pending' | 'error'>('saved')
-  const allClean = () => latest.current.reels.every(x => saved.current.get(`scene:${x.id}`) === x)
-    && latest.current.videos.every(x => saved.current.get(`video:${x.id}`) === x)
-  const saveNow = useCallback(async (kind: 'scene' | 'video', obj: Reel | Video) => {
-    const key = `${kind}:${obj.id}`
-    if (saved.current.get(key) === obj) return
-    // Serialized only here, for an object that may have changed: an edit that ended where it
-    // started is not written again.
-    const json = JSON.stringify(obj)
-    if (savedJson.current.get(key) === json) { saved.current.set(key, obj); if (allClean()) setSaveState('saved'); return }
-    try {
-      if (kind === 'scene') await api.saveReel(obj as Reel); else await api.saveVideo(obj as Video)
-      saved.current.set(key, obj); savedJson.current.set(key, json)
-      if (allClean()) setSaveState('saved')
-    } catch (e) {
-      setSaveState('error')
-      setError(t('{0}を保存できませんでした: {1}', kind === 'scene' ? t('シーン') : t('動画'), (e as Error).message))
-    }
-  }, [])
-  const flushAll = useCallback(() => Promise.all([
-    ...latest.current.reels.map(r => saveNow('scene', r)), ...latest.current.videos.map(v => saveNow('video', v)),
-  ]), [saveNow])
-
-  // Updates (installed copies): the main process finds and downloads a newer version; once it is
-  // ready a banner offers to restart into it, after saving everything here.
-  const [appVersion, setAppVersion] = useState('')
-  const [update, setUpdate] = useState<UpdateEvent | null>(null)
-  const [updateLater, setUpdateLater] = useState(false)
-  const [updateBusy, setUpdateBusy] = useState(false)
-  useEffect(() => {
-    void api.appVersion().then(setAppVersion)
-    return api.onUpdateEvent(ev => {
-      if (ev.type === 'error') { setUpdateBusy(false); setUpdateLater(false) }
-      setUpdate(u => (u?.type === 'ready' && ev.type !== 'error' ? u : ev))
-    })
-  }, [])
-  const restartToUpdate = async () => {
-    const st = latest.current.exportState?.status
-    if ((st === 'running' || st === 'preparing') && !confirm(t('書き出し中です。書き出しを中止して再起動しますか？'))) return
-    setUpdateBusy(true)
-    try {
-      await flushAll()
-      await api.installUpdate()
-    } catch (e) {
-      setError(t('更新できませんでした: {0}', (e as Error).message))
-      setUpdateBusy(false)
-    }
-  }
-  useEffect(() => {
-    const dirty = [
-      ...reels.filter(r => saved.current.get(`scene:${r.id}`) !== r).map(r => ['scene', r] as const),
-      ...videos.filter(v => saved.current.get(`video:${v.id}`) !== v).map(v => ['video', v] as const),
-    ]
-    if (!dirty.length) return
-    setSaveState(s => (s === 'error' ? s : 'pending'))
-    const timers = dirty.map(([k, o]) => window.setTimeout(() => void saveNow(k, o), SAVE_DELAY_MS))
-    return () => timers.forEach(t => clearTimeout(t))
-  }, [reels, videos, saveNow])
-  useEffect(() => api.onFlushRequest(async () => { await flushAll() }), [flushAll])
 
   const settings = project?.settings
-  const refsByMatch = useMemo(() => {
-    const out: Record<string, PlayRef[]> = {}
-    if (settings) for (const m of project!.matches) if (dvws[m.id]) out[m.id] = buildRefs(m.id, dvws[m.id], settings)
-    return out
-  }, [dvws, settings, project])
-
-  const scopeRefs = useMemo(() => {
-    if (scope === 'match') return matchId ? refsByMatch[matchId] ?? [] : []
-    const ms = project?.matches ?? [] // oldest first
-    return (matchOrder === 'new' ? [...ms].reverse() : ms).flatMap(m => refsByMatch[m.id] ?? [])
-  }, [scope, matchId, refsByMatch, project, matchOrder])
-  const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
-  const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
-  // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
-  const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
-  const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
-  // Where each match comes in the play list (old or new matches first): clips without a marker, and
-  // clips just marked, go in this order too, so the scene reads like the list it was picked from.
-  const matchRank = useMemo(() => {
-    const ms = project?.matches ?? [] // oldest first
-    const list = matchOrder === 'new' ? [...ms].reverse() : ms
-    return Object.fromEntries(list.map((m, i) => [m.id, String(i).padStart(4, '0')]))
-  }, [project, matchOrder])
-  const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
+  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, matchRank, matchLabels } = usePlaySearch(project, dvws, scope, matchId, matchOrder, filter)
 
   // ---- reels --------------------------------------------------------------------------------
-  // One undo history for scenes, videos and the project settings, in the order edits happened. Edits to the same thing
-  // within UNDO_MERGE_MS (a handle drag, typing a name) become one step, unless `merge` is false (separate clicks).
-  type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video } | { kind: 'settings'; value: ProjectSettings }
-  const undoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
-  const redoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
-  const record = useCallback((prev: Snapshot, merge = true) => {
-    const key = prev.kind === 'settings' ? 'settings' : `${prev.kind}:${prev.value.id}`, now = Date.now(), top = undoStack.current[undoStack.current.length - 1]
-    if (merge && top && top.key === key && now - top.at < UNDO_MERGE_MS) top.at = now
-    else { undoStack.current.push({ key, prev, at: now }); if (undoStack.current.length > UNDO_LIMIT) undoStack.current.shift() }
-    redoStack.current = []
-  }, [])
+  // Undo puts back a scene or video (and shows it), or the project settings.
+  const { record, undoRedo, clearHistory } = useUndo({
+    now: e => (e.kind === 'settings' ? latest.current.settings : e.kind === 'scene' ? latest.current.reels.find(x => x.id === e.value.id) : latest.current.videos.find(x => x.id === e.value.id)),
+    restore: e => {
+      if (e.kind === 'settings') void api.saveSettings(e.value).then(setProject).catch(err => setError(String(err)))
+      else if (e.kind === 'scene') { putScene(e.value); setReelId(e.value.id) } else { putVideo(e.value); setVideoId(e.value.id) }
+    },
+  })
   const putScene = (r: Reel) => {
     latest.current = { ...latest.current, reels: latest.current.reels.map(x => (x.id === r.id ? r : x)), reel: latest.current.reel?.id === r.id ? r : latest.current.reel }
     setReels(rs => rs.map(x => (x.id === r.id ? r : x)))
@@ -304,24 +199,6 @@ export function App() {
     if (prev && prev !== v) record({ kind: 'video', value: prev })
     putVideo(v)
   }, [record])
-  const undoRedo = useCallback((dir: 'undo' | 'redo') => {
-    const [from, to] = dir === 'undo' ? [undoStack.current, redoStack.current] : [redoStack.current, undoStack.current]
-    for (let e = from.pop(); e; e = from.pop()) {
-      if (e.prev.kind === 'settings') {
-        const now = latest.current.settings
-        if (!now) continue
-        to.push({ key: e.key, prev: { kind: 'settings', value: now }, at: 0 })
-        void api.saveSettings(e.prev.value).then(setProject).catch(err => setError(String(err)))
-        return
-      }
-      const id = e.prev.value.id
-      const cur = e.prev.kind === 'scene' ? latest.current.reels.find(x => x.id === id) : latest.current.videos.find(x => x.id === id)
-      if (!cur) continue // deleted since: skip to the next step
-      to.push({ key: e.key, prev: { kind: e.prev.kind, value: cur } as Snapshot, at: 0 })
-      if (e.prev.kind === 'scene') { putScene(e.prev.value); setReelId(e.prev.value.id) } else { putVideo(e.prev.value); setVideoId(e.prev.value.id) }
-      return
-    }
-  }, [])
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
   // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
   const infoFor = useCallback((c: Clip, scene: Reel | null): ClipInfo => {
@@ -428,7 +305,7 @@ export function App() {
   // Deleting a scene takes it out of every video that used it.
   const deleteReel = async (id: string) => {
     await api.deleteReel(id)
-    saved.current.delete(`scene:${id}`); savedJson.current.delete(`scene:${id}`)
+    forget(`scene:${id}`)
     const rest = reels.filter(r => r.id !== id)
     setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
     for (const v of latest.current.videos) if (v.sceneIds.includes(id)) updateVideo(dropScene(v, id))
@@ -446,7 +323,7 @@ export function App() {
   }
   const deleteVideo = async (id: string) => {
     await api.deleteVideo(id)
-    saved.current.delete(`video:${id}`); savedJson.current.delete(`video:${id}`)
+    forget(`video:${id}`)
     const rest = videos.filter(v => v.id !== id)
     setVideos(rest); setVideoId(rest[0]?.id ?? null)
   }
@@ -456,8 +333,11 @@ export function App() {
     const o = overlaySettings(video?.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
   }, [video?.overlay, project?.settings.theme])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null, projectPath: null as string | null, activeGroup: null as Group | null })
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library, activeGroup }
+  const latest = useRef<AppLatest>({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null })
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, library, activeGroup }
+  const { saveState, flushAll, markSaved, forget } = useAutosave(reels, videos, latest, setError)
+  const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
+    () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
@@ -598,94 +478,9 @@ export function App() {
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
-  // The export panel's choices: the whole video, the open scene, each marker group of it.
-  const planSec = (plan: PlanItem[]) => {
-    const byId = Object.fromEntries(reels.map(s => [s.id, s]))
-    let sec = 0, clips = 0, slides = 0
-    for (const it of plan) {
-      if (it.kind === 'card') { sec += it.durationSec; if (it.card.slide) slides++; continue }
-      const r = infoFor(it.clip, byId[it.sceneId] ?? null).range
-      if (r) { sec += r.out - r.in; clips++ }
-    }
-    return { sec, clips, slides, empty: !clips && !slides }
-  }
-  const slidesNote = (n: number) => (n ? t('・スライド {0}', n) : '')
-  const fmtLen = (s: number) => t('{0}分{1}秒', Math.floor(Math.round(s) / 60), String(Math.round(s) % 60).padStart(2, '0'))
-  const markerPlan = (sc: Reel, m: Marker) => {
-    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
-    return planScene(orderOf(only), only, overlay, matches, settings?.ourTeamCodes ?? [])
-  }
-  // Each scene of the video with something to play, once, in the video's order: its plan as in the
-  // video (its card, then its clips) and the file name it is saved under.
-  const scenePlans = () => {
-    const { video: v, reels: rs, orderOf: of, overlay: ov, matches: ms, settings: st } = latest.current
-    if (!v) return []
-    const byId = Object.fromEntries(rs.map(s => [s.id, s]))
-    const list = [...new Set(v.sceneIds)].flatMap(id => {
-      const s = byId[id]
-      const plan = s ? planSceneWithCard(s, of(s), ov, ms, st?.ourTeamCodes ?? []) : []
-      return s && plan.some(p => p.kind === 'clip' || p.card.slide) ? [{ name: s.name, plan }] : []
-    })
-    const files = sceneFileNames(list.map(x => x.name))
-    return list.map((x, i) => ({ ...x, file: files[i] }))
-  }
-  // Rebuilt when the video, its scenes or the overlay change (planSec and markerPlan read the same state).
-  const exportTargets: ExportTarget[] = useMemo(() => {
-    if (!video) return []
-    const out: ExportTarget[] = []
-    const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: t('すべて書き出し'), detail: t('{0} シーン・{1} クリップ{2}・{3}', video.sceneIds.length, vp.clips, slidesNote(vp.slides), fmtLen(vp.sec)), empty: vp.empty,
-      hint: t('動画「{0}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す', video.name) })
-    const each = scenePlans()
-    if (video.sceneIds.length > 1 || each.length > 1) {
-      const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
-      out.push({ key: 'scenes', label: t('シーンごとに書き出し'), detail: t('{0} 本・{1}', each.length, fmtLen(sec)), empty: !each.length,
-        hint: t('シーンを 1 本ずつ、シーンの名前のファイルに。フォルダを選ぶと順に書き出す') })
-    }
-    if (reel) {
-      const sp = planSec(currentPlan('scene'))
-      out.push({ key: 'scene', label: t('シーン「{0}」だけ', reel.name), detail: t('{0} クリップ{1}・{2}', sp.clips, slidesNote(sp.slides), fmtLen(sp.sec)), empty: sp.empty })
-      for (const m of reel.groupOrder) {
-        if (!reel.groups[m].length && !reel.slides?.some(s => s.group === m)) continue
-        const mp = planSec(markerPlan(reel, m))
-        out.push({ key: `marker:${m}`, label: t('マーカー {0}「{1}」だけ', m, reel.markerNames[m] || t('マーカー {0}', m)), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), fmtLen(mp.sec)), empty: mp.empty })
-      }
-    }
-    return out
-  }, [video, reel, reels, overlay, matches, settings, dvws])
-  const exportInfo = t('{0}p・{1}・{2}', EXPORT_HEIGHT, overlay.transition.fade ? t('フェードあり') : t('フェードなし'), overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? t('タイトルカードあり') : t('タイトルカードなし'))
-  const exportTarget = (key: string) => {
-    if (key === 'video') { void startExport(); return }
-    if (key === 'scenes') { void exportScenes(); return }
-    const sc = latest.current.reel
-    if (!sc) return
-    if (key === 'scene') { void startExport(undefined, { plan: currentPlan('scene'), name: `${video?.name ?? sc.name} - ${sc.name}` }); return }
-    void exportMarker(sc.id, Number(key.split(':')[1]) as Marker)
-  }
-  // One MP4 per scene, named after it, into a folder picked once. They export one after another:
-  // the export events start the next (sceneRun), and an error or a cancel stops the rest.
-  // dir: the folder without asking (smoke runs only).
-  const exportScenes = async (dir?: string) => {
-    const list = scenePlans()
-    if (!list.length) return
-    const r = dir ? { paths: list.map(x => `${dir}\\${x.file}.mp4`), existing: [] } : await api.chooseExportFolder(list.map(x => x.file))
-    if (!r) return
-    if (r.existing.length && !confirm(t('同じ名前のファイルが {0} 本あります。上書きしますか？\n{1}', r.existing.length, r.existing.map(p => p.split(/[\\/]/).pop()).join('\n')))) return
-    sceneRun.current = { items: list.map((x, i) => ({ name: x.name, plan: x.plan, path: r.paths[i] })), i: 0 }
-    const first = sceneRun.current.items[0]
-    if (!await startExport(first.path, { plan: first.plan, name: first.name })) sceneRun.current = null
-  }
-  // One marker group of a scene as its own MP4: its card (when on) and its clips, with the video's
-  // overlays and objects. A group switched off can still be exported this way.
-  const exportMarker = (sceneId: string, m: Marker, outPath?: string) => {
-    const { reels: rs, orderOf: of, overlay: ov, matches: ms, settings: st, video: v } = latest.current
-    const sc = rs.find(x => x.id === sceneId)
-    if (!sc) return Promise.resolve(null)
-    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
-    const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
-    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('マーカー{0}', m)}`
-    return startExport(outPath, { plan, name })
-  }
+  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportTargets, exportInfo, exportTarget } = useExport(
+    { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef)
+  latest.current.exportState = exportState
   // The gears: edit a title card over the video window — its title's place and size, and objects on
   // it (text, pictures, shapes). sceneId null = the video's opening card; marker null = the scene's card.
   // slideId: a slide of the scene instead, edited the same way (its objects; no title).
@@ -854,84 +649,7 @@ export function App() {
     }
   }
 
-  // Slides read from a file are checked against it when the project opens and whenever the window
-  // comes back to the front (after exporting from PowerPoint again): a bar offers to read them again.
-  const [staleSlides, setStaleSlides] = useState<string[]>([])
-  const dismissedSlides = useRef(new Map<string, number>()) // "later": not asked again until the file changes again
-  const sourcesOf = (rs: Reel[]) => {
-    const out = new Map<string, number>() // path -> the oldest time a slide read it
-    for (const r of rs) for (const s of r.slides ?? []) {
-      if (s.bg.kind === 'image' && s.bg.source) out.set(s.bg.source.path, Math.min(out.get(s.bg.source.path) ?? Infinity, s.bg.source.mtimeMs))
-    }
-    return out
-  }
-  const checkSlideFiles = useCallback(async (rs: Reel[] = latest.current.reels) => {
-    const srcs = sourcesOf(rs)
-    if (!srcs.size) { setStaleSlides([]); return }
-    const times = await api.slideFileTimes([...srcs.keys()]).catch(() => ({} as Record<string, number | null>))
-    setStaleSlides([...srcs].filter(([path, t]) => {
-      const now = times[path]
-      return now != null && now > t + 1 && dismissedSlides.current.get(path) !== now
-    }).map(([path]) => path))
-  }, [])
-  useEffect(() => {
-    const onFocus = () => void checkSlideFiles()
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [checkSlideFiles])
-  const laterSlides = async () => {
-    const paths = staleSlides
-    setStaleSlides([])
-    const times = await api.slideFileTimes(paths).catch(() => ({} as Record<string, number | null>))
-    for (const path of paths) { const t = times[path]; if (t != null) dismissedSlides.current.set(path, t) }
-  }
-  // Each slide from the file gets its page again (a picture: the picture); pages the file no longer
-  // has keep their old picture, and new pages are only reported.
-  const reloadSlideFiles = async (paths: string[]) => {
-    const notes: string[] = []
-    setStaleSlides(s => s.filter(x => !paths.includes(x)))
-    try {
-      for (const path of paths) {
-        const using = latest.current.reels.flatMap(r => (r.slides ?? []).flatMap(s => (s.bg.kind === 'image' && s.bg.source?.path === path ? [s.bg.source] : [])))
-        if (!using.length) continue
-        const name = using[0].name
-        try {
-          const f = await api.readSlideFile(path)
-          const assets = new Map<number | null, string>()
-          let total: number | undefined
-          if (f.kind === 'image') assets.set(null, f.assetId)
-          else {
-            const want = new Set(using.map(s => s.page ?? 1))
-            total = await pdfPages(f.data, async (n, png, all) => {
-              setProgress({ stage: 'save', message: t('{0} を読み直しています（{1} / {2} ページ）', f.name, n, all), ratio: n / all })
-              if (want.has(n)) assets.set(n, await api.saveAsset(png))
-            }, Math.max(...want))
-            // pdfPages stops at the last page used; the page count comes from the file.
-          }
-          for (const r of latest.current.reels) {
-            if (!r.slides?.some(s => s.bg.kind === 'image' && s.bg.source?.path === path)) continue
-            updateReel({ ...r, updatedAt: new Date().toISOString(), slides: r.slides.map(s => {
-              if (s.bg.kind !== 'image' || s.bg.source?.path !== path) return s
-              const id = assets.get(f.kind === 'image' ? null : s.bg.source.page ?? 1)
-              if (!id) return s
-              return { ...s, bg: { ...s.bg, assetId: id, source: { ...s.bg.source, mtimeMs: f.mtimeMs, ...(total ? { pages: total } : {}) } } }
-            }) })
-          }
-          if (f.kind === 'pdf' && total) {
-            const gone = [...new Set(using.map(s => s.page ?? 1))].filter(n => n > total!).sort((a, b) => a - b)
-            if (gone.length) notes.push(t('{0} は {1} ページになりました。p.{2} のスライドは前のままです', name, total, gone.join(', ')))
-            const before = Math.max(...using.map(s => s.pages ?? 0))
-            if (before && total > before) notes.push(t('{0} のページが {1} → {2} に増えました。増えたページは「＋」→「PDF・画像を読み込む」で入れられます', name, before, total))
-          }
-        } catch (e) {
-          notes.push(t('{0} を読み直せませんでした: {1}', name, (e as Error).message))
-        }
-      }
-    } finally {
-      setProgress(null)
-    }
-    setNotice(notes.length ? notes.join(' / ') : t('スライドを読み直しました'))
-  }
+  const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
@@ -1008,156 +726,14 @@ export function App() {
     updateReel(trimClip(r, c.id, edge, t, i.range, i.def, ms[c.matchId]?.durationSec))
   }, [updateReel])
 
-  const copyObjectsRef = useRef(copyObjects)
-  copyObjectsRef.current = copyObjects
-  const pasteObjectsRef = useRef(pasteObjects)
-  pasteObjectsRef.current = pasteObjects
-  const pasteImageRef = useRef(pasteImage)
-  pasteImageRef.current = pasteImage
-  useEffect(() => {
-    // The clip below (down) or above in the scene editor's rows, opened like a click on it.
-    const stepClip = (down: boolean) => {
-      const r = latest.current.reel
-      if (!r) return
-      const rows = [...r.groupOrder.flatMap(g => r.groups[g].map(id => ({ id, g: g as Group }))),
-        ...chronological(r, r.groups.none, whenIn(r)).map(c => ({ id: c.id, g: 'none' as Group }))]
-      const a = latest.current.activeClipId, ag = latest.current.activeGroup
-      let i = rows.findIndex(x => x.id === a && (ag === null || x.g === ag))
-      if (i < 0) i = rows.findIndex(x => x.id === a)
-      const next = rows[down ? i + 1 : i < 0 ? 0 : i - 1]
-      if (next) activateClip(r.clips[next.id], next.g)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target
-      if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || settingsOpen || composing(e)) return
-      // A slider in a panel (transparency, opacity…) moves with the arrow keys; only the seek bar
-      // leaves them to the shortcuts, so ← → still step the video after it is clicked.
-      if (t instanceof HTMLInputElement && t.type === 'range' && !t.closest('.transport') && /^(Arrow|Page|Home$|End$)/.test(e.key)) return
-      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        const k = e.key.toLowerCase()
-        if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo') }
-        else if (k === 'c' && !e.shiftKey && !window.getSelection()?.toString()) { if (copyObjectsRef.current()) e.preventDefault() }
-        else if (k === 'v' && !e.shiftKey) {
-          // Whatever was copied last: a picture from elsewhere, or objects copied here (they leave a
-          // mark on the system clipboard, so a screenshot taken after them wins).
-          e.preventDefault()
-          void api.clipboardKind().then(kind => { if (kind === 'image') void pasteImageRef.current(); else pasteObjectsRef.current() })
-        }
-        else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); undoRedo('redo') }
-        return
-      }
-      if (e.altKey) return
-      if (e.key === '?') { setShortcutsOpen(o => !o); return }
-      if (e.code === 'Space') { e.preventDefault(); playback.toggle() }
-      else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && focusPane.current === 'scene') {
-        // Up / Down in the scene editor (last clicked): the clip above / below, opened like a click on it.
-        e.preventDefault()
-        stepClip(e.key === 'ArrowDown')
-      }
-      else if (/^[fd]$/i.test(e.key) && !e.shiftKey && latest.current.reel && !cardEditRef.current) {
-        // F / D: the next / previous clip of the scene, from anywhere (the clip loops while it is edited).
-        e.preventDefault()
-        stepClip(e.key.toLowerCase() === 'f')
-      }
-      else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        // Up / Down: the previous / next play in the left list (played like a click on it).
-        e.preventDefault()
-        const res = latest.current.results, s = latest.current.selected
-        const i = s ? res.findIndex(x => x.matchId === s.matchId && x.play.id === s.playId) : -1
-        const next = res[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
-        if (next) jumpRef.current(next)
-      }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
-      else if (e.key === 'Escape') playback.stopSequence()
-      else if ((latest.current.activeClipId || cardEditRef.current) && /^[vtacrglp]$/i.test(e.key)) {
-        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', g: 'triangle', l: 'polyline', p: 'polygon' }
-        setAnnTool(tools[e.key.toLowerCase()])
-      }
-      else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {
-        const sel = latest.current.selectedAnn, now = scopedNow()
-        // The selected object, the other selected ones and their groups.
-        const drop = (list: Annotation[]) => { const ids = withGroups(list, [sel!, ...extraSelRef.current]); return list.filter(a => !ids.includes(a.id)) }
-        if (cardEditRef.current) { e.preventDefault(); setCardAnns(drop(cardAnnsRef.current)); setSelectedAnn(null); setExtraSel([]) }
-        else if (now) { e.preventDefault(); setAnns(drop(mergeScoped(now))); setSelectedAnn(null); setExtraSel([]) }
-      }
-      else if (e.key === '[' || e.key === ']') {
-        const { reel: r, activeClipId: id } = latest.current
-        if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
-      }
-      else if (e.shiftKey && /^(Digit|Numpad)[0-5]$/.test(e.code)) {
-        // Shift + 1–5: the active clip's tag (the same number takes it off; Shift + 0 always does).
-        // By key position, as Shift + a digit types a symbol on most layouts.
-        const { reel: r, activeClipId: id } = latest.current
-        if (!r || !id || !r.clips[id]) return
-        e.preventDefault()
-        const n = e.code.slice(-1)
-        updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n))
-      }
-      else if (/^[0-5]$/.test(e.key)) { e.preventDefault(); markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, markerKey, trim, updateReel])
+  useShortcuts({
+    latest, paused: settingsOpen, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
+    scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
+    undoRedo, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o),
+    activateClip, whenIn, jump, setAnnTool, trim, markerKey,
+    setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
+  })
 
-  // ---- export (design §3.8) ------------------------------------------------------------------
-  // The job is built here (PNG layers drawn with the preview's functions) and handed to the main
-  // process, which encodes in the background; the app stays usable meanwhile.
-  useEffect(() => api.onExportEvent(ev => {
-    // Scene by scene: the bar shows the whole run, the text which scene is being written.
-    const run = sceneRun.current
-    const n = run?.items.length ?? 1, at = run ? t('シーン {0} / {1}「{2}」: ', run.i + 1, n, run.items[run.i].name) : ''
-    if (ev.type !== 'progress' && ev.type !== 'done') sceneRun.current = null
-    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ((run?.i ?? 0) + ev.ratio) / n, message: t('{0}{1} / {2} 本目を書き出し中{3}', at, ev.item + 1, ev.items, eta(ev.ratio, ev.elapsedSec)) }))
-    else if (ev.type === 'done' && run && run.i + 1 < n) {
-      run.i++
-      const next = run.items[run.i]
-      void startExportRef.current(next.path, { plan: next.plan, name: next.name }).then(job => { if (!job) sceneRun.current = null })
-    }
-    else if (ev.type === 'done' && run) { sceneRun.current = null; setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: t('シーンごとに {0} 本を書き出しました', n) }) }
-    else if (ev.type === 'done') {
-      // YouTube only shows chapters when there are 3 or more and each is 10 seconds or longer.
-      const short = ev.shortChapters ?? [], few = (ev.chapterCount ?? 0) < 3
-      const why = [few ? t('チャプターが {0} つだけ', ev.chapterCount) : '', short.length ? t('10 秒未満: {0}', short.join(t('、'))) : ''].filter(Boolean).join(t('・'))
-      const chapters = !ev.chaptersPath ? '' : t('。YouTube のチャプターを「{0}」に書き出しました{1}', ev.chaptersPath.split(/[\\/]/).pop(), why ? t('（{0}。YouTube では 3 つ以上・各 10 秒以上でないとチャプターになりません）', why) : '')
-      setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: t('書き出しました（{0} 秒分を {1} 秒、{2} MB）{3}', Math.round(ev.footageSec), Math.round(ev.elapsedSec), (ev.sizeBytes / 1e6).toFixed(1), chapters) })
-    }
-    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: t('{0}書き出しに失敗しました: {1}{2}', at, ev.message, run ? t('（残りのシーンは書き出していません）') : '') })
-    else setExportState({ status: 'cancelled', ratio: 0, message: t('書き出しをキャンセルしました{0}', run ? t('（{0} / {1} 本は書き出し済み）', run.i, n) : '') })
-  }), [])
-  const sceneRun = useRef<{ items: { name: string; plan: PlanItem[]; path: string }[]; i: number } | null>(null)
-
-  // The whole video by default, with its YouTube chapters (a .txt beside the MP4); part of it (a
-  // scene, one marker group) when a plan and a file name are given.
-  const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
-    const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf, orderOf: of, settings: st } = latest.current
-    const whole = !part && v ? planVideoChapters(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, st?.ourTeamCodes ?? []) : null
-    const plan = part?.plan ?? whole?.plan ?? []
-    if (!v || !plan.some(p => p.kind === 'clip' || p.card.slide)) return null
-    const outPath = outPathArg ?? await api.chooseExportPath(part?.name ?? v.name)
-    if (!outPath) return null
-    // Between the scenes of a scene-by-scene run the bar stays where it is.
-    setExportState(s => ({ status: 'preparing', ratio: sceneRun.current ? s?.ratio ?? 0 : 0, message: t('オーバーレイを準備しています') }))
-    try {
-      const byId = Object.fromEntries(rs.map(s => [s.id, s]))
-      const job = await buildExportJob(plan, ov,
-        { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms,
-          sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [],
-          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []),
-          court: c => {
-            const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
-            return fit && play ? { fit, zones: playZones(play, fit, plays![c.playId + 1]) } : null
-          },
-          courtStyle: gridStyleRef.current }, outPath, whole?.chapters)
-      await api.startExport(job)
-      return job
-    } catch (e) {
-      setExportState({ status: 'error', ratio: 0, message: t('書き出しに失敗しました: {0}', (e as Error).message) })
-      return null
-    }
-  }, [currentPlan])
-  const startExportRef = useRef(startExport)
-  startExportRef.current = startExport
 
   // ---- dev self-check (VR_SMOKE): only loaded when the main process runs one (see smoke.ts)
   useEffect(() => {
@@ -1242,51 +818,10 @@ export function App() {
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
 
-      {progress && (
-        <div className="banner">
-          {progress.message}
-          {progress.ratio != null && <progress value={progress.ratio} max={1} />}
-        </div>
-      )}
-      {update?.type === 'ready' && !updateLater && (
-        <div className="banner update" role="status">
-          {t('新しいバージョン')} {update.version} {t('の準備ができました')}
-          <button className="primary" disabled={updateBusy} onClick={() => void restartToUpdate()}>{t('再起動して更新')}</button>
-          <button className="link" onClick={() => setUpdateLater(true)} title={t('閉じても、アプリを終了するときに更新されます')}>{t('あとで')}</button>
-        </div>
-      )}
-      {update?.type === 'error' && !updateLater && (
-        // The installer couldn't be started: the download page always works (as installing by hand).
-        <div className="banner update-failed" role="alert">
-          {t('更新を入れられませんでした:')} {update.message}
-          <button className="primary" onClick={() => void api.updateHelp('page')}>{t('ダウンロードページを開く')}</button>
-          <button className="link" onClick={() => void api.updateHelp('log')} title={t('原因を調べるための記録（update.log）。送ってもらえると原因が分かります')}>{t('記録を見る')}</button>
-          <button className="link" onClick={() => setUpdateLater(true)}>{t('閉じる')}</button>
-        </div>
-      )}
-      {error && <div className="banner error" onClick={() => setError(null)}>{error}</div>}
-      {notice && <div className="banner notice" onClick={() => setNotice(null)}>{notice}</div>}
-      {staleSlides.length > 0 && (
-        <div className="banner slides-stale" role="status">
-          <span>{t('スライドの元のファイルが更新されています:')} {staleSlides.map(p => p.split(/[\\/]/).pop()).join(t('、'))}</span>
-          <button className="primary" onClick={() => void reloadSlideFiles(staleSlides)}>{t('読み直す')}</button>
-          <button className="link" onClick={() => void laterSlides()}>{t('あとで')}</button>
-        </div>
-      )}
-      {exportState && (
-        <div className={`banner export ${exportState.status}`} role="status">
-          <span>{exportState.message}</span>
-          {(exportState.status === 'running' || exportState.status === 'preparing') && (
-            <>
-              <progress value={exportState.ratio} max={1} />
-              <span className="muted">{Math.round(exportState.ratio * 100)}%</span>
-              <button onClick={() => void api.cancelExport()}>{t('キャンセル')}</button>
-            </>
-          )}
-          {exportState.status === 'done' && exportState.outPath && <button onClick={() => void api.showInFolder(exportState.outPath!)}>{t('フォルダを開く')}</button>}
-          {exportState.status !== 'running' && exportState.status !== 'preparing' && <button className="link" onClick={() => setExportState(null)}>{t('閉じる')}</button>}
-        </div>
-      )}
+      <Banners progress={progress} update={update} updateLater={updateLater} updateBusy={updateBusy} onRestart={() => void restartToUpdate()} onUpdateLater={() => setUpdateLater(true)}
+        error={error} onError={setError} notice={notice} onNotice={setNotice}
+        staleSlides={staleSlides} onReloadSlides={paths => void reloadSlideFiles(paths)} onLaterSlides={() => void laterSlides()}
+        exportState={exportState} onCloseExport={() => setExportState(null)} />
 
       {project && Object.keys(project.missing).length > 0 && (
         <div className="missing-bar" role="alert">
@@ -1494,30 +1029,3 @@ export function App() {
     </div>
   )
 }
-
-// Dialog preview data: the active (or first) clip's real data, or a placeholder for an empty reel.
-function overlaySample(d: { scoreboard: ScoreboardData; caption: CaptionData } | null, r: Reel | null) {
-  const m = r?.groupOrder.find(g => r.groups[g].length) ?? 1
-  return {
-    scoreboard: d?.scoreboard ?? { left: 'HTH', right: 'OPP', ptsL: 17, ptsR: 9, setsL: 1, setsR: 0, winner: 'L' as const },
-    caption: d?.caption ?? { number: 1, name: 'PLAYER', line: 'SERVE · ACE' },
-    card: { marker: m, name: r?.markerNames[m] ?? '', match: null },
-  }
-}
-
-// Short label for the match column: "10/11 SMT" (the opponent when one side is ours).
-function labelMatches(ms: Match[], codes: string[]): Record<string, string> {
-  return Object.fromEntries(ms.map(m => {
-    const side = ourSide(m.teams, codes)
-    const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
-    const d = m.date ? `${+m.date.slice(5, 7)}/${+m.date.slice(8, 10)}` : ''
-    return [m.id, `${d} ${opp}`.trim()]
-  }))
-}
-
-function eta(ratio: number, elapsedSec: number): string {
-  if (ratio < 0.03 || elapsedSec < 2) return ''
-  const left = Math.max(0, Math.round(elapsedSec / ratio - elapsedSec))
-  return t('・残り約 {0}', left >= 60 ? t('{0}分{1}秒', Math.floor(left / 60), left % 60) : t('{0}秒', left))
-}
-

@@ -1,6 +1,7 @@
 // Builds an add-on pack (.vrpack, see src/shared/pack.ts) from a folder:
 //   <folder>/players.csv  team,jersey,lastName,firstName,label,ids,teams,photo  (UTF-8; Excel: "CSV UTF-8")
-//   <folder>/photos/      the photos the csv names (PNG or JPEG)
+//   <folder>/photos/      the photos the csv names (PNG or JPEG); with the photo column empty, a photo
+//                         named <TEAM>_<jersey>.png / .jpg (e.g. HTH_7.jpg) is used
 // ids and teams take several values separated by ';'. Only team, lastName and photo are needed.
 //   node scripts/make-pack.mjs <folder> --id vleague-2026 --name "V.League 2026" [--out file.vrpack]
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -42,9 +43,13 @@ for (const need of ['team', 'lastName', 'photo']) if (col[need] === undefined) {
 const files = { }
 const players = []
 const list = s => (s ?? '').split(';').map(x => x.trim()).filter(Boolean)
+let noPhoto = 0 // rows still waiting for a photo (e.g. a roster from svleague-roster.mjs): left out quietly
 rows.forEach((r, n) => {
   const get = k => (col[k] === undefined ? '' : (r[col[k]] ?? '').trim())
-  const photo = get('photo'), where = `players.csv line ${n + 2}`
+  // An empty photo column takes photos/<TEAM>_<jersey>.png (or .jpg / .jpeg) when there is one.
+  const named = ['png', 'jpg', 'jpeg'].map(e => `${get('team').toUpperCase()}_${get('jersey')}.${e}`).find(f => get('jersey') && existsSync(join(dir, 'photos', f)))
+  const photo = get('photo') || named || '', where = `players.csv line ${n + 2}`
+  if (!photo && get('team') && get('lastName')) return void noPhoto++
   if (!get('team') || !get('lastName') || !photo) return console.warn(`${where}: skipped (team, lastName and photo are needed)`)
   if (!/^[A-Za-z0-9_.-]{1,80}\.(png|jpg|jpeg)$/i.test(photo)) return console.warn(`${where}: skipped (photo "${photo}": PNG/JPEG, letters, digits, . - _ only)`)
   const file = join(dir, 'photos', photo)
@@ -67,4 +72,4 @@ if (!players.length) { console.error('no players to pack'); process.exit(1) }
 files['manifest.json'] = strToU8(JSON.stringify({ format: 'volley-reel-pack', version: 1, id, name, players }, null, 2))
 const out = resolve(opt('out') ?? `${id}.vrpack`)
 writeFileSync(out, zipSync(files))
-console.log(`${basename(out)}: ${players.length} players`)
+console.log(`${basename(out)}: ${players.length} players${noPhoto ? ` (${noPhoto} without a photo left out)` : ''}`)

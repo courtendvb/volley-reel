@@ -162,3 +162,32 @@ export async function pdfPages(data: Uint8Array, each: (page: number, png: Uint8
     void task.destroy()
   }
 }
+
+// Player photos from the packs for the caption, decoded once at full size (they are small).
+const packPhotos = new Map<string, Promise<ImageBitmap | null>>()
+const packPhotoReady = new Map<string, ImageBitmap | null>()
+type PhotoRef = { pack: string; photo: string }
+
+function loadPackPhoto(r: PhotoRef): Promise<ImageBitmap | null> {
+  const key = `${r.pack}/${r.photo}`
+  let p = packPhotos.get(key)
+  if (!p) {
+    p = api.readPackPhoto(r.pack, r.photo)
+      .then(data => decode(data, 800))
+      .catch(() => null)
+      .then(bmp => { packPhotoReady.set(key, bmp); listeners.forEach(f => f()); return bmp })
+    packPhotos.set(key, p)
+  }
+  return p
+}
+
+export function packPhotoImage(r: PhotoRef | null | undefined): ImageBitmap | null {
+  if (!r) return null
+  const key = `${r.pack}/${r.photo}`
+  if (!packPhotoReady.has(key)) { void loadPackPhoto(r); return null }
+  return packPhotoReady.get(key) ?? null
+}
+
+export async function preloadPackPhotos(refs: (PhotoRef | null | undefined)[]): Promise<void> {
+  await Promise.all(refs.filter((r): r is PhotoRef => !!r).map(loadPackPhoto))
+}

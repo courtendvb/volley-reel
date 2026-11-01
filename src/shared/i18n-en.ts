@@ -770,4 +770,6 @@ export const EN: Record<string, string> = {
   "今の条件に名前を付けて保存": "Save the current conditions under a name",
   "＋ 今の条件を保存": "+ Save conditions",
   "条件の名前": "Name for these conditions",
+  "アプリに同梱": "Shipped with the app",
+  "写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）": "Photo (from the player packs; above a caption at the bottom, below one at the top)",
 }

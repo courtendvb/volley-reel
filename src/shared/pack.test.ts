@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { LOCAL_PACK, findPhoto, fit, isFor, localEntry, matchesQuery, readManifest, type PackInfo, type PackPlayer } from './pack'
-import type { Player } from './types'
+import { LOCAL_PACK, captionPhoto, findPhoto, fit, isFor, localEntry, matchesQuery, readManifest, type PackInfo, type PackPlayer } from './pack'
+import type { ParsedDVW, Play, Player } from './types'
 
 const player = (o: Partial<Player>): Player => ({ key: 'X', side: '*', jersey: 1, lastName: '', firstName: '', ...o })
 const pp = (o: Partial<PackPlayer>): PackPlayer => ({ team: 'SUN', lastName: '', photo: 'a.jpg', ...o })
@@ -90,5 +90,20 @@ describe('matchesQuery', () => {
     expect(matchesQuery(p, 'yamada sun')).toBe(true)
     expect(matchesQuery(p, '山田')).toBe(true)
     expect(matchesQuery(p, 'yamada pan')).toBe(false)
+  })
+})
+
+describe('captionPhoto', () => {
+  const dvw = { teams: [{ code: 'SUN', name: 'Sun' }, { code: 'OPP', name: 'Opp' }], players: {
+    '*7': player({ key: 'YAM-TAR', side: '*', jersey: 7, lastName: 'YAMADA', firstName: 'Taro' }),
+    'a7': player({ key: 'SAT-JIR', side: 'a', jersey: 7, lastName: 'SATO', firstName: 'Jiro' }),
+  } } as unknown as ParsedDVW
+  const packs: PackInfo[] = [{ id: 'sv', name: 'SV', players: [pp({ lastName: 'YAMADA', jersey: 7, photo: 'yamada.png' })] }]
+  const play = (side: '*' | 'a', jersey: number) => ({ side, jersey }) as Play
+
+  it("finds the play's player by side and jersey, with their team's code", () => {
+    expect(captionPhoto(packs, dvw, play('*', 7))).toEqual({ pack: 'sv', photo: 'yamada.png' })
+    expect(captionPhoto(packs, dvw, play('a', 7))).toBeNull() // the other team's #7
+    expect(captionPhoto(packs, dvw, play('*', 9))).toBeNull() // not in the roster
   })
 })

@@ -16,7 +16,8 @@ export interface OverlayTheme {
 export interface OverlaySettings {
   theme: OverlayTheme
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
-  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean }
+  // photo: the player's photo from the player packs, above a caption at the bottom (below one at the top).
+  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
@@ -53,7 +54,7 @@ export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
 export const DEFAULT_OVERLAY: OverlaySettings = {
   theme: THEME_PRESETS[0].theme,
   scoreboard: { enabled: true, anchor: 'tl', scale: 1, showSets: true }, // top left: the headline sits at the top middle
-  playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true },
+  playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true, photo: false },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
@@ -82,7 +83,8 @@ export interface ScoreboardData {
   winner: 'L' | 'R' | null // who took this rally
 }
 
-export interface CaptionData { number: number | null; name: string | null; line: string | null }
+// photo: the player's photo in a pack (shared/pack.ts captionPhoto), when the caption shows one.
+export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null }
 
 // Our team always on the left (design §3.7); scrimmages and all-home files keep home on the left.
 // The score is the one before the rally.

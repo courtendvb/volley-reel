@@ -8,10 +8,18 @@
 // leaving the release without latest.yml). Apps don't see a draft, so they never get half a release.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { packsToShip } from './packs-guard.mjs'
 
 const REPO = 'courtendvb/volley-reel-releases'
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
 const tag = `v${version}`
+// Before anything is built or uploaded: no league photos in a public release by accident.
+const packs = packsToShip()
+if (packs.length && process.env.VR_RELEASE_WITH_PACKS !== '1') {
+  console.error(`vendor/packs にパックがあります（${packs.join(', ')}）。インストーラーに入り、${REPO} は公開なので誰でもダウンロードできます。`)
+  console.error('パックはモニターに .vrpack で渡し、vendor/packs から外してからリリースしてください（入れて公開するときだけ VR_RELEASE_WITH_PACKS=1）')
+  process.exit(1)
+}
 const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8' }).trim()
 
 let token

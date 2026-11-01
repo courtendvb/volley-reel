@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { strToU8, zipSync } from 'fflate'
@@ -64,5 +64,27 @@ describe('Library packs', () => {
     await expect(lib.setPlayerPhoto(tg, join(dir, 'p.vrpack'))).rejects.toThrow()
     await lib.removePlayerPhoto(tg)
     expect(await lib.packs()).toEqual([])
+  })
+
+  it('lists the packs shipped with the app, read-only, unless the library has one of the same id', async () => {
+    const shipped = join(dir, 'shipped'), own = join(dir, 'lib')
+    const put = (root: string, name: string) => {
+      mkdirSync(join(root, 'test', 'photos'), { recursive: true })
+      writeFileSync(join(root, 'test', 'manifest.json'), manifest({ name }))
+      writeFileSync(join(root, 'test', 'photos', 'a.png'), png)
+    }
+    put(shipped, 'Shipped')
+    Library.bundledPacks = shipped
+    try {
+      const lib = await Library.open(own)
+      expect((await lib.packs()).map(p => [p.name, p.bundled])).toEqual([['Shipped', true]])
+      expect(await lib.readPackPhoto('test', 'a.png')).toEqual(png)
+      await lib.removePack('test') // nothing to take out: it stays
+      expect(existsSync(join(shipped, 'test'))).toBe(true)
+      put(join(own, 'addons'), 'Read in')
+      expect((await lib.packs()).map(p => [p.name, p.bundled])).toEqual([['Read in', undefined]])
+    } finally {
+      Library.bundledPacks = null
+    }
   })
 })

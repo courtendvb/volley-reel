@@ -8,7 +8,7 @@ import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
 import { drawCourt, type CourtFit, type GridStyle, type PlayZones } from '../../shared/court'
-import { logoImage, preloadAssets, preloadLogos } from './assets'
+import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
 export const EXPORT_HEIGHT = 720
 
@@ -54,6 +54,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
   // One canvas for every layer of the job (each layer is drawn, encoded to PNG, then cleared).
   const png = pngOn(new OffscreenCanvas(W, H))
   await preloadLogos(plan.map(p => (p.kind === 'card' ? p.card.opp : null)))
+  if (overlay.playerCaption.photo) await preloadPackPhotos(plan.map(p => (p.kind === 'clip' ? d.overlayData(p.clip)?.caption.photo : null)))
   const items: ExportItem[] = []
   const firstItem: number[] = [] // per plan index: the job item it starts at (a skipped clip starts at the next)
   for (const p of plan) {
@@ -100,7 +101,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
         // The court lies on the floor: under the scoreboard, the caption and every object.
         if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, overlay.theme)
-        if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, overlay.theme)
+        if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, overlay.theme, packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),
     })

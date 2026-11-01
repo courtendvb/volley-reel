@@ -14,7 +14,7 @@ import { assetStats, forgetLogo } from './assets'
 import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
-import { findPhoto } from '../../shared/pack'
+import { captionPhoto, findPhoto } from '../../shared/pack'
 import { courtQuad, playZones } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
@@ -39,6 +39,7 @@ export interface SmokeOpts {
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
+  captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
@@ -130,6 +131,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.photos) return smokePhotos(res, opts.photos)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
+    if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1009,6 +1011,62 @@ export function installSmoke(h: SmokeHost): void {
     revert?.click()
     await waitFor(() => tiles().mine === 0 || null, 10000, 'photo removed')
     return { pack: packs.map(p => `${p.id}:${p.players.length}`), focusName, before, image: { w: +image.w.toFixed(3), h: +image.h.toFixed(3) }, setFor: `#${bare.jersey} ${bare.lastName}`, afterSet, afterRevert: tiles() }
+  }
+
+  // The caption's photo: off by default; on, a play whose player has a photo shows it above a
+  // bottom-left caption and below a top-left one (read from the overlay canvas), and the export's
+  // layer has it too.
+  const smokeCaptionPhoto = async (res: PlayRef[], exportTo?: string) => {
+    await refreshPacks()
+    const packs = await api.listPacks()
+    const dvws = latest.current.dvwsRef!
+    const r = res.find(x => captionPhoto(packs, dvws[x.matchId], x.play))
+    if (!r) throw new Error('no play whose player has a photo')
+    const { reel: added, ids } = addClips(newReel('photo smoke'), [{ matchId: r.matchId, play: r.play }])
+    const built = { ...added, scope: 'all' as const } // the clip has no marker
+    const v = newVideo('photo smoke', [built.id])
+    setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+    await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'photo reel')
+    const byDefault = latest.current.overlay.playerCaption.photo
+    activateClip(built.clips[ids[0]]); await sleep(600)
+    const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=overlay-canvas]'), 10000, 'overlay canvas')
+    // The middle of where the photo goes: the caption's left side, above it (bottom) or below it (top).
+    const photoAt = (bottom: boolean, W: number, H: number) => {
+      const k = H / 720, m = H * 0.025, h = 56 * k, ph = 132 * k, pw = ph * 0.8
+      return { x: m + pw / 2, y: bottom ? H - m - h - 6 * k - ph / 2 : m + h + 6 * k + ph / 2 }
+    }
+    const alpha = (bottom: boolean) => {
+      const { x, y } = photoAt(bottom, canvas.width, canvas.height)
+      return canvas.getContext('2d')!.getImageData(Math.round(x), Math.round(y), 1, 1).data[3]
+    }
+    const offBottom = alpha(true)
+    const cap = (o: Partial<OverlaySettings['playerCaption']>) => setOverlay({ ...latest.current.overlay, playerCaption: { ...latest.current.overlay.playerCaption, ...o } })
+    cap({ photo: true, anchor: 'bl' })
+    const onBottom = await waitFor(() => alpha(true) || null, 10000, 'photo above the caption')
+    await api.smokeShot!('caption-photo-bl.png')
+    cap({ anchor: 'tl' })
+    const onTop = await waitFor(() => alpha(false) || null, 10000, 'photo below the caption')
+    const topLeavesBottom = alpha(true)
+    await api.smokeShot!('caption-photo-tl.png')
+    cap({ anchor: 'bl' }); await sleep(300)
+    let exported: unknown = null
+    if (exportTo) {
+      const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'photo smoke' })
+      if (!job) throw new Error('export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'photo export done')
+      const clip = job.items.find(i => i.kind === 'clip')
+      const layer = clip && clip.kind === 'clip' ? clip.layers[0] : null
+      const bmp = layer ? await createImageBitmap(new Blob([layer.png as BlobPart])) : null
+      let layerAlpha = 0
+      if (bmp) {
+        const off = new OffscreenCanvas(bmp.width, bmp.height), g = off.getContext('2d')!
+        g.drawImage(bmp, 0, 0)
+        const { x, y } = photoAt(true, bmp.width, bmp.height)
+        layerAlpha = g.getImageData(Math.round(x), Math.round(y), 1, 1).data[3]
+      }
+      exported = { state: latest.current.exportState?.status, layerAlpha }
+    }
+    return { captionPhoto: { player: `#${r.play.jersey} ${r.name}`, byDefault, offBottom, onBottom, onTop, topLeavesBottom, exported } }
   }
 
   // Saved conditions, through the row at the top of the filters: saved under a name, cleared and put

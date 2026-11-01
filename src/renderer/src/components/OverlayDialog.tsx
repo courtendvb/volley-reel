@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { cardBackground, drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
 import { t } from '../../../shared/i18n'
+import { packPhotoImage } from '../assets'
 
 interface Props {
   settings: OverlaySettings
@@ -28,7 +29,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
     const v = document.querySelector<HTMLVideoElement>('.video-box video')
     if (v && v.readyState >= 2) ctx.drawImage(v, 0, 0, c.width, c.height)
     if (s.scoreboard.enabled) drawScoreboard(ctx, c.width, c.height, sample.scoreboard, s.scoreboard, s.theme)
-    if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, s.theme)
+    if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, s.theme, packPhotoImage(sample.caption.photo))
     const t = card.current
     if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, s.theme)
   }, [s, sample])
@@ -75,6 +76,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {check(t('名前'), s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
                 {check(t('スキル'), s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
                 {check(t('評価'), s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
+                {check(t('写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）'), s.playerCaption.photo, v => set('playerCaption', { photo: v }))}
               </div>
             </section>
 

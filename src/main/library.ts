@@ -163,20 +163,15 @@ export class Library {
     return f ? new Uint8Array(await readFile(join(this.dir, 'logos', f))) : null
   }
 
-  // Add-on packs (shared/pack.ts): addons/<id>/manifest.json and photos/, one folder per pack.
+  // Packs shipped with the app (resources/packs, or vendor/packs in development): set once at start.
+  static bundledPacks: string | null = null
+
+  // Add-on packs (shared/pack.ts): addons/<id>/manifest.json and photos/, one folder per pack, and
+  // the packs shipped with the app, unless the library has one of the same id (read in later).
   async packs(): Promise<PackInfo[]> {
-    const dir = join(this.dir, 'addons')
-    if (!existsSync(dir)) return []
-    const out: PackInfo[] = []
-    for (const id of await readdir(dir)) {
-      const f = join(dir, id, 'manifest.json')
-      if (!existsSync(f)) continue
-      try {
-        const m = readManifest(JSON.parse(await readFile(f, 'utf8')))
-        if (m && m.id === id) out.push({ id: m.id, name: m.name, players: m.players })
-      } catch { /* an unreadable pack is left out */ }
-    }
-    return out.sort((a, b) => a.name.localeCompare(b.name))
+    const own = await readPacks(join(this.dir, 'addons'))
+    const shipped = Library.bundledPacks ? (await readPacks(Library.bundledPacks)).filter(b => !own.some(o => o.id === b.id)).map(b => ({ ...b, bundled: true as const })) : []
+    return [...own, ...shipped].sort((a, b) => a.name.localeCompare(b.name))
   }
 
   // Reads a .vrpack (a zip) into addons/<id>/, replacing a pack with the same id. Only manifest.json
@@ -239,9 +234,11 @@ export class Library {
 
   private packPhotoPath(id: string, photo: string): string {
     if (!/^[a-z0-9_-]{1,40}$/.test(id) || !PACK_PHOTO.test(photo)) throw new Error(t('写真が見つかりません'))
-    const f = join(this.dir, 'addons', id, 'photos', photo)
-    if (!existsSync(f)) throw new Error(t('写真が見つかりません'))
-    return f
+    const own = join(this.dir, 'addons', id), f = join(own, 'photos', photo)
+    if (existsSync(f)) return f
+    const shipped = Library.bundledPacks && !existsSync(join(own, 'manifest.json')) ? join(Library.bundledPacks, id, 'photos', photo) : null
+    if (shipped && existsSync(shipped)) return shipped
+    throw new Error(t('写真が見つかりません'))
   }
 
   async readPackPhoto(id: string, photo: string): Promise<Uint8Array> {
@@ -458,3 +455,18 @@ async function walk(dir: string, depth: number, visit: (p: string) => void): Pro
 // Windows paths compare case-insensitively and with either slash.
 const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 const same = (a: string, b: string) => norm(a) === norm(b)
+
+// The packs in a folder: <id>/manifest.json (with its photos/ beside it); unreadable ones are left out.
+async function readPacks(dir: string): Promise<PackInfo[]> {
+  if (!existsSync(dir)) return []
+  const out: PackInfo[] = []
+  for (const id of await readdir(dir)) {
+    const f = join(dir, id, 'manifest.json')
+    if (!existsSync(f)) continue
+    try {
+      const m = readManifest(JSON.parse(await readFile(f, 'utf8')))
+      if (m && m.id === id) out.push({ id: m.id, name: m.name, players: m.players })
+    } catch { /* an unreadable pack is left out */ }
+  }
+  return out
+}

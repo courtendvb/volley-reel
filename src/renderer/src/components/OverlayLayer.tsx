@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CaptionData, ClipOverlayOverride, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { drawCaption, drawCard, drawScoreboard } from '../../../shared/overlayDraw'
 import { drawAnnotation } from '../../../shared/annotation'
-import { assetImage, logoImage, subscribeAssets } from '../assets'
+import { assetImage, logoImage, packPhotoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback, type PlaybackState } from '../playback'
 
@@ -43,7 +43,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     }
     if (!inClip) return
     if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, settings.theme)
-    if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, settings.theme)
+    if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, settings.theme, packPhotoImage(caption.photo))
   }, [size.w, size.h, settings, scoreboard, caption, override, inClip, st.card, logoTick])
 
   return <canvas ref={canvas} className="overlay-layer" data-testid="overlay-canvas" style={{ width: size.w, height: size.h }} />

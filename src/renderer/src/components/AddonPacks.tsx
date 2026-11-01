@@ -18,7 +18,9 @@ export function AddonPacks() {
         <div key={p.id} className="logo-row">
           <b>{p.id === LOCAL_PACK ? t('自分で足した写真') : p.name}</b>
           <span className="muted logo-name">{t('選手写真 {0} 人', p.players.length)}</span>
-          <button className="link" disabled={busy} onClick={() => void run(() => removePack(p.id))}>{t('外す')}</button>
+          {p.bundled
+            ? <span className="muted small">{t('アプリに同梱')}</span>
+            : <button className="link" disabled={busy} onClick={() => void run(() => removePack(p.id))}>{t('外す')}</button>}
         </div>
       ))}
       {!packs.length && <p className="muted small">{t('アドオンは入っていません')}</p>}

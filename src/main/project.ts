@@ -4,6 +4,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { cleanSavedFilters, type SavedFilter } from '../shared/filter'
 import type { OverlayTheme } from '../shared/overlay'
 import type { Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
@@ -20,6 +21,7 @@ interface ProjectFile {
   ourTeamCodes: string[]
   playerAliases: Record<string, string> // the old 名寄せ table: no longer used, kept as saved
   theme?: OverlayTheme
+  filters?: SavedFilter[]
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
@@ -56,6 +58,7 @@ export class Project {
       ourTeamCodes: Array.isArray(saved.ourTeamCodes) && saved.ourTeamCodes.length ? saved.ourTeamCodes.slice(0, 1) : DEFAULT_SETTINGS.ourTeamCodes,
       playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
       ...(validTheme(saved.theme) ? { theme: saved.theme } : {}),
+      filters: cleanSavedFilters(saved.filters),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
       scenesVersion: saved.scenesVersion,
     }
@@ -141,7 +144,7 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.theme ? { theme: this.file.theme } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [] },
       missing: this.library.missing(matches),
     }
   }
@@ -168,6 +171,7 @@ export class Project {
   async saveSettings(s: ProjectSettings): Promise<void> {
     this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes).slice(0, 1)
     if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }
+    if (s.filters) this.file.filters = cleanSavedFilters(s.filters)
     await this.save()
   }
 

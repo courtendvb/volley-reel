@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { EFFECTS, HITS, SKILLS, TEMPOS } from '../../../shared/labels'
-import { EMPTY_FILTER, type Person, type PlayFilter, type detailOptions } from '../../../shared/filter'
+import { EMPTY_FILTER, sameFilter, type Person, type PlayFilter, type SavedFilter, type detailOptions } from '../../../shared/filter'
 import type { ClipMode, RangeDefaults } from '../../../shared/reel'
 import { SecInput } from './ReelPanel'
 import { t } from '../../../shared/i18n'
@@ -21,12 +21,14 @@ interface Props {
   targetCode: string // the project's target team, shown on the team button
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
   onAddAll: () => void
+  saved: SavedFilter[] // the project's saved conditions
+  onSaved: (list: SavedFilter[]) => void
 }
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, onAddAll }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, onAddAll, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length
@@ -36,6 +38,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
 
   return (
     <div className="filters">
+      <SavedRow filter={f} onChange={onChange} saved={saved} onSaved={onSaved} />
       <div className="filter-row">
         <label className="field-label">{t('チーム')}</label>
         <Segmented value={f.team} onChange={team => set({ team })} options={[['all', t('すべて')], ['our', targetCode || t('対象チーム')], ['opp', t('相手')]]} />
@@ -142,6 +145,38 @@ function Near({ f, set, which, label, title, skipTitle }: { f: PlayFilter; set: 
         </div>
       )}
     </>
+  )
+}
+
+// Saved conditions: click one to put it back (it lights while the conditions are the same),
+// right-click to remove it. Saving under a name already used replaces those conditions.
+function SavedRow({ filter, onChange, saved, onSaved }: { filter: PlayFilter; onChange: (f: PlayFilter) => void; saved: SavedFilter[]; onSaved: (list: SavedFilter[]) => void }) {
+  const [naming, setNaming] = useState<string | null>(null)
+  const empty = sameFilter(filter, EMPTY_FILTER)
+  const save = () => {
+    const name = naming?.trim()
+    setNaming(null)
+    if (!name) return
+    const same = saved.find(s => s.name === name)
+    onSaved(same ? saved.map(s => (s === same ? { ...s, filter } : s)) : [...saved, { id: crypto.randomUUID(), name, filter }])
+  }
+  if (!saved.length && naming === null && empty) return null
+  return (
+    <div className="filter-row">
+      <span className="field-label">{t('保存条件')}</span>
+      <div className="chips">
+        {saved.map(s => (
+          <button key={s.id} className={`chip${sameFilter(filter, s.filter) ? ' on' : ''}`} aria-pressed={sameFilter(filter, s.filter)}
+            title={t('クリックでこの条件にする（右クリックで外す）')} onClick={() => onChange(s.filter)}
+            onContextMenu={e => { e.preventDefault(); onSaved(saved.filter(x => x !== s)) }}>{s.name}</button>
+        ))}
+        {naming === null
+          ? <button className="chip" onClick={() => setNaming('')} disabled={empty} title={empty ? t('条件を選んでから保存してください') : t('今の条件に名前を付けて保存')}>{t('＋ 今の条件を保存')}</button>
+          : <input className="saved-filter-name" autoFocus value={naming} placeholder={t('条件の名前')} aria-label={t('条件の名前')}
+              onChange={e => setNaming(e.target.value)} onBlur={save}
+              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') save(); if (e.key === 'Escape') setNaming(null) }} />}
+      </div>
+    </div>
   )
 }
 

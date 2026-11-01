@@ -276,13 +276,13 @@ export function App() {
 
   // ---- reels --------------------------------------------------------------------------------
   // One undo history for scenes, videos and the project settings, in the order edits happened. Edits to the same thing
-  // within UNDO_MERGE_MS (a handle drag, typing a name) become one step.
+  // within UNDO_MERGE_MS (a handle drag, typing a name) become one step, unless `merge` is false (separate clicks).
   type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video } | { kind: 'settings'; value: ProjectSettings }
   const undoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
   const redoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
-  const record = useCallback((prev: Snapshot) => {
+  const record = useCallback((prev: Snapshot, merge = true) => {
     const key = prev.kind === 'settings' ? 'settings' : `${prev.kind}:${prev.value.id}`, now = Date.now(), top = undoStack.current[undoStack.current.length - 1]
-    if (top && top.key === key && now - top.at < UNDO_MERGE_MS) top.at = now
+    if (merge && top && top.key === key && now - top.at < UNDO_MERGE_MS) top.at = now
     else { undoStack.current.push({ key, prev, at: now }); if (undoStack.current.length > UNDO_LIMIT) undoStack.current.shift() }
     redoStack.current = []
   }, [])
@@ -1220,9 +1220,9 @@ export function App() {
     const ours = settings?.ourTeamCodes ?? []
     return [...map.values()].sort((a, b) => Number(ours.includes(a.code)) - Number(ours.includes(b.code)) || a.code.localeCompare(b.code))
   }, [project, settings])
-  const saveSettings = async (s: ProjectSettings) => {
+  const saveSettings = async (s: ProjectSettings, merge = true) => {
     const prev = latest.current.settings
-    if (prev) record({ kind: 'settings', value: prev })
+    if (prev) record({ kind: 'settings', value: prev }, merge)
     setProject(await api.saveSettings(s))
   }
 
@@ -1324,6 +1324,7 @@ export function App() {
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
               onAddAll={() => addPlays(results)}
+              saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
               ? <PlayList refs={results} matches={matches} showMatch={scope === 'all' && (project?.matches.length ?? 0) > 1}

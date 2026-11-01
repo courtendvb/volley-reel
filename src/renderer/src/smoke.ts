@@ -1,6 +1,6 @@
 // Dev self-checks (VR_SMOKE): scripted runs through the real UI that report what they saw.
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { EMPTY_FILTER, sameFilter, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel, type SlideSpot } from '../../shared/reel'
 import type { ExportJob, LibraryInfo, Match, ParsedDVW, ProjectInfo, ProjectSettings, ScanResult, SlideFile } from '../../shared/types'
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
@@ -39,6 +39,7 @@ export interface SmokeOpts {
   logo?: string // with video: "<code>|<image>" set as that team's logo first
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
+  savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
@@ -136,6 +137,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
     if (opts.court) return smokeCourt(res, opts.exportTo)
+    if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1015,6 +1017,47 @@ export function installSmoke(h: SmokeHost): void {
     revert?.click()
     await waitFor(() => tiles().mine === 0 || null, 10000, 'photo removed')
     return { pack: packs.map(p => `${p.id}:${p.players.length}`), focusName, before, image: { w: +image.w.toFixed(3), h: +image.h.toFixed(3) }, setFor: `#${bare.jersey} ${bare.lastName}`, afterSet, afterRevert: tiles() }
+  }
+
+  // Saved conditions, through the row at the top of the filters: saved under a name, cleared and put
+  // back with its chip, saved again under the same name (replaced), removed with a right-click, and
+  // the removal undone with Ctrl+Z. Each step is checked in project.json through the main process.
+  const smokeSavedFilters = async (want: PlayFilter, shown: number) => {
+    const name = 'smoke 条件'
+    const row = () => [...document.querySelectorAll<HTMLElement>('.filters .filter-row')].find(r => r.textContent?.startsWith(t('保存条件'))) ?? null
+    const chip = () => [...(row()?.querySelectorAll<HTMLButtonElement>('.chip') ?? [])].find(b => b.textContent === name) ?? null
+    const savedNow = async () => (await api.getProject())?.settings.filters ?? []
+    const until = async <T,>(get: () => Promise<T | null>, label: string): Promise<T> => {
+      for (const end = Date.now() + 10000; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
+    }
+    const saveAs = async () => {
+      const add = await waitFor(() => [...(row()?.querySelectorAll<HTMLButtonElement>('.chip') ?? [])].find(b => b.textContent === t('＋ 今の条件を保存')) ?? null, 10000, 'save button')
+      add.click()
+      const input = await waitFor(() => row()?.querySelector<HTMLInputElement>('input.saved-filter-name') ?? null, 5000, 'name field')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, name)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    }
+    for (const old of await savedNow()) if (old.name === name) throw new Error('left from an earlier run: use a fresh project')
+    await saveAs()
+    const first = await until(async () => (await savedNow()).find(s => s.name === name && sameFilter(s.filter, want)) ?? null, 'saved in project.json')
+    const lit = await waitFor(() => chip()?.classList.contains('on') || null, 5000, 'chip lit after saving')
+    setFilter(EMPTY_FILTER)
+    await waitFor(() => (sameFilter(latest.current.filter, EMPTY_FILTER) && chip() && !chip()!.classList.contains('on')) || null, 5000, 'cleared')
+    chip()!.click()
+    await waitFor(() => (sameFilter(latest.current.filter, want) && latest.current.results.length === shown && chip()!.classList.contains('on')) || null, 5000, 'put back')
+    await api.smokeShot!('saved-filters.png')
+    const more = { ...want, effects: ['#'] }
+    setFilter(more)
+    await waitFor(() => (sameFilter(latest.current.filter, more) && !chip()!.classList.contains('on')) || null, 5000, 'changed')
+    await saveAs()
+    const replaced = await until(async () => { const l = await savedNow(); return l.length === 1 && sameFilter(l[0].filter, more) ? l : null }, 'replaced under the same name')
+    chip()!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    await until(async () => ((await savedNow()).length === 0 ? true : null), 'removed')
+    await waitFor(() => (!row() || !chip()) || null, 5000, 'chip gone')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    const undone = await until(async () => { const l = await savedNow(); return l.length === 1 && l[0].id === first.id ? l : null }, 'removal undone')
+    return { savedFilters: { lit, shown, replacedId: replaced[0].id === first.id, undone: undone[0].name } }
   }
 
   // Court grid: fitted from its bar, one corner dragged on the canvas, saved with the match; the

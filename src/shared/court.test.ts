@@ -101,13 +101,12 @@ describe('playZones', () => {
 })
 
 describe('playDirection', () => {
-  it("serve and attack leave the player's side; reception and dig come to it; a set goes by its zones", () => {
+  it("serve and attack leave the player's side; reception and dig come to it; a set has no way", () => {
     expect(playDirection(serve, fit)).toBe('down') // away, far in set 1
     expect(playDirection(reception, fit)).toBe('down') // home, near: the serve comes down to it
     expect(playDirection(attack, fit)).toBe('up') // from the near side
     expect(playDirection(dig, fit)).toBe('up') // the far side digs the near side's attack
-    expect(playDirection(set, fit, attack)).toBe('up') // from zone 8 toward the net (zone 4)
-    expect(playDirection(set, fit, dig)).toBeNull() // no attack after it: not known
+    expect(playDirection(set, fit)).toBeNull()
   })
 
   it('turns with the sides', () => {

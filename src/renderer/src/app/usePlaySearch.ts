@@ -24,7 +24,7 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
   // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
   const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
   const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
-  const dirUnknown = useMemo(() => scopeRefs.filter(r => r.dir === null).length, [scopeRefs])
+  const dirUnknown = useMemo(() => scopeRefs.filter(r => r.dir === null && r.play.skill !== 'E').length, [scopeRefs]) // sets have no way: not counted
   // Where each match comes in the play list (old or new matches first): clips without a marker, and
   // clips just marked, go in this order too, so the scene reads like the list it was picked from.
   const matchRank = useMemo(() => {

@@ -1061,7 +1061,7 @@ export function installSmoke(h: SmokeHost): void {
     await loadProject(await api.getProject())
     setFilter(EMPTY_FILTER)
     await waitFor(() => latest.current.results.some(r => r.dir) || null, 20000, 'directions known')
-    const all = latest.current.results.length
+    const all = latest.current.results.length, sets = latest.current.results.filter(r => r.play.skill === 'E').length
     const press = async (label: string) => {
       const b = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.filters button[role=radio]')].find(x => x.textContent === label) ?? null, 5000, label)
       b.click(); await sleep(400)
@@ -1073,9 +1073,9 @@ export function installSmoke(h: SmokeHost): void {
     await api.smokeShot!('direction-up.png')
     const down = await press(t('↓ 上から下')), downCount = down.length
     const allUp = up.every(r => r.dir === 'up'), allDown = down.every(r => r.dir === 'down')
-    const unknown = latest.current.results.length === 0 ? null : all - upCount - downCount
+    const other = all - upCount - downCount - sets // plays neither up nor down that aren't sets: none once the court is fitted
     await press(t('すべて'))
-    return { direction: { beforeKnown, all, up: upCount, down: downCount, unknown, allUp, allDown, upSkills, arrowsShown: arrowsUp.length, arrowsAllUp: arrowsUp.every(a => a === '↑'), hint } }
+    return { direction: { beforeKnown, all, up: upCount, down: downCount, sets, other, setArrows: [...document.querySelectorAll('.play-row .skill-E .dir')].length, allUp, allDown, upSkills, arrowsShown: arrowsUp.length, arrowsAllUp: arrowsUp.every(a => a === '↑'), hint } }
   }
 
   // The caption's photo: off by default; on, a play whose player has a photo shows it above a

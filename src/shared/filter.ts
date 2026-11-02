@@ -24,7 +24,7 @@ export interface PlayRef {
 
 export interface PlayFilter {
   team: 'all' | TeamRole // the project's target team or its opponents, whichever side they played
-  dir: 'all' | PlayDir // up the screen or down it; plays whose way isn't known are left out
+  dir: 'all' | PlayDir // up the screen or down it; sets, and plays whose way isn't known, are left out
   person: string | null
   skills: string[] // empty = any
   effects: string[]
@@ -128,7 +128,7 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
     ourRot: ourHome ? p.homeRot : p.awayRot,
     oppRot: ourHome ? p.awayRot : p.homeRot,
     ...detailOf(p.code, p.skill, dvw.codeNames ?? {}),
-    dir: court && !dvw.allHome ? playDirection(p, court, dvw.plays[p.id + 1]) : null,
+    dir: court && !dvw.allHome ? playDirection(p, court) : null,
   }))
 }
 

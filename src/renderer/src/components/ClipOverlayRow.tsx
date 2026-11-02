@@ -10,16 +10,23 @@ interface Props {
   autoName: string
   autoLine: string
   onChange: (o: ClipOverlayOverride | undefined) => void
+  videoName: string | undefined // the video's name for this clip's player (every clip of theirs in the video)
+  canVideo: boolean // there is a video to keep it in
+  onVideoName: (name: string | undefined) => void
 }
 
 // Per-clip exceptions to the reel's overlay settings: hide an element, or rewrite the caption.
 const SB_POSITIONS: [Anchor, string][] = [['tl', t('左上')], ['tc', t('中央上')], ['tr', t('右上')]]
 
-export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange }: Props) {
+export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange, videoName, canVideo, onVideoName }: Props) {
   const [gear, setGear] = useState(false)
-  const [name, setName] = useState(o?.playerCaption?.name ?? '')
+  // Where a name typed here goes: the player's name in the whole video (the default), or this clip only.
+  const ownName = o?.playerCaption?.name
+  const [scope, setScope] = useState<'video' | 'clip'>(ownName || !canVideo ? 'clip' : 'video')
+  const nameAt = (sc: 'video' | 'clip') => (sc === 'clip' ? ownName ?? '' : videoName ?? '')
+  const [name, setName] = useState(nameAt(scope))
   const [line, setLine] = useState(o?.playerCaption?.line ?? '')
-  useEffect(() => { setName(o?.playerCaption?.name ?? ''); setLine(o?.playerCaption?.line ?? '') }, [o])
+  useEffect(() => { const sc = ownName || !canVideo ? 'clip' : 'video'; setScope(sc); setName(nameAt(sc)); setLine(o?.playerCaption?.line ?? '') }, [o, videoName, canVideo])
 
   const write = (next: ClipOverlayOverride) => {
     const sb = next.scoreboard?.hidden ? { hidden: true } : undefined
@@ -27,7 +34,13 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
     const cap = pc && (pc.hidden || pc.name || pc.line) ? { ...(pc.hidden ? { hidden: true } : {}), ...(pc.name ? { name: pc.name } : {}), ...(pc.line ? { line: pc.line } : {}) } : undefined
     onChange(sb || cap ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}) } : undefined)
   }
-  const commit = () => write({ ...o, playerCaption: { ...o?.playerCaption, name: name.trim() || undefined, line: line.trim() || undefined } })
+  const commit = () => {
+    const n = name.trim() || undefined
+    if (scope === 'video') {
+      if (n !== videoName) onVideoName(n)
+      write({ ...o, playerCaption: { ...o?.playerCaption, name: undefined, line: line.trim() || undefined } }) // the clip follows the video's name
+    } else write({ ...o, playerCaption: { ...o?.playerCaption, name: n, line: line.trim() || undefined } })
+  }
 
   return (
     <div className="ann-row clip-overlay">
@@ -47,8 +60,16 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
         onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> {t('テロップ')}</label>
       <label className="check" title={t('コートのグリッドとプレーのゾーンを書き出しに入れる（この動画のすべてのクリップ。見た目は動画の下の「コート」の設定。コートを合わせた試合だけ）')}>
         <input type="checkbox" checked={s.court.enabled} onChange={e => onOverlay({ ...s, court: { enabled: e.target.checked } })} /> {t('コート（書き出し）')}</label>
-      <input className="ov-text" value={name} placeholder={autoName} aria-label={t('テロップの名前（空欄で自動）')}
+      <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
+      {canVideo && (
+        <select className="ov-pos" value={scope} aria-label={t('名前を使う範囲')}
+          title={t('動画全体: この動画の、この選手のすべてのクリップのテロップに使う。このクリップだけ: このクリップだけ別の名前にする')}
+          onChange={e => { const sc = e.target.value as 'video' | 'clip'; setScope(sc); setName(nameAt(sc)) }}>
+          <option value="video">{t('動画全体（この選手）')}</option>
+          <option value="clip">{t('このクリップだけ')}</option>
+        </select>
+      )}
       <input className="ov-text wide" value={line} placeholder={autoLine} aria-label={t('テロップの2行目（空欄で自動）')}
         onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <span className="spacer" />

@@ -52,6 +52,14 @@ describe('caption data', () => {
     expect(captionData(D, D.plays[2], s, { name: 'Kenta', line: 'great serve' })).toMatchObject({ name: 'Kenta', line: 'GREAT SERVE' })
     expect(captionData(D, D.plays[2], s, { line: '  ' }).line).toBe('SERVE · ACE')
   })
+
+  it("uses the video's name for the player in every clip, unless the clip has its own", () => {
+    const key = D.plays[2].playerKey, names = { [key]: 'Kenta Sato' }
+    expect(captionData(D, D.plays[2], s, undefined, names).name).toBe('Kenta Sato')
+    expect(captionData(D, D.plays[2], s, { name: 'K. SATO' }, names).name).toBe('K. SATO') // the clip's own wins
+    expect(captionData(D, D.plays[1], s, undefined, names).name).toBe('SATO J.') // another player
+    expect(captionData(D, D.plays[2], s, undefined, { [key]: '  ' }).name).toBe('SATO K.') // blank: the DVW's
+  })
 })
 
 describe('settings', () => {

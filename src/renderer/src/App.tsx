@@ -470,9 +470,9 @@ export function App() {
   const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData } | null => {
     const d = c ? dvws[c.matchId] : null, play = c && d ? d.plays[c.playId] : null
     if (!c || !d || !play) return null
-    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption)
+    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
-  }, [dvws, settings, overlay, packs])
+  }, [dvws, settings, overlay, packs, video?.captionNames])
   const activeOverlay = overlayData(active)
   const activeMarker = reel && active ? markerFor(reel, active.id, activeGroup) : null
   const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? {
@@ -975,6 +975,14 @@ export function App() {
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
+                videoName={video?.captionNames?.[activeInfo.ref.play.playerKey]} canVideo={!!video}
+                onVideoName={name => {
+                  const v = latest.current.video, key = activeInfo.ref!.play.playerKey
+                  if (!v) return
+                  const { [key]: _old, ...rest } = v.captionNames ?? {}
+                  const names = name ? { ...rest, [key]: name } : rest
+                  updateVideo({ ...v, captionNames: Object.keys(names).length ? names : undefined, updatedAt: new Date().toISOString() })
+                }}
                 autoLine={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showSkill: true, showEvaluation: true }).line ?? '' : ''}
                 onChange={o => { const r = latest.current.reel; if (r) updateReel(setOverlayOverride(r, active.id, o)) }}
               />

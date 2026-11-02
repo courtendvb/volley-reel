@@ -41,6 +41,7 @@ export interface SmokeOpts {
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
+  captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -134,6 +135,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
+    if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
@@ -1076,6 +1078,47 @@ export function installSmoke(h: SmokeHost): void {
     const other = all - upCount - downCount - sets // plays neither up nor down that aren't sets: none once the court is fitted
     await press(t('すべて'))
     return { direction: { beforeKnown, all, up: upCount, down: downCount, sets, other, setArrows: [...document.querySelectorAll('.play-row .skill-E .dir')].length, allUp, allDown, upSkills, arrowsShown: arrowsUp.length, arrowsAllUp: arrowsUp.every(a => a === '↑'), hint } }
+  }
+
+  // The caption's name for a player across the video: typed on one clip (whole video, the default),
+  // it shows on the player's other clip and not on another player's; 'this clip only' changes one.
+  const smokeCaptionNames = async (res: PlayRef[]) => {
+    const byKey = new Map<string, PlayRef[]>()
+    for (const r of res) byKey.set(r.play.playerKey, [...(byKey.get(r.play.playerKey) ?? []), r])
+    const twice = [...byKey.values()].find(l => l.length >= 2)
+    const other = res.find(r => r.play.playerKey !== twice?.[0].play.playerKey)
+    if (!twice || !other) throw new Error('no player with two plays')
+    const { reel: added, ids } = addClips(newReel('names smoke'), [twice[0], twice[1], other].map(r => ({ matchId: r.matchId, play: r.play })))
+    const built = { ...added, scope: 'all' as const }
+    const v = newVideo('names smoke', [built.id])
+    setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+    await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'names reel')
+    const clip = (i: number) => latest.current.reel!.clips[ids[i]]
+    const nameOn = (i: number) => latest.current.overlayData!(clip(i))?.caption.name ?? null
+    const type = async (text: string) => {
+      const input = await waitFor(() => document.querySelector<HTMLInputElement>('.clip-overlay input.ov-text'), 5000, 'name field')
+      input.focus()
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text)
+      input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(50)
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(300)
+      input.blur(); await sleep(200)
+    }
+    const before = [nameOn(0), nameOn(1), nameOn(2)]
+    activateClip(clip(0)); await sleep(500)
+    const scopeDefault = document.querySelector<HTMLSelectElement>('.clip-overlay select[aria-label="' + t('名前を使う範囲') + '"]')?.value
+    await type('Whole Video Name')
+    await waitFor(() => nameOn(1) === 'Whole Video Name' || null, 5000, 'name on the other clip')
+    const afterVideo = [nameOn(0), nameOn(1), nameOn(2)], saved = latest.current.video?.captionNames
+    activateClip(clip(1)); await sleep(500)
+    const sel = await waitFor(() => document.querySelector<HTMLSelectElement>('.clip-overlay select[aria-label="' + t('名前を使う範囲') + '"]'), 5000, 'scope select')
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'clip')
+    sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200)
+    await type('Only Here')
+    await waitFor(() => nameOn(1) === 'Only Here' || null, 5000, 'clip-only name')
+    const afterClip = [nameOn(0), nameOn(1), nameOn(2)]
+    await sleep(400)
+    await api.smokeShot!('caption-names.png')
+    return { captionNames: { player: twice[0].name, other: other.name, before, scopeDefault, afterVideo, saved, afterClip } }
   }
 
   // The caption's photo: off by default; on, a play whose player has a photo shows it above a

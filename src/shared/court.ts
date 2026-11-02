@@ -87,9 +87,10 @@ export function courtQuad(corners: CourtFit['corners'], part: CourtPart): [[numb
 
 // ---- which side, which cell -----------------------------------------------------------------
 
-// The team on the near side for a rally: swapped every set, and in set 5 once a team has 8.
+// The team on the near side for a rally: swapped every set up to set 4; set 5 starts on the same
+// sides as set 4 and swaps once a team has 8 (the score is the one before the rally).
 export function nearSide(fit: CourtFit, play: Pick<Play, 'setNum' | 'score'>): Side {
-  let flip = (play.setNum - 1) % 2 === 1
+  let flip = (Math.min(play.setNum, 4) - 1) % 2 === 1
   if (play.setNum === 5 && Math.max(play.score.home, play.score.away) >= 8) flip = !flip
   return flip ? other(fit.nearSet1) : fit.nearSet1
 }

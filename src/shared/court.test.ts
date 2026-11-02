@@ -46,8 +46,11 @@ describe('sides', () => {
     expect(nearSide(fit, { setNum: 1, score: { home: 0, away: 0 } })).toBe('*')
     expect(nearSide(fit, { setNum: 2, score: { home: 0, away: 0 } })).toBe('a')
     expect(nearSide(fit, { setNum: 3, score: { home: 0, away: 0 } })).toBe('*')
-    expect(nearSide(fit, { setNum: 5, score: { home: 7, away: 5 } })).toBe('*')
-    expect(nearSide(fit, { setNum: 5, score: { home: 8, away: 5 } })).toBe('a')
+    expect(nearSide(fit, { setNum: 4, score: { home: 0, away: 0 } })).toBe('a')
+    expect(nearSide(fit, { setNum: 5, score: { home: 0, away: 0 } })).toBe('a') // set 5 starts as set 4
+    expect(nearSide(fit, { setNum: 5, score: { home: 7, away: 5 } })).toBe('a')
+    expect(nearSide(fit, { setNum: 5, score: { home: 8, away: 5 } })).toBe('*') // a team has 8: swapped
+    expect(nearSide(fit, { setNum: 5, score: { home: 3, away: 8 } })).toBe('*')
   })
 
   it('finds zones on each half as seen from the camera', () => {

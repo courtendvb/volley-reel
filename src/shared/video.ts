@@ -16,6 +16,7 @@ export interface Video {
   annotations?: Annotation[] // objects shown on every clip of the video (表示範囲: 動画全体)
   cardAnnotations?: Annotation[] // objects on the video's title card (its opening card)
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
+  captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
   updatedAt: string
 }
 

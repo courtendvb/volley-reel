@@ -785,4 +785,8 @@ export const EN: Record<string, string> = {
   "コートのグリッドを合わせていない試合のプレー {0} 件は、向きが分からないため除いています": "{0} plays from matches without a fitted court grid are left out: their direction isn't known",
   "下から上へ": "Upward",
   "上から下へ": "Downward",
+  "名前を使う範囲": "Where the name is used",
+  "動画全体: この動画の、この選手のすべてのクリップのテロップに使う。このクリップだけ: このクリップだけ別の名前にする": "Whole video: the caption of every clip of this player in this video. This clip only: a different name on this clip alone",
+  "動画全体（この選手）": "Whole video (this player)",
+  "このクリップだけ": "This clip only",
 }

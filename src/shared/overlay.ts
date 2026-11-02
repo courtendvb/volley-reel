@@ -102,12 +102,13 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
   }
 }
 
-export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption']): CaptionData {
+// The name: the clip's own, else the video's name for the player (Video.captionNames), else the DVW's.
+export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption'], names?: Record<string, string>): CaptionData {
   const skill = SKILLS[play.skill] ?? play.skill
   const effect = EFFECTS[play.skill]?.[play.effect] ?? play.effect
   const parts = [s.showSkill ? skill : null, s.showEvaluation ? effect : null].filter(Boolean) as string[]
   const autoLine = parts.length ? parts.join(' · ').toUpperCase() : null
-  const name = o?.name?.trim() || displayName(dvw.players, play.side, play.jersey)
+  const name = o?.name?.trim() || names?.[play.playerKey]?.trim() || displayName(dvw.players, play.side, play.jersey)
   return {
     number: s.showNumber ? play.jersey : null,
     name: s.showName ? name : null,

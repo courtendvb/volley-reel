@@ -778,4 +778,11 @@ export const EN: Record<string, string> = {
   "最大化して再生": "Play maximized",
   "動画を最大化 / 元に戻す": "Maximize the video / back to normal",
   "通し再生を止める（最大化中は元の大きさに戻すだけ）": "Stop the through-play (while maximized, only back to normal size)",
+  "ボールが画面の上へ向かうか下へ向かうか。サーブ・アタックは打った側から、レセプション・ディグ・ブロックは相手側から。セットは向きで絞ると出ません。コートのグリッドを合わせた試合だけ分かります": "Whether the ball goes up or down the screen: a serve or attack from the player's side, a reception, dig or block from the other side. Sets don't show with a direction picked. Known only for matches with a fitted court grid",
+  "向き": "Direction",
+  "↑ 下から上": "↑ Upward",
+  "↓ 上から下": "↓ Downward",
+  "コートのグリッドを合わせていない試合のプレー {0} 件は、向きが分からないため除いています": "{0} plays from matches without a fitted court grid are left out: their direction isn't known",
+  "下から上へ": "Upward",
+  "上から下へ": "Downward",
 }

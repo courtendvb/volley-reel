@@ -174,7 +174,7 @@ export function App() {
 
 
   const settings = project?.settings
-  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, matchRank, matchLabels } = usePlaySearch(project, dvws, scope, matchId, matchOrder, filter)
+  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, scope, matchId, matchOrder, filter)
 
   // ---- reels --------------------------------------------------------------------------------
   // Undo puts back a scene or video (and shows it), or the project settings.
@@ -862,7 +862,7 @@ export function App() {
             <FilterPanel
               filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
-              shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
+              shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />

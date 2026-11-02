@@ -149,6 +149,17 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
   return { start: served ?? spot(play.startZone, play.startSub, startNear), end: spot(play.endZone, play.endSub, !startNear) }
 }
 
+// Which way the ball goes on screen in a play: 'up' from the near side toward the far one, 'down'
+// the other way. A serve or an attack leaves the player's side; a reception, dig, block or freeball
+// comes to it. A set has no way (null).
+export type PlayDir = 'up' | 'down'
+export function playDirection(play: ZonePlay, fit: CourtFit): PlayDir | null {
+  const ownNear = nearSide(fit, play) === play.side
+  if (play.skill === 'S' || play.skill === 'A') return ownNear ? 'up' : 'down'
+  if ('RDBF'.includes(play.skill)) return ownNear ? 'down' : 'up'
+  return null
+}
+
 // ---- drawing ---------------------------------------------------------------------------------
 
 export interface GridStyle {

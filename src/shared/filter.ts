@@ -1,5 +1,6 @@
 // Play search across matches (design §3.2, §3.3). Pure, so it is unit-tested without the app.
 import { displayName } from './dvw'
+import { playDirection, type CourtFit, type PlayDir } from './court'
 import type { ParsedDVW, Play, ProjectSettings, Side, Team } from './types'
 
 export type TeamRole = 'our' | 'opp'
@@ -18,10 +19,12 @@ export interface PlayRef {
   combo: string | null // attack combination (attacks) or setter call (sets), e.g. "X5", "K1"
   comboName: string | null // its name from the file's tables, e.g. "QUICK TEMPO A"
   hit: string | null // attacks: H hard, P soft, T tip
+  dir: PlayDir | null // which way the ball goes on screen (court.ts playDirection); null: no fitted court, or not known
 }
 
 export interface PlayFilter {
   team: 'all' | TeamRole // the project's target team or its opponents, whichever side they played
+  dir: 'all' | PlayDir // up the screen or down it; sets, and plays whose way isn't known, are left out
   person: string | null
   skills: string[] // empty = any
   effects: string[]
@@ -45,7 +48,7 @@ export interface PlayFilter {
 }
 
 export const EMPTY_FILTER: PlayFilter = {
-  team: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
+  team: 'all', dir: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
   phase: 'all', prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
   nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
@@ -60,7 +63,7 @@ export interface SavedFilter {
 // A filter read back from project.json: each condition takes the shape it has in EMPTY_FILTER, and
 // anything missing or of the wrong kind falls back to "any" (also for conditions added later).
 const CHOICES: Partial<Record<keyof PlayFilter, readonly string[]>> = {
-  team: ['all', 'our', 'opp'], phase: ['all', 'reception', 'transition'], prevTeam: ['any', 'same', 'opp'], nextTeam: ['any', 'same', 'opp'],
+  team: ['all', 'our', 'opp'], dir: ['all', 'up', 'down'], phase: ['all', 'reception', 'transition'], prevTeam: ['any', 'same', 'opp'], nextTeam: ['any', 'same', 'opp'],
 }
 const NUMBERS = new Set<keyof PlayFilter>(['sets', 'rots', 'oppRots', 'startZone', 'endZone'])
 
@@ -108,7 +111,8 @@ export function ourSide(teams: [Team, Team], codes: string[]): Side | null {
   return null
 }
 
-export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSettings): PlayRef[] {
+// court: the match's fitted court, for which way each play goes on screen.
+export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSettings, court?: CourtFit | null): PlayRef[] {
   const our = dvw.allHome ? null : ourSide(dvw.teams, settings.ourTeamCodes)
   // Rotations by team, not by who made the play. Where our side can't be known, home counts as ours
   // (all-home input scouts the home team).
@@ -124,6 +128,7 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
     ourRot: ourHome ? p.homeRot : p.awayRot,
     oppRot: ourHome ? p.awayRot : p.homeRot,
     ...detailOf(p.code, p.skill, dvw.codeNames ?? {}),
+    dir: court && !dvw.allHome ? playDirection(p, court) : null,
   }))
 }
 
@@ -154,6 +159,7 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
   return refs.filter(r => {
     const p = r.play
     if (f.team !== 'all' && r.teamRole !== null && r.teamRole !== f.team) return false
+    if (f.dir && f.dir !== 'all' && r.dir !== f.dir) return false
     if (f.person && r.personKey !== f.person) return false
     if (f.skills.length && !f.skills.includes(p.skill)) return false
     if (f.effects.length && !f.effects.includes(p.effect)) return false

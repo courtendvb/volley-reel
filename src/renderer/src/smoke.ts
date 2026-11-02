@@ -40,6 +40,7 @@ export interface SmokeOpts {
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
+  direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -133,6 +134,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
+    if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
@@ -1047,6 +1049,33 @@ export function installSmoke(h: SmokeHost): void {
     const t0 = Date.now()
     await waitFor(() => (!playback.current.seq && !full()) || null, 90000, 'back after the play ends')
     return { maximize: { ...maxed, escKeepsPlaying, leftAfterSec: +((Date.now() - t0) / 1000).toFixed(1), clips: Object.keys(built.clips).length } }
+  }
+
+  // Which way plays go on screen: unknown before the court is fitted, then the 向き buttons in the
+  // filters split the plays into up and down, and the list's rows show the arrows.
+  const smokeDirection = async () => {
+    const p0 = await api.getProject()
+    const m = p0!.matches[0]
+    const beforeKnown = latest.current.results.filter(r => r.dir).length
+    await api.setMatchCourt(m.id, { corners: [{ x: 0.36, y: 0.28 }, { x: 0.64, y: 0.28 }, { x: 0.14, y: 0.9 }, { x: 0.86, y: 0.9 }], nearSet1: '*' })
+    await loadProject(await api.getProject())
+    setFilter(EMPTY_FILTER)
+    await waitFor(() => latest.current.results.some(r => r.dir) || null, 20000, 'directions known')
+    const all = latest.current.results.length
+    const press = async (label: string) => {
+      const b = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.filters button[role=radio]')].find(x => x.textContent === label) ?? null, 5000, label)
+      b.click(); await sleep(400)
+      return latest.current.results
+    }
+    const up = await press(t('↑ 下から上')), upCount = up.length, upSkills = [...new Set(up.map(r => r.play.skill))].sort().join('')
+    const arrowsUp = [...document.querySelectorAll('.play-row .dir')].map(e => e.textContent)
+    const hint = !!document.querySelector('.filters .hint')
+    await api.smokeShot!('direction-up.png')
+    const down = await press(t('↓ 上から下')), downCount = down.length
+    const allUp = up.every(r => r.dir === 'up'), allDown = down.every(r => r.dir === 'down')
+    const unknown = latest.current.results.length === 0 ? null : all - upCount - downCount
+    await press(t('すべて'))
+    return { direction: { beforeKnown, all, up: upCount, down: downCount, unknown, allUp, allDown, upSkills, arrowsShown: arrowsUp.length, arrowsAllUp: arrowsUp.every(a => a === '↑'), hint } }
   }
 
   // The caption's photo: off by default; on, a play whose player has a photo shows it above a

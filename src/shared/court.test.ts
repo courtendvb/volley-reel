@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CORNERS, homography, nearSide, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
+import { DEFAULT_CORNERS, homography, nearSide, playDirection, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -97,5 +97,22 @@ describe('playZones', () => {
     expect(playZones(set, fit, attack)).toEqual({ start: { cell: { row: 4, col: 1 }, sub: 'C' }, end: { cell: { row: 3, col: 0 }, sub: 'C' } })
     expect(playZones(set, fit, dig).end).toBeNull() // the other team's play
     expect(playZones(lone, fit, d.plays[7] ?? null)).toEqual({ start: { cell: { row: 2, col: 1 }, sub: 'B' }, end: null }) // set 2: home is far
+  })
+})
+
+describe('playDirection', () => {
+  it("serve and attack leave the player's side; reception and dig come to it; a set goes by its zones", () => {
+    expect(playDirection(serve, fit)).toBe('down') // away, far in set 1
+    expect(playDirection(reception, fit)).toBe('down') // home, near: the serve comes down to it
+    expect(playDirection(attack, fit)).toBe('up') // from the near side
+    expect(playDirection(dig, fit)).toBe('up') // the far side digs the near side's attack
+    expect(playDirection(set, fit, attack)).toBe('up') // from zone 8 toward the net (zone 4)
+    expect(playDirection(set, fit, dig)).toBeNull() // no attack after it: not known
+  })
+
+  it('turns with the sides', () => {
+    const swapped: CourtFit = { ...fit, nearSet1: fit.nearSet1 === '*' ? 'a' : '*' }
+    expect(playDirection(serve, swapped)).toBe('up')
+    expect(playDirection(attack, swapped)).toBe('down')
   })
 })

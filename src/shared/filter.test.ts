@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import { EMPTY_FILTER, applyFilter, buildRefs, cleanFilter, cleanSavedFilters, listPeople, ourSide, sameFilter } from './filter'
+import type { CourtFit } from './court'
 import type { ProjectSettings } from './types'
 
 // Two made-up matches: HTH at home in A, away in B (same player, other side, "-a" style ID in B).
@@ -188,5 +189,18 @@ describe('saved filters', () => {
     expect(sameFilter({ ...EMPTY_FILTER, rots: [1, 3] }, { ...EMPTY_FILTER, rots: [3, 1] })).toBe(true)
     expect(sameFilter({ ...EMPTY_FILTER, rots: [1] }, { ...EMPTY_FILTER, oppRots: [1] })).toBe(false)
     expect(sameFilter({ ...EMPTY_FILTER, person: 'TAN-TAR-02' }, EMPTY_FILTER)).toBe(false)
+  })
+})
+
+describe('direction', () => {
+  it('needs a fitted court; the filter keeps the plays going that way', () => {
+    expect(refs().every(r => r.dir === null)).toBe(true) // no court fitted
+    const court: CourtFit = { corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }], nearSet1: '*' }
+    const rs = buildRefs('A', A, settings, court)
+    const up = applyFilter(rs, { ...EMPTY_FILTER, dir: 'up' }), down = applyFilter(rs, { ...EMPTY_FILTER, dir: 'down' })
+    expect(up.map(r => r.play.skill)).toEqual(['S', 'R']) // home serves from the near side; away receives on the far one
+    expect(down.map(r => r.play.skill)).toEqual(['A']) // away attacks from the far side
+    expect(up.length + down.length).toBe(rs.filter(r => r.dir).length)
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, dir: 'up' })).toEqual([])
   })
 })

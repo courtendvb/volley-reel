@@ -133,6 +133,7 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-row .match { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .play-row .team.ours { color: var(--primary); font-weight: 600; }
 .play-row .player { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.play-row .dir { color: var(--sub); margin-right: 3px; }
 .play-row .skill { white-space: nowrap; }
 .skill-S { color: var(--skill-s); } .skill-R { color: var(--skill-r); } .skill-A { color: var(--danger-strong); }
 .skill-B { color: var(--skill-b); } .skill-D { color: var(--amber); } .skill-E { color: var(--sub); }

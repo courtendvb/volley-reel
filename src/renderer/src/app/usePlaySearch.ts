@@ -10,7 +10,7 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
   const settings = project?.settings
   const refsByMatch = useMemo(() => {
     const out: Record<string, PlayRef[]> = {}
-    if (settings) for (const m of project!.matches) if (dvws[m.id]) out[m.id] = buildRefs(m.id, dvws[m.id], settings)
+    if (settings) for (const m of project!.matches) if (dvws[m.id]) out[m.id] = buildRefs(m.id, dvws[m.id], settings, m.court)
     return out
   }, [dvws, settings, project])
 
@@ -24,6 +24,7 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
   // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
   const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
   const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
+  const dirUnknown = useMemo(() => scopeRefs.filter(r => r.dir === null).length, [scopeRefs])
   // Where each match comes in the play list (old or new matches first): clips without a marker, and
   // clips just marked, go in this order too, so the scene reads like the list it was picked from.
   const matchRank = useMemo(() => {
@@ -33,5 +34,5 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
   }, [project, matchOrder])
   const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
 
-  return { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, matchRank, matchLabels }
+  return { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels }
 }

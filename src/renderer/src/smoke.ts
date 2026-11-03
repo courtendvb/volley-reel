@@ -97,6 +97,13 @@ export interface SmokeHost {
 const api = window.api
 const sleep = (ms: number) => new Promise(ok => setTimeout(ok, ms))
 
+// Opens one of the panels under the video (StageTabs) by its tab, for steps that use it with the real mouse.
+async function openPanel(p: 'trim' | 'objects' | 'display' | 'court'): Promise<void> {
+  const label = { trim: t('トリム'), objects: t('図形'), display: t('表示'), court: t('コート') }[p]
+  const tab = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === label && !b.disabled) ?? null, 10000, `${label} tab`)
+  if (tab.getAttribute('aria-selected') !== 'true') { tab.click(); await sleep(250) }
+}
+
 function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() => string) = 'condition'): Promise<T> {
   return new Promise((resolve, reject) => {
     const start = Date.now()
@@ -1340,6 +1347,7 @@ export function installSmoke(h: SmokeHost): void {
     annCanvas.dispatchEvent(new PointerEvent('pointermove', apt(qx + 0.02, qy - 0.02))); await sleep(30)
     annCanvas.dispatchEvent(new PointerEvent('pointerup', apt(qx + 0.02, qy - 0.02))); await sleep(200)
     const dragged = heat()!.quad!
+    await openPanel('objects') // the slider is in the objects panel under the video
     // The transparency slider with the real mouse and keys: a drag, a click, then → (moves the
     // slider, not the video) and ↓ (stays on the slider, not the next play).
     const opacity = () => heat()?.opacity ?? 1

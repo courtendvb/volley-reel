@@ -808,4 +808,13 @@ export const EN: Record<string, string> = {
   "この停止を外す": "Remove this hold",
   "再生位置にする": "Set to the playhead",
   "{0}を再生位置にする": "Set {0} to the playhead",
+  "トリム": "Trim",
+  "図形": "Objects",
+  "IN / OUT、スロー・停止、図形の表示時間": "IN / OUT, slow and hold, when objects show",
+  "テキスト・矢印・図形・画像と書式": "Text, arrows, shapes, pictures and their format",
+  "見出し、スコアボード・テロップ": "Headline, scoreboard and caption",
+  "コートのグリッドとプレーのゾーン": "The court grid and the play's zones",
+  "動画の下の欄": "Panels under the video",
+  "シーンのクリップを選ぶと使えます": "Pick a clip in the scene to use it",
+  "閉じて動画を大きく": "Close for a bigger video",
 }

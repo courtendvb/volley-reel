@@ -817,4 +817,5 @@ export const EN: Record<string, string> = {
   "動画の下の欄": "Panels under the video",
   "シーンのクリップを選ぶと使えます": "Pick a clip in the scene to use it",
   "閉じて動画を大きく": "Close for a bigger video",
+  "試合の状況（セット・ローテ・局面・直前直後）": "Match situation (set, rotation, phase, plays around)",
 }

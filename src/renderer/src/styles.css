@@ -106,7 +106,7 @@ button:disabled { opacity: 0.6; cursor: default; }
 .empty { margin: auto; text-align: center; max-width: 460px; }
 .empty h2 { font-size: 18px; font-weight: 600; }
 
-.workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 470px minmax(0, 1fr) 360px; }
+.workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 430px minmax(0, 1fr) 360px; }
 
 .sidebar {
   display: flex; flex-direction: column; min-height: 0;
@@ -118,9 +118,9 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
 .play-row {
   position: absolute; left: 0; right: 0;
-  display: grid; grid-template-columns: 22px 40px 34px minmax(0, 1fr) 124px 98px; gap: 5px; align-items: center; cursor: pointer;
+  display: grid; grid-template-columns: 20px 36px 34px minmax(0, 1fr) 112px 88px; gap: 4px; align-items: center; cursor: pointer;
   width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
-  padding: 5px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; background: transparent;
+  padding: 5px 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; background: transparent;
 }
 .play-row:hover { background: var(--soft); }
 .play-row.now { box-shadow: inset 3px 0 0 var(--faint); }
@@ -208,7 +208,7 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .play-row .marks { display: flex; gap: 2px; justify-content: flex-end; }
-.play-row .mark { padding: 0; width: 18px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 1; color: var(--sub); }
+.play-row .mark { padding: 0; width: 16px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 1; color: var(--sub); }
 .play-row .mark:hover { color: var(--primary); border-color: var(--primary); }
 .play-row .mark.on { color: #fff; font-weight: 600; }
 .play-row.in-scene { box-shadow: inset 3px 0 0 var(--border-strong); }

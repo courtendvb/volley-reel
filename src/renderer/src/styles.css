@@ -137,6 +137,13 @@ button:disabled { opacity: 0.6; cursor: default; }
 /* Slow stretches and holds on the trim bar (TrimBar SlowHold). */
 .trim-slow { position: absolute; top: 2px; height: 12px; background: rgba(59, 130, 246, 0.35); border-radius: 3px; font-size: 9px; line-height: 12px; color: #1D4ED8; text-align: center; overflow: hidden; pointer-events: none; }
 .trim-hold { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #F59E0B; pointer-events: none; }
+/* The tabs under the video (StageTabs) and their panels; a closed panel is kept, only hidden. */
+.stage-tabs { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); }
+.stage-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 4px 12px; color: var(--sub); }
+.stage-tabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.stage-tabs button:disabled { opacity: 0.45; }
+.stage-panel[hidden] { display: none; }
+.stage-panel { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: none; }
 .trim-timing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .trim-timing-item { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; }
 .trim-timing input[type=number] { width: 56px; }

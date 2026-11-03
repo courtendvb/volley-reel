@@ -52,6 +52,7 @@ import { useSlideFiles } from './app/useSlideFiles'
 import { useExport } from './app/useExport'
 import { useShortcuts } from './app/useShortcuts'
 import { Banners } from './app/Banners'
+import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
 
 const api = window.api
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
@@ -110,6 +111,11 @@ export function App() {
   const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, detail: detail === 'sub' ? 'sub' : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
+  // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
+  const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : 'trim' } catch { return 'trim' } })
+  useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
+  // An object picked on the video (or a headline's 書式) opens the objects panel, unless the trim panel is up (its lanes show the object's times).
+  const showObjects = () => setStagePanel(p => (p === 'trim' ? p : 'objects'))
   const gridStyleRef = useRef(gridStyle)
   gridStyleRef.current = gridStyle
 
@@ -901,7 +907,7 @@ export function App() {
                       <AnnotationLayer
                         size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here}
                         editable={!seqPlaying} tool={annTool} style={annStyle}
-                        selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={selectAnn} onChange={setAnns}
+                        selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={id => { selectAnn(id); if (id) showObjects() }} onChange={setAnns}
                       />
                     )}
                     {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
@@ -929,14 +935,16 @@ export function App() {
               />
             )}
             {!cardEdit && match && (
+              <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting} />
+            )}
+            {!cardEdit && match && (
+              <div className="stage-panel" hidden={stagePanel !== 'court' && !courtFitting}>
               <CourtBar match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} />
-            )}
-            {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
-                onFormat={id => { setAnnTool('select'); setSelectedAnn(id) }} />
+              </div>
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
+              <div className="stage-panel" hidden={stagePanel !== 'trim'}>
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -964,16 +972,22 @@ export function App() {
                   }))
                 }}
               />
+              </div>
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
+              <div className="stage-panel" hidden={stagePanel !== 'objects'}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
                 court={matches[active.matchId]?.court?.corners ?? null}
               />
+              </div>
             )}
-            {!cardEdit && active && activeInfo?.ref && active.matchId === matchId && (
+            {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
+              <div className="stage-panel" hidden={stagePanel !== 'display'}>
+              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
+                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); setStagePanel('objects') }} />
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
@@ -988,6 +1002,7 @@ export function App() {
                 autoLine={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showSkill: true, showEvaluation: true }).line ?? '' : ''}
                 onChange={o => { const r = latest.current.reel; if (r) updateReel(setOverlayOverride(r, active.id, o)) }}
               />
+              </div>
             )}
           </section>
           <div className="right-col" onPointerDownCapture={() => { focusPane.current = 'scene' }}>

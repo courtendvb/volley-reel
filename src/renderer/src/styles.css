@@ -134,6 +134,13 @@ button:disabled { opacity: 0.6; cursor: default; }
 .play-row .team.ours { color: var(--primary); font-weight: 600; }
 .play-row .player { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .play-row .dir { color: var(--sub); margin-right: 3px; }
+/* Slow stretches and holds on the trim bar (TrimBar SlowHold). */
+.trim-slow { position: absolute; top: 2px; height: 12px; background: rgba(59, 130, 246, 0.35); border-radius: 3px; font-size: 9px; line-height: 12px; color: #1D4ED8; text-align: center; overflow: hidden; pointer-events: none; }
+.trim-hold { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #F59E0B; pointer-events: none; }
+.trim-timing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.trim-timing-item { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; }
+.trim-timing input[type=number] { width: 56px; }
+.sec-field { display: inline-flex; align-items: center; gap: 1px; }
 .play-row .skill { white-space: nowrap; }
 .skill-S { color: var(--skill-s); } .skill-R { color: var(--skill-r); } .skill-A { color: var(--danger-strong); }
 .skill-B { color: var(--skill-b); } .skill-D { color: var(--amber); } .skill-E { color: var(--sub); }

@@ -945,6 +945,8 @@ export function App() {
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <div className="stage-panel" hidden={stagePanel !== 'trim'}>
+              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
+                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); setStagePanel('objects') }} />
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -986,8 +988,6 @@ export function App() {
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
               <div className="stage-panel" hidden={stagePanel !== 'display'}>
-              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
-                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); setStagePanel('objects') }} />
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}

@@ -35,6 +35,12 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
   const detailCount = f.tempos.length + f.combos.length + f.hits.length
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
+  // Set, rotations, phase and the plays around: folded like the detailed search, opened when one is in use.
+  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.phase !== 'all' ? 1 : 0)
+    + f.prevSkills.length + f.prevEffects.length + (f.prevTeam !== 'any' ? 1 : 0) + (f.prevSkipSet ? 1 : 0)
+    + f.nextSkills.length + f.nextEffects.length + (f.nextTeam !== 'any' ? 1 : 0) + (f.nextSkipSet ? 1 : 0)
+  const [situOpen, setSituOpen] = useState(situCount > 0)
+  useEffect(() => { if (situCount > 0) setSituOpen(true) }, [situCount > 0])
   const comboName = (code: string) => details.combos.find(c => c.code === code)?.name
 
   return (
@@ -81,20 +87,28 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       <Chips label={t('スキル')} values={Object.keys(SKILLS)} selected={f.skills} onChange={skills => set({ skills })} render={k => SKILLS[k]} />
       <Chips label={t('評価')} values={EFFECT_KEYS} selected={f.effects} onChange={effects => set({ effects })}
         render={k => effectHint ? `${k} ${effectHint[k]}` : k} />
-      <Chips label={t('セット')} values={[1, 2, 3, 4, 5]} selected={f.sets} onChange={sets => set({ sets })} />
-      {/* Rotations by team, whoever made the play: ours, and the opponent's right under it. */}
-      <Chips label={t('ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.rots} onChange={rots => set({ rots })}
-        title={() => t('{0}のローテーション', targetCode || t('対象チーム'))} />
-      <Chips label={t('相手ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
-        title={() => t('相手チームのローテーション')} />
-      <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
-        <label className="field-label">{t('局面')}</label>
-        <Segmented value={f.phase} onChange={phase => set({ phase })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />
+      <div className="filter-row">
+        <button className="link" aria-expanded={situOpen} onClick={() => setSituOpen(o => !o)}>
+          {situOpen ? '▾' : '▸'} {t('試合の状況（セット・ローテ・局面・直前直後）')}{situCount ? t('（{0}）', situCount) : ''}</button>
       </div>
-      <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）')}
-        skipTitle={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')} />
-      <Near f={f} set={set} which="next" label={t('直後')} title={t('同じラリーで一つ後のプレー（フリーボールも数えます）。ラリー最後のプレーは入りません')}
-        skipTitle={t('直後が自チームのトスなら、その次のプレーで探します。レセプションからのアタックの結果など')} />
+      {situOpen && (
+        <div className="filter-detail">
+        <Chips label={t('セット')} values={[1, 2, 3, 4, 5]} selected={f.sets} onChange={sets => set({ sets })} />
+        {/* Rotations by team, whoever made the play: ours, and the opponent's right under it. */}
+        <Chips label={t('ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.rots} onChange={rots => set({ rots })}
+          title={() => t('{0}のローテーション', targetCode || t('対象チーム'))} />
+        <Chips label={t('相手ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
+          title={() => t('相手チームのローテーション')} />
+        <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
+          <label className="field-label">{t('局面')}</label>
+          <Segmented value={f.phase} onChange={phase => set({ phase })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />
+        </div>
+        <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）')}
+          skipTitle={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')} />
+        <Near f={f} set={set} which="next" label={t('直後')} title={t('同じラリーで一つ後のプレー（フリーボールも数えます）。ラリー最後のプレーは入りません')}
+          skipTitle={t('直後が自チームのトスなら、その次のプレーで探します。レセプションからのアタックの結果など')} />
+        </div>
+      )}
       <div className="filter-row">
         <button className="link" aria-expanded={detailOpen} onClick={() => setDetailOpen(o => !o)}>
           {detailOpen ? '▾' : '▸'} {t('詳細（テンポ・コンビ・打ち方）')}{detailCount ? t('（{0}）', detailCount) : ''}</button>

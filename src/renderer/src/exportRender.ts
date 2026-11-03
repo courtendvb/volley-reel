@@ -8,6 +8,7 @@ import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
 import { drawCourt, type CourtFit, type GridStyle, type PlayZones } from '../../shared/court'
+import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
 export const EXPORT_HEIGHT = 720
@@ -68,7 +69,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     }
     const c = p.clip, r = d.range(c, p.sceneId)
     if (!r) continue
-    items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, p.group, r, overlay, d, W, H, png, assetImage) })
+    items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, p.group, r, overlay, d, W, H, png, assetImage), ...(c.timing ? { timing: c.timing } : {}) })
   }
   // Chapters left with nothing in them (every clip skipped) are dropped.
   const marks = (chapters ?? []).map(c => ({ item: firstItem[c.at] ?? items.length, title: c.title }))
@@ -86,10 +87,16 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
   const court = overlay.court.enabled && d.courtStyle ? d.court?.(c) ?? null : null
-  const window = (a: Annotation) => ({ from: Math.max(0, (a.showFrom ?? r.in) - r.in), to: Math.min(r.out, a.showTo ?? r.out) - r.in })
+  // Windows in seconds into the clip as played: slow stretches stretch them, and an object shown at
+  // a held moment stays up while it is held (shared/timing.ts).
+  const ps = pieces(r.in, r.out, c.timing), played = playedSec(ps)
+  const window = (a: Annotation) => {
+    const from = Math.max(r.in, a.showFrom ?? r.in), to = Math.min(r.out, a.showTo ?? r.out)
+    return to <= from ? { from: 0, to: 0 } : { from: playedAt(ps, from, 'start'), to: playedAt(ps, to, 'end') }
+  }
   const fades = (a: Annotation) => !!(a.fadeIn || a.fadeOut)
   // Objects shown for the whole clip without a fade share one layer; the rest go by window (and fade).
-  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && w.from <= 0.001 && w.to >= r.out - r.in - 0.001 }
+  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && w.from <= 0.001 && w.to >= played - 0.001 }
 
   // The video's objects at the bottom, then the scene's, the marker group's, the clip's (as in the editor).
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]

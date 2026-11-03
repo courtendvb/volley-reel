@@ -7,6 +7,7 @@ import type { OverlayTheme } from './overlay'
 import type { PackInfo, PhotoTarget } from './pack'
 import type { Reel } from './reel'
 import type { Video } from './video'
+import type { ClipTiming } from './timing'
 
 export type Side = '*' | 'a'
 
@@ -268,7 +269,7 @@ export interface ExportLayer {
 }
 
 export type ExportItem =
-  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[] }
+  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[]; timing?: ClipTiming } // layers' from / to: seconds into the clip as played (with its slows and holds)
   | { kind: 'card'; png: Uint8Array; durationSec: number }
 
 export interface ExportJob {

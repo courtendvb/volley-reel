@@ -19,6 +19,7 @@ import { courtQuad, playZones } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
 import type { AppLatest } from './app/appState'
+import { clipPlayedSec } from '../../shared/timing'
 
 export interface SmokeOpts {
   play: number
@@ -41,6 +42,7 @@ export interface SmokeOpts {
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
+  slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
@@ -136,6 +138,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
+    if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
@@ -1078,6 +1081,50 @@ export function installSmoke(h: SmokeHost): void {
     const other = all - upCount - downCount - sets // plays neither up nor down that aren't sets: none once the court is fitted
     await press(t('すべて'))
     return { direction: { beforeKnown, all, up: upCount, down: downCount, sets, other, setArrows: [...document.querySelectorAll('.play-row .skill-E .dir')].length, allUp, allDown, upSkills, arrowsShown: arrowsUp.length, arrowsAllUp: arrowsUp.every(a => a === '↑'), hint } }
+  }
+
+  // Slow and hold: the trim bar's ＋ スロー at IN+1 s and ＋ 停止 at IN+3 s; the loop plays the stretch at
+  // half speed and stops on the hold for its seconds; the export is as long as the clip played.
+  const smokeSlowHold = async (res: PlayRef[], exportTo?: string) => {
+    const r = res[0]
+    const { reel: added, ids } = addClips(newReel('slow smoke'), [{ matchId: r.matchId, play: r.play }])
+    const built = { ...added, scope: 'all' as const }
+    const v = newVideo('slow smoke', [built.id])
+    setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+    await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'slow reel')
+    const clip = () => latest.current.reel!.clips[ids[0]]
+    activateClip(clip()); await sleep(800)
+    const range = latest.current.clipInfo(clip()).range!
+    const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.trim-timing button')].find(b => b.textContent === label)!
+    playback.pause(); await playback.seekAndWait(range.in + 1)
+    button(t('＋ スロー')).click(); await sleep(300)
+    await playback.seekAndWait(range.in + 3)
+    button(t('＋ 停止')).click(); await sleep(300)
+    const timing = clip().timing
+    if (!timing?.slows?.length || !timing.holds?.length) throw new Error('slow or hold not added: ' + JSON.stringify(timing))
+    // An object shown across the hold.
+    const hold = timing.holds[0].at
+    updateReel(setAnnotations(latest.current.reel!, ids[0], [{ id: 'held', kind: 'text', color: '#FFFFFF', x: 0.1, y: 0.1, text: 'HOLD', size: 36, showFrom: hold - 0.3, showTo: hold + 0.3 }]))
+    await sleep(300)
+    const video = document.querySelector<HTMLVideoElement>('video')!
+    await playback.seekAndWait(range.in); playback.toggle()
+    const slowRate = await waitFor(() => (playback.current.time > timing.slows![0].from + 0.2 && playback.current.time < timing.slows![0].to ? video.playbackRate : null), 10000, 'in the slow stretch')
+    await waitFor(() => (playback.current.paused && Math.abs(playback.current.time - hold) < 0.1) || null, 15000, 'stopped on the hold')
+    const t0 = Date.now()
+    await waitFor(() => !playback.current.paused || null, 10000, 'playing again after the hold')
+    const heldSec = +((Date.now() - t0) / 1000).toFixed(2)
+    const rateAfter = video.playbackRate
+    playback.pause()
+    await api.smokeShot!('slow-hold.png')
+    let exported: unknown = null
+    if (exportTo) {
+      const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'slow smoke' })
+      if (!job) throw new Error('export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'slow export done')
+      const item = job.items.find(i => i.kind === 'clip')
+      exported = { state: latest.current.exportState?.status, message: latest.current.exportState?.message, layers: item && item.kind === 'clip' ? item.layers.map(l => [l.from ?? null, l.to ?? null]) : null }
+    }
+    return { slowHold: { range: [range.in, range.out], timing, slowRate, heldSec, rateAfter, playedSec: clipPlayedSec(range, timing), exported } }
   }
 
   // The caption's name for a player across the video: typed on one clip (whole video, the default),

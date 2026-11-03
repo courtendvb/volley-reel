@@ -1,5 +1,6 @@
 // Reel = the blueprint of one highlight video (design §3.4). Pure functions returning new reels,
 // so the UI can treat a reel as immutable state and every change is unit-testable.
+import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
 import type { ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
@@ -20,6 +21,7 @@ export interface Clip {
   overlayOverride?: ClipOverlayOverride // design §3.7: hide an auto element or rewrite the caption
   mode?: ClipMode // how it was cut when added from the search; missing = the scene's default
   tag?: string // a short note ("1", "A") to sort a group's clips by hand; never played or exported
+  timing?: ClipTiming // slow stretches and holds (shared/timing.ts); video times like inSec / outSec
 }
 
 // "keyplay": key play ± seconds. "toEnd": from just before the key play to the end of its rally.
@@ -412,6 +414,13 @@ export function setAnnotations(reel: Reel, clipId: string, annotations: Annotati
   const c = reel.clips[clipId]
   if (!c) return reel
   return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, annotations: annotations.map(roundCoords) } } })
+}
+
+export function setTiming(reel: Reel, clipId: string, timing: ClipTiming): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  const { timing: _old, ...rest } = c
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: hasTiming(timing) ? { ...rest, timing } : rest } })
 }
 
 export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {

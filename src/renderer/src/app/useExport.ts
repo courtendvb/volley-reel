@@ -10,6 +10,7 @@ import type { ClipInfo } from '../components/ReelPanel'
 import type { ExportTarget } from '../components/ExportPanel'
 import { EXPORT_HEIGHT, buildExportJob } from '../exportRender'
 import type { AppLatest } from './appState'
+import { clipPlayedSec } from '../../../shared/timing'
 import { t } from '../../../shared/i18n'
 
 const api = window.api
@@ -91,7 +92,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     for (const it of plan) {
       if (it.kind === 'card') { sec += it.durationSec; if (it.card.slide) slides++; continue }
       const r = infoFor(it.clip, byId[it.sceneId] ?? null).range
-      if (r) { sec += r.out - r.in; clips++ }
+      if (r) { sec += clipPlayedSec(r, it.clip.timing); clips++ }
     }
     return { sec, clips, slides, empty: !clips && !slides }
   }

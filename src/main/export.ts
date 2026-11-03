@@ -8,6 +8,7 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
 import { chapterText } from '../shared/video'
+import { clipPlayedSec, pieces } from '../shared/timing'
 import { ffmpegDir } from './ffmpegPath'
 import { probe } from './media'
 import { t } from '../shared/i18n'
@@ -30,7 +31,7 @@ export class Exporter {
     this.cancelled = false
     const t0 = Date.now()
     const elapsed = () => (Date.now() - t0) / 1000
-    const dur = (it: ExportItem) => (it.kind === 'clip' ? it.out - it.in : it.durationSec)
+    const dur = (it: ExportItem) => (it.kind === 'clip' ? clipPlayedSec(it, it.timing) : it.durationSec)
     const total = job.items.reduce((s, it) => s + dur(it), 0)
     await rm(workDir, { recursive: true, force: true })
     await mkdir(workDir, { recursive: true })
@@ -124,15 +125,19 @@ function encoderArgs(fpsStr: string): string[] {
 }
 
 // -ss before -i seeks fast and, because we re-encode, still cuts on the exact frame. Overlay
-// filters see t from 0 at the clip's IN, which is what the layers' from/to are relative to.
+// filters see t from 0 at the clip's IN, as played: its slow stretches and holds (retime) come
+// first, and the layers' from/to are times in the played clip.
 async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string, job: ExportJob, dir: string, i: number, enc: string[]): Promise<string[]> {
   const args = ['-ss', it.in.toFixed(3), '-t', (it.out - it.in).toFixed(3), '-i', video]
   let fc = `[0:v]scale=${job.width}:${job.height}:flags=lanczos,fps=${job.fpsStr},format=yuv420p,setsar=1[v0]`
   let last = 'v0'
+  const rt = retime(it, job.fpsStr)
+  if (rt) { fc += `;[v0]${rt}[vt]`; last = 'vt' }
+  const dur = clipPlayedSec(it, it.timing)
   for (const [j, l] of it.layers.entries()) {
     const png = join(dir, `clip${i}-layer${j}.png`)
     await writeFile(png, l.png)
-    const dur = it.out - it.in, from = l.from ?? 0, to = l.to ?? dur
+    const from = l.from ?? 0, to = l.to ?? dur
     const enable = l.from !== undefined || l.to !== undefined ? `:enable='between(t,${from.toFixed(3)},${to.toFixed(3)})'` : ''
     if (l.fadeIn || l.fadeOut) {
       // A fading layer is the picture looped over the clip, its alpha faded at its window's ends.
@@ -146,9 +151,25 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
     }
     last = `v${j + 1}`
   }
-  const f = fades(job.fadeSec, it.out - it.in)
+  const f = fades(job.fadeSec, dur)
   if (f) { fc += `;[${last}]${f.slice(1)}[vf]`; last = 'vf' }
   return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, join(dir, `seg${String(i).padStart(4, '0')}.mp4`)]
+}
+
+// The clip's slow stretches and holds as a filter chain on the trimmed clip (times from 0 at IN), or
+// null when it has none: each piece cut from a copy of the clip, slowed by stretching its timestamps
+// or held by cloning one frame, then joined and put back on the frame rate.
+export function retime(it: Extract<ExportItem, { kind: 'clip' }>, fpsStr: string): string | null {
+  const ps = pieces(it.in, it.out, it.timing)
+  if (ps.length < 2 && !(ps[0]?.kind === 'play' && ps[0].rate !== 1)) return null
+  const [n, d] = fpsStr.split('/').map(Number)
+  const frame = 1 / (d ? n / d : n), last = Math.max(0, it.out - it.in - frame)
+  const parts = ps.map((p, k) => {
+    if (p.kind === 'play') return `[r${k}]trim=start=${(p.from - it.in).toFixed(4)}:end=${(p.to - it.in).toFixed(4)},setpts=(PTS-STARTPTS)/${p.rate}[q${k}]`
+    const at = Math.min(last, Math.max(0, p.at - it.in))
+    return `[r${k}]trim=start=${at.toFixed(4)}:end=${(at + frame).toFixed(4)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${Math.max(0, p.sec - frame).toFixed(4)}[q${k}]`
+  })
+  return `split=${ps.length}${ps.map((_, k) => `[r${k}]`).join('')};${parts.join(';')};${ps.map((_, k) => `[q${k}]`).join('')}concat=n=${ps.length}:v=1:a=0,fps=${fpsStr}`
 }
 
 // ",fade=in…,fade=out…" for an item of dur seconds (at most a third of it each), or ''.

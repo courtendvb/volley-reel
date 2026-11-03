@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, setTiming, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
 import type { ImportProgress, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
@@ -42,6 +42,7 @@ import { t } from '../../shared/i18n'
 import { captionPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
+import { clipPlayedSec } from '../../shared/timing'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -237,7 +238,7 @@ export function App() {
     const hit = statsMemo.get(s)
     if (hit) return hit
     const o = orderOf(s)
-    const st = { clips: o.length, sec: o.reduce((t, c) => { const r = infoFor(c, s).range!; return t + r.out - r.in }, 0) }
+    const st = { clips: o.length, sec: o.reduce((t, c) => { return t + clipPlayedSec(infoFor(c, s).range!, c.timing) }, 0) }
     statsMemo.set(s, st)
     return st
   }, [orderOf, infoFor, statsMemo])
@@ -246,7 +247,7 @@ export function App() {
     return playOrder(reel, c => { const i = clipInfo(c); return [i.matchKey, i.range?.in ?? 0] })
       .filter(c => !missing.has(c.id) && clipInfo(c).range)
   }, [reel, clipInfo, missing])
-  const orderSec = useMemo(() => order.reduce((s, c) => { const r = clipInfo(c).range!; return s + r.out - r.in }, 0), [order, clipInfo])
+  const orderSec = useMemo(() => order.reduce((s, c) => s + clipPlayedSec(clipInfo(c).range!, c.timing), 0), [order, clipInfo])
   // Clips of one match whose ranges overlap (e.g. two plays of the same rally): warned, both kept.
   const overlaps = useMemo(() => {
     if (!reel) return new Map<string, string[]>()
@@ -419,7 +420,7 @@ export function App() {
       // the start points at the first of them.
       if (p.kind === 'card') { if (clipNo === startAt && startItem < 0) startItem = items.length; items.push({ card: p.card, durationSec: p.durationSec }); clipAt.push(null); continue }
       if (clipNo === startAt && startItem < 0) startItem = items.length
-      items.push({ key: p.clip.matchId, ...inf(p.clip, byId[p.sceneId] ?? null).range! })
+      items.push({ key: p.clip.matchId, ...inf(p.clip, byId[p.sceneId] ?? null).range!, timing: p.clip.timing })
       clipAt.push({ clip: p.clip, sceneId: p.sceneId, group: p.group })
       clipNo++
     }
@@ -460,7 +461,7 @@ export function App() {
   const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out
   // The active clip loops while it's being trimmed; a through-play overrides the loop.
   useEffect(() => {
-    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun && loopOn ? { key: active.matchId, in: loopIn, out: loopOut } : null)
+    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun && loopOn ? { key: active.matchId, in: loopIn, out: loopOut, timing: active.timing } : null)
   }, [active, loopIn, loopOut, seqPlaying, listRun, loopOn])
 
   useEffect(() => setSelectedAnn(null), [activeClipId])
@@ -946,6 +947,7 @@ export function App() {
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
                 onTrim={trim} loop={loopOn} onLoop={setLoopOn}
+                timing={active.timing} onTiming={tm => { const r = latest.current.reel; if (r) updateReel(setTiming(r, active.id, tm)) }}
                 objects={active.annotations.map(a => ({
                   id: a.id, label: a.kind === 'text' ? `T ${a.text}` : KIND_LABEL[a.kind],
                   from: a.showFrom ?? activeInfo.range!.in, to: a.showTo ?? activeInfo.range!.out, set: a.showFrom !== undefined || a.showTo !== undefined,

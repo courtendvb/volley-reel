@@ -3,6 +3,7 @@ import { snapTime } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
 import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
+import { SLOW_RATES, clipPlayedSec, type ClipTiming, type Hold, type Slow } from '../../../shared/timing'
 
 interface Props {
   label: string
@@ -20,6 +21,8 @@ interface Props {
   selectedObjectId: string | null
   onSelectObject: (id: string) => void
   onObjectSpan: (id: string, edge: 'from' | 'to', t: number | null) => void // null = the clip's edge
+  timing: ClipTiming | undefined // slow stretches and holds (video times)
+  onTiming: (timing: ClipTiming) => void
 }
 
 export interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
@@ -28,7 +31,7 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
   // While a show / hide time sticks to another time: that time, drawn as a guide line.
   const [snapGuide, setSnapGuide] = useState<number | null>(null)
@@ -99,7 +102,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     <div className="trim">
       <div className="trim-head">
         <span className="trim-title">{label}</span>
-        <span className="muted">{(range.out - range.in).toFixed(1)}{t('秒')}</span>
+        <span className="muted">{(range.out - range.in).toFixed(1)}{t('秒')}{timing?.slows?.length || timing?.holds?.length ? t('（再生 {0} 秒）', clipPlayedSec(range, timing).toFixed(1)) : ''}</span>
         <label className="check muted" title={t('外すと OUT を過ぎても再生を続け、範囲の外も見られます')}>
           <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> {t('ループ再生')}{loop && <Playing />}</label>
         {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} {t('本と範囲が重なっています')}</span>}
@@ -115,6 +118,13 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <div className="trim-key" style={{ left: pct(keyTime) }} title={t('キープレー')} />
         <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title={t('IN（ドラッグ）')} />
         <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title={t('OUT（ドラッグ）')} />
+        {(timing?.slows ?? []).map((s, k) => (
+          <div key={`s${k}`} className="trim-slow" style={{ left: pct(Math.max(lo, s.from)), width: `calc(${pct(Math.min(hi, s.to))} - ${pct(Math.max(lo, s.from))})` }}
+            title={t('スロー ×{0}: {1} 〜 {2} 秒', s.rate, rel(s.from), rel(s.to))}>×{s.rate}</div>
+        ))}
+        {(timing?.holds ?? []).map((h, k) => (
+          <div key={`h${k}`} className="trim-hold" style={{ left: pct(h.at) }} title={t('停止 {0} 秒（{1} 秒の位置）', h.sec, rel(h.at))} />
+        ))}
         {selected && span(selected, true)}
         <Playhead lo={lo} hi={hi} />
         {snapGuide !== null && <div className="trim-snap" style={{ left: pct(snapGuide) }} />}
@@ -140,6 +150,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         </div>
       )}
 
+      <SlowHold timing={timing} onTiming={onTiming} range={range} rel={rel} keyTime={keyTime} />
+
       <div className="trim-fields">
         <Edge name="IN" keyName="[" value={rel(range.in)} overridden={overrides.in}
           onSet={() => onTrim('in', playback.current.time)} onType={v => onTrim('in', keyTime + v)} onReset={() => onTrim('in', null)} />
@@ -148,6 +160,62 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム')}</span>
       </div>
     </div>
+  )
+}
+
+// Slow stretches and holds of the clip: added at the playhead, then their times (seconds from the key
+// play, or the playhead), the rate and the hold's seconds set here. They play in the loop and the
+// through-play, and go into the export.
+function SlowHold({ timing, onTiming, range, rel, keyTime }: {
+  timing: ClipTiming | undefined; onTiming: (t: ClipTiming) => void; range: { in: number; out: number }; rel: (t: number) => string; keyTime: number
+}) {
+  const slows = timing?.slows ?? [], holds = timing?.holds ?? []
+  const now = () => Math.max(range.in, Math.min(range.out, Math.round(playback.current.time * 100) / 100))
+  const put = (s: Slow[], h: Hold[]) => onTiming({ ...(s.length ? { slows: s } : {}), ...(h.length ? { holds: h } : {}) })
+  const setSlow = (k: number, p: Partial<Slow>) => put(slows.map((s, i) => { if (i !== k) return s; const n = { ...s, ...p }; return n.to > n.from ? n : s }), holds)
+  const setHold = (k: number, p: Partial<Hold>) => put(slows, holds.map((h, i) => (i === k ? { ...h, ...p } : h)))
+  const at = (v: number) => Math.max(range.in, Math.min(range.out, keyTime + v))
+  return (
+    <div className="trim-timing">
+      <span className="field-label">{t('スロー・停止')}</span>
+      <button onClick={() => { const a = now(); put([...slows, { from: a, to: Math.min(range.out, a + 1), rate: 0.5 }], holds) }}
+        title={t('再生位置から 1 秒を 0.5 倍で。範囲と速さは下で変えられます')}>{t('＋ スロー')}</button>
+      <button onClick={() => put(slows, [...holds, { at: now(), sec: 2 }])} title={t('再生位置のコマで 2 秒止める。秒数は下で変えられます')}>{t('＋ 停止')}</button>
+      {slows.map((s, k) => (
+        <span key={`s${k}`} className="trim-timing-item">
+          {t('スロー')}
+          <SecField value={rel(s.from)} label={t('スローの始め（キープレーからの秒）')} onType={v => setSlow(k, { from: at(v) })} onNow={() => setSlow(k, { from: now() })} />〜
+          <SecField value={rel(s.to)} label={t('スローの終わり（キープレーからの秒）')} onType={v => setSlow(k, { to: at(v) })} onNow={() => setSlow(k, { to: now() })} />
+          <select value={s.rate} aria-label={t('スローの速さ')} onChange={e => setSlow(k, { rate: Number(e.target.value) })}>
+            {SLOW_RATES.map(r => <option key={r} value={r}>×{r}</option>)}
+          </select>
+          <button className="link" aria-label={t('このスローを外す')} onClick={() => put(slows.filter((_, i) => i !== k), holds)}>×</button>
+        </span>
+      ))}
+      {holds.map((h, k) => (
+        <span key={`h${k}`} className="trim-timing-item">
+          {t('停止')}
+          <SecField value={rel(h.at)} label={t('止める位置（キープレーからの秒）')} onType={v => setHold(k, { at: at(v) })} onNow={() => setHold(k, { at: now() })} />
+          <input type="number" min={0.5} max={30} step={0.5} value={h.sec} aria-label={t('止める秒数')}
+            onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.5 && n <= 30) setHold(k, { sec: n }) }} />{t('秒')}
+          <button className="link" aria-label={t('この停止を外す')} onClick={() => put(slows, holds.filter((_, i) => i !== k))}>×</button>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// Seconds from the key play, typed or set to the playhead (◎).
+function SecField({ value, label, onType, onNow }: { value: string; label: string; onType: (v: number) => void; onNow: () => void }) {
+  const [text, setText] = useState(value)
+  useEffect(() => setText(value), [value])
+  const commit = () => { const v = parseFloat(text); if (isFinite(v)) onType(v); else setText(value) }
+  return (
+    <span className="sec-field">
+      <input type="number" step={0.1} value={text} aria-label={label} onChange={e => setText(e.target.value)} onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
+      <button className="link" onClick={onNow} title={t('再生位置にする')} aria-label={t('{0}を再生位置にする', label)}>◎</button>
+    </span>
   )
 }
 

@@ -2,11 +2,13 @@
 // subscribe to state; nothing else writes video.currentTime, so jumps can't overwrite each other.
 // All times here are video times (DVW time + Match.offsetSec).
 import type { Card } from '../../shared/video'
+import { rateAt, type ClipTiming } from '../../shared/timing'
 
 export interface SeqItem {
   key: string // match id
   in: number
   out: number
+  timing?: ClipTiming // slow stretches and holds, played as the export will
 }
 
 // A title card in a through-play: shown over the paused video for durationSec, then the next item.
@@ -41,6 +43,9 @@ class Playback {
   private detachEvents: (() => void) | null = null
   private seq: { items: SequenceItem[]; index: number; onIndex: (i: number | null) => void } | null = null
   private cardTimer = 0
+  // Slow and hold (shared/timing.ts): the hold running now, and the holds already done in this pass.
+  private holdTimer = 0
+  private held = new Set<number>()
 
   attach(video: HTMLVideoElement | null, fps: number, key: string | null = null): void {
     if (video === this.video) { this.fps = fps || 30; return }
@@ -64,6 +69,7 @@ class Playback {
     let handle = 0
     const onFrame = (_now: number, meta: VideoFrameCallbackMetadata) => {
       this.set({ ...this.state, time: meta.mediaTime, paused: video.paused })
+      this.applyTiming(meta.mediaTime) // first: a hold at OUT stops before the clip ends
       this.checkSequence(meta.mediaTime)
       handle = video.requestVideoFrameCallback(onFrame)
     }
@@ -118,11 +124,12 @@ class Playback {
   // reaching OUT jumps back to IN. A through-play takes precedence over the loop.
   setLoop(item: SeqItem | null): void {
     const l = this.state.loop
-    if (l === item || (l && item && l.key === item.key && l.in === item.in && l.out === item.out)) return
+    if (l === item || (l && item && l.key === item.key && l.in === item.in && l.out === item.out && l.timing === item.timing)) return
     this.set({ ...this.state, loop: item })
   }
 
   stopSequence(): void {
+    this.endHold()
     const s = this.seq
     if (!s) return
     this.seq = null
@@ -151,10 +158,12 @@ class Playback {
   toggle(): void {
     const v = this.video
     if (!v) return
+    this.endHold()
     if (v.paused) void v.play(); else v.pause()
   }
 
   pause(): void {
+    this.endHold()
     this.video?.pause()
   }
 
@@ -207,6 +216,35 @@ class Playback {
     this.advance()
   }
 
+  // The item playing now (through-play) or the clip looping, when the video is on its match.
+  private timedItem(): SeqItem | null {
+    const s = this.seq
+    const it = s ? s.items[s.index] : this.state.loop
+    return it && !isCard(it) && it.key === this.key ? it : null
+  }
+
+  // Inside a slow stretch the video plays at its rate; reaching a hold, it stops on that frame for
+  // its seconds, then plays on. Each hold once per pass (a seek or a new item starts a new pass).
+  private applyTiming(t: number): void {
+    const v = this.video
+    if (!v || v.seeking || this.pending) return
+    const it = this.timedItem()
+    const inside = !!it && t >= it.in - 0.05 && t <= it.out + 0.05
+    const rate = inside ? rateAt(it!.timing, t) : 1
+    if (v.playbackRate !== rate) v.playbackRate = rate
+    if (!inside || v.paused || this.holdTimer) return
+    const h = it!.timing?.holds?.find(x => x.at - 0.02 <= t && t < x.at + 0.3 && !this.held.has(x.at))
+    if (!h) return
+    this.held.add(h.at)
+    v.pause()
+    v.currentTime = h.at
+    this.holdTimer = window.setTimeout(() => { this.holdTimer = 0; void this.video?.play() }, h.sec * 1000)
+  }
+
+  private endHold(): void {
+    if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = 0 }
+  }
+
   private queueSeek(key: string, t: number, play: boolean): void {
     if (key === this.key && this.video && this.video.readyState >= 1) { this.pending = null; this.rawSeek(t, play); return }
     this.pending = { key, t, play }
@@ -215,6 +253,8 @@ class Playback {
   private rawSeek(t: number, play: boolean): void {
     const v = this.video
     if (!v) return
+    this.endHold()
+    this.held.clear() // a new pass: its holds play again
     v.currentTime = this.clamp(t)
     if (play) void v.play()
   }

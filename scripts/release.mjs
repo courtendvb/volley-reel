@@ -9,6 +9,7 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { packsToShip } from './packs-guard.mjs'
+import { pruneReleases } from './prune-releases.mjs'
 
 const REPO = 'courtendvb/volley-reel-releases'
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
@@ -44,3 +45,5 @@ const missing = need.filter(n => !files.includes(n))
 if (missing.length) { console.error(`アップロードされていないファイルがあります: ${missing.join(', ')}（下書きのまま）`); process.exit(1) }
 gh('release', 'edit', tag, '--repo', REPO, '--draft=false', '--latest')
 console.log(`公開しました: https://github.com/${REPO}/releases/tag/${tag}`)
+const gone = pruneReleases() // the old installers here; they stay on the releases repository
+if (gone.length) console.log(`release/ の古いインストーラーを消しました: ${gone.join(', ')}`)

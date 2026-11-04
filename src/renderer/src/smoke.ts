@@ -44,6 +44,7 @@ export interface SmokeOpts {
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
   courtPoints?: string // a CourtFit as JSON: the fit set on the match, 座標（点） picked, plays shown, one exported
+  shotChart?: string // a CourtFit as JSON: the fit set, the チャート button pressed on a frame, exported
   statCard?: boolean // the 数字カード button: a slide at the head of the scene with the numbers of the search
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
@@ -148,6 +149,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.statCard) return smokeStatCard()
+    if (opts.shotChart) return smokeShotChart(opts.shotChart, res.length, opts.filter ?? {}, opts.exportTo)
     if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo)
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
@@ -1189,6 +1191,30 @@ export function installSmoke(h: SmokeHost): void {
       exported = { state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
     return { courtPoints: { counts, shots, exported } }
+  }
+
+  // The shot chart: on a fitted match, the button makes a picture slide per start zone, with its cones.
+  const smokeShotChart = async (fitJson: string, found: number, filter: Partial<PlayFilter>, exportTo?: string) => {
+    const p0 = await api.getProject()
+    await api.setMatchCourt(p0!.matches[0].id, JSON.parse(fitJson))
+    await loadProject(await api.getProject())
+    setFilter({ ...EMPTY_FILTER, ...filter })
+    await waitFor(() => (latest.current.results.length === found && latest.current.matches[p0!.matches[0].id]?.court ? true : null), 20000, 'plays and court')
+    jump(latest.current.results[0]); await sleep(1500); playback.pause(); await sleep(400)
+    const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.filters button')].find(b => b.textContent === t('チャート')) ?? null, 5000, 'chart button')
+    btn.click()
+    const slide = await waitFor(() => latest.current.reel?.slides?.[0] ?? null, 15000, 'chart slide')
+    await sleep(800)
+    await api.smokeShot!('shot-chart.png')
+    const slides = latest.current.reel!.slides!
+    let exported: unknown = null
+    if (exportTo) {
+      const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'chart smoke' })
+      if (!job) throw new Error('export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'chart export done')
+      exported = latest.current.exportState?.status
+    }
+    return { shotChart: { found, slides: slides.map(x => x.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))), bg: slide.bg.kind, notice: latest.current.notice, exported } }
   }
 
   // The stats card: from the filter's button, on a slide opened for editing, counted over all evaluations.

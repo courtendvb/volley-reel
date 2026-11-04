@@ -44,6 +44,7 @@ import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
 import { filterTitle, playStats, statAnnotations } from '../../shared/stats'
+import { shotCharts } from '../../shared/shotChart'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -674,6 +675,26 @@ export function App() {
     editCard(r.id, null, slide.id)
   }
 
+  // Where the search's serves and attacks go, one slide per start zone, on the frame on screen, at the
+  // head of the open scene; the first opens for editing.
+  const addShotChart = async () => {
+    const key = playback.attachedKey, m = key ? latest.current.matches[key] : null
+    if (!key || !m?.court || !m.width || !m.height) { setNotice(t('コートの四隅を合わせた試合の動画を出してから押してください')); return }
+    const { charts, left } = shotCharts(results, m.court, m.width, m.height, filterTitle(filter, people, settings?.ourTeamCodes[0] ?? ''))
+    if (!charts.length) { setNotice(t('チャートにできるサーブ・アタックがありません（座標があって、同じスタートゾーンに 3 本以上）')); return }
+    try {
+      const assetId = await api.grabFrame(key, playback.current.time)
+      const r = withReel(x => x)
+      const group = r.groupOrder.find(g => r.groups[g].length) ?? r.groupOrder[0]
+      const slides = charts.map(c => ({ ...newSlide({ kind: 'image', assetId }, 5), annotations: c.annotations }))
+      updateScene(r.id, s => putSlides(s, slides, { group, after: null, index: 0 }))
+      editCard(r.id, null, slides[0].id)
+      if (left) setNotice(t('座標がないか本数の少ないスタートゾーンの {0} 本はチャートに入っていません', left))
+    } catch (e) {
+      setError(t('スライドを入れられませんでした: {0}', (e as Error).message))
+    }
+  }
+
   const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
@@ -885,6 +906,7 @@ export function App() {
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
               onStatCard={addStatCard}
+              onShotChart={() => void addShotChart()}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length

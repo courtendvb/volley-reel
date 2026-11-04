@@ -142,7 +142,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} {t('プレー')}</p>
         <span className="spacer" />
         <button onClick={onStatCard} disabled={!shown} title={t('今の条件の決定率などを計算して、開いているシーンの先頭にスライドを入れます（評価の条件は外して計算）。文字はあとから直せます')}>{t('数字カード')}</button>
-        <button onClick={onShotChart} disabled={!shown} title={t('今の画面を背景に、条件に合うサーブ・アタックの矢印を全部重ねたスライドを開いているシーンの先頭に入れます（どれも手前から奥へ打つ向きにそろえます）。赤は決定、青はミス・被ブロック。コートの四隅を合わせた試合で使えます')}>{t('チャート')}</button>
+        <button onClick={onShotChart} disabled={!shown} title={t('今の画面を背景に、条件に合うサーブ・アタックのコースを、スタートゾーンごとのスライドにして開いているシーンの先頭に入れます。打点から扇を 5 つのコーンに分け、本数の割合を色の濃さと数字で示します。コートの四隅を合わせた試合で使えます')}>{t('チャート')}</button>
         <button onClick={onAddAll} disabled={!shown || shown === total}
           title={shown === total ? t('条件で絞り込んでから追加してください') : undefined}>{t('結果をシーンに追加')}</button>
       </div>

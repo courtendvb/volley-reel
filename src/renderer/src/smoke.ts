@@ -1193,7 +1193,7 @@ export function installSmoke(h: SmokeHost): void {
     return { courtPoints: { counts, shots, exported } }
   }
 
-  // The shot chart: on a fitted match, the button makes a picture slide with one arrow per shot.
+  // The shot chart: on a fitted match, the button makes a picture slide per start zone, with its cones.
   const smokeShotChart = async (fitJson: string, found: number, filter: Partial<PlayFilter>, exportTo?: string) => {
     const p0 = await api.getProject()
     await api.setMatchCourt(p0!.matches[0].id, JSON.parse(fitJson))
@@ -1206,7 +1206,7 @@ export function installSmoke(h: SmokeHost): void {
     const slide = await waitFor(() => latest.current.reel?.slides?.[0] ?? null, 15000, 'chart slide')
     await sleep(800)
     await api.smokeShot!('shot-chart.png')
-    const arrows = slide.annotations.filter(a => a.kind === 'arrow')
+    const slides = latest.current.reel!.slides!
     let exported: unknown = null
     if (exportTo) {
       const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'chart smoke' })
@@ -1214,7 +1214,7 @@ export function installSmoke(h: SmokeHost): void {
       await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'chart export done')
       exported = latest.current.exportState?.status
     }
-    return { shotChart: { found, arrows: arrows.length, colors: Object.fromEntries([...new Set(arrows.map(a => a.color))].map(c => [c, arrows.filter(a => a.color === c).length])), bg: slide.bg.kind, notice: latest.current.notice, exported } }
+    return { shotChart: { found, slides: slides.map(x => x.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))), bg: slide.bg.kind, notice: latest.current.notice, exported } }
   }
 
   // The stats card: from the filter's button, on a slide opened for editing, counted over all evaluations.

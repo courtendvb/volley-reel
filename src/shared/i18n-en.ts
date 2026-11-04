@@ -844,4 +844,10 @@ export const EN: Record<string, string> = {
   "座標のあるサーブ・アタックがありません": "No serves or attacks with coordinates here",
   "座標のないサーブ・アタック {0} 本はチャートに入っていません": "{0} serves and attacks without coordinates aren't on the chart",
   "{0} 本　赤: 決定 {1}　青: ミス・被ブロック {2}　黄: その他 {3}": "{0} shots   red: kills {1}   blue: errors and blocked {2}   yellow: other {3}",
+  "今の画面を背景に、条件に合うサーブ・アタックのコースを、スタートゾーンごとのスライドにして開いているシーンの先頭に入れます。打点から扇を 5 つのコーンに分け、本数の割合を色の濃さと数字で示します。コートの四隅を合わせた試合で使えます": "Puts slides at the head of the open scene, one per start zone: the frame on screen with the serves and attacks of these conditions as a fan of five cones from the contact, as dark as their share of the shots. For matches with a fitted court",
+  "チャートにできるサーブ・アタックがありません（座標があって、同じスタートゾーンに 3 本以上）": "No serves or attacks to chart (they need coordinates, and 3 or more from a start zone)",
+  "座標がないか本数の少ないスタートゾーンの {0} 本はチャートに入っていません": "{0} shots aren't on a chart: no coordinates, or too few from their start zone",
+  "{0}%（{1} 本）\n決定 {2}%": "{0}% ({1})\nkill {2}%",
+  "{0} ゾーン {1} から": "{0} from zone {1}",
+  "{0} 本": "{0} shots",
 }

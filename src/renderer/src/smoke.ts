@@ -15,7 +15,7 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
-import { courtQuad, nearSide, playZones } from '../../shared/court'
+import { courtQuad, flightTiming, nearSide, playZones } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
 import type { AppLatest } from './app/appState'
@@ -1162,6 +1162,15 @@ export function installSmoke(h: SmokeHost): void {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'point')
     sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300)
     await show('serve', pick('S')); await show('attack', pick('A')); await show('reception', pick('R')); await show('block', pick('B'))
+    // The flight curve: ticked in the court panel, the serve seen part way along it.
+    const flightBox = await waitFor(() => [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.includes(t('軌道（放物線）')))?.querySelector('input') ?? null, 5000, 'flight box')
+    if (!flightBox.checked) flightBox.click()
+    await sleep(300)
+    const flyServe = pick('S')
+    await show('flight-start', flyServe)
+    const fl = flightTiming(flyServe.play, latest.current.matches[m.id].offsetSec)
+    await playback.seekAndWait(fl.startSec + fl.sec * 0.6); await sleep(400)
+    await api.smokeShot!('points-flight-mid.png')
     const counts = Object.fromEntries('SRADEB'.split('').map(k => { const l = all.filter(r => r.play.skill === k); return [k, `${l.filter(r => r.play.startClick && r.play.endClick).length}/${l.length}`] }))
     let exported: unknown = null
     if (exportTo) {
@@ -1174,7 +1183,8 @@ export function installSmoke(h: SmokeHost): void {
       const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'points smoke' })
       if (!job) throw new Error('export did not start')
       await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'points export done')
-      exported = latest.current.exportState?.status
+      const clip = job.items.find(i => i.kind === 'clip')
+      exported = { state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
     return { courtPoints: { counts, shots, exported } }
   }

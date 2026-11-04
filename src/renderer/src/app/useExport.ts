@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Clip, Marker, Reel } from '../../../shared/reel'
 import type { OverlaySettings } from '../../../shared/overlay'
-import { playMarks, type GridStyle } from '../../../shared/court'
+import { flightTiming, playMarks, type GridStyle } from '../../../shared/court'
 import type { ExportEvent, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
 import { planScene, planSceneWithCard, planVideoChapters, sceneFileNames, type PlanItem, type Video } from '../../../shared/video'
 import type { ClipInfo } from '../components/ReelPanel'
@@ -72,7 +72,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
           markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []),
           court: c => {
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
-            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1]) } : null
+            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1]), flight: flightTiming(play, ms[c.matchId].offsetSec) } : null
           },
           courtStyle: gridStyleRef.current }, outPath, whole?.chapters)
       await api.startExport(job)

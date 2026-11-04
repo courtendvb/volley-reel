@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { drawCourt, type CourtFit, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { drawCourt, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { playback } from '../playback'
 import { prepareCanvas } from '../canvas'
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
   fit: CourtFit
   style: GridStyle
   zones: PlayZones | null
+  flight: Flight | null // when the selected play's ball flies (the moving curve)
   fitting: boolean // the corners can be dragged; clicks don't reach the layers underneath
   onCorners: (corners: CourtFit['corners']) => void // when a drag ends
 }
@@ -16,17 +18,25 @@ const HIT = 18
 
 // The court grid (CourtEnd Vision) and the selected play's zones. Under the scoreboard and the
 // annotations; while fitting it sits on top and the four corners are dragged onto the court.
-export function CourtLayer({ size, fit, style, zones, fitting, onCorners }: Props) {
+export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [drag, setDrag] = useState<{ i: number; corners: CourtFit['corners'] } | null>(null)
   const corners = drag?.corners ?? fit.corners
+
+  // How far the curve has gone, in steps, so the layer redraws only while the ball is flying.
+  const flies = !fitting && !!flight && hasFlight(style, zones)
+  const [progress, setProgress] = useState(1)
+  useEffect(() => {
+    if (!flies || !flight) { setProgress(1); return }
+    return playback.subscribe(s => setProgress(Math.round(Math.max(0, Math.min(1, (s.time - flight.startSec) / flight.sec)) * 40) / 40))
+  }, [flies, flight?.startSec, flight?.sec])
 
   useEffect(() => {
     const c = canvas.current
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
     // While fitting the grid is always drawn, so the lines can be laid on the court's.
-    drawCourt(ctx, size.w, size.h, { ...fit, corners }, fitting ? { ...style, grid: true } : style, fitting ? null : zones)
+    drawCourt(ctx, size.w, size.h, { ...fit, corners }, fitting ? { ...style, grid: true } : style, fitting ? null : zones, flies ? progress : 1)
     if (!fitting) return
     for (const p of corners) {
       const x = p.x * size.w, y = p.y * size.h
@@ -34,7 +44,7 @@ export function CourtLayer({ size, fit, style, zones, fitting, onCorners }: Prop
       ctx.beginPath(); ctx.arc(x, y, HANDLE, 0, Math.PI * 2); ctx.fillStyle = style.color; ctx.fill()
       ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill()
     }
-  }, [size.w, size.h, fit, corners, style, zones, fitting])
+  }, [size.w, size.h, fit, corners, style, zones, fitting, flies, progress])
 
   const pointAt = (e: React.PointerEvent): Pt => {
     const r = canvas.current!.getBoundingClientRect()

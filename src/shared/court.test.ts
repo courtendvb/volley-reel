@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, landingPoint, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -293,5 +293,59 @@ describe('heatColor', () => {
     const [r, g, b] = heatColor(0.5)
     expect(g).toBeGreaterThan(r)
     expect(g).toBeGreaterThan(b)
+  })
+})
+
+describe('a set by the attack it is for', () => {
+  const set = { skill: 'E', side: '*', code: '*21EM+K8F~3B', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, startZone: null, endZone: 3, startSub: null, endSub: 'B', startClick: { u: 0.6, v: 0.45 }, endClick: { u: 0.2, v: 0.45 } }
+  it('goes straight to a quick', () => {
+    expect(playPoints({ ...set, setTo: 'Q' } as never, fit).arc).toBe(0)
+  })
+  it('is 15% quicker and peaks at three quarters to an M or U', () => {
+    for (const setTo of ['M', 'U']) {
+      expect(flightTiming({ ...set, time: 10, setTo } as never, 0).sec).toBeCloseTo(0.85)
+      expect(playPoints({ ...set, setTo } as never, fit).apex).toBe(0.75)
+    }
+  })
+  it('keeps its own shape to other attacks', () => {
+    expect(flightTiming({ ...set, time: 10, setTo: 'H' } as never, 0).sec).toBe(1)
+    expect(playPoints({ ...set, setTo: 'H' } as never, fit).apex).toBeUndefined()
+  })
+})
+
+describe('playerMarks', () => {
+  const base = { side: '*', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, endZone: null, startSub: null, endSub: null }
+  const shot = (playerKey: string, skill: string, u: number, startZone: number | null, combo = '~~') =>
+    ({ ...base, playerKey, skill, startZone, code: `*05${skill}Q-${combo}~1`, startClick: { u, v: 0 }, endClick: { u, v: 0.8 } }) as never
+  const plays = [shot('a', 'S', 0.1, 1), shot('a', 'S', 0.2, 1), shot('a', 'S', 0.25, 5), shot('b', 'S', 0.4, 1), shot('a', 'A', 0.3, 4, 'P1'), shot('a', 'A', 0.35, 4, 'P1'), shot('a', 'A', 0.5, 2, 'X5')]
+  const style = { ...DEFAULT_GRID_STYLE, heat: true, serveFlights: true }
+  it('keeps a serve heatmap to the same start zone, and its flights to the player', () => {
+    const m = playerMarks(plays[0], fit, style, () => plays)!
+    expect(m.heat!.points).toHaveLength(2)
+    expect(m.flights!.paths).toHaveLength(3)
+  })
+  it('keeps an attack heatmap to the same attack code, with no flights', () => {
+    const m = playerMarks(plays[4], fit, style, () => plays)!
+    expect(m.heat!.points).toHaveLength(2)
+    expect(playerMarks(plays[6], fit, style, () => plays)!.heat!.points).toHaveLength(1)
+    expect(m.flights).toBeUndefined()
+  })
+  it('has nothing on other skills or with both off', () => {
+    expect(playerMarks(shot('a', 'R', 0.5, 1), fit, style, () => plays)).toBeNull()
+    expect(playerMarks(plays[0], fit, DEFAULT_GRID_STYLE, () => plays)).toBeNull()
+  })
+})
+
+describe('flightZ', () => {
+  it('peaks halfway by default, with the arc on top of the line', () => {
+    expect(flightZ({ start: null, end: null, startZ: 2, endZ: 2, arc: 1 }, 0.5)).toBeCloseTo(3)
+  })
+  it('peaks at three quarters with the apex there, and meets both ends', () => {
+    const p = { start: null, end: null, startZ: 2, endZ: 2, arc: 1, apex: 0.75 }
+    expect(flightZ(p, 0.75)).toBeCloseTo(3)
+    expect(flightZ(p, 0.5)).toBeLessThan(3)
+    expect(flightZ(p, 0.9)).toBeLessThan(3)
+    expect(flightZ(p, 0)).toBeCloseTo(2)
+    expect(flightZ(p, 1)).toBeCloseTo(2)
   })
 })

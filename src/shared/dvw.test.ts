@@ -102,6 +102,13 @@ describe.skipIf(!dir || !existsSync(dir))('real DVW files', () => {
   })
 })
 
+describe('a set and its attack', () => {
+  it('keeps the tempo of the same team\u0027s attack right after it', () => {
+    const d = parseDVW(['[3TEAMS]', 'HTH;HOME;0;;', 'TGB;AWAY;0;;', '[3SCOUT]', 'a04SM+~~~58A;;;;;;;14.00.01;1;1;1;1;201;;', '*21EQ+K8F~8C;;;;;;;14.00.03;1;1;1;1;203;;', '*07AU+P1~41BH3;;;;;;;14.00.04;1;1;1;1;204;;', '*21EH+K8F~8C;;;;;;;14.00.06;1;1;1;1;206;;', ''].join(String.fromCharCode(10)))
+    expect(d.plays.filter(p => p.skill === 'E').map(p => p.setTo ?? null)).toEqual(['U', null])
+  })
+})
+
 describe('possibility', () => {
   const marked = (scout: string) => parseDVW(`[3TEAMS]
 HTH;HOME;0;;

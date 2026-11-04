@@ -1191,6 +1191,19 @@ export function installSmoke(h: SmokeHost): void {
       if (anim.checked) anim.click()
       await sleep(300)
     }
+    // The court tab's heatmap and serve paths: the player's serves flying with the one selected.
+    const tick = async (label: string) => {
+      const box = await waitFor(() => [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.trim() === t(label))?.querySelector('input') ?? null, 5000, label)
+      if (!box.checked) box.click()
+      await sleep(300)
+    }
+    await tick('ヒートマップ'); await tick('サーブ軌道')
+    const ps = pick('S')
+    await show('player-serve', ps)
+    const pf = flightTiming(ps.play, latest.current.matches[m.id].offsetSec)
+    await playback.seekAndWait(pf.startSec + pf.sec * 0.5); await sleep(400)
+    await api.smokeShot!('player-serve-mid.png')
+    await show('player-attack', pick('A'))
     let exported: unknown = null
     if (exportTo) {
       const { reel: added } = addClips(newReel('points smoke'), [pick('S'), pick('A')].map(r => ({ matchId: r.matchId, play: r.play })))

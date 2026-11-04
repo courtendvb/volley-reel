@@ -111,7 +111,7 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, serveFlights } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, serveFlights: !!serveFlights, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
@@ -134,7 +134,9 @@ export function App() {
   }
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
-  const courtZones = useMemo(() => (match?.court && selectedPlay ? playMarks(selectedPlay, match.court, nextPlay) : null), [match?.court, selectedPlay, nextPlay])
+  const courtZones = useMemo(() => (match?.court && selectedPlay
+    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays))
+    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, dvws])
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)

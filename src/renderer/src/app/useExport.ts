@@ -72,7 +72,8 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
           markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []),
           court: c => {
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
-            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1]), flight: flightTiming(play, ms[c.matchId].offsetSec, c.skillSec) } : null
+            const dvws = latest.current.dvwsRef ?? {}
+            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays)), flight: flightTiming(play, ms[c.matchId].offsetSec, c.skillSec) } : null
           },
           courtStyle: gridStyleRef.current }, outPath, whole?.chapters)
       await api.startExport(job)

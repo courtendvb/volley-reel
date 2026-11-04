@@ -152,11 +152,14 @@ export interface PlayZones {
   start: Spot | null
   end: Spot | null
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
+  player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
 }
+export interface PlayerMarks { heat?: SlideHeat; flights?: SlideFlights }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
-export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
+// apex: how far along the top of the arc is (missing: halfway).
+export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number; apex?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -192,11 +195,18 @@ export function strikeHeight(code: string): number {
 }
 
 // The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
-// attack (T, P) loops; a hard one goes straight down. A set goes by its tempo.
-function shotPath(code: string): { sec: number; arc: number } {
+// attack (T, P) loops; a hard one goes straight down. A set goes by its tempo and by the attack it
+// is for (setTo): to a quick (Q) it goes straight; to a slower one in front (M, U) it is quicker and
+// peaks late, at three quarters of the way.
+const FAST_SET = 0.85
+function shotPath(code: string, setTo?: string): { sec: number; arc: number; apex?: number } {
   const skill = code.charAt(3), type = code.charAt(4)
   if (skill === 'A') return code.charAt(12) === 'T' || code.charAt(12) === 'P' ? { sec: 0.9, arc: 0.8 } : { sec: 0.5, arc: 0 }
-  if (skill === 'E') return type === 'H' ? { sec: 1.3, arc: 3 } : type === 'Q' ? { sec: 0.6, arc: 0.5 } : { sec: 1, arc: 1.5 }
+  if (skill === 'E') {
+    const set = type === 'H' ? { sec: 1.3, arc: 3 } : type === 'Q' ? { sec: 0.6, arc: 0.5 } : { sec: 1, arc: 1.5 }
+    if (setTo === 'Q') return { ...set, arc: 0 }
+    return setTo === 'M' || setTo === 'U' ? { sec: set.sec * FAST_SET, arc: set.arc, apex: 0.75 } : set
+  }
   return { sec: type === 'Q' ? 1 : 1.4, arc: 1.2 }
 }
 
@@ -207,15 +217,37 @@ const SETTER_SPOT: ClickPoint = { u: 0.6, v: 0.444 }
 // The play's clicks on the court. They are seen from the play's team, whose end line is on the near
 // side (v 0 is the bottom) or the far one (turned round). Many DVWs click where a set went but not
 // where it left: its coded zone stands in, and without one the usual setter's spot.
-export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit): PlayPoints {
+export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode' | 'setTo'>, fit: CourtFit): PlayPoints {
   const near = nearSide(fit, play) === play.side
-  const on = (c: ClickPoint | null | undefined): Pt | null => (c ? (near ? { x: c.u, y: 1 - c.v } : { x: 1 - c.u, y: c.v }) : null)
+  const on = clickOn(near)
   const end = on(play.endClick)
   const coded = play.skill === 'E' ? spot(play.endZone, play.endSub, near) : null
   const middle = coded ? spotArea(coded, true) : null
   const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
   const shot = play.shotCode ?? play.code, start = on(play.startClick) ?? setFrom, z = strikeHeight(shot)
-  return { start, end, ...(start && z ? { startZ: z, arc: shotPath(shot).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+  const path = shotPath(shot, play.setTo)
+  return { start, end, ...(start && z ? { startZ: z, arc: path.arc, ...(path.apex ? { apex: path.apex } : {}) } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+}
+
+// A click on the court, for a team whose end line is near or far.
+const clickOn = (near: boolean) => (c: ClickPoint | null | undefined): Pt | null => (c ? (near ? { x: c.u, y: 1 - c.v } : { x: 1 - c.u, y: c.v }) : null)
+
+// The tell of a shot that a heatmap keeps to: a serve's start zone, an attack's code (P1, X5...).
+const shotKind = (p: Pick<Play, 'skill' | 'startZone' | 'code'>) => (p.skill === 'S' ? p.startZone : p.code.slice(6, 8))
+
+// A serve's or attack's player, from `plays` (every match of the project), on the side of the court
+// this play is on: where their shots of the same kind landed (shotKind), and all their serves' flights.
+export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style: GridStyle, plays: () => Play[]): PlayerMarks | null {
+  if (play.skill !== 'S' && play.skill !== 'A') return null
+  const heatOn = !!style.heat, flightsOn = !!style.serveFlights && play.skill === 'S'
+  if (!heatOn && !flightsOn) return null
+  const on = clickOn(nearSide(fit, play) === play.side)
+  const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && p.endClick)
+  const flying = shots.filter(p => p.startClick), kind = shotKind(play)
+  return {
+    ...(heatOn ? { heat: { fit, points: shots.filter(p => shotKind(p) === kind).map(p => on(p.endClick)!) } } : {}),
+    ...(flightsOn ? { flights: { fit, paths: flying.map(p => ({ start: on(p.startClick), end: on(p.endClick), startZ: strikeHeight(p.code), arc: shotPath(p.code).arc })) } } : {}),
+  }
 }
 
 // A serve's flight coming down the court toward the camera whichever end it came from, so serves
@@ -228,8 +260,10 @@ export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>):
 }
 
 // What is drawn for a play: its zones, and its clicks for the 座標 detail.
-export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit, next?: ZonePlay | null): PlayZones {
-  return { ...playZones(play, fit, next), points: playPoints(play, fit) }
+// plays and style: for the player's other shots (playerMarks), when the court tab shows them.
+export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[]): PlayZones {
+  const player = style && plays ? playerMarks(play, fit, style, plays) : null
+  return { ...playZones(play, fit, next), points: playPoints(play, fit), ...(player ? { player } : {}) }
 }
 
 // The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
@@ -237,8 +271,8 @@ export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' 
 // is reached at its time. `sec`: see shotPath. skillSec: the clip's own time for the play, moved by
 // hand (Clip.skillSec), in place of the DVW's.
 export interface Flight { startSec: number; sec: number }
-export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill'>, offsetSec: number, skillSec?: number): Flight {
-  const { sec } = shotPath(play.shotCode ?? play.code)
+export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill' | 'setTo'>, offsetSec: number, skillSec?: number): Flight {
+  const { sec } = shotPath(play.shotCode ?? play.code, play.setTo)
   const t = skillSec ?? play.time + offsetSec
   return { startSec: play.shotCode ? t - sec : t, sec }
 }
@@ -249,14 +283,16 @@ export function hasFlight(style: GridStyle, zones: PlayZones | null | undefined)
   return !!(style.playZones && style.detail === 'point' && style.flight && p?.start && p.end && p.startZ)
 }
 
-// Whether the curve grows with the play: else it is simply shown whole.
+// Whether the curves grow with the play (the play's own, the player's serves): else they are simply shown whole.
 export function flightMoves(style: GridStyle, zones: PlayZones | null | undefined): boolean {
-  return hasFlight(style, zones) && !style.flightStill
+  return (hasFlight(style, zones) || !!zones?.player?.flights) && !style.flightStill
 }
 
-// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc.
-function flightZ(p: PlayPoints, s: number): number {
-  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + 4 * (p.arc ?? 0) * s * (1 - s)
+// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc, which
+// is 1 at its top; a top at halfway makes it the parabola 4s(1 - s).
+export function flightZ(p: PlayPoints, s: number): number {
+  const top = p.apex ?? 0.5, k = top / (1 - top)
+  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + ((p.arc ?? 0) * s ** k * (1 - s)) / (top ** k * (1 - top))
 }
 const FLIGHT_STEPS = 32
 
@@ -427,6 +463,8 @@ export interface GridStyle {
   playZones: boolean
   flight?: boolean // with the points: the ball's path as a curve
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
+  heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
+  serveFlights?: boolean // on a serve: all the player's serves flying with it
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
 
@@ -455,6 +493,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
   }
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
+  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat) // on the floor, under everything
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
@@ -481,6 +520,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     ctx.restore()
   }
 
+  if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
   if (hasFlight(style, zones) && courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) {
     if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight)
   } else if (style.playZones && zones) {

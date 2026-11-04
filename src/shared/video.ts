@@ -3,7 +3,7 @@
 // every video that uses it (design §0). The overlay look belongs to the video.
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
-import type { OverlayPatch, OverlaySettings } from './overlay'
+import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
@@ -16,6 +16,7 @@ export interface Video {
   annotations?: Annotation[] // objects shown on every clip of the video (表示範囲: 動画全体)
   cardAnnotations?: Annotation[] // objects on the video's title card (its opening card)
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
+  cardLayout?: CardLayout // the opening card's own title place and size
   captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
   updatedAt: string
 }
@@ -54,7 +55,8 @@ export function dropScene(v: Video, sceneId: string): Video {
 // marker null = scene card. opp: the opponent's team code when every clip is from one match (for its logo).
 // video: the opening card with the video's name. annotations: objects drawn on the card.
 // slide: a slide of a scene, played like a card (drawn as its page instead of a title).
-export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]
+// layout: this card's own title place and size, apart from its kind's.
+export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]; layout?: CardLayout
   slide?: { id: string; bg: SlideBg } }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
@@ -78,7 +80,7 @@ function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matche
     const list = items(g)
     if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
-      list.unshift({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
+      list.unshift({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ group: g, items: list })
   }
@@ -141,7 +143,7 @@ export function planSceneWithCard(s: Reel, order: Clip[], overlay: OverlaySettin
 
 function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem | null {
   if (!(s.sceneCard ?? overlay.titleCard.sceneCards)) return null
-  const card: Card = { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [] }
+  const card: Card = { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [], layout: s.cardLayout }
   return { kind: 'card', card, durationSec: overlay.titleCard.durationSec }
 }
 
@@ -182,7 +184,7 @@ export function sceneFileNames(names: string[]): string[] {
 export function videoCard(video: Video, scenes: Record<string, Reel>, matches: Record<string, Match>, ourCodes: string[]): Card {
   const ids = new Set(video.sceneIds.flatMap(id => Object.values(scenes[id]?.clips ?? {}).map(c => c.matchId)))
   const m = ids.size === 1 ? matches[[...ids][0]] : undefined
-  return { marker: null, video: true, name: video.cardTitle || video.name, match: m ? cardMatchLabel(m, ourCodes) : null, opp: m ? cardOpponent(m, ourCodes) : null, annotations: video.cardAnnotations ?? [] }
+  return { marker: null, video: true, layout: video.cardLayout, name: video.cardTitle || video.name, match: m ? cardMatchLabel(m, ourCodes) : null, opp: m ? cardOpponent(m, ourCodes) : null, annotations: video.cardAnnotations ?? [] }
 }
 
 // The card's match line, when every clip it introduces comes from one match.

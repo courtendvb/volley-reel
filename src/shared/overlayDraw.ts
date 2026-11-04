@@ -123,20 +123,20 @@ const titleLines = (name: string, fallback: string): string[] => {
 // logo: the opponent's logo, drawn beside the marker title or above the scene title.
 // Returns the title's box in pixels (for the card editor to grab). Position and size come from
 // s.markerLayout / s.sceneLayout, which the editor changes.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
   const k = H / 720
   ctx.save()
   fillRect(ctx, cardBackground(s, theme), 0, 0, W, H)
   if (d.marker === null) {
     // The video's opening card is drawn like a scene card, larger by default, with its own layout.
-    const L = d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT
+    const L = d.layout ?? (d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT)
     const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo ?? null, L)
     ctx.restore()
     return box
   }
   // Marker cards: 3× the base size times the layout's scale, the title's top-left at the layout's
   // point (10% / 30% by default); shrunk to stay inside the frame when the name is long.
-  const L = s.markerLayout ?? DEFAULT_MARKER_LAYOUT
+  const L = d.layout ?? s.markerLayout ?? DEFAULT_MARKER_LAYOUT
   const names = titleLines(s.showMarkerName ? d.name : '', `MARKER ${d.marker}`)
   const more = names.length - 1 // each further line makes the plate 34 (× q) taller
   const match = s.showMatch && d.match ? d.match : null

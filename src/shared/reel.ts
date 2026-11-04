@@ -2,7 +2,7 @@
 // so the UI can treat a reel as immutable state and every change is unit-testable.
 import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
-import type { ClipOverlayOverride, OverlayPatch } from './overlay'
+import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
 export type Marker = 1 | 2 | 3 | 4 | 5
@@ -45,6 +45,8 @@ export interface Reel {
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
   cardTitle?: string // the scene card's text when it differs from the name (may have line breaks: one line each)
   markerCardTitles?: Partial<Record<Marker, string>> // the same for each marker's card
+  cardLayout?: CardLayout // the scene card's own title place and size; missing = the video's for scene cards
+  markerCardLayouts?: Partial<Record<Marker, CardLayout>> // the same for each marker's card
   slides?: Slide[] // still pages between clips; see Slide
   overlay?: OverlayPatch // M6 only: moved to the video in v3 (kept so old files still read)
   updatedAt: string

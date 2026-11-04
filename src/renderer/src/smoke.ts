@@ -43,9 +43,9 @@ export interface SmokeOpts {
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
+  cardOwn?: boolean // 「このカードだけ」: one marker card's title moved and scaled apart from the others, then back
+  flightStill?: boolean // with courtPoints: the animation off, the whole curve on one layer
   courtPoints?: string // a CourtFit as JSON: the fit set on the match, 座標（点） picked, plays shown, one exported
-  shotChart?: string // a CourtFit as JSON: the fit set, the チャート button pressed on a frame, exported
-  statCard?: boolean // the 数字カード button: a slide at the head of the scene with the numbers of the search
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
@@ -148,9 +148,8 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
-    if (opts.statCard) return smokeStatCard()
-    if (opts.shotChart) return smokeShotChart(opts.shotChart, res.length, opts.filter ?? {}, opts.exportTo)
-    if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo)
+    if (opts.cardOwn) return smokeCardOwn(res)
+    if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo, opts.flightStill)
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
@@ -1143,7 +1142,7 @@ export function installSmoke(h: SmokeHost): void {
 
   // The scout's clicks as points: the given court fit on the match, 座標（点） from the court panel, a
   // serve, attack, reception and block on screen (the block has no click: zones), then an export.
-  const smokeCourtPoints = async (fitJson: string, exportTo?: string) => {
+  const smokeCourtPoints = async (fitJson: string, exportTo?: string, still?: boolean) => {
     const p0 = await api.getProject()
     const m = p0!.matches[0]
     await api.setMatchCourt(m.id, JSON.parse(fitJson))
@@ -1176,6 +1175,11 @@ export function installSmoke(h: SmokeHost): void {
     await playback.seekAndWait(fl.startSec + fl.sec * 0.6); await sleep(400)
     await api.smokeShot!('points-flight-mid.png')
     const counts = Object.fromEntries('SRADEB'.split('').map(k => { const l = all.filter(r => r.play.skill === k); return [k, `${l.filter(r => r.play.startClick && r.play.endClick).length}/${l.length}`] }))
+    if (still) {
+      const anim = await waitFor(() => [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.includes(t('アニメーション')))?.querySelector('input') ?? null, 5000, 'animation box')
+      if (anim.checked) anim.click()
+      await sleep(300)
+    }
     let exported: unknown = null
     if (exportTo) {
       const { reel: added } = addClips(newReel('points smoke'), [pick('S'), pick('A')].map(r => ({ matchId: r.matchId, play: r.play })))
@@ -1193,39 +1197,28 @@ export function installSmoke(h: SmokeHost): void {
     return { courtPoints: { counts, shots, exported } }
   }
 
-  // The shot chart: on a fitted match, the button makes a picture slide per start zone, with its cones.
-  const smokeShotChart = async (fitJson: string, found: number, filter: Partial<PlayFilter>, exportTo?: string) => {
-    const p0 = await api.getProject()
-    await api.setMatchCourt(p0!.matches[0].id, JSON.parse(fitJson))
-    await loadProject(await api.getProject())
-    setFilter({ ...EMPTY_FILTER, ...filter })
-    await waitFor(() => (latest.current.results.length === found && latest.current.matches[p0!.matches[0].id]?.court ? true : null), 20000, 'plays and court')
-    jump(latest.current.results[0]); await sleep(1500); playback.pause(); await sleep(400)
-    const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.filters button')].find(b => b.textContent === t('チャート')) ?? null, 5000, 'chart button')
-    btn.click()
-    const slide = await waitFor(() => latest.current.reel?.slides?.[0] ?? null, 15000, 'chart slide')
-    await sleep(800)
-    await api.smokeShot!('shot-chart.png')
-    const slides = latest.current.reel!.slides!
-    let exported: unknown = null
-    if (exportTo) {
-      const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'chart smoke' })
-      if (!job) throw new Error('export did not start')
-      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'chart export done')
-      exported = latest.current.exportState?.status
-    }
-    return { shotChart: { found, slides: slides.map(x => x.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))), bg: slide.bg.kind, notice: latest.current.notice, exported } }
-  }
-
-  // The stats card: from the filter's button, on a slide opened for editing, counted over all evaluations.
-  const smokeStatCard = async () => {
-    const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.filters button')].find(b => b.textContent === t('数字カード')) ?? null, 5000, 'stats button')
-    btn.click(); await sleep(800)
-    const scene = latest.current.reel
-    const slide = scene?.slides?.[0]
-    if (!slide) throw new Error('no slide')
-    await api.smokeShot!('stat-card.png')
-    return { statCard: { scene: scene!.name, group: slide.group, sec: slide.durationSec, texts: slide.annotations.map(a => (a.kind === 'text' ? a.text : a.kind)) } }
+  // 「このカードだけ」: marker 1's card gets its own title place and size; marker 2's and the shared
+  // layout stay, and unticking goes back to the shared one.
+  const smokeCardOwn = async (res: PlayRef[]) => {
+    const { reel: added, ids } = addClips(newReel('card smoke'), res.slice(0, 2).map(r => ({ matchId: r.matchId, play: r.play })))
+    const built = toggleMarker(toggleMarker(added, ids[0], 1, () => ['0', 0]), ids[1], 2, () => ['0', 0])
+    const v = newVideo('card smoke', [built.id], { titleCard: { ...overlaySettings(undefined).titleCard, enabled: true } })
+    setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+    await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'card reel')
+    const cards = () => currentPlan('scene').flatMap(p => (p.kind === 'card' ? [{ marker: p.card.marker, layout: p.card.layout ?? null }] : []))
+    const shared = () => latest.current.overlay.titleCard.markerLayout ?? null
+    editCard(built.id, 1); await sleep(500)
+    const pick = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === label)!
+    pick(t('タイトルの位置')).click(); await sleep(300)
+    const box = await waitFor(() => [...document.querySelectorAll<HTMLLabelElement>('.card-edit-bar label')].find(l => l.textContent?.includes(t('このカードだけ')))?.querySelector('input') ?? null, 5000, 'own box')
+    box.click(); await sleep(300)
+    const range = document.querySelector<HTMLInputElement>('.card-edit-bar input[type=range]')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(range, '60')
+    range.dispatchEvent(new Event('input', { bubbles: true })); await sleep(300)
+    const own = { cards: cards(), shared: shared(), saved: latest.current.reel!.markerCardLayouts ?? null }
+    await api.smokeShot!('card-own.png')
+    box.click(); await sleep(300)
+    return { cardOwn: { own, back: { cards: cards(), shared: shared() } } }
   }
 
   // The caption's name for a player across the video: typed on one clip (whole video, the default),

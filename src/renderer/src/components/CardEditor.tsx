@@ -12,6 +12,7 @@ interface Props {
   card: Card
   settings: OverlaySettings
   onChange: (s: OverlaySettings) => void
+  onOwn: (l: CardLayout | undefined) => void // this card's own title place and size; undefined: back with its kind
   active: boolean // the title can be grabbed (else the objects on the card are being edited)
 }
 
@@ -20,15 +21,15 @@ type Drag = { mode: 'move' | 'scale'; from: [number, number]; start: CardLayout;
 const HANDLE = 9 // px, the resize corner
 
 // The title card drawn over the video window, with its title in a frame: drag it to move, drag the
-// corner to resize (a slide is only drawn: it has no title). Changes the video's layout for that kind of card (all scene cards, or all marker cards).
-export function CardEditor({ size, card, settings, onChange, active }: Props) {
+// corner to resize (a slide is only drawn: it has no title). Changes the video's layout for that kind of card (all scene cards, or all marker cards), or the card's own when it has one.
+export function CardEditor({ size, card, settings, onChange, onOwn, active }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<Box | null>(null)
   const drag = useRef<Drag | null>(null)
   const [tick, setTick] = useState(0)
   useEffect(() => subscribeAssets(() => setTick(n => n + 1)), [])
   const kind = layoutKey(card)
-  const layout = settings.titleCard[kind] ?? defaultLayout(card)
+  const layout = card.layout ?? settings.titleCard[kind] ?? defaultLayout(card)
 
   useEffect(() => {
     const c = canvas.current
@@ -49,7 +50,7 @@ export function CardEditor({ size, card, settings, onChange, active }: Props) {
     const r = canvas.current!.getBoundingClientRect()
     return [e.clientX - r.left, e.clientY - r.top]
   }
-  const set = (l: CardLayout) => onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } })
+  const set = (l: CardLayout) => (card.layout ? onOwn(l) : onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } }))
 
   const onDown = (e: PointerEvent) => {
     const b = boxRef.current
@@ -89,14 +90,15 @@ const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker ===
 // Below the video while a card is being edited: whether it is shown, its text (the name unless set;
 // a line break makes a second line), the background of every card, what the pointer edits (the
 // objects on this card, or the title's place and size for every card of this kind), reset and done.
-export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle }: {
-  card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onDone: () => void
+export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle }: {
+  card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
   tool: 'objects' | 'title'; onTool: (t: 'objects' | 'title') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
 }) {
   const kind = layoutKey(card), def = defaultLayout(card)
-  const layout = settings.titleCard[kind] ?? def
-  const set = (l: CardLayout) => onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } })
+  const shared = settings.titleCard[kind] ?? def, own = !!card.layout
+  const layout = card.layout ?? shared
+  const set = (l: CardLayout) => (own ? onOwn(l) : onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } }))
   const what = cardKindName(card)
   return (
     <div className="card-edit-bar">
@@ -114,16 +116,18 @@ export function CardEditBar({ card, settings, onChange, onDone, tool, onTool, sh
         <button role="radio" aria-checked={tool === 'objects'} className={tool === 'objects' ? 'on' : ''} onClick={() => onTool('objects')}
           title={t('このカードに文字・画像・図形を置く')}>{t('図形・文字')}</button>
         <button role="radio" aria-checked={tool === 'title'} className={tool === 'title' ? 'on' : ''} onClick={() => onTool('title')}
-          title={t('タイトルの位置と大きさ（この動画のすべての{0}のカード）', what)}>{t('タイトルの位置')}</button>
+          title={t('タイトルの位置と大きさ（この動画のすべての{0}のカード。「このカードだけ」にもできる）', what)}>{t('タイトルの位置')}</button>
       </div>
       {tool === 'title' && (
         <>
-          <span className="muted">{t('ドラッグで移動、右下の角で大きさ（すべての')}{what}{t('のカード）')}</span>
+          <label className="check" title={t('このカードだけ別の位置と大きさにする（文字が長くて崩れるときなど）。外すと同じ種類のカードの設定に戻る')}>
+            <input type="checkbox" checked={own} onChange={e => onOwn(e.target.checked ? layout : undefined)} /> {t('このカードだけ')}</label>
+          <span className="muted">{own ? t('ドラッグで移動、右下の角で大きさ（このカードだけ）') : <>{t('ドラッグで移動、右下の角で大きさ（すべての')}{what}{t('のカード）')}</>}</span>
           <label className="check">{t('大きさ')}
             <input type="range" aria-label={t('タイトルの大きさ')} min={30} max={300} step={5} value={Math.round(layout.scale * 100)}
               onChange={e => set({ ...layout, scale: +e.target.value / 100 })} />
             <span>{Math.round(layout.scale * 100)}%</span></label>
-          <button onClick={() => set(def)}>{t('元に戻す')}</button>
+          {!own && <button onClick={() => set(def)}>{t('元に戻す')}</button>}
         </>
       )}
       <span className="spacer" />

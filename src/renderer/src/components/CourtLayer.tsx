@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { drawCourt, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { drawCourt, flightMoves, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
 import { playback } from '../playback'
 import { prepareCanvas } from '../canvas'
 
@@ -24,7 +24,7 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
   const corners = drag?.corners ?? fit.corners
 
   // How far the curve has gone, in steps, so the layer redraws only while the ball is flying.
-  const flies = !fitting && !!flight && hasFlight(style, zones)
+  const flies = !fitting && !!flight && flightMoves(style, zones)
   const [progress, setProgress] = useState(1)
   useEffect(() => {
     if (!flies || !flight) { setProgress(1); return }

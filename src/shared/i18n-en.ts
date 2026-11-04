@@ -850,4 +850,10 @@ export const EN: Record<string, string> = {
   "{0}%（{1} 本）\n決定 {2}%": "{0}% ({1})\nkill {2}%",
   "{0} ゾーン {1} から": "{0} from zone {1}",
   "{0} 本": "{0} shots",
+  "オン: プレーに合わせて放物線が伸びる。オフ: クリップの間、放物線の全体を出したままにする": "On: the curve grows with the play. Off: the whole curve stays up for the clip",
+  "アニメーション": "Animate",
+  "このカードだけ別の位置と大きさにする（文字が長くて崩れるときなど）。外すと同じ種類のカードの設定に戻る": "Give this card its own place and size (when long text doesn't fit, say). Off: back with the other cards of its kind",
+  "このカードだけ": "This card only",
+  "ドラッグで移動、右下の角で大きさ（このカードだけ）": "Drag to move, the lower right corner to resize (this card only)",
+  "タイトルの位置と大きさ（この動画のすべての{0}のカード。「このカードだけ」にもできる）": "The title's place and size (every {0} card of this video, or this card only)",
 }

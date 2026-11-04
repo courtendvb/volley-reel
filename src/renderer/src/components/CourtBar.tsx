@@ -45,6 +45,8 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       </select>
       <label className="check" title={t('座標（点）のとき、矢印の代わりに打点から着地までの軌道を放物線で描き、プレーに合わせて伸ばす。DVW の時刻は秒単位なので、実際のボールとは重なりません')}>
         <input type="checkbox" checked={!!s.flight} disabled={!s.playZones || s.detail !== 'point'} onChange={e => onStyle({ ...s, flight: e.target.checked })} /> {t('軌道（放物線）')}</label>
+      <label className="check" title={t('オン: プレーに合わせて放物線が伸びる。オフ: クリップの間、放物線の全体を出したままにする')}>
+        <input type="checkbox" checked={!s.flightStill} disabled={!s.playZones || s.detail !== 'point' || !s.flight} onChange={e => onStyle({ ...s, flightStill: !e.target.checked })} /> {t('アニメーション')}</label>
       <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前（第1セット）')}
         <select value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
           <option value="*">{home.name || home.code}</option>

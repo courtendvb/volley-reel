@@ -7,7 +7,7 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { drawCourt, drawFlight, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones } from '../../shared/court'
+import { drawCourt, drawFlight, flightMoves, type CourtFit, type Flight, type GridStyle, type PlayZones } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
@@ -103,7 +103,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
   const layers: ExportLayer[] = []
   const always = anns.filter(whole)
-  const flies = !!court?.flight && hasFlight(d.courtStyle!, court.zones)
+  const flies = !!court?.flight && flightMoves(d.courtStyle!, court.zones)
   if (court || showSb || showCap || always.length) {
     layers.push({
       png: await png(ctx => {

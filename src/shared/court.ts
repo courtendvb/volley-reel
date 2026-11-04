@@ -220,6 +220,11 @@ export function hasFlight(style: GridStyle, zones: PlayZones | null | undefined)
   return !!(style.playZones && style.detail === 'point' && style.flight && p?.start && p.end && p.startZ)
 }
 
+// Whether the curve grows with the play: else it is simply shown whole.
+export function flightMoves(style: GridStyle, zones: PlayZones | null | undefined): boolean {
+  return hasFlight(style, zones) && !style.flightStill
+}
+
 // Height along the flight, s from 0 to 1: down from the contact, with a serve arcing over the net.
 function flightZ(startZ: number, attack: boolean, s: number): number {
   return startZ * (1 - s) + (attack ? 0 : 4 * SERVE_ARC_M * s * (1 - s))
@@ -278,7 +283,8 @@ export interface GridStyle {
   opacity: number // 0..1
   lineWidth: number // px at 720p, scaled with the picture like the annotations
   playZones: boolean
-  flight?: boolean // with the points: the ball's path as a curve that grows as the play goes
+  flight?: boolean // with the points: the ball's path as a curve
+  flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
 

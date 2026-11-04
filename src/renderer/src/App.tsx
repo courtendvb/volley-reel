@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { EMPTY_FILTER, applyFilter, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
   DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, setTiming, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
@@ -15,7 +15,7 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { freshIds, pasteCopies, shiftTimes, withGroups, type Annotation } from '../../shared/annotation'
 import { changed, mergeScoped, moveToScope, scopeOf, splitScoped, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
-import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
+import { captionData, overlaySettings, scoreboardData, type CaptionData, type CardLayout, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
@@ -43,8 +43,6 @@ import { captionPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
-import { filterTitle, playStats, statAnnotations } from '../../shared/stats'
-import { shotCharts } from '../../shared/shotChart'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -110,7 +108,7 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
@@ -510,7 +508,7 @@ export function App() {
     const m = cardEdit.marker
     const ids = m === null ? Object.keys(sc.clips) : sc.groups[m]
     return { marker: m, name: (m === null ? sc.cardTitle || sc.name : sc.markerCardTitles?.[m] || sc.markerNames[m]), ...cardMatch(sc, ids, matches, codes),
-      annotations: (m === null ? sc.cardAnnotations : sc.markerCardAnnotations?.[m]) ?? [] }
+      annotations: (m === null ? sc.cardAnnotations : sc.markerCardAnnotations?.[m]) ?? [], layout: m === null ? sc.cardLayout : sc.markerCardLayouts?.[m] }
   }, [cardEdit, reels, video, matches, settings])
   const setCardAnns = useCallback((list: Annotation[]) => {
     const ce = cardEditRef.current
@@ -543,6 +541,16 @@ export function App() {
     if (!sc) return
     const m = cardEdit.marker
     updateReel(m === null ? { ...sc, cardTitle: value, updatedAt: now } : { ...sc, markerCardTitles: { ...sc.markerCardTitles, [m]: value }, updatedAt: now })
+  }
+  // This card's own title place and size, apart from the others of its kind (undefined: back with them).
+  const setCardLayout = (l: CardLayout | undefined) => {
+    if (!cardEdit) return
+    const now = new Date().toISOString()
+    if (cardEdit.sceneId === null) { if (video) updateVideo({ ...video, cardLayout: l, updatedAt: now }); return }
+    const sc = reels.find(x => x.id === cardEdit.sceneId)
+    if (!sc) return
+    const m = cardEdit.marker
+    updateReel(m === null ? { ...sc, cardLayout: l, updatedAt: now } : { ...sc, markerCardLayouts: { ...sc.markerCardLayouts, [m]: l }, updatedAt: now })
   }
   // Whether this card is shown at all (the same switches as the overlay dialog and the scene editor).
   const cardShown = !cardEdit ? false : cardEdit.sceneId === null ? !!overlay.titleCard.videoCard
@@ -659,38 +667,6 @@ export function App() {
       else editCard(sceneId, null, list[0].id)
     } catch (e) {
       setProgress(null)
-      setError(t('スライドを入れられませんでした: {0}', (e as Error).message))
-    }
-  }
-
-  // The numbers of the search, on a slide at the head of the open scene (made if there is none). All
-  // evaluations count, whatever is picked: the rates are about all the plays. Open to edit.
-  const addStatCard = () => {
-    const lines = playStats(applyFilter(scopeRefs, { ...filter, effects: [] }))
-    if (!lines.length) { setNotice(t('数字にできるプレーがありません（セットには数字がありません）')); return }
-    const r = withReel(x => x)
-    const group = r.groupOrder.find(m => r.groups[m].length) ?? r.groupOrder[0]
-    const slide = { ...newSlide({ kind: 'blank' }, 4), annotations: statAnnotations(filterTitle(filter, people, settings?.ourTeamCodes[0] ?? ''), lines) }
-    updateScene(r.id, s => putSlides(s, [slide], { group, after: null, index: 0 }))
-    editCard(r.id, null, slide.id)
-  }
-
-  // Where the search's serves and attacks go, one slide per start zone, on the frame on screen, at the
-  // head of the open scene; the first opens for editing.
-  const addShotChart = async () => {
-    const key = playback.attachedKey, m = key ? latest.current.matches[key] : null
-    if (!key || !m?.court || !m.width || !m.height) { setNotice(t('コートの四隅を合わせた試合の動画を出してから押してください')); return }
-    const { charts, left } = shotCharts(results, m.court, m.width, m.height, filterTitle(filter, people, settings?.ourTeamCodes[0] ?? ''))
-    if (!charts.length) { setNotice(t('チャートにできるサーブ・アタックがありません（座標があって、同じスタートゾーンに 3 本以上）')); return }
-    try {
-      const assetId = await api.grabFrame(key, playback.current.time)
-      const r = withReel(x => x)
-      const group = r.groupOrder.find(g => r.groups[g].length) ?? r.groupOrder[0]
-      const slides = charts.map(c => ({ ...newSlide({ kind: 'image', assetId }, 5), annotations: c.annotations }))
-      updateScene(r.id, s => putSlides(s, slides, { group, after: null, index: 0 }))
-      editCard(r.id, null, slides[0].id)
-      if (left) setNotice(t('座標がないか本数の少ないスタートゾーンの {0} 本はチャートに入っていません', left))
-    } catch (e) {
       setError(t('スライドを入れられませんでした: {0}', (e as Error).message))
     }
   }
@@ -905,8 +881,6 @@ export function App() {
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
-              onStatCard={addStatCard}
-              onShotChart={() => void addShotChart()}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
@@ -921,7 +895,7 @@ export function App() {
                 if (cardEditCard) {
                   return (
                     <>
-                      <CardEditor size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} active={cardTool === 'title'} />
+                      <CardEditor size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title'} />
                       <AnnotationLayer
                         size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always
                         editable={cardTool === 'objects'} tool={annTool} style={annStyle}
@@ -958,7 +932,7 @@ export function App() {
                 onReload={editingSource ? () => void reloadSlideFiles([editingSource.path]) : null} />
             )}
             {cardEditCard && !editingSlide && (
-              <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
+              <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
                 title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} />
             )}

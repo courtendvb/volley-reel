@@ -153,9 +153,10 @@ export interface PlayZones {
   end: Spot | null
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
 }
-// x across, y far to near; outside 0–1 is off the court. startZ: the metres above that spot the ball
-// was struck from.
-export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number }
+// x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
+// (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
+// straight line between them, in metres.
+export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -179,14 +180,24 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
   return { start: served ?? spot(play.startZone, play.startSub, startNear), end: spot(play.endZone, play.endSub, !startNear) }
 }
 
-// How high the ball is struck, in metres: a jump serve (Q), other serves, an attack. Sets stay on
-// the floor. `code` is the shot: the play itself, or what a reception or dig answers.
+// How high the ball is struck, in metres: a jump serve (Q), other serves, an attack, a set. `code` is
+// the shot: the play itself, or what a reception or dig answers.
 export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
 export const ATTACK_Z = 3.15
+export const SET_Z = 2.4
 export function strikeHeight(code: string): number {
   const skill = code.charAt(3)
-  return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : 0
+  return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : skill === 'E' ? SET_Z : 0
+}
+
+// The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
+// attack (T, P) loops; a hard one goes straight down. A set goes by its tempo.
+function shotPath(code: string): { sec: number; arc: number } {
+  const skill = code.charAt(3), type = code.charAt(4)
+  if (skill === 'A') return code.charAt(12) === 'T' || code.charAt(12) === 'P' ? { sec: 0.9, arc: 0.8 } : { sec: 0.5, arc: 0 }
+  if (skill === 'E') return type === 'H' ? { sec: 1.3, arc: 3 } : type === 'Q' ? { sec: 0.6, arc: 0.5 } : { sec: 1, arc: 1.5 }
+  return { sec: type === 'Q' ? 1 : 1.4, arc: 1.2 }
 }
 
 // The play's clicks on the court. They are seen from the play's team, whose end line is on the near
@@ -194,8 +205,8 @@ export function strikeHeight(code: string): number {
 export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit): PlayPoints {
   const near = nearSide(fit, play) === play.side
   const on = (c: ClickPoint | null | undefined): Pt | null => (c ? (near ? { x: c.u, y: 1 - c.v } : { x: 1 - c.u, y: c.v }) : null)
-  const start = on(play.startClick), z = strikeHeight(play.shotCode ?? play.code)
-  return { start, end: on(play.endClick), ...(start && z ? { startZ: z } : {}) }
+  const shot = play.shotCode ?? play.code, start = on(play.startClick), z = strikeHeight(shot)
+  return { start, end: on(play.endClick), ...(start && z ? { startZ: z, arc: shotPath(shot).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
 }
 
 // What is drawn for a play: its zones, and its clicks for the 座標 detail.
@@ -205,11 +216,10 @@ export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' 
 
 // The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
 // than following the real ball: a serve or attack leaves at the play's time, and a reception or dig
-// is reached at its time. `sec`: a jump serve 1, other serves 1.4, an attack 0.5.
+// is reached at its time. `sec`: see shotPath.
 export interface Flight { startSec: number; sec: number }
 export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill'>, offsetSec: number): Flight {
-  const shot = play.shotCode ?? play.code, skill = shot.charAt(3)
-  const sec = skill === 'A' ? 0.5 : shot.charAt(4) === 'Q' ? 1 : 1.4
+  const { sec } = shotPath(play.shotCode ?? play.code)
   const t = play.time + offsetSec
   return { startSec: play.shotCode ? t - sec : t, sec }
 }
@@ -225,11 +235,10 @@ export function flightMoves(style: GridStyle, zones: PlayZones | null | undefine
   return hasFlight(style, zones) && !style.flightStill
 }
 
-// Height along the flight, s from 0 to 1: down from the contact, with a serve arcing over the net.
-function flightZ(startZ: number, attack: boolean, s: number): number {
-  return startZ * (1 - s) + (attack ? 0 : 4 * SERVE_ARC_M * s * (1 - s))
+// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc.
+function flightZ(p: PlayPoints, s: number): number {
+  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + 4 * (p.arc ?? 0) * s * (1 - s)
 }
-const SERVE_ARC_M = 1.2
 const FLIGHT_STEPS = 32
 
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
@@ -240,8 +249,8 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
   if (!camera) return
   const H = homography(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt])
-  const a = p.start, b = p.end, attack = p.startZ === ATTACK_Z
-  const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p.startZ!, attack, s))
+  const a = p.start, b = p.end
+  const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s))
   const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
   drawLift(ctx, project(H, a.x, a.y), air, w)
   if (done > 0) {
@@ -260,6 +269,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
     ctx.restore()
   }
   drawPoint(ctx, air, START_COLOR, w)
+  if (done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
   if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
@@ -350,10 +360,12 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     const camera = pts?.start && pts.startZ ? courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h) : null
     const air = camera && pts?.start ? camera(pts.start.x, pts.start.y, pts.startZ!) : null
     if (ground && air) drawLift(ctx, ground, air, w)
-    const a = air ?? place(pts?.start, zones.start), b = place(pts?.end, zones.end)
+    const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null
+    if (pts?.end && endAir) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
+    const a = air ?? place(pts?.start, zones.start), b = endAir ?? place(pts?.end, zones.end)
     if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w)
-    if (pts?.end) drawPoint(ctx, at(pts.end.x, pts.end.y), END_COLOR, w)
+    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w)
   }
 }
 

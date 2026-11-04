@@ -1171,6 +1171,16 @@ export function installSmoke(h: SmokeHost): void {
     await sleep(300)
     const flyServe = pick('S')
     await show('flight-start', flyServe)
+    const shotOf = (want: (c: string) => boolean) => all.find(r => r.play.startClick && r.play.endClick && want(r.play.code))
+    const tip = shotOf(c => c.charAt(3) === 'A' && (c.charAt(12) === 'T' || c.charAt(12) === 'P'))
+    const highSet = shotOf(c => c.charAt(3) === 'E' && c.charAt(4) === 'H')
+    for (const [name, r] of [['flight-tip', tip], ['flight-set', highSet]] as const) {
+      if (!r) continue
+      await show(name, r)
+      const f = flightTiming(r.play, latest.current.matches[m.id].offsetSec)
+      await playback.seekAndWait(f.startSec + f.sec + 0.1); await sleep(400)
+      await api.smokeShot!(`points-${name}-end.png`)
+    }
     const fl = flightTiming(flyServe.play, latest.current.matches[m.id].offsetSec)
     await playback.seekAndWait(fl.startSec + fl.sec * 0.6); await sleep(400)
     await api.smokeShot!('points-flight-mid.png')

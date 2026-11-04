@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, courtCamera, flightTiming, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -135,13 +135,29 @@ describe('playPoints', () => {
     expect(a.end!.y).toBeLessThan(0.5)
   })
 
-  it('starts in the air by the shot: jump serve, float, attack, what a reception or dig answers; sets on the floor', () => {
+  it('starts in the air by the shot: jump serve, float, attack, set, what a reception or dig answers', () => {
     expect(playPoints({ ...serve, code: 'a04SQ+~~~58A' }, fit).startZ).toBe(JUMP_SERVE_Z)
     expect(playPoints(serve, fit).startZ).toBe(FLOAT_SERVE_Z) // SM, a jump float
     expect(playPoints(attack, fit).startZ).toBe(ATTACK_Z)
     expect(playPoints(reception, fit).startZ).toBe(FLOAT_SERVE_Z)
     expect(playPoints(dig, fit).startZ).toBe(ATTACK_Z)
-    expect(playPoints(set, fit).startZ).toBeUndefined()
+    expect(playPoints(set, fit)).toMatchObject({ startZ: SET_Z, endZ: ATTACK_Z, arc: 3 }) // EH: a high ball, to the hitter's hand
+  })
+
+  it('a hard attack goes straight; a tip or soft one, and a dig of it, arcs', () => {
+    expect(playPoints(attack, fit).arc).toBe(0) // AH … H
+    const tip = { ...attack, code: '*07AH#P1~41BT3' }, soft = { ...attack, code: '*07AH#P1~41BP3' }
+    expect(playPoints(tip, fit).arc).toBeGreaterThan(0)
+    expect(playPoints(soft, fit).arc).toBeGreaterThan(0)
+    expect(playPoints({ ...dig, shotCode: tip.code }, fit).arc).toBeGreaterThan(0)
+    expect(flightTiming(tip, 0).sec).toBeGreaterThan(flightTiming(attack, 0).sec)
+  })
+
+  it('a set goes by its tempo', () => {
+    const tempo = (type: string) => { const p = { ...set, code: `*21E${type}+K8F~8C` }; return [flightTiming(p, 0).sec, playPoints(p, fit).arc] }
+    expect(tempo('H')).toEqual([1.3, 3])
+    expect(tempo('M')).toEqual([1, 1.5])
+    expect(tempo('Q')).toEqual([0.6, 0.5])
   })
 
   it("a reception and a dig take the ball's path from the shot they answer", () => {
@@ -177,7 +193,7 @@ describe('flight', () => {
     expect(hasFlight({ ...style, detail: 'zone' }, zones)).toBe(false)
     expect(hasFlight({ ...style, flight: false }, zones)).toBe(false)
     expect(hasFlight({ ...style, playZones: false }, zones)).toBe(false)
-    expect(hasFlight(style, playMarks(set, fit))).toBe(false) // a set stays on the floor
+    expect(hasFlight(style, playMarks(set, fit))).toBe(true) // a set flies too
     expect(hasFlight(style, null)).toBe(false)
   })
 })

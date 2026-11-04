@@ -115,6 +115,19 @@ a06BH=~~~~;s;;;;;;14.00.13;1;4;2;1;220;;
 `)
   const [serve, reception, attack, block, cover] = D.plays
 
+  it("sends a set without an end click to the same team's next attack", () => {
+    const d = parseDVW(`[3TEAMS]
+HTH;HOME;0;;
+TGB;AWAY;0;;
+[3SCOUT]
+a04SM+~~~58A;;;;0619;-1-1;7348;14.00.07;1;4;2;1;214;;
+*21EH+K8F~8C;;;;3548;;;14.00.11;1;4;2;1;218;;
+*07AH#P1~41BH3;s;r;;4717;-1-1;8017;14.00.11;1;4;2;1;218;;
+`)
+    const [, set, attack] = d.plays
+    expect(set.endClick).toEqual(attack.startClick)
+  })
+
   it('keeps where the scout clicked', () => {
     expect(serve.startClick?.v).toBeCloseTo(-0.0075)
     expect(attack.endClick?.v).toBeGreaterThan(0.5)

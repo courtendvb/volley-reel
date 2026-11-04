@@ -334,11 +334,21 @@ export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
 }
 
 // A heatmap on the floor: how thick the landings are, in metres so the spread is the same both ways
-// along the court. One red, light to dark, as the count rises; thin parts fade out so the floor shows.
+// along the court. Coloured like a thermal camera, blue through to red as the count rises; the
+// thinnest parts fade out so the floor shows.
 export interface SlideHeat { fit: CourtFit; points: Pt[] }
 const COURT_W_M = 9, COURT_L_M = 18
 const HEAT_CELL_M = 0.25, HEAT_SIGMA_M = 0.8, HEAT_MARGIN_M = 3
-const HEAT_LIGHT = [252, 165, 165], HEAT_DARK = [153, 27, 27], HEAT_ALPHA = 0.85
+const HEAT_ALPHA = 0.75
+const HEAT_RAMP: [number, [number, number, number]][] = [[0, [37, 99, 235]], [0.3, [6, 182, 212]], [0.5, [34, 197, 94]], [0.72, [250, 204, 21]], [1, [220, 38, 38]]]
+
+// The colour for a thickness of 0–1.
+export function heatColor(v: number): [number, number, number] {
+  const hi = Math.max(1, HEAT_RAMP.findIndex(([at]) => at >= v))
+  const [a, ca] = HEAT_RAMP[hi - 1], [b, cb] = HEAT_RAMP[hi]
+  const s = Math.max(0, Math.min(1, (v - a) / (b - a)))
+  return [ca[0] + (cb[0] - ca[0]) * s, ca[1] + (cb[1] - ca[1]) * s, ca[2] + (cb[2] - ca[2]) * s]
+}
 
 export interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
 export function heatGrid(points: Pt[]): HeatGrid {
@@ -387,8 +397,9 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat): void 
       if (q * side <= 1e-9) continue
       const v = heatAt(grid, (A * x + B * y + C) / q, (D * x + E * y + F) / q)
       if (v < 0.04) continue
-      for (let k = 0; k < 3; k++) px[i + k] = HEAT_LIGHT[k] + (HEAT_DARK[k] - HEAT_LIGHT[k]) * v
-      px[i + 3] = 255 * HEAT_ALPHA * Math.min(1, v * 1.6)
+      const c = heatColor(v)
+      px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]
+      px[i + 3] = 255 * HEAT_ALPHA * Math.min(1, v * 5)
     }
   }
   out.putImageData(image, 0, 0)

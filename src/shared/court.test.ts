@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatGrid, landingPoint, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, landingPoint, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -283,5 +283,15 @@ describe('flightTiming with the red line moved', () => {
     expect(flightTiming(serve, 5).startSec).toBe(105)
     expect(flightTiming(serve, 5, 106.3).startSec).toBe(106.3)
     expect(flightTiming(reception, 5, 108).startSec).toBeCloseTo(108 - 1.4)
+  })
+})
+
+describe('heatColor', () => {
+  it('runs from blue through to red', () => {
+    expect(heatColor(0)).toEqual([37, 99, 235])
+    expect(heatColor(1)).toEqual([220, 38, 38])
+    const [r, g, b] = heatColor(0.5)
+    expect(g).toBeGreaterThan(r)
+    expect(g).toBeGreaterThan(b)
   })
 })

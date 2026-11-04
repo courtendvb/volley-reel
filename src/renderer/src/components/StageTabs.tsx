@@ -1,6 +1,6 @@
-// The panels under the video, one at a time so the video keeps its size: trim (IN/OUT, slow and
-// hold, object times), objects (the drawing tools), display (headline and the auto overlays) and
-// the court grid. The open tab again closes it, for the biggest video.
+// The panels under the video, one at a time so the video keeps its size: trim (the main editing
+// panel: headline, IN/OUT, slow and hold, object times), objects (the drawing tools), display (the
+// auto overlays) and the court grid. The open tab again closes it, for the biggest video.
 import { t } from '../../../shared/i18n'
 
 export const STAGE_PANELS = ['trim', 'objects', 'display', 'court'] as const
@@ -8,9 +8,9 @@ export type StagePanel = typeof STAGE_PANELS[number]
 
 const LABELS: Record<StagePanel, string> = { trim: t('トリム'), objects: t('図形'), display: t('表示'), court: t('コート') }
 const TIPS: Record<StagePanel, string> = {
-  trim: t('IN / OUT、スロー・停止、図形の表示時間'),
+  trim: t('見出し、IN / OUT、スロー・停止、図形の表示時間'),
   objects: t('テキスト・矢印・図形・画像と書式'),
-  display: t('見出し、スコアボード・テロップ'),
+  display: t('スコアボード・テロップ'),
   court: t('コートのグリッドとプレーのゾーン'),
 }
 

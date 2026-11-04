@@ -37,12 +37,14 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       <label className="check" title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')}>
         <input type="checkbox" checked={s.playZones} onChange={e => onStyle({ ...s, playZones: e.target.checked })} /> {t('プレーのゾーン')}</label>
       <select value={s.detail} aria-label={t('ゾーンの細かさ')} disabled={!s.playZones}
-        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.25 m、フローター 3 m、アタック 3.3 m）の空中から矢印が出る。座標がないプレーはゾーンを塗る')}
+        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。座標がないプレーはゾーンを塗る')}
         onChange={e => onStyle({ ...s, detail: e.target.value as GridStyle['detail'] })}>
         <option value="zone">{t('ゾーン')}</option>
         <option value="sub">{t('サブゾーン')}</option>
         <option value="point">{t('座標（点）')}</option>
       </select>
+      <label className="check" title={t('座標（点）のとき、矢印の代わりに打点から着地までの軌道を放物線で描き、プレーに合わせて伸ばす。DVW の時刻は秒単位なので、実際のボールとは重なりません')}>
+        <input type="checkbox" checked={!!s.flight} disabled={!s.playZones || s.detail !== 'point'} onChange={e => onStyle({ ...s, flight: e.target.checked })} /> {t('軌道（放物線）')}</label>
       <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前（第1セット）')}
         <select value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
           <option value="*">{home.name || home.code}</option>

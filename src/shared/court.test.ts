@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, FLOAT_SERVE_Z, JUMP_SERVE_Z, courtCamera, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, courtCamera, flightTiming, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -158,6 +158,27 @@ describe('playPoints', () => {
     expect(playPoints(serve, swapped).start!.y).toBeGreaterThan(0.99)
     expect(playPoints({ ...attack, startClick: null, endClick: undefined }, fit)).toEqual({ start: null, end: null })
     expect(playMarks(attack, fit)).toMatchObject({ start: { cell: { row: 3, col: 0 } }, points: { start: expect.anything() } })
+  })
+})
+
+describe('flight', () => {
+  it('a shot leaves at its time; a reception or dig is reached at its time', () => {
+    expect(flightTiming(attack, 10)).toEqual({ startSec: attack.time + 10, sec: 0.5 })
+    expect(flightTiming(serve, 0)).toEqual({ startSec: serve.time, sec: 1.4 }) // SM: a float
+    expect(flightTiming({ ...serve, code: 'a04SQ+~~~58A' }, 0).sec).toBe(1)
+    expect(flightTiming(reception, 0)).toEqual({ startSec: reception.time - 1.4, sec: 1.4 })
+    expect(flightTiming(dig, 0)).toEqual({ startSec: dig.time - 0.5, sec: 0.5 })
+  })
+
+  it('needs the points shown with the curve on, both ends and a height', () => {
+    const style = { ...DEFAULT_GRID_STYLE, detail: 'point' as const, flight: true }
+    const zones = playMarks(attack, fit)
+    expect(hasFlight(style, zones)).toBe(true)
+    expect(hasFlight({ ...style, detail: 'zone' }, zones)).toBe(false)
+    expect(hasFlight({ ...style, flight: false }, zones)).toBe(false)
+    expect(hasFlight({ ...style, playZones: false }, zones)).toBe(false)
+    expect(hasFlight(style, playMarks(set, fit))).toBe(false) // a set stays on the floor
+    expect(hasFlight(style, null)).toBe(false)
   })
 })
 

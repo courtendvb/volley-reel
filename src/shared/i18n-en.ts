@@ -818,6 +818,8 @@ export const EN: Record<string, string> = {
   "シーンのクリップを選ぶと使えます": "Pick a clip in the scene to use it",
   "閉じて動画を大きく": "Close for a bigger video",
   "試合の状況（セット・ローテ・局面・直前直後）": "Match situation (set, rotation, phase, plays around)",
-  "サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.25 m、フローター 3 m、アタック 3.3 m）の空中から矢印が出る。座標がないプレーはゾーンを塗る": "Sub-zone: light the zone's quarter A–D and draw the arrow between their middles; where the DVW has no sub-zone, the whole zone. Points: where the scout clicked (for a reception or dig, where the ball came from). Serves and attacks start in the air at the contact height (jump serve 3.25 m, float 3 m, attack 3.3 m). Plays without a click light their zones",
+  "サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。座標がないプレーはゾーンを塗る": "Sub-zone: light the zone's quarter A–D and draw the arrow between their middles; where the DVW has no sub-zone, the whole zone. Points: where the scout clicked (for a reception or dig, where the ball came from). Serves and attacks start in the air at the contact height (jump serve 3.1 m, float 3 m, attack 3.15 m). Plays without a click light their zones",
   "座標（点）": "Points",
+  "座標（点）のとき、矢印の代わりに打点から着地までの軌道を放物線で描き、プレーに合わせて伸ばす。DVW の時刻は秒単位なので、実際のボールとは重なりません": "With Points: a curve from the contact to the landing, in place of the arrow, growing with the play. DVW times are whole seconds, so it doesn't follow the real ball",
+  "軌道（放物線）": "Flight curve",
 }

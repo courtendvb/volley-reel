@@ -181,9 +181,9 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
 
 // How high the ball is struck, in metres: a jump serve (Q), other serves, an attack. Sets stay on
 // the floor. `code` is the shot: the play itself, or what a reception or dig answers.
-export const JUMP_SERVE_Z = 3.25
+export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
-export const ATTACK_Z = 3.3
+export const ATTACK_Z = 3.15
 function strikeHeight(code: string): number {
   const skill = code.charAt(3)
   return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : 0
@@ -201,6 +201,62 @@ export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'
 // What is drawn for a play: its zones, and its clicks for the 座標 detail.
 export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit, next?: ZonePlay | null): PlayZones {
   return { ...playZones(play, fit, next), points: playPoints(play, fit) }
+}
+
+// The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
+// than following the real ball: a serve or attack leaves at the play's time, and a reception or dig
+// is reached at its time. `sec`: a jump serve 1, other serves 1.4, an attack 0.5.
+export interface Flight { startSec: number; sec: number }
+export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill'>, offsetSec: number): Flight {
+  const shot = play.shotCode ?? play.code, skill = shot.charAt(3)
+  const sec = skill === 'A' ? 0.5 : shot.charAt(4) === 'Q' ? 1 : 1.4
+  const t = play.time + offsetSec
+  return { startSec: play.shotCode ? t - sec : t, sec }
+}
+
+// Which flights can be drawn: the points are shown with the curve on, and the play has both ends and a height.
+export function hasFlight(style: GridStyle, zones: PlayZones | null | undefined): boolean {
+  const p = zones?.points
+  return !!(style.playZones && style.detail === 'point' && style.flight && p?.start && p.end && p.startZ)
+}
+
+// Height along the flight, s from 0 to 1: down from the contact, with a serve arcing over the net.
+function flightZ(startZ: number, attack: boolean, s: number): number {
+  return startZ * (1 - s) + (attack ? 0 : 4 * SERVE_ARC_M * s * (1 - s))
+}
+const SERVE_ARC_M = 1.2
+const FLIGHT_STEPS = 32
+
+// The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
+// far with the ball at its tip, and the landing point once it is there.
+export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number): void {
+  const p = zones.points
+  if (!p?.start || !p.end || !p.startZ) return
+  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  if (!camera) return
+  const H = homography(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt])
+  const a = p.start, b = p.end, attack = p.startZ === ATTACK_Z
+  const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p.startZ!, attack, s))
+  const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
+  drawLift(ctx, project(H, a.x, a.y), air, w)
+  if (done > 0) {
+    const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done))
+    ctx.save()
+    ctx.strokeStyle = '#FACC15'
+    ctx.lineWidth = lineW
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'
+    ctx.shadowBlur = lineW * 1.5
+    ctx.beginPath()
+    ctx.moveTo(air.x, air.y)
+    for (let i = 1; i <= n; i++) { const q = at((done * i) / n); ctx.lineTo(q.x, q.y) }
+    ctx.stroke()
+    ctx.restore()
+  }
+  drawPoint(ctx, air, START_COLOR, w)
+  if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w)
+  else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
 
 // Which way the ball goes on screen in a play: 'up' from the near side toward the far one, 'down'
@@ -222,6 +278,7 @@ export interface GridStyle {
   opacity: number // 0..1
   lineWidth: number // px at 720p, scaled with the picture like the annotations
   playZones: boolean
+  flight?: boolean // with the points: the ball's path as a curve that grows as the play goes
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
 
@@ -235,7 +292,8 @@ const END_COLOR = '#EF4444'
 // The grid and the play's zones over a w × h picture.
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
-export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null): void {
+// flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null, flight: number | null = 1): void {
   const H = homography(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt])
   const at = (u: number, v: number) => project(H, u, v)
   const area = (s: Spot) => spotArea(s, style.detail === 'sub')
@@ -275,7 +333,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     ctx.restore()
   }
 
-  if (style.playZones && zones) {
+  if (hasFlight(style, zones) && courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) {
+    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight)
+  } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
     const place = (p: Pt | null | undefined, s: Spot | null) => (p ? at(p.x, p.y) : s ? mid(s) : null)

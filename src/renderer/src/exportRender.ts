@@ -7,11 +7,12 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { drawCourt, type CourtFit, type GridStyle, type PlayZones } from '../../shared/court'
+import { drawCourt, drawFlight, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
 export const EXPORT_HEIGHT = 720
+const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 
 interface Deps {
   range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
@@ -20,7 +21,7 @@ interface Deps {
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
   markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
-  court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null } | null // the clip's fitted court and its play's zones
+  court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
   courtStyle?: GridStyle // the grid's look, as in the player
 }
 
@@ -102,16 +103,30 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
   const layers: ExportLayer[] = []
   const always = anns.filter(whole)
+  const flies = !!court?.flight && hasFlight(d.courtStyle!, court.zones)
   if (court || showSb || showCap || always.length) {
     layers.push({
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
-        if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones)
+        if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones, flies ? null : 1)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, overlay.theme)
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, overlay.theme, packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),
     })
+  }
+  // The curve grows in steps, each its own layer in its time window (slow and holds stretch them),
+  // and the last stays to the end of the clip.
+  if (flies) {
+    const { startSec, sec } = court!.flight!
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    const steps = Math.max(2, Math.min(FLIGHT_LAYERS, Math.ceil(sec * 12)))
+    for (let i = 0; i <= steps; i++) {
+      const from = i ? playedOf(startSec + (sec * (i - 1)) / steps) : 0
+      const to = i === steps ? played : playedOf(startSec + (sec * i) / steps)
+      if (to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps)) })
+    }
   }
   const timed = new Map<string, Annotation[]>()
   for (const a of anns) {

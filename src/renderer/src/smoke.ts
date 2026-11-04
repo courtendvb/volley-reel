@@ -1175,7 +1175,8 @@ export function installSmoke(h: SmokeHost): void {
     const tip = shotOf(c => c.charAt(3) === 'A' && (c.charAt(12) === 'T' || c.charAt(12) === 'P'))
     // Many DVWs leave out where a set was struck: the check takes any that says where it went.
     const highSet = all.find(r => r.play.skill === 'E' && r.play.code.charAt(4) === 'H' && r.play.endClick)
-    for (const [name, r] of [['flight-tip', tip], ['flight-set', highSet]] as const) {
+    const midSet = all.find(r => r.play.skill === 'E' && r.play.setTo === 'M' && r.play.code.charAt(4) !== 'Q' && r.play.endClick)
+    for (const [name, r] of [['flight-tip', tip], ['flight-set', highSet], ['flight-set-m', midSet]] as const) {
       if (!r) continue
       await show(name, r)
       const f = flightTiming(r.play, latest.current.matches[m.id].offsetSec)
@@ -1233,7 +1234,19 @@ export function installSmoke(h: SmokeHost): void {
       const movedClip = movedJob?.items.find(i => i.kind === 'clip')
       const firstJobClip = job.items.find(i => i.kind === 'clip')
       const layer = (c: typeof movedClip) => (c?.kind === 'clip' ? c.layers[1]?.to ?? null : null)
-      const skillLine = { skillSec, before: layer(firstJobClip), after: layer(movedClip) }
+      // The serve's speed, typed in the trim tab: the flight's last step ends sooner or later with it.
+      const speedBox = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('サーブの速度（km/h）') + '"]'), 5000, 'speed field')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(speedBox, '110')
+      speedBox.dispatchEvent(new Event('input', { bubbles: true })); await sleep(100)
+      speedBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(400)
+      await api.smokeShot!('serve-speed.png')
+      const speedClip = latest.current.reel!.clips[first.id]
+      const fastJob = await startExport(exportTo.replace(/\.mp4$/i, '-fast.mp4'), { plan: currentPlan('scene'), name: 'fast' })
+      await sleep(500)
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'fast export done')
+      const flightEnd = (c: unknown) => { const it = c as { layers: { to?: number }[] } | undefined; const l = it?.layers ?? []; return l[l.length - 2]?.to ?? null }
+      const speedLine = { kmh: speedClip.speedKmh ?? null, usual: speedBox.placeholder, before: flightEnd(movedClip), after: flightEnd(fastJob?.items.find(i => i.kind === 'clip')) }
+      const skillLine = { speedLine, skillSec, before: layer(firstJobClip), after: layer(movedClip) }
       exported = { skillLine, state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
     // Every serve of the search at once: the button beside 結果をシーンに追加 makes the slide on the

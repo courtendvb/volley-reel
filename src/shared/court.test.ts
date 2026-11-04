@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -281,8 +281,8 @@ describe('flightTiming with the red line moved', () => {
   const serve = { time: 100, code: '*05SM-', skill: 'S' }, reception = { time: 102, code: 'a01RM+', shotCode: '*05SM-', skill: 'R' }
   it('leaves from it, or reaches it for a reception, in place of the DVW time', () => {
     expect(flightTiming(serve, 5).startSec).toBe(105)
-    expect(flightTiming(serve, 5, 106.3).startSec).toBe(106.3)
-    expect(flightTiming(reception, 5, 108).startSec).toBeCloseTo(108 - 1.4)
+    expect(flightTiming(serve, 5, { skillSec: 106.3 }).startSec).toBe(106.3)
+    expect(flightTiming(reception, 5, { skillSec: 108 }).startSec).toBeCloseTo(108 - 1.4)
   })
 })
 
@@ -301,15 +301,15 @@ describe('a set by the attack it is for', () => {
   it('goes straight to a quick', () => {
     expect(playPoints({ ...set, setTo: 'Q' } as never, fit).arc).toBe(0)
   })
-  it('is 15% quicker and peaks at three quarters to an M or U', () => {
+  it('is 15% quicker to an M or U, as high as gravity takes it in that time', () => {
     for (const setTo of ['M', 'U']) {
       expect(flightTiming({ ...set, time: 10, setTo } as never, 0).sec).toBeCloseTo(0.85)
-      expect(playPoints({ ...set, setTo } as never, fit).apex).toBe(0.75)
+      expect(playPoints({ ...set, setTo } as never, fit).arc).toBeCloseTo((9.8 * 0.85 * 0.85) / 8)
     }
   })
   it('keeps its own shape to other attacks', () => {
     expect(flightTiming({ ...set, time: 10, setTo: 'H' } as never, 0).sec).toBe(1)
-    expect(playPoints({ ...set, setTo: 'H' } as never, fit).apex).toBeUndefined()
+    expect(playPoints({ ...set, setTo: 'H' } as never, fit).arc).toBe(1.5)
   })
 })
 
@@ -337,15 +337,31 @@ describe('playerMarks', () => {
 })
 
 describe('flightZ', () => {
-  it('peaks halfway by default, with the arc on top of the line', () => {
-    expect(flightZ({ start: null, end: null, startZ: 2, endZ: 2, arc: 1 }, 0.5)).toBeCloseTo(3)
+  it('is a parabola meeting both ends, whose top is past halfway when it rises', () => {
+    const p = { start: null, end: null, startZ: 2.4, endZ: 3.15, arc: 0.885 }
+    expect(flightZ(p, 0)).toBeCloseTo(2.4)
+    expect(flightZ(p, 1)).toBeCloseTo(3.15)
+    const top = Array.from({ length: 101 }, (_, i) => i / 100).reduce((a, b) => (flightZ(p, b) > flightZ(p, a) ? b : a))
+    expect(top).toBeGreaterThan(0.55)
+    expect(top).toBeLessThan(0.65)
+    // Equal steps in time drop by the same growing amounts: the second difference is constant.
+    const second = (s: number) => flightZ(p, s) - 2 * flightZ(p, s + 0.1) + flightZ(p, s + 0.2)
+    expect(second(0)).toBeCloseTo(second(0.8))
   })
-  it('peaks at three quarters with the apex there, and meets both ends', () => {
-    const p = { start: null, end: null, startZ: 2, endZ: 2, arc: 1, apex: 0.75 }
-    expect(flightZ(p, 0.75)).toBeCloseTo(3)
-    expect(flightZ(p, 0.5)).toBeLessThan(3)
-    expect(flightZ(p, 0.9)).toBeLessThan(3)
-    expect(flightZ(p, 0)).toBeCloseTo(2)
-    expect(flightZ(p, 1)).toBeCloseTo(2)
+})
+
+describe('a serve with its speed', () => {
+  const serve = { time: 100, code: '*05SQ-', skill: 'S', startClick: { u: 0.5, v: 0 }, endClick: { u: 0.5, v: 1 } }
+  it('takes its distance at that speed', () => {
+    expect(flightTiming(serve, 0, { speedKmh: 72 }).sec).toBeCloseTo(18 / 20)
+  })
+  it('keeps the usual time without a speed, and shows that speed', () => {
+    expect(flightTiming(serve, 0).sec).toBe(1)
+    expect(serveSpeed(serve)).toBe(65)
+  })
+  it('needs both clicks, and is only for serves', () => {
+    expect(flightTiming({ ...serve, endClick: null }, 0, { speedKmh: 72 }).sec).toBe(1)
+    expect(flightTiming({ ...serve, skill: 'A', code: '*05AH-' }, 0, { speedKmh: 72 }).sec).toBe(0.5)
+    expect(serveSpeed({ ...serve, startClick: null })).toBeNull()
   })
 })

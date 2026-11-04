@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  setSkillTime, shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
+  setServeSpeed, setSkillTime, shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
 } from './reel'
 
@@ -369,5 +369,14 @@ describe('setSkillTime', () => {
     expect(moved.clips[ids[0]].skillSec).toBe(12.4)
     expect('skillSec' in setSkillTime(moved, ids[0], null).clips[ids[0]]).toBe(false)
     expect(setSkillTime(reel, 'nope', 1)).toBe(reel)
+  })
+})
+
+describe('setServeSpeed', () => {
+  it('sets a clip serve speed and takes it off', () => {
+    const { reel, ids } = addClips(newReel('x'), [{ matchId: 'm', play: { id: 1, fingerprint: 'f', time: 10, rallyId: 1 } as never }])
+    const fast = setServeSpeed(reel, ids[0], 95)
+    expect(fast.clips[ids[0]].speedKmh).toBe(95)
+    expect('speedKmh' in setServeSpeed(fast, ids[0], null).clips[ids[0]]).toBe(false)
   })
 })

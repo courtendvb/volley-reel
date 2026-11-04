@@ -158,8 +158,7 @@ export interface PlayerMarks { heat?: SlideHeat; flights?: SlideFlights }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
-// apex: how far along the top of the arc is (missing: halfway).
-export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number; apex?: number }
+export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -196,16 +195,18 @@ export function strikeHeight(code: string): number {
 
 // The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
 // attack (T, P) loops; a hard one goes straight down. A set goes by its tempo and by the attack it
-// is for (setTo): to a quick (Q) it goes straight; to a slower one in front (M, U) it is quicker and
-// peaks late, at three quarters of the way.
-const FAST_SET = 0.85
-function shotPath(code: string, setTo?: string): { sec: number; arc: number; apex?: number } {
+// is for (setTo): to a quick (Q) it goes straight; to a slower one in front (M, U) it is quicker,
+// and as high as gravity makes it in that time. Rising to the hitter's hand puts its top past halfway.
+const FAST_SET = 0.85, GRAVITY = 9.8
+function shotPath(code: string, setTo?: string): { sec: number; arc: number } {
   const skill = code.charAt(3), type = code.charAt(4)
   if (skill === 'A') return code.charAt(12) === 'T' || code.charAt(12) === 'P' ? { sec: 0.9, arc: 0.8 } : { sec: 0.5, arc: 0 }
   if (skill === 'E') {
     const set = type === 'H' ? { sec: 1.3, arc: 3 } : type === 'Q' ? { sec: 0.6, arc: 0.5 } : { sec: 1, arc: 1.5 }
     if (setTo === 'Q') return { ...set, arc: 0 }
-    return setTo === 'M' || setTo === 'U' ? { sec: set.sec * FAST_SET, arc: set.arc, apex: 0.75 } : set
+    if (setTo !== 'M' && setTo !== 'U') return set
+    const sec = set.sec * FAST_SET
+    return { sec, arc: (GRAVITY * sec * sec) / 8 }
   }
   return { sec: type === 'Q' ? 1 : 1.4, arc: 1.2 }
 }
@@ -225,8 +226,7 @@ export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'
   const middle = coded ? spotArea(coded, true) : null
   const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
   const shot = play.shotCode ?? play.code, start = on(play.startClick) ?? setFrom, z = strikeHeight(shot)
-  const path = shotPath(shot, play.setTo)
-  return { start, end, ...(start && z ? { startZ: z, arc: path.arc, ...(path.apex ? { apex: path.apex } : {}) } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+  return { start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
 }
 
 // A click on the court, for a team whose end line is near or far.
@@ -268,13 +268,26 @@ export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, sty
 
 // The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
 // than following the real ball: a serve or attack leaves at the play's time, and a reception or dig
-// is reached at its time. `sec`: see shotPath. skillSec: the clip's own time for the play, moved by
-// hand (Clip.skillSec), in place of the DVW's.
+// is reached at its time. `sec`: see shotPath. A clip can put its own time on the play, moved by hand
+// (skillSec, in place of the DVW's), and on a serve its speed (speedKmh), which sets the time in the air.
 export interface Flight { startSec: number; sec: number }
-export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill' | 'setTo'>, offsetSec: number, skillSec?: number): Flight {
-  const { sec } = shotPath(play.shotCode ?? play.code, play.setTo)
-  const t = skillSec ?? play.time + offsetSec
+type FlightPlay = Pick<Play, 'time' | 'code' | 'shotCode' | 'skill' | 'setTo' | 'startClick' | 'endClick'>
+export function flightTiming(play: FlightPlay, offsetSec: number, clip?: { skillSec?: number; speedKmh?: number } | null): Flight {
+  const metres = play.skill === 'S' ? serveMetres(play) : null
+  const sec = metres && clip?.speedKmh ? metres / (clip.speedKmh / 3.6) : shotPath(play.shotCode ?? play.code, play.setTo).sec
+  const t = clip?.skillSec ?? play.time + offsetSec
   return { startSec: play.shotCode ? t - sec : t, sec }
+}
+
+// How far a serve goes along the floor, in metres; null without both clicks.
+function serveMetres({ startClick: a, endClick: b }: Pick<Play, 'startClick' | 'endClick'>): number | null {
+  return a && b ? Math.hypot((a.u - b.u) * COURT_W_M, (a.v - b.v) * COURT_L_M) : null
+}
+
+// The speed a serve flies at when the clip doesn't set one, in km/h, for the field to show.
+export function serveSpeed(play: FlightPlay): number | null {
+  const metres = serveMetres(play)
+  return metres ? Math.round((metres / flightTiming(play, 0).sec) * 3.6) : null
 }
 
 // Which flights can be drawn: the points are shown with the curve on, and the play has both ends and a height.
@@ -288,11 +301,10 @@ export function flightMoves(style: GridStyle, zones: PlayZones | null | undefine
   return (hasFlight(style, zones) || !!zones?.player?.flights) && !style.flightStill
 }
 
-// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc, which
-// is 1 at its top; a top at halfway makes it the parabola 4s(1 - s).
+// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc. Always a
+// parabola, as a ball under gravity flies.
 export function flightZ(p: PlayPoints, s: number): number {
-  const top = p.apex ?? 0.5, k = top / (1 - top)
-  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + ((p.arc ?? 0) * s ** k * (1 - s)) / (top ** k * (1 - top))
+  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + 4 * (p.arc ?? 0) * s * (1 - s)
 }
 const FLIGHT_STEPS = 32
 

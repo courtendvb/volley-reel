@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CORNERS, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, FLOAT_SERVE_Z, JUMP_SERVE_Z, courtCamera, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -103,6 +103,27 @@ describe('playZones', () => {
   })
 })
 
+describe('courtCamera', () => {
+  // A real fit (2026-10-31 HTH-TGB) on 1280 × 720; in its video the net's top runs y 253–256 and its
+  // bottom tape is at 345 on the left.
+  const px = [{ x: 0.23770491803278687, y: 0.48451730418943534 }, { x: 0.7730696798493408, y: 0.49246231155778897 }, { x: 0.1016949152542373, y: 0.9179229480737019 }, { x: 0.903954802259887, y: 0.9179229480737019 }]
+    .map(p => ({ x: p.x * 1280, y: p.y * 720 })) as CourtFit['corners']
+
+  it('finds where heights show: the net of the real video', () => {
+    const cam = courtCamera(px, 1280, 720)!
+    expect(cam(0, 0, 0).x).toBeCloseTo(px[0].x, 3) // the floor stays on the fit
+    expect(cam(1, 1, 0).y).toBeCloseTo(px[3].y, 3)
+    expect(Math.abs(cam(0, 0.5, 2.43).y - 253)).toBeLessThan(5)
+    expect(Math.abs(cam(0, 0.5, 1.43).y - 345)).toBeLessThan(5)
+    expect(cam(0.5, 0.5, 3).y).toBeLessThan(cam(0.5, 0.5, 2).y) // higher is up the picture
+  })
+
+  it('gives up on corners that cannot tell', () => {
+    const flat: CourtFit['corners'] = [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 100, y: 500 }, { x: 300, y: 500 }]
+    expect(courtCamera(flat, 400, 600)).toBeNull()
+  })
+})
+
 describe('playPoints', () => {
   it('puts a far serve behind the far end line and a near attack from the near half to the far one', () => {
     const s = playPoints(serve, fit) // away, far in set 1: seen turned round
@@ -112,6 +133,15 @@ describe('playPoints', () => {
     const a = playPoints(attack, fit) // home, near
     expect(a.start!.y).toBeGreaterThan(0.5)
     expect(a.end!.y).toBeLessThan(0.5)
+  })
+
+  it('starts in the air by the shot: jump serve, float, attack, what a reception or dig answers; sets on the floor', () => {
+    expect(playPoints({ ...serve, code: 'a04SQ+~~~58A' }, fit).startZ).toBe(JUMP_SERVE_Z)
+    expect(playPoints(serve, fit).startZ).toBe(FLOAT_SERVE_Z) // SM, a jump float
+    expect(playPoints(attack, fit).startZ).toBe(ATTACK_Z)
+    expect(playPoints(reception, fit).startZ).toBe(FLOAT_SERVE_Z)
+    expect(playPoints(dig, fit).startZ).toBe(ATTACK_Z)
+    expect(playPoints(set, fit).startZ).toBeUndefined()
   })
 
   it("a reception and a dig take the ball's path from the shot they answer", () => {

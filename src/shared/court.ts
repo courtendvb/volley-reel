@@ -17,6 +17,8 @@ export const DEFAULT_CORNERS: CourtFit['corners'] = [
   { x: 0.36, y: 0.28 }, { x: 0.64, y: 0.28 }, { x: 0.14, y: 0.9 }, { x: 0.86, y: 0.9 },
 ]
 
+const COURT_W = 9 // metres
+const COURT_L = 18
 export const COLS = 3
 export const ROWS = 6
 const HALF = ROWS / 2
@@ -85,6 +87,29 @@ export function courtQuad(corners: CourtFit['corners'], part: CourtPart): [[numb
   return [at(0, v0), at(1, v0), at(0, v1), at(1, v1)]
 }
 
+// The camera behind the picture, recovered from the fitted corners of a 9 × 18 m court (w × h pixels,
+// square pixels, the optical axis through the middle of the picture): where a point above the
+// floor shows, u and v as court units and z in metres. Null when the corners can't tell (seen
+// straight from above, say), and then there is no height to show.
+export function courtCamera(corners: readonly [Pt, Pt, Pt, Pt], w: number, h: number): ((u: number, v: number, z: number) => Pt) | null {
+  const cx = w / 2, cy = h / 2
+  const H = homography(corners.map(p => ({ x: p.x - cx, y: p.y - cy })) as [Pt, Pt, Pt, Pt])
+  // The floor's two axes in metres; rotated into the camera they are the same length and square.
+  const c1 = [H.a / COURT_W, H.d / COURT_W, H.g / COURT_W], c2 = [H.b / COURT_L, H.e / COURT_L, H.h / COURT_L], c3 = [H.c, H.f, 1]
+  const f2 = (c1[0] ** 2 + c1[1] ** 2 - c2[0] ** 2 - c2[1] ** 2) / (c2[2] ** 2 - c1[2] ** 2)
+  if (!(f2 > 0) || !isFinite(f2)) return null
+  const f = Math.sqrt(f2), inCam = (c: number[]) => [c[0] / f, c[1] / f, c[2]]
+  const a = inCam(c1), b = inCam(c2), t0 = inCam(c3), s = 1 / Math.hypot(...a)
+  const r1 = a.map(x => x * s), r2 = b.map(x => x * s), t = t0.map(x => x * s)
+  const r3 = [r1[1] * r2[2] - r1[2] * r2[1], r1[2] * r2[0] - r1[0] * r2[2], r1[0] * r2[1] - r1[1] * r2[0]]
+  const show = (u: number, v: number, z: number, up: number): Pt => {
+    const p = [0, 1, 2].map(i => r1[i] * u * COURT_W + r2[i] * v * COURT_L + r3[i] * z * up + t[i])
+    return { x: (p[0] / p[2]) * f + cx, y: (p[1] / p[2]) * f + cy }
+  }
+  const up = show(0.5, 0.5, 2, 1).y < show(0.5, 0.5, 0, 1).y ? 1 : -1 // up goes up the picture
+  return (u, v, z) => show(u, v, z, up)
+}
+
 // ---- which side, which cell -----------------------------------------------------------------
 
 // The team on the near side for a rally: swapped every set up to set 4; set 5 starts on the same
@@ -128,7 +153,9 @@ export interface PlayZones {
   end: Spot | null
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
 }
-export interface PlayPoints { start: Pt | null; end: Pt | null } // x across, y far to near; outside 0–1 is off the court
+// x across, y far to near; outside 0–1 is off the court. startZ: the metres above that spot the ball
+// was struck from.
+export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -152,16 +179,27 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
   return { start: served ?? spot(play.startZone, play.startSub, startNear), end: spot(play.endZone, play.endSub, !startNear) }
 }
 
+// How high the ball is struck, in metres: a jump serve (Q), other serves, an attack. Sets stay on
+// the floor. `code` is the shot: the play itself, or what a reception or dig answers.
+export const JUMP_SERVE_Z = 3.25
+export const FLOAT_SERVE_Z = 3
+export const ATTACK_Z = 3.3
+function strikeHeight(code: string): number {
+  const skill = code.charAt(3)
+  return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : 0
+}
+
 // The play's clicks on the court. They are seen from the play's team, whose end line is on the near
 // side (v 0 is the bottom) or the far one (turned round).
-export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'>, fit: CourtFit): PlayPoints {
+export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit): PlayPoints {
   const near = nearSide(fit, play) === play.side
   const on = (c: ClickPoint | null | undefined): Pt | null => (c ? (near ? { x: c.u, y: 1 - c.v } : { x: 1 - c.u, y: c.v }) : null)
-  return { start: on(play.startClick), end: on(play.endClick) }
+  const start = on(play.startClick), z = strikeHeight(play.shotCode ?? play.code)
+  return { start, end: on(play.endClick), ...(start && z ? { startZ: z } : {}) }
 }
 
 // What is drawn for a play: its zones, and its clicks for the 座標 detail.
-export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'>, fit: CourtFit, next?: ZonePlay | null): PlayZones {
+export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit, next?: ZonePlay | null): PlayZones {
   return { ...playZones(play, fit, next), points: playPoints(play, fit) }
 }
 
@@ -241,11 +279,29 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
     const place = (p: Pt | null | undefined, s: Spot | null) => (p ? at(p.x, p.y) : s ? mid(s) : null)
-    const a = place(pts?.start, zones.start), b = place(pts?.end, zones.end)
+    // A struck ball starts in the air, over the spot on the floor (marked, with a line up to it).
+    const ground = pts?.start ? at(pts.start.x, pts.start.y) : null
+    const camera = pts?.start && pts.startZ ? courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h) : null
+    const air = camera && pts?.start ? camera(pts.start.x, pts.start.y, pts.startZ!) : null
+    if (ground && air) drawLift(ctx, ground, air, w)
+    const a = air ?? place(pts?.start, zones.start), b = place(pts?.end, zones.end)
     if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
-    if (pts?.start) drawPoint(ctx, at(pts.start.x, pts.start.y), START_COLOR, w)
+    if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w)
     if (pts?.end) drawPoint(ctx, at(pts.end.x, pts.end.y), END_COLOR, w)
   }
+}
+
+// A small ring on the floor and a thin dashed line up to the point in the air.
+function drawLift(ctx: Ctx, ground: Pt, air: Pt, w: number): void {
+  ctx.save()
+  ctx.strokeStyle = '#FFFFFF'
+  ctx.lineWidth = Math.max(1, w / 900)
+  ctx.globalAlpha = 0.9
+  ctx.setLineDash([w / 200, w / 240])
+  ctx.beginPath(); ctx.moveTo(ground.x, ground.y); ctx.lineTo(air.x, air.y); ctx.stroke()
+  ctx.setLineDash([])
+  ctx.beginPath(); ctx.ellipse(ground.x, ground.y, w / 200, w / 420, 0, 0, Math.PI * 2); ctx.stroke()
+  ctx.restore()
 }
 
 function drawPoint(ctx: Ctx, p: Pt, color: string, w: number): void {

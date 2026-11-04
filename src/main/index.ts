@@ -30,6 +30,8 @@ protocol.registerSchemesAsPrivileged([
 // occlusion tracking counts a window behind another app as hidden). This is an editor: a
 // through-play must keep going while the user looks at another window.
 app.commandLine.appendSwitch('disable-background-media-suspend')
+// A self-check keeps its own window state (panel tabs, the court's look), apart from everyday use.
+if (process.env.VR_SMOKE) app.setPath('userData', join(tmpdir(), 'volley-reel-smoke'))
 // The memory smoke check forces a GC before each heap sample.
 if (process.env.VR_SMOKE_MEM) app.commandLine.appendSwitch('js-flags', '--expose-gc')
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')

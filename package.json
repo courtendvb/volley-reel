@@ -1,6 +1,6 @@
 {
   "name": "volley-reel",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "private": true,
   "description": "DataVolley (.dvw) + match video -> highlight reel MP4 editor",
   "main": "out/main/index.js",

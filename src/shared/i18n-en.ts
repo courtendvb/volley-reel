@@ -383,6 +383,8 @@ export const EN: Record<string, string> = {
   "結果をシーンに追加": "Add results to the scene",
   "ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー": "Possibility: a rally where the serving team got an attack",
   "サーブ軌道": "Serve paths",
+  "サーブかアタックを選ぶと、その選手の落下点の多さをプロジェクトの全試合からコートに色で出す。サーブはスタートゾーンが同じもの、アタックはアタックコードが同じものだけ（書き出しも同じ）": "With a serve or attack selected, colours the court by where that player's shots landed across the project's matches: serves from the same start zone, attacks with the same attack code (also in the export)",
+  "サーブを選ぶと、その選手のサーブの軌道をプロジェクトの全試合からすべて、そのサーブと一緒に飛ばす（書き出しも同じ）": "With a serve selected, flies all that player's serves from the project's matches along with it (also in the export)",
   "起点": "Start",
   "スキルの起点（ドラッグ）。軌道はここから動きます": "Where the skill starts (drag). The flight starts here",
   "ヒートマップ": "Heatmap",

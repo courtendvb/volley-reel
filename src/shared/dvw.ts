@@ -129,10 +129,13 @@ export function parseDVW(text: string): ParsedDVW {
     if (rally) touch({ code, side, skill, play })
   }
 
-  // A set without a click for where it went goes to the attack that follows it, when it is the same team's.
+  // A set without a click for where it went goes to the attack that follows it, when it is the same
+  // team's; that attack's tempo also shapes the set's flight.
   for (const p of plays) {
     const q = plays[p.id + 1]
-    if (p.skill === 'E' && !p.endClick && q?.skill === 'A' && q.side === p.side && q.rallyId === p.rallyId) p.endClick = q.startClick
+    if (p.skill !== 'E' || q?.skill !== 'A' || q.side !== p.side || q.rallyId !== p.rallyId) continue
+    if (!p.endClick) p.endClick = q.startClick
+    p.setTo = q.code.charAt(4)
   }
 
   // Receptions and digs have no clicks of their own: the ball came along the other team's last serve

@@ -49,6 +49,7 @@ export interface Play {
   endSub: string | null // A–D within the end zone: as coded, else from where the scout clicked
   startClick?: ClickPoint | null // where the scout clicked, or for a reception or dig where the ball came from (dvw.ts)
   endClick?: ClickPoint | null
+  setTo?: string // a set: the tempo of the same team's attack right after it (dvw.ts)
   shotCode?: string // a reception or dig: the code of the serve or attack it answers, for the height the ball came from
   rallyId: number | null
   possibility?: boolean // the serve, blocks and first attack of a rally where the serving team got an attack (dvw.ts)

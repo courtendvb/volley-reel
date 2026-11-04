@@ -184,7 +184,7 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
 export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
 export const ATTACK_Z = 3.15
-function strikeHeight(code: string): number {
+export function strikeHeight(code: string): number {
   const skill = code.charAt(3)
   return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : 0
 }

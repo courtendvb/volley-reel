@@ -44,6 +44,7 @@ import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
 import { filterTitle, playStats, statAnnotations } from '../../shared/stats'
+import { shotChart } from '../../shared/shotChart'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -674,6 +675,25 @@ export function App() {
     editCard(r.id, null, slide.id)
   }
 
+  // The serves and attacks of the search as arrows on the frame on screen, at the head of the open scene.
+  const addShotChart = async () => {
+    const key = playback.attachedKey, m = key ? latest.current.matches[key] : null
+    if (!key || !m?.court || !m.width || !m.height) { setNotice(t('コートの四隅を合わせた試合の動画を出してから押してください')); return }
+    const chart = shotChart(results, m.court, m.width, m.height, filterTitle(filter, people, settings?.ourTeamCodes[0] ?? ''))
+    if (!chart.shots) { setNotice(t('座標のあるサーブ・アタックがありません')); return }
+    try {
+      const assetId = await api.grabFrame(key, playback.current.time)
+      const r = withReel(x => x)
+      const group = r.groupOrder.find(g => r.groups[g].length) ?? r.groupOrder[0]
+      const slide = { ...newSlide({ kind: 'image', assetId }, 5), annotations: chart.annotations }
+      updateScene(r.id, s => putSlides(s, [slide], { group, after: null, index: 0 }))
+      editCard(r.id, null, slide.id)
+      if (chart.left) setNotice(t('座標のないサーブ・アタック {0} 本はチャートに入っていません', chart.left))
+    } catch (e) {
+      setError(t('スライドを入れられませんでした: {0}', (e as Error).message))
+    }
+  }
+
   const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
@@ -885,6 +905,7 @@ export function App() {
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
               onStatCard={addStatCard}
+              onShotChart={() => void addShotChart()}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length

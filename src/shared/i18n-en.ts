@@ -838,4 +838,10 @@ export const EN: Record<string, string> = {
   "今の条件の決定率などを計算して、開いているシーンの先頭にスライドを入れます（評価の条件は外して計算）。文字はあとから直せます": "Works out the rates for these conditions and puts a slide at the head of the open scene (evaluations aren't counted as conditions). The text can be edited",
   "数字カード": "Stats card",
   "数字にできるプレーがありません（セットには数字がありません）": "No plays to make numbers from (sets have none)",
+  "今の画面を背景に、条件に合うサーブ・アタックの矢印を全部重ねたスライドを開いているシーンの先頭に入れます（どれも手前から奥へ打つ向きにそろえます）。赤は決定、青はミス・被ブロック。コートの四隅を合わせた試合で使えます": "Puts a slide at the head of the open scene: the frame on screen with every serve and attack of these conditions as arrows, all played up the court. Red: kills, blue: errors and blocked. For matches with a fitted court",
+  "チャート": "Shot chart",
+  "コートの四隅を合わせた試合の動画を出してから押してください": "Show the video of a match with a fitted court first",
+  "座標のあるサーブ・アタックがありません": "No serves or attacks with coordinates here",
+  "座標のないサーブ・アタック {0} 本はチャートに入っていません": "{0} serves and attacks without coordinates aren't on the chart",
+  "{0} 本　赤: 決定 {1}　青: ミス・被ブロック {2}　黄: その他 {3}": "{0} shots   red: kills {1}   blue: errors and blocked {2}   yellow: other {3}",
 }

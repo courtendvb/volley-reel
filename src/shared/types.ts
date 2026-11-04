@@ -49,6 +49,7 @@ export interface Play {
   endSub: string | null // A–D within the end zone: as coded, else from where the scout clicked
   startClick?: ClickPoint | null // where the scout clicked, or for a reception or dig where the ball came from (dvw.ts)
   endClick?: ClickPoint | null
+  shotCode?: string // a reception or dig: the code of the serve or attack it answers, for the height the ball came from
   rallyId: number | null
   before: string[] // codes of the last two contacts before this one in the rally, latest first, freeballs included
   after: string[] // the next two after it, in order

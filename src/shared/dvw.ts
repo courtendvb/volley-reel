@@ -136,7 +136,7 @@ export function parseDVW(text: string): ParsedDVW {
     for (let i = p.id - 1; i >= 0 && plays[i].rallyId === p.rallyId; i--) {
       const q = plays[i]
       if (q.skill !== 'S' && q.skill !== 'A') continue
-      if (q.side !== p.side) { p.startClick = turned(q.startClick); p.endClick = turned(q.endClick) }
+      if (q.side !== p.side) { p.startClick = turned(q.startClick); p.endClick = turned(q.endClick); p.shotCode = q.code }
       break
     }
   }

@@ -101,3 +101,35 @@ describe.skipIf(!dir || !existsSync(dir))('real DVW files', () => {
     expect(ours.map((ph, i) => (ph && cols[i] ? `${ph}${cols[i] === 'r' ? 'r' : 't'}` : 'ok')).filter(x => x !== 'ok' && x[0] !== x[1])).toEqual([])
   })
 })
+
+describe('clicks', () => {
+  const D = parseDVW(`[3TEAMS]
+HTH;HOME;0;;
+TGB;AWAY;0;;
+[3SCOUT]
+a04SM+~~~58A;;;;0619;-1-1;7348;14.00.07;1;4;2;1;214;;
+*05RM-~~~58AR;;;;;;;14.00.09;1;4;2;1;217;;
+*07AH#P1~41BH3;s;r;;4717;-1-1;8017;14.00.11;1;4;2;1;218;;
+a06BH=~~~~;s;;;;;;14.00.13;1;4;2;1;220;;
+*08DH+~~~41B;s;;;;;;14.00.14;1;4;2;1;221;;
+`)
+  const [serve, reception, attack, block, cover] = D.plays
+
+  it('keeps where the scout clicked', () => {
+    expect(serve.startClick?.v).toBeCloseTo(-0.0075)
+    expect(attack.endClick?.v).toBeGreaterThan(0.5)
+    expect(block.startClick ?? null).toBeNull()
+  })
+
+  it('gives a reception the serve seen from the other side', () => {
+    expect(reception.startClick!.u).toBeCloseTo(1 - serve.startClick!.u)
+    expect(reception.startClick!.v).toBeCloseTo(1 - serve.startClick!.v)
+    expect(reception.endClick!.v).toBeCloseTo(1 - serve.endClick!.v)
+  })
+
+  it("doesn't give a dig of the team's own blocked attack its own shot", () => {
+    expect(cover.side).toBe(attack.side)
+    expect(cover.startClick ?? null).toBeNull()
+  })
+})
+

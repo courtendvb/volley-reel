@@ -15,7 +15,7 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
-import { courtQuad, playZones } from '../../shared/court'
+import { courtQuad, nearSide, playZones } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
 import type { AppLatest } from './app/appState'
@@ -43,6 +43,7 @@ export interface SmokeOpts {
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
+  courtPoints?: string // a CourtFit as JSON: the fit set on the match, 座標（点） picked, plays shown, one exported
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
@@ -145,6 +146,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
+    if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo)
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
@@ -1133,6 +1135,48 @@ export function installSmoke(h: SmokeHost): void {
       exported = { state: latest.current.exportState?.status, message: latest.current.exportState?.message, layers: item && item.kind === 'clip' ? item.layers.map(l => [l.from ?? null, l.to ?? null]) : null }
     }
     return { slowHold: { range: [range.in, range.out], timing, slowRate, heldSec, rateAfter, playedSec: clipPlayedSec(range, timing), exported } }
+  }
+
+  // The scout's clicks as points: the given court fit on the match, 座標（点） from the court panel, a
+  // serve, attack, reception and block on screen (the block has no click: zones), then an export.
+  const smokeCourtPoints = async (fitJson: string, exportTo?: string) => {
+    const p0 = await api.getProject()
+    const m = p0!.matches[0]
+    await api.setMatchCourt(m.id, JSON.parse(fitJson))
+    await loadProject(await api.getProject())
+    setFilter(EMPTY_FILTER)
+    await waitFor(() => (latest.current.results.length && latest.current.matches[m.id]?.court ? true : null), 20000, 'plays and court')
+    const all = latest.current.results
+    const pick = (skill: string) => all.find(r => r.play.skill === skill && r.play.startClick && r.play.endClick) ?? all.find(r => r.play.skill === skill)!
+    const shots: Record<string, unknown> = {}
+    const show = async (name: string, r: PlayRef) => {
+      jump(r)
+      await waitFor(() => (latest.current.selected?.playId === r.play.id ? true : null), 10000, name)
+      await sleep(700); playback.pause(); await sleep(300)
+      await api.smokeShot!(`points-${name}.png`)
+      shots[name] = { code: r.play.code, near: nearSide(latest.current.matches[m.id].court!, r.play) === r.play.side, start: r.play.startClick ?? null, end: r.play.endClick ?? null }
+    }
+    await show('first', pick('S')) // something selected, so the bar is up
+    await openPanel('court')
+    const sel = await waitFor(() => document.querySelector<HTMLSelectElement>('select[aria-label="' + t('ゾーンの細かさ') + '"]'), 5000, 'detail select')
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'point')
+    sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300)
+    await show('serve', pick('S')); await show('attack', pick('A')); await show('reception', pick('R')); await show('block', pick('B'))
+    const counts = Object.fromEntries('SRADEB'.split('').map(k => { const l = all.filter(r => r.play.skill === k); return [k, `${l.filter(r => r.play.startClick && r.play.endClick).length}/${l.length}`] }))
+    let exported: unknown = null
+    if (exportTo) {
+      const { reel: added } = addClips(newReel('points smoke'), [pick('S'), pick('A')].map(r => ({ matchId: r.matchId, play: r.play })))
+      const built = { ...added, scope: 'all' as const }
+      const v = newVideo('points smoke', [built.id])
+      setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+      await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'points reel')
+      setOverlay({ ...latest.current.overlay, court: { enabled: true } }); await sleep(400)
+      const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'points smoke' })
+      if (!job) throw new Error('export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'points export done')
+      exported = latest.current.exportState?.status
+    }
+    return { courtPoints: { counts, shots, exported } }
   }
 
   // The caption's name for a player across the video: typed on one clip (whole video, the default),

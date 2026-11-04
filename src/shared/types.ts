@@ -24,6 +24,10 @@ export interface Player {
   firstName: string
 }
 
+// A place on the court seen by the play's team from behind its own end line: u across (0–1), v from
+// that end line (0) past the net (0.5) to the far one (1). Outside 0–1 is off the court.
+export interface ClickPoint { u: number; v: number }
+
 export interface Play {
   id: number // order of appearance; the skip rule in dvw.ts is fixed so this is stable per file
   fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift
@@ -43,6 +47,8 @@ export interface Play {
   endZone: number | null
   startSub: string | null // A–D within the start zone, from where the scout clicked (not coded)
   endSub: string | null // A–D within the end zone: as coded, else from where the scout clicked
+  startClick?: ClickPoint | null // where the scout clicked, or for a reception or dig where the ball came from (dvw.ts)
+  endClick?: ClickPoint | null
   rallyId: number | null
   before: string[] // codes of the last two contacts before this one in the rally, latest first, freeballs included
   after: string[] // the next two after it, in order

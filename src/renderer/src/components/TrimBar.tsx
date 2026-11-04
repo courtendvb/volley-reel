@@ -14,6 +14,8 @@ interface Props {
   overrides: { in: boolean; out: boolean }
   overlapLabels: string[]
   onTrim: (edge: 'in' | 'out', t: number | null) => void
+  skillTime: number | null // the red line, moved by hand from keyTime; null = on it
+  onSkillTime: (t: number | null) => void
   loop: boolean // loop the clip (off: play on past OUT to see around it)
   onLoop: (on: boolean) => void
   // The clip's objects and when each shows (from / to are video times; set = not the whole clip).
@@ -31,14 +33,15 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
   // While a show / hide time sticks to another time: that time, drawn as a guide line.
   const [snapGuide, setSnapGuide] = useState<number | null>(null)
   // Dragging an object's start or end, on the main track or on its own lane (same scale).
   const objDrag = useRef<{ id: string; edge: 'from' | 'to'; rect: DOMRect } | null>(null)
   const track = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<'in' | 'out' | null>(null)
+  const [drag, setDrag] = useState<'in' | 'out' | 'skill' | null>(null)
+  const skillAt = skillTime ?? keyTime
 
   const lo = Math.max(0, Math.min(range.in, def.in) - CONTEXT_SEC)
   const hi = Math.min(durationSec || Infinity, Math.max(range.out, def.out) + CONTEXT_SEC)
@@ -48,9 +51,9 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     return lo + Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * (hi - lo)
   }
 
-  const startDrag = (edge: 'in' | 'out') => (e: PointerEvent) => {
+  const startDrag = (edge: 'in' | 'out' | 'skill') => (e: PointerEvent) => {
     e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
     setDrag(edge)
     playback.pause()
   }
@@ -70,6 +73,14 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     }
     if (!drag) return
     const t = timeAt(e.clientX)
+    if (drag === 'skill') {
+      // Back on the DVW's time within 6 px (Alt: free), so it can be put back by hand.
+      const sn = e.altKey ? { t, snapped: null } : snapTime(t, [keyTime], (6 / track.current!.getBoundingClientRect().width) * (hi - lo))
+      setSnapGuide(sn.snapped)
+      onSkillTime(sn.snapped !== null ? null : Math.round(sn.t * 100) / 100)
+      playback.seek(sn.t)
+      return
+    }
     onTrim(drag, t)
     playback.seek(t) // show the frame under the handle
   }
@@ -115,7 +126,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         ))}
         <div className="trim-default" style={{ left: pct(def.in), width: `calc(${pct(def.out)} - ${pct(def.in)})` }} title={t('初期値の範囲')} />
         <div className="trim-range" style={{ left: pct(range.in), width: `calc(${pct(range.out)} - ${pct(range.in)})` }} />
-        <div className="trim-key" style={{ left: pct(keyTime) }} title={t('キープレー')} />
+        <div className={`trim-key${drag === 'skill' ? ' dragging' : ''}`} style={{ left: pct(skillAt) }} onPointerDown={startDrag('skill')}
+          title={t('スキルの起点（ドラッグ）。軌道はここから動きます')} />
         <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title={t('IN（ドラッグ）')} />
         <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title={t('OUT（ドラッグ）')} />
         {(timing?.slows ?? []).map((s, k) => (
@@ -157,6 +169,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
           onSet={() => onTrim('in', playback.current.time)} onType={v => onTrim('in', keyTime + v)} onReset={() => onTrim('in', null)} />
         <Edge name="OUT" keyName="]" value={rel(range.out)} overridden={overrides.out}
           onSet={() => onTrim('out', playback.current.time)} onType={v => onTrim('out', keyTime + v)} onReset={() => onTrim('out', null)} />
+        <Edge name={t('起点')} keyName="◎" value={rel(skillAt)} overridden={skillTime !== null}
+          onSet={() => onSkillTime(Math.round(playback.current.time * 100) / 100)} onType={v => onSkillTime(v ? Math.round((keyTime + v) * 100) / 100 : null)} onReset={() => onSkillTime(null)} />
         <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム')}</span>
       </div>
     </div>

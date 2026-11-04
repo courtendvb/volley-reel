@@ -147,9 +147,25 @@ export function parseDVW(text: string): ParsedDVW {
     }
   }
 
+  markPossibilities(plays)
+
   while (teams.length < 2) teams.push({ code: '?', name: '' })
   const allHome = plays.length > 0 && plays.every(p => p.side === '*')
   return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames }
+}
+
+// A possibility: the serving team got an attack of its own out of the rally. Its serve, its blocks
+// up to that attack and the attack itself are marked; later attacks in the rally are not.
+function markPossibilities(plays: Play[]): void {
+  const rallies = new Map<number, Play[]>()
+  for (const p of plays) if (p.rallyId !== null) rallies.set(p.rallyId, [...(rallies.get(p.rallyId) ?? []), p])
+  for (const rally of rallies.values()) {
+    const serve = rally.find(p => p.skill === 'S')
+    if (!serve) continue
+    const attack = rally.find(p => p.skill === 'A' && p.side === serve.side)
+    if (!attack) continue
+    for (const p of rally) if (p === serve || p === attack || (p.skill === 'B' && p.side === serve.side && p.id < attack.id)) p.possibility = true
+  }
 }
 
 // Reception phase: the receiving team's contacts from its reception until the ball goes to the other

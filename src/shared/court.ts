@@ -200,13 +200,31 @@ function shotPath(code: string): { sec: number; arc: number } {
   return { sec: type === 'Q' ? 1 : 1.4, arc: 1.2 }
 }
 
+// Where a setter stands when the DVW doesn't say: a metre off the net, between zones 2 and 3, from
+// the team's own end line (as a click).
+const SETTER_SPOT: ClickPoint = { u: 0.6, v: 0.444 }
+
 // The play's clicks on the court. They are seen from the play's team, whose end line is on the near
-// side (v 0 is the bottom) or the far one (turned round).
+// side (v 0 is the bottom) or the far one (turned round). Many DVWs click where a set went but not
+// where it left: its coded zone stands in, and without one the usual setter's spot.
 export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode'>, fit: CourtFit): PlayPoints {
   const near = nearSide(fit, play) === play.side
   const on = (c: ClickPoint | null | undefined): Pt | null => (c ? (near ? { x: c.u, y: 1 - c.v } : { x: 1 - c.u, y: c.v }) : null)
-  const shot = play.shotCode ?? play.code, start = on(play.startClick), z = strikeHeight(shot)
-  return { start, end: on(play.endClick), ...(start && z ? { startZ: z, arc: shotPath(shot).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+  const end = on(play.endClick)
+  const coded = play.skill === 'E' ? spot(play.endZone, play.endSub, near) : null
+  const middle = coded ? spotArea(coded, true) : null
+  const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
+  const shot = play.shotCode ?? play.code, start = on(play.startClick) ?? setFrom, z = strikeHeight(shot)
+  return { start, end, ...(start && z ? { startZ: z, arc: shotPath(shot).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+}
+
+// A serve's flight coming down the court toward the camera whichever end it came from, so serves
+// from either side and from other matches lie on one picture, the landings on the larger half of
+// it; null without both clicks.
+export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>): PlayPoints | null {
+  const a = play.startClick, b = play.endClick
+  if (!a || !b) return null
+  return { start: { x: 1 - a.u, y: a.v }, end: { x: 1 - b.u, y: b.v }, startZ: strikeHeight(play.code), arc: shotPath(play.code).arc }
 }
 
 // What is drawn for a play: its zones, and its clicks for the 座標 detail.
@@ -216,11 +234,12 @@ export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' 
 
 // The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
 // than following the real ball: a serve or attack leaves at the play's time, and a reception or dig
-// is reached at its time. `sec`: see shotPath.
+// is reached at its time. `sec`: see shotPath. skillSec: the clip's own time for the play, moved by
+// hand (Clip.skillSec), in place of the DVW's.
 export interface Flight { startSec: number; sec: number }
-export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill'>, offsetSec: number): Flight {
+export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill'>, offsetSec: number, skillSec?: number): Flight {
   const { sec } = shotPath(play.shotCode ?? play.code)
-  const t = play.time + offsetSec
+  const t = skillSec ?? play.time + offsetSec
   return { startSec: play.shotCode ? t - sec : t, sec }
 }
 
@@ -272,6 +291,108 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   if (done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
   if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
+}
+
+// Many flights at once on a slide: they leave together after a moment and then stay. `progress` as
+// in drawFlight; the more there are, the thinner and fainter each is, so the pattern shows.
+export interface SlideFlights { fit: CourtFit; paths: PlayPoints[] }
+export const FLIGHTS_LEAD_SEC = 0.5, FLIGHTS_SEC = 1.5
+export const flightsProgress = (sec: number) => Math.max(0, Math.min(1, (sec - FLIGHTS_LEAD_SEC) / FLIGHTS_SEC))
+export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: SlideFlights, progress: number): void {
+  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  if (!camera) return
+  const done = Math.min(1, Math.max(0, progress)), many = paths.length > 12
+  const at = (p: PlayPoints, s: number) => camera(p.start!.x + (p.end!.x - p.start!.x) * s, p.start!.y + (p.end!.y - p.start!.y) * s, flightZ(p, s))
+  const dot = (q: Pt, color: string) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(2.5, w / (many ? 320 : 240)), 0, Math.PI * 2); ctx.fill() }
+  const drawn = paths.filter(p => p.start && p.end)
+  ctx.save()
+  ctx.strokeStyle = '#FACC15'
+  ctx.lineWidth = Math.max(1, w / (many ? 900 : 480))
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.globalAlpha = many ? Math.max(0.35, 12 / paths.length) : 0.95
+  if (done > 0) for (const p of drawn) {
+    const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done)), o = at(p, 0)
+    ctx.beginPath()
+    ctx.moveTo(o.x, o.y)
+    for (let i = 1; i <= n; i++) { const q = at(p, (done * i) / n); ctx.lineTo(q.x, q.y) }
+    ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+  for (const p of drawn) {
+    dot(at(p, 0), START_COLOR)
+    if (done >= 1) dot(at(p, 1), END_COLOR)
+    else if (done > 0) dot(at(p, done), '#FFFFFF')
+  }
+  ctx.restore()
+}
+
+// Where a shot landed, turned like servePath so any match's lie on one picture; null without the click.
+export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
+  const b = play.endClick
+  return b ? { x: 1 - b.u, y: b.v } : null
+}
+
+// A heatmap on the floor: how thick the landings are, in metres so the spread is the same both ways
+// along the court. One red, light to dark, as the count rises; thin parts fade out so the floor shows.
+export interface SlideHeat { fit: CourtFit; points: Pt[] }
+const COURT_W_M = 9, COURT_L_M = 18
+const HEAT_CELL_M = 0.25, HEAT_SIGMA_M = 0.8, HEAT_MARGIN_M = 3
+const HEAT_LIGHT = [252, 165, 165], HEAT_DARK = [153, 27, 27], HEAT_ALPHA = 0.85
+
+export interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
+export function heatGrid(points: Pt[]): HeatGrid {
+  const cols = Math.round((COURT_W_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1, rows = Math.round((COURT_L_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1
+  const data = new Float32Array(cols * rows), reach = Math.ceil((3 * HEAT_SIGMA_M) / HEAT_CELL_M)
+  for (const p of points) {
+    const cx = (p.x * COURT_W_M + HEAT_MARGIN_M) / HEAT_CELL_M, cy = (p.y * COURT_L_M + HEAT_MARGIN_M) / HEAT_CELL_M
+    for (let r = Math.max(0, Math.ceil(cy - reach)); r <= Math.min(rows - 1, Math.floor(cy + reach)); r++) {
+      for (let c = Math.max(0, Math.ceil(cx - reach)); c <= Math.min(cols - 1, Math.floor(cx + reach)); c++) {
+        const d2 = ((c - cx) ** 2 + (r - cy) ** 2) * HEAT_CELL_M ** 2
+        data[r * cols + c] += Math.exp(-d2 / (2 * HEAT_SIGMA_M ** 2))
+      }
+    }
+  }
+  const top = data.reduce((m, v) => Math.max(m, v), 0)
+  if (top > 0) for (let i = 0; i < data.length; i++) data[i] /= top
+  return { cols, rows, data }
+}
+
+// The grid at a place on the court (units as Pt), blended between cells; 0 off the grid.
+export function heatAt({ cols, rows, data }: HeatGrid, x: number, y: number): number {
+  const cx = (x * COURT_W_M + HEAT_MARGIN_M) / HEAT_CELL_M, cy = (y * COURT_L_M + HEAT_MARGIN_M) / HEAT_CELL_M
+  const c = Math.floor(cx), r = Math.floor(cy)
+  if (c < 0 || r < 0 || c >= cols - 1 || r >= rows - 1) return 0
+  const fx = cx - c, fy = cy - r, i = r * cols + c
+  return (data[i] * (1 - fx) + data[i + 1] * fx) * (1 - fy) + (data[i + cols] * (1 - fx) + data[i + cols + 1] * fx) * fy
+}
+
+const grids = new WeakMap<SlideHeat, HeatGrid>()
+
+// Painted pixel by pixel from the picture back onto the floor, at half size and smoothed up.
+export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat): void {
+  const grid = grids.get(heat) ?? heatGrid(heat.points)
+  grids.set(heat, grid)
+  const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
+  const H = homography(heat.fit.corners.map(c => ({ x: c.x * sw, y: c.y * sh })) as [Pt, Pt, Pt, Pt])
+  // The inverse of the homography (its adjugate); `side` tells the floor from what is above the horizon.
+  const A = H.e - H.f * H.h, B = H.c * H.h - H.b, C = H.b * H.f - H.c * H.e
+  const D = H.f * H.g - H.d, E = H.a - H.c * H.g, F = H.c * H.d - H.a * H.f
+  const G = H.d * H.h - H.e * H.g, J = H.b * H.g - H.a * H.h, K = H.a * H.e - H.b * H.d
+  const mid = project(H, 0.5, 0.5), side = Math.sign(G * mid.x + J * mid.y + K)
+  const off = new OffscreenCanvas(sw, sh), out = off.getContext('2d')!, image = out.createImageData(sw, sh), px = image.data
+  for (let y = 0, i = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++, i += 4) {
+      const q = G * x + J * y + K
+      if (q * side <= 1e-9) continue
+      const v = heatAt(grid, (A * x + B * y + C) / q, (D * x + E * y + F) / q)
+      if (v < 0.04) continue
+      for (let k = 0; k < 3; k++) px[i + k] = HEAT_LIGHT[k] + (HEAT_DARK[k] - HEAT_LIGHT[k]) * v
+      px[i + 3] = 255 * HEAT_ALPHA * Math.min(1, v * 1.6)
+    }
+  }
+  out.putImageData(image, 0, 0)
+  ctx.drawImage(off, 0, 0, w, h)
 }
 
 // Which way the ball goes on screen in a play: 'up' from the near side toward the far one, 'down'

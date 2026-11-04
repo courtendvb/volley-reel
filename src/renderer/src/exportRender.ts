@@ -7,12 +7,13 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { drawCourt, drawFlight, flightMoves, type CourtFit, type Flight, type GridStyle, type PlayZones } from '../../shared/court'
+import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, drawHeat, flightMoves, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
 export const EXPORT_HEIGHT = 720
 const FLIGHT_LAYERS = 12 // at most, for one ball's flight
+const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
 
 interface Deps {
   range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
@@ -64,8 +65,9 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
         drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
+        if (p.card.slide?.heat) drawHeat(ctx, W, H, p.card.slide.heat)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
-      }) })
+      }), ...(p.card.slide?.flights ? { layers: await flightLayers(p.card.slide.flights, p.durationSec, png) } : {}) })
       continue
     }
     const c = p.clip, r = d.range(c, p.sceneId)
@@ -77,6 +79,19 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     .filter((c, i, all) => c.item < items.length && (all[i + 1]?.item ?? items.length) > c.item)
   return { outPath, width: W, height: H, fpsStr, items, ...(overlay.transition.fade ? { fadeSec: overlay.transition.durationSec } : {}),
     ...(marks.length ? { chapters: marks } : {}) }
+}
+
+// A slide's flights: each step of the curves its own layer, the last to the end of the slide. Like
+// the preview: they leave after a moment, and a slide too short for that shows them whole.
+async function flightLayers(f: SlideFlights, durationSec: number, png: Png): Promise<ExportLayer[]> {
+  const layers: ExportLayer[] = []
+  for (let i = 0; i <= SLIDE_FLIGHT_LAYERS; i++) {
+    const from = i ? FLIGHTS_LEAD_SEC + (FLIGHTS_SEC * (i - 1)) / SLIDE_FLIGHT_LAYERS : 0
+    const to = i === SLIDE_FLIGHT_LAYERS ? durationSec : FLIGHTS_LEAD_SEC + (FLIGHTS_SEC * i) / SLIDE_FLIGHT_LAYERS
+    if (from >= durationSec) break
+    layers.push({ from, to: Math.min(to, durationSec), png: await png(ctx => drawFlights(ctx, ctx.canvas.width, ctx.canvas.height, f, i / SLIDE_FLIGHT_LAYERS)) })
+  }
+  return layers
 }
 
 // One layer for everything shown for the whole clip (the court, auto overlays, annotations on top),

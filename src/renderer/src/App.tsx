@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, setTiming, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSkillTime, setSlide, setTag, setTiming, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
 import type { ImportProgress, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
@@ -34,7 +34,7 @@ import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
-import { DEFAULT_GRID_STYLE, flightTiming, playMarks, type CourtFit, type GridStyle } from '../../shared/court'
+import { DEFAULT_GRID_STYLE, courtCamera, flightTiming, landingPoint, playMarks, servePath, type CourtFit, type GridStyle, type PlayPoints, type Pt } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
@@ -59,6 +59,9 @@ const api = window.api
 const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
 
+
+const SERVE_FLIGHTS_SEC = 5 // the slides of a search's serves and heatmap
+const HEAT_FEW = 30 // fewer shots than this read as dots, not a pattern
 
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
@@ -299,6 +302,38 @@ export function App() {
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group, extractRef.current).reel)
   }, [withReel])
+  // Every serve of the search flying at once, on the frame on screen, on a slide at the head of the
+  // open scene; opened for editing. All are turned to come down the court, so any match's serves fit.
+  const addServeFlights = () => {
+    const serves = results.filter(r => r.play.skill === 'S')
+    const paths = serves.flatMap((r): PlayPoints[] => { const p = servePath(r.play); return p ? [p] : [] })
+    if (!paths.length) { setNotice(t('座標のあるサーブがありません')); return }
+    return frameSlide(fit => ({ flights: { fit, paths } }), paths.length < serves.length ? t('座標がないサーブ {0} 本は入っていません', serves.length - paths.length) : null)
+  }
+  // Where the search's serves and attacks landed, as a heatmap on the same kind of slide.
+  const addHeatmap = () => {
+    const shots = results.filter(r => r.play.skill === 'S' || r.play.skill === 'A')
+    const points = shots.flatMap((r): Pt[] => { const p = landingPoint(r.play); return p ? [p] : [] })
+    if (!points.length) { setNotice(t('座標のあるサーブ・アタックがありません')); return }
+    return frameSlide(fit => ({ heat: { fit, points } }), points.length < HEAT_FEW ? t('{0} 本だけのヒートマップです。本数が少ないと点の集まりに見えます', points.length)
+      : points.length < shots.length ? t('座標がない {0} 本は入っていません', shots.length - points.length) : null)
+  }
+  const frameSlide = async (extra: (fit: CourtFit) => Partial<Slide>, note: string | null) => {
+    const key = playback.attachedKey, m = key ? latest.current.matches[key] : null
+    const w = m?.width ?? 0, h = m?.height ?? 0
+    if (!key || !m?.court || !courtCamera(m.court.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) { setNotice(t('コートの四隅を合わせた試合の動画を出してから押してください')); return }
+    try {
+      const assetId = await api.grabFrame(key, playback.current.time)
+      const r = withReel(x => x)
+      const group = r.groupOrder.find(g => r.groups[g].length) ?? r.groupOrder[0]
+      const slide = { ...newSlide({ kind: 'image', assetId }, SERVE_FLIGHTS_SEC), ...extra(m.court) }
+      updateScene(r.id, s => putSlides(s, [slide], { group, after: null, index: 0 }))
+      editCard(r.id, null, slide.id)
+      if (note) setNotice(note)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
   // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
     withReel(r => {
@@ -881,6 +916,8 @@ export function App() {
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
+              serves={results.filter(r => r.play.skill === 'S').length} onServeFlights={() => void addServeFlights()}
+              shots={results.filter(r => r.play.skill === 'S' || r.play.skill === 'A').length} onHeatmap={() => void addHeatmap()}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
@@ -905,7 +942,7 @@ export function App() {
                   )
                 }
                 const court = match.court && (
-                  <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec) : null} fitting={courtFitting}
+                  <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active.skillSec : undefined) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })} />
                 )
                 return (
@@ -967,6 +1004,8 @@ export function App() {
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
                 onTrim={trim} loop={loopOn} onLoop={setLoopOn}
+                skillTime={active.skillSec ?? null}
+                onSkillTime={sec => { const r = latest.current.reel; if (r) updateReel(setSkillTime(r, active.id, sec)) }}
                 timing={active.timing} onTiming={tm => { const r = latest.current.reel; if (r) updateReel(setTiming(r, active.id, tm)) }}
                 objects={active.annotations.map(a => ({
                   id: a.id, label: a.kind === 'text' ? `T ${a.text}` : KIND_LABEL[a.kind],

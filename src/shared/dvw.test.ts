@@ -102,6 +102,26 @@ describe.skipIf(!dir || !existsSync(dir))('real DVW files', () => {
   })
 })
 
+describe('possibility', () => {
+  const marked = (scout: string) => parseDVW(`[3TEAMS]
+HTH;HOME;0;;
+TGB;AWAY;0;;
+[3SCOUT]
+${scout}
+`).plays.map(p => `${p.side}${p.skill}${p.possibility ? ':P' : ''}`)
+  const line = (code: string, sec: number) => `${code};;;;;;;14.00.${String(sec).padStart(2, '0')};1;1;1;1;${200 + sec};;`
+  const serve = line('*04SM+~~~58A', 1), rec = line('a01RM+~~~58A', 2), set = line('a02EH+K8F~8C', 3), oppAttack = line('a07AH+P1~41BH', 4)
+
+  it('marks the serve, the blocks before the first attack, and that attack only', () => {
+    const block = line('*03BH+~~~~~', 5), dig = line('*02DH+~~~~~', 6), mySet = line('*05EH+K8F~8C', 7), first = line('*07AH+P1~41BH', 8), second = line('*07AH-P1~41BH', 9), lateBlock = line('*03BH-~~~~~', 10)
+    expect(marked([serve, rec, set, oppAttack, block, dig, mySet, first, lateBlock, second].join('\n')))
+      .toEqual(['*S:P', 'aR', 'aE', 'aA', '*B:P', '*D', '*E', '*A:P', '*B', '*A'])
+  })
+  it('marks nothing without an attack by the serving team', () => {
+    expect(marked([serve, rec, set, oppAttack, line('*03BH#~~~~~', 5)].join('\n'))).toEqual(['*S', 'aR', 'aE', 'aA', '*B'])
+  })
+})
+
 describe('clicks', () => {
   const D = parseDVW(`[3TEAMS]
 HTH;HOME;0;;

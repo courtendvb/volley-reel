@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CORNERS, homography, nearSide, playDirection, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
+import { DEFAULT_CORNERS, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -100,6 +100,34 @@ describe('playZones', () => {
     expect(playZones(set, fit, attack)).toEqual({ start: { cell: { row: 4, col: 1 }, sub: 'C' }, end: { cell: { row: 3, col: 0 }, sub: 'C' } })
     expect(playZones(set, fit, dig).end).toBeNull() // the other team's play
     expect(playZones(lone, fit, d.plays[7] ?? null)).toEqual({ start: { cell: { row: 2, col: 1 }, sub: 'B' }, end: null }) // set 2: home is far
+  })
+})
+
+describe('playPoints', () => {
+  it('puts a far serve behind the far end line and a near attack from the near half to the far one', () => {
+    const s = playPoints(serve, fit) // away, far in set 1: seen turned round
+    expect(s.start!.y).toBeLessThan(0.01) // at the far end line
+    expect(s.start!.x).toBeGreaterThan(0.8) // zone 5 side: the camera's right on the far side
+    expect(s.end!.y).toBeGreaterThan(0.5) // lands on the near half
+    const a = playPoints(attack, fit) // home, near
+    expect(a.start!.y).toBeGreaterThan(0.5)
+    expect(a.end!.y).toBeLessThan(0.5)
+  })
+
+  it("a reception and a dig take the ball's path from the shot they answer", () => {
+    expect(reception.startClick).toBeTruthy()
+    const r = playPoints(reception, fit), s = playPoints(serve, fit)
+    expect(r.start!.x).toBeCloseTo(s.start!.x); expect(r.start!.y).toBeCloseTo(s.start!.y)
+    expect(r.end!.x).toBeCloseTo(s.end!.x); expect(r.end!.y).toBeCloseTo(s.end!.y)
+    const g = playPoints(dig, fit), a = playPoints(attack, fit)
+    expect(g.end!.x).toBeCloseTo(a.end!.x); expect(g.end!.y).toBeCloseTo(a.end!.y)
+  })
+
+  it('turns with the sides, and is empty without clicks; marks carry the zones too', () => {
+    const swapped: CourtFit = { ...fit, nearSet1: 'a' }
+    expect(playPoints(serve, swapped).start!.y).toBeGreaterThan(0.99)
+    expect(playPoints({ ...attack, startClick: null, endClick: undefined }, fit)).toEqual({ start: null, end: null })
+    expect(playMarks(attack, fit)).toMatchObject({ start: { cell: { row: 3, col: 0 } }, points: { start: expect.anything() } })
   })
 })
 

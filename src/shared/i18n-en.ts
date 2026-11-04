@@ -818,4 +818,6 @@ export const EN: Record<string, string> = {
   "シーンのクリップを選ぶと使えます": "Pick a clip in the scene to use it",
   "閉じて動画を大きく": "Close for a bigger video",
   "試合の状況（セット・ローテ・局面・直前直後）": "Match situation (set, rotation, phase, plays around)",
+  "サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。座標がないプレーはゾーンを塗る": "Sub-zone: light the zone's quarter A–D and draw the arrow between their middles; where the DVW has no sub-zone, the whole zone. Points: where the scout clicked (for a reception or dig, where the ball came from); plays without a click light their zones",
+  "座標（点）": "Points",
 }

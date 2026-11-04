@@ -2,7 +2,7 @@
 // split 3 × 6 into zones 1–9 for each side (the DVW's zone layout), drawn with perspective. The
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
-import type { Play, Side } from './types'
+import type { ClickPoint, Play, Side } from './types'
 
 export interface Pt { x: number; y: number }
 
@@ -126,7 +126,9 @@ function spotArea(s: Spot, sub: boolean): { u0: number; v0: number; du: number; 
 export interface PlayZones {
   start: Spot | null
   end: Spot | null
+  points?: PlayPoints // where the scout clicked, in court units (playMarks)
 }
+export interface PlayPoints { start: Pt | null; end: Pt | null } // x across, y far to near; outside 0–1 is off the court
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -150,6 +152,19 @@ export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null)
   return { start: served ?? spot(play.startZone, play.startSub, startNear), end: spot(play.endZone, play.endSub, !startNear) }
 }
 
+// The play's clicks on the court. They are seen from the play's team, whose end line is on the near
+// side (v 0 is the bottom) or the far one (turned round).
+export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'>, fit: CourtFit): PlayPoints {
+  const near = nearSide(fit, play) === play.side
+  const on = (c: ClickPoint | null | undefined): Pt | null => (c ? (near ? { x: c.u, y: 1 - c.v } : { x: 1 - c.u, y: c.v }) : null)
+  return { start: on(play.startClick), end: on(play.endClick) }
+}
+
+// What is drawn for a play: its zones, and its clicks for the 座標 detail.
+export function playMarks(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'>, fit: CourtFit, next?: ZonePlay | null): PlayZones {
+  return { ...playZones(play, fit, next), points: playPoints(play, fit) }
+}
+
 // Which way the ball goes on screen in a play: 'up' from the near side toward the far one, 'down'
 // the other way. A serve or an attack leaves the player's side; a reception, dig, block or freeball
 // comes to it. A set has no way (null).
@@ -169,7 +184,7 @@ export interface GridStyle {
   opacity: number // 0..1
   lineWidth: number // px at 720p, scaled with the picture like the annotations
   playZones: boolean
-  detail: 'zone' | 'sub' // the play's zones as whole zones, or their sub-zones where the DVW has them
+  detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
 
 export const DEFAULT_GRID_STYLE: GridStyle = {
@@ -196,10 +211,11 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
   }
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
+  const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
-    if (zones.start) { ctx.globalAlpha = 0.35; ctx.fillStyle = START_COLOR; spotPath(zones.start); ctx.fill() }
-    if (zones.end) { ctx.globalAlpha = 0.35; ctx.fillStyle = END_COLOR; spotPath(zones.end); ctx.fill() }
+    if (zones.start && !pts?.start) { ctx.globalAlpha = 0.35; ctx.fillStyle = START_COLOR; spotPath(zones.start); ctx.fill() }
+    if (zones.end && !pts?.end) { ctx.globalAlpha = 0.35; ctx.fillStyle = END_COLOR; spotPath(zones.end); ctx.fill() }
     ctx.restore()
   }
 
@@ -221,12 +237,27 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     ctx.restore()
   }
 
-  if (style.playZones && zones?.start && zones.end) {
-    // From the middle of the lit zone or sub-zone to the middle of the other.
+  if (style.playZones && zones) {
+    // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
-    const a = mid(zones.start), b = mid(zones.end)
-    drawArrow(ctx, a, b, Math.max(3, w / 320))
+    const place = (p: Pt | null | undefined, s: Spot | null) => (p ? at(p.x, p.y) : s ? mid(s) : null)
+    const a = place(pts?.start, zones.start), b = place(pts?.end, zones.end)
+    if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
+    if (pts?.start) drawPoint(ctx, at(pts.start.x, pts.start.y), START_COLOR, w)
+    if (pts?.end) drawPoint(ctx, at(pts.end.x, pts.end.y), END_COLOR, w)
   }
+}
+
+function drawPoint(ctx: Ctx, p: Pt, color: string, w: number): void {
+  ctx.save()
+  ctx.fillStyle = color
+  ctx.strokeStyle = '#FFFFFF'
+  ctx.lineWidth = Math.max(1.5, w / 640)
+  ctx.beginPath()
+  ctx.arc(p.x, p.y, Math.max(4, w / 160), 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.restore()
 }
 
 function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {

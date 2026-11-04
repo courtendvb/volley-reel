@@ -1,6 +1,6 @@
 // DVW parser. Pure: no file or DOM access.
 // Ported from HTH_videoviewer/dvw-parser.js and m0/lib/dvw.mjs (docs/design.md §7).
-import type { ParsedDVW, Play, Player, Rally, Side, Team } from './types'
+import type { ClickPoint, ParsedDVW, Play, Player, Rally, Side, Team } from './types'
 
 export function parseDVW(text: string): ParsedDVW {
   const teams: Team[] = []
@@ -118,6 +118,8 @@ export function parseDVW(text: string): ParsedDVW {
       // A set's coded zone is where it was set from, and its first click is that spot.
       startSub: clickSub(c[4], zone(code.charAt(9))),
       endSub: /[A-D]/.test(code.charAt(11)) ? code.charAt(11) : clickSub(skill === 'E' ? c[4] : c[6], zone(code.charAt(10))),
+      startClick: clickPoint(c[4]),
+      endClick: clickPoint(c[6]),
       rallyId: rally ? rally.id : null,
       before: rally ? contacts.slice(-2).map(x => x.code).reverse() : [],
       phase: rally && skill !== 'S' ? phaseOf(contacts, side, skill) : null,
@@ -125,6 +127,18 @@ export function parseDVW(text: string): ParsedDVW {
     }
     plays.push(play)
     if (rally) touch({ code, side, skill, play })
+  }
+
+  // Receptions and digs have no clicks of their own: the ball came along the other team's last serve
+  // or attack, seen from this side. Not when that shot was this team's own (a dig of a blocked attack).
+  for (const p of plays) {
+    if (p.rallyId === null || (p.skill !== 'R' && p.skill !== 'D')) continue
+    for (let i = p.id - 1; i >= 0 && plays[i].rallyId === p.rallyId; i--) {
+      const q = plays[i]
+      if (q.skill !== 'S' && q.skill !== 'A') continue
+      if (q.side !== p.side) { p.startClick = turned(q.startClick); p.endClick = turned(q.endClick) }
+      break
+    }
   }
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })
@@ -170,12 +184,15 @@ function zone(ch: string): number | null {
 // as row * 100 + column + 1, seen by the player's team from behind its own end line. Columns span
 // 4 m-units across (the court is 0.5–3.5), rows 7 along (court 0.5–6.5, net at 3.5). Checked against
 // the coded zones and sub-zones of a season's files: 87–97% agree.
-export function clickPoint(raw: string | undefined): { u: number; v: number } | null {
+export function clickPoint(raw: string | undefined): ClickPoint | null {
   const i = parseInt(raw ?? '')
   if (!(i > 0)) return null
   const row = Math.floor((i - 1) / 100), col = (i - 1) % 100
   return { u: (((col + 0.5) * 4) / 100 - 0.5) / 3, v: (((row + 0.5) * 7) / 100 - 0.5) / 6 } // v: own end line 0, net 0.5
 }
+
+// The same place seen from the other side of the net.
+const turned = (p: ClickPoint | null | undefined): ClickPoint | null => (p ? { u: 1 - p.u, v: 1 - p.v } : null)
 
 const OWN = [[5, 6, 1], [7, 8, 9], [4, 3, 2]] // from the own end line toward the net, left to right
 const OPP = [[2, 3, 4], [9, 8, 7], [1, 6, 5]] // from the net toward the far end line

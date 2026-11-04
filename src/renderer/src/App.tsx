@@ -1034,7 +1034,7 @@ export function App() {
               focus={!cardEditCard && activeInfo?.ref ? { side: activeInfo.ref.play.side, jersey: activeInfo.ref.play.jersey } : null}
               disabled={!cardEditCard && !(active && activeInfo?.range)}
               onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
-            <ExportPanel targets={exportTargets} info={exportInfo} state={exportState} onExport={exportTarget}
+            <ExportPanel targets={exportTargets} info={exportInfo} court={overlay.court.enabled} onCourt={on => setOverlay({ ...overlay, court: { enabled: on } })} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
           </div>
         </main>

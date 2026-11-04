@@ -763,7 +763,7 @@ export const EN: Record<string, string> = {
   "サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体": "Sub-zones: light the zone's quarter A–D and draw the arrow between their middles. Where the DVW has no sub-zone, the whole zone",
   "サブゾーン": "Sub-zone",
   "コートのグリッドとプレーのゾーンを書き出しに入れる（この動画のすべてのクリップ。見た目は動画の下の「コート」の設定。コートを合わせた試合だけ）": "Put the court grid and the play's zones in the export (every clip of this video; the look is set under \"Court\" below the video; only matches with a fitted court)",
-  "コート（書き出し）": "Court (export)",
+  "コートとゾーンを入れる": "Include the court and zones",
   "保存条件": "Saved",
   "クリックでこの条件にする（右クリックで外す）": "Click to use these conditions (right-click to remove)",
   "条件を選んでから保存してください": "Pick some conditions first",

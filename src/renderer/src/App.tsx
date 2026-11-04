@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { EMPTY_FILTER, applyFilter, type PlayFilter, type PlayRef } from '../../shared/filter'
 import {
   DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setSlide, setTag, setTiming, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
@@ -43,6 +43,7 @@ import { captionPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
+import { filterTitle, playStats, statAnnotations } from '../../shared/stats'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
@@ -661,6 +662,18 @@ export function App() {
     }
   }
 
+  // The numbers of the search, on a slide at the head of the open scene (made if there is none). All
+  // evaluations count, whatever is picked: the rates are about all the plays. Open to edit.
+  const addStatCard = () => {
+    const lines = playStats(applyFilter(scopeRefs, { ...filter, effects: [] }))
+    if (!lines.length) { setNotice(t('数字にできるプレーがありません（セットには数字がありません）')); return }
+    const r = withReel(x => x)
+    const group = r.groupOrder.find(m => r.groups[m].length) ?? r.groupOrder[0]
+    const slide = { ...newSlide({ kind: 'blank' }, 4), annotations: statAnnotations(filterTitle(filter, people, settings?.ourTeamCodes[0] ?? ''), lines) }
+    updateScene(r.id, s => putSlides(s, [slide], { group, after: null, index: 0 }))
+    editCard(r.id, null, slide.id)
+  }
+
   const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
@@ -871,6 +884,7 @@ export function App() {
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
+              onStatCard={addStatCard}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length

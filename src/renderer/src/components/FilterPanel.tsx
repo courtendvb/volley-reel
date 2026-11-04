@@ -22,6 +22,7 @@ interface Props {
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
   dirUnknown: number // plays in scope whose way on screen isn't known (no fitted court); sets aren't counted
   onAddAll: () => void
+  onStatCard: () => void // a slide with the numbers of these plays
   saved: SavedFilter[] // the project's saved conditions
   onSaved: (list: SavedFilter[]) => void
 }
@@ -29,7 +30,7 @@ interface Props {
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, onStatCard, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length
@@ -139,6 +140,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       <div className="filter-row">
         <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} {t('プレー')}</p>
         <span className="spacer" />
+        <button onClick={onStatCard} disabled={!shown} title={t('今の条件の決定率などを計算して、開いているシーンの先頭にスライドを入れます（評価の条件は外して計算）。文字はあとから直せます')}>{t('数字カード')}</button>
         <button onClick={onAddAll} disabled={!shown || shown === total}
           title={shown === total ? t('条件で絞り込んでから追加してください') : undefined}>{t('結果をシーンに追加')}</button>
       </div>

@@ -609,6 +609,7 @@ async function smoke(w: BrowserWindow, outPng: string): Promise<void> {
       savedFilters: !!process.env.VR_SMOKE_SAVEDFILTERS,
       captionPhoto: !!process.env.VR_SMOKE_CAPTIONPHOTO,
       captionNames: !!process.env.VR_SMOKE_CAPTIONNAMES,
+      statCard: !!process.env.VR_SMOKE_STATCARD,
       courtPoints: process.env.VR_SMOKE_COURTPOINTS,
       slowHold: !!process.env.VR_SMOKE_SLOWHOLD,
       direction: !!process.env.VR_SMOKE_DIRECTION,

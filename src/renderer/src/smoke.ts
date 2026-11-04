@@ -44,6 +44,7 @@ export interface SmokeOpts {
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
   courtPoints?: string // a CourtFit as JSON: the fit set on the match, 座標（点） picked, plays shown, one exported
+  statCard?: boolean // the 数字カード button: a slide at the head of the scene with the numbers of the search
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
@@ -146,6 +147,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
+    if (opts.statCard) return smokeStatCard()
     if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo)
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
@@ -1187,6 +1189,17 @@ export function installSmoke(h: SmokeHost): void {
       exported = { state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
     return { courtPoints: { counts, shots, exported } }
+  }
+
+  // The stats card: from the filter's button, on a slide opened for editing, counted over all evaluations.
+  const smokeStatCard = async () => {
+    const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.filters button')].find(b => b.textContent === t('数字カード')) ?? null, 5000, 'stats button')
+    btn.click(); await sleep(800)
+    const scene = latest.current.reel
+    const slide = scene?.slides?.[0]
+    if (!slide) throw new Error('no slide')
+    await api.smokeShot!('stat-card.png')
+    return { statCard: { scene: scene!.name, group: slide.group, sec: slide.durationSec, texts: slide.annotations.map(a => (a.kind === 'text' ? a.text : a.kind)) } }
   }
 
   // The caption's name for a player across the video: typed on one clip (whole video, the default),

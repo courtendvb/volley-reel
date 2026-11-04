@@ -51,8 +51,7 @@ export class Exporter {
         if (it.kind === 'card') {
           const png = join(workDir, `card${i}.png`)
           await writeFile(png, it.png)
-          await this.ffmpeg(['-loop', '1', '-framerate', job.fpsStr, '-t', it.durationSec.toFixed(3), '-i', png,
-            '-vf', `scale=${job.width}:${job.height},format=yuv420p,setsar=1${fades(job.fadeSec, it.durationSec)}`, ...enc, seg], report)
+          await this.ffmpeg(await cardArgs(it, png, job, workDir, i, enc, seg), report)
         } else {
           const video = videoOf(it.matchId)
           if (!video || !existsSync(video)) throw new Error(t('動画が見つかりません（試合 {0}）', it.matchId))
@@ -122,6 +121,24 @@ function encoderArgs(fpsStr: string): string[] {
   const gop = Math.round((d ? n / d : n) * 2)
   return ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-r', fpsStr, '-g', String(gop),
     '-video_track_timescale', '15360', '-an']
+}
+
+// A card is its picture held for its length, with any layers over it in their windows.
+export async function cardArgs(it: Extract<ExportItem, { kind: 'card' }>, png: string, job: ExportJob, dir: string, i: number, enc: string[], seg: string): Promise<string[]> {
+  const args = ['-loop', '1', '-framerate', job.fpsStr, '-t', it.durationSec.toFixed(3), '-i', png]
+  const base = `scale=${job.width}:${job.height},format=yuv420p,setsar=1`
+  const f = fades(job.fadeSec, it.durationSec)
+  if (!it.layers?.length) return [...args, '-vf', `${base}${f}`, ...enc, seg]
+  let fc = `[0:v]${base}[v0]`, last = 'v0'
+  for (const [j, l] of it.layers.entries()) {
+    const file = join(dir, `card${i}-layer${j}.png`)
+    await writeFile(file, l.png)
+    args.push('-i', file)
+    fc += `;[${last}][${j + 1}:v]overlay=0:0:enable='between(t,${(l.from ?? 0).toFixed(3)},${(l.to ?? it.durationSec).toFixed(3)})'[v${j + 1}]`
+    last = `v${j + 1}`
+  }
+  if (f) { fc += `;[${last}]${f.slice(1)}[vf]`; last = 'vf' }
+  return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, seg]
 }
 
 // -ss before -i seeks fast and, because we re-encode, still cuts on the exact frame. Overlay

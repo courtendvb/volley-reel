@@ -22,6 +22,10 @@ interface Props {
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
   dirUnknown: number // plays in scope whose way on screen isn't known (no fitted court); sets aren't counted
   onAddAll: () => void
+  serves: number // serves among the results, for the slide of their flights
+  onServeFlights: () => void
+  shots: number // serves and attacks among the results, for the heatmap of where they landed
+  onHeatmap: () => void
   saved: SavedFilter[] // the project's saved conditions
   onSaved: (list: SavedFilter[]) => void
 }
@@ -29,7 +33,7 @@ interface Props {
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, serves, onServeFlights, shots, onHeatmap, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length
@@ -136,9 +140,13 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         <span className="spacer" />
         <button className="link" onClick={() => onChange(EMPTY_FILTER)} disabled={f === EMPTY_FILTER}>{t('条件をクリア')}</button>
       </div>
-      <div className="filter-row">
+      <div className="filter-row actions">
         <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} {t('プレー')}</p>
         <span className="spacer" />
+        <button onClick={onServeFlights} disabled={!serves}
+          title={serves ? t('結果のサーブの軌道をすべて、画面のフレームの上で一斉に飛ばすスライドをシーンの先頭に作ります。どのサーブも奥から手前へ向けてそろえます') : t('結果にサーブがありません')}>{t('サーブ軌道')}</button>
+        <button onClick={onHeatmap} disabled={!shots}
+          title={shots ? t('結果のサーブとアタックの落下点の濃さを、画面のフレームのコートに塗るスライドをシーンの先頭に作ります。どれも奥から手前へ向けてそろえます。サーブかアタックに絞ってから押すのがおすすめです') : t('結果にサーブもアタックもありません')}>{t('ヒートマップ')}</button>
         <button onClick={onAddAll} disabled={!shown || shown === total}
           title={shown === total ? t('条件で絞り込んでから追加してください') : undefined}>{t('結果をシーンに追加')}</button>
       </div>

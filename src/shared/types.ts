@@ -51,6 +51,7 @@ export interface Play {
   endClick?: ClickPoint | null
   shotCode?: string // a reception or dig: the code of the serve or attack it answers, for the height the ball came from
   rallyId: number | null
+  possibility?: boolean // the serve, blocks and first attack of a rally where the serving team got an attack (dvw.ts)
   before: string[] // codes of the last two contacts before this one in the rally, latest first, freeballs included
   after: string[] // the next two after it, in order
   phase: 'r' | 't' | null // reception phase or transition (dvw.ts phaseOf); null for serves
@@ -277,7 +278,7 @@ export interface ExportLayer {
 
 export type ExportItem =
   | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[]; timing?: ClipTiming } // layers' from / to: seconds into the clip as played (with its slows and holds)
-  | { kind: 'card'; png: Uint8Array; durationSec: number }
+  | { kind: 'card'; png: Uint8Array; durationSec: number; layers?: ExportLayer[] } // layers' from / to: seconds into the card
 
 export interface ExportJob {
   outPath: string

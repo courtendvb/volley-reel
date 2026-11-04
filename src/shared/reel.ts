@@ -2,6 +2,7 @@
 // so the UI can treat a reel as immutable state and every change is unit-testable.
 import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
+import type { SlideFlights, SlideHeat } from './court'
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
@@ -22,6 +23,7 @@ export interface Clip {
   mode?: ClipMode // how it was cut when added from the search; missing = the scene's default
   tag?: string // a short note ("1", "A") to sort a group's clips by hand; never played or exported
   timing?: ClipTiming // slow stretches and holds (shared/timing.ts); video times like inSec / outSec
+  skillSec?: number // when the play really happens, moved by hand from the DVW's whole second (the red line); starts the ball's flight
 }
 
 // "keyplay": key play ± seconds. "toEnd": from just before the key play to the end of its rally.
@@ -63,6 +65,8 @@ export interface Slide {
   durationSec: number
   bg: SlideBg
   annotations: Annotation[]
+  flights?: SlideFlights // balls flying over the picture, all at once (a search's serves)
+  heat?: SlideHeat // a heatmap on the floor of the picture (where a search's shots landed)
 }
 
 // blank: the title card's background color. image: a picture in assets/. source: the file it was
@@ -423,6 +427,14 @@ export function setTiming(reel: Reel, clipId: string, timing: ClipTiming): Reel 
   if (!c) return reel
   const { timing: _old, ...rest } = c
   return touch({ ...reel, clips: { ...reel.clips, [clipId]: hasTiming(timing) ? { ...rest, timing } : rest } })
+}
+
+// Where the red line of a clip is: a video time, or null back on the DVW's time.
+export function setSkillTime(reel: Reel, clipId: string, sec: number | null): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  const { skillSec: _old, ...rest } = c
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: sec === null ? rest : { ...rest, skillSec: sec } } })
 }
 
 export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {

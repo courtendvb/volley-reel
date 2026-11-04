@@ -37,7 +37,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       <label className="check" title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')}>
         <input type="checkbox" checked={s.playZones} onChange={e => onStyle({ ...s, playZones: e.target.checked })} /> {t('プレーのゾーン')}</label>
       <select value={s.detail} aria-label={t('ゾーンの細かさ')} disabled={!s.playZones}
-        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点（3.15 m）まで。座標がないプレーはゾーンを塗る')}
+        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点（3.15 m）まで（セットの開始座標がない DVW はセットのゾーンの中央、ゾーンもなければネット際のセッター位置から）。座標がないプレーはゾーンを塗る')}
         onChange={e => onStyle({ ...s, detail: e.target.value as GridStyle['detail'] })}>
         <option value="zone">{t('ゾーン')}</option>
         <option value="sub">{t('サブゾーン')}</option>

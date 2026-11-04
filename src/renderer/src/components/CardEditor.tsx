@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, drawCard, type Box } from '../../../shared/overlayDraw'
+import { drawFlights, drawHeat } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
 import type { Card } from '../../../shared/video'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
@@ -37,6 +38,8 @@ export function CardEditor({ size, card, settings, onChange, onOwn, active }: Pr
     const ctx = prepareCanvas(c, size.w, size.h)
     const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp), assetImage)
     boxRef.current = b
+    if (card.slide?.heat) drawHeat(ctx, size.w, size.h, card.slide.heat)
+    if (card.slide?.flights) drawFlights(ctx, size.w, size.h, card.slide.flights, 1)
     if (!active || !b) return // a slide has no title to move
     ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#FACC15'
     ctx.strokeRect(b.x - 6, b.y - 6, b.w + 12, b.h + 12)

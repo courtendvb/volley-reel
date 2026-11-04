@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, landingPoint, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -211,5 +211,87 @@ describe('playDirection', () => {
     const swapped: CourtFit = { ...fit, nearSet1: fit.nearSet1 === '*' ? 'a' : '*' }
     expect(playDirection(serve, swapped)).toBe('up')
     expect(playDirection(attack, swapped)).toBe('down')
+  })
+})
+
+describe('a set without a click for where it left', () => {
+  const set = { skill: 'E', side: '*', code: '*21EQ+KAC~3B', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, startZone: null, endZone: 3, startSub: null, endSub: 'B', startClick: null, endClick: { u: 0.2, v: 0.45 } } as never
+  it('starts from its coded zone and still flies', () => {
+    const p = playPoints(set, fit)
+    expect(p.start).not.toBeNull()
+    expect(p.start!.y).toBeGreaterThan(0.5) // the team near the camera, on its own side of the net
+    expect(p.startZ).toBe(SET_Z)
+    expect(hasFlight({ ...DEFAULT_GRID_STYLE, detail: 'point', flight: true }, { start: null, end: null, points: p })).toBe(true)
+  })
+  it('starts from the setter\'s spot with no zone either', () => {
+    const p = playPoints({ ...(set as object), endZone: null, endSub: null } as never, fit)
+    expect(p.start!.x).toBeCloseTo(0.6)
+    expect(p.start!.y).toBeCloseTo(0.556)
+  })
+  it('is left alone when nothing says where it went', () => {
+    expect(playPoints({ ...(set as object), endClick: null } as never, fit).start).toBeNull()
+  })
+})
+
+describe('servePath', () => {
+  it('comes down the court, with the serve\'s height', () => {
+    const p = servePath({ startClick: { u: 0.2, v: -0.05 }, endClick: { u: 0.7, v: 0.8 }, code: '*05SQ-~~~15' })!
+    expect(p.start).toEqual({ x: 0.8, y: -0.05 })
+    expect(p.end!.y).toBeCloseTo(0.8)
+    expect(p.startZ).toBe(JUMP_SERVE_Z)
+  })
+  it('needs both ends', () => {
+    expect(servePath({ startClick: null, endClick: { u: 0, v: 0 }, code: '*05SQ-' })).toBeNull()
+  })
+})
+
+describe('flightsProgress', () => {
+  it('waits, flies, then stays', () => {
+    expect(flightsProgress(0.3)).toBe(0)
+    expect(flightsProgress(1.25)).toBeCloseTo(0.5)
+    expect(flightsProgress(4)).toBe(1)
+  })
+})
+
+describe('heatGrid', () => {
+  it('is thickest where the shots land, and fades away from there', () => {
+    const g = heatGrid([{ x: 0.5, y: 0.75 }, { x: 0.5, y: 0.75 }, { x: 0.1, y: 0.6 }])
+    expect(heatAt(g, 0.5, 0.75)).toBeCloseTo(1, 1)
+    expect(heatAt(g, 0.1, 0.6)).toBeCloseTo(0.5, 1)
+    expect(heatAt(g, 0.9, 0.1)).toBe(0)
+  })
+  it('spreads as far across the court as along it, in metres', () => {
+    const g = heatGrid([{ x: 0.5, y: 0.5 }])
+    expect(heatAt(g, 0.5 + 1 / 9, 0.5)).toBeCloseTo(heatAt(g, 0.5, 0.5 + 1 / 18), 2)
+  })
+  it('is empty with no shots, and ignores what is off the map', () => {
+    expect(heatGrid([]).data.every(v => v === 0)).toBe(true)
+    expect(heatAt(heatGrid([{ x: 5, y: 5 }]), 0.5, 0.5)).toBe(0)
+  })
+})
+
+describe('landingPoint', () => {
+  it('turns the landing like the serve paths, and needs the click', () => {
+    expect(landingPoint({ endClick: { u: 0.25, v: 0.8 } })).toEqual({ x: 0.75, y: 0.8 })
+    expect(landingPoint({ endClick: null })).toBeNull()
+  })
+})
+
+describe('flightTiming with the red line moved', () => {
+  const serve = { time: 100, code: '*05SM-', skill: 'S' }, reception = { time: 102, code: 'a01RM+', shotCode: '*05SM-', skill: 'R' }
+  it('leaves from it, or reaches it for a reception, in place of the DVW time', () => {
+    expect(flightTiming(serve, 5).startSec).toBe(105)
+    expect(flightTiming(serve, 5, 106.3).startSec).toBe(106.3)
+    expect(flightTiming(reception, 5, 108).startSec).toBeCloseTo(108 - 1.4)
+  })
+})
+
+describe('heatColor', () => {
+  it('runs from blue through to red', () => {
+    expect(heatColor(0)).toEqual([37, 99, 235])
+    expect(heatColor(1)).toEqual([220, 38, 38])
+    const [r, g, b] = heatColor(0.5)
+    expect(g).toBeGreaterThan(r)
+    expect(g).toBeGreaterThan(b)
   })
 })

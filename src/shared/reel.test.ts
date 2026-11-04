@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
+  setSkillTime, shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
 } from './reel'
 
@@ -359,5 +359,15 @@ describe('tags', () => {
     const r = sortByTag(reel, 1)
     expect(r.groups[1]).toEqual([c[2], c[3], c[0], c[4], c[1]])
     expect(sortByTag(r, 1)).toBe(r)
+  })
+})
+
+describe('setSkillTime', () => {
+  it('moves the red line of a clip and puts it back', () => {
+    const { reel, ids } = addClips(newReel('x'), [{ matchId: 'm', play: { id: 1, fingerprint: 'f', time: 10, rallyId: 1 } as never }])
+    const moved = setSkillTime(reel, ids[0], 12.4)
+    expect(moved.clips[ids[0]].skillSec).toBe(12.4)
+    expect('skillSec' in setSkillTime(moved, ids[0], null).clips[ids[0]]).toBe(false)
+    expect(setSkillTime(reel, 'nope', 1)).toBe(reel)
   })
 })

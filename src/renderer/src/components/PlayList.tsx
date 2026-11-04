@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
-import { playLabel } from '../../../shared/labels'
+import { effectName, skillName } from '../../../shared/labels'
 import { MARKER_COLORS, type Marker } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
@@ -109,7 +109,7 @@ const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
-      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{playLabel(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}</span>
+      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{skillName(p.skill)}{p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {effectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}</span>
       <span className="marks">
         {MARKERS.map(m => {
           const on = !!marks && marks.split(',').includes(String(m))

@@ -1173,7 +1173,8 @@ export function installSmoke(h: SmokeHost): void {
     await show('flight-start', flyServe)
     const shotOf = (want: (c: string) => boolean) => all.find(r => r.play.startClick && r.play.endClick && want(r.play.code))
     const tip = shotOf(c => c.charAt(3) === 'A' && (c.charAt(12) === 'T' || c.charAt(12) === 'P'))
-    const highSet = shotOf(c => c.charAt(3) === 'E' && c.charAt(4) === 'H')
+    // Many DVWs leave out where a set was struck: the check takes any that says where it went.
+    const highSet = all.find(r => r.play.skill === 'E' && r.play.code.charAt(4) === 'H' && r.play.endClick)
     for (const [name, r] of [['flight-tip', tip], ['flight-set', highSet]] as const) {
       if (!r) continue
       await show(name, r)
@@ -1202,9 +1203,69 @@ export function installSmoke(h: SmokeHost): void {
       if (!job) throw new Error('export did not start')
       await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'points export done')
       const clip = job.items.find(i => i.kind === 'clip')
-      exported = { state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
+      // The red line, dragged in the trim tab: the first clip's flight leaves from there in the export.
+      const first = Object.values(latest.current.reel!.clips).sort((a, b) => a.playId - b.playId)[0]
+      activateClip(first); await sleep(600)
+      await openPanel('trim')
+      const line = await waitFor(() => document.querySelector<HTMLElement>('.trim-key'), 5000, 'red line')
+      const lb = line.getBoundingClientRect(), ptr = (x: number) => ({ clientX: x, clientY: lb.top + 5, bubbles: true, pointerId: 1 })
+      line.dispatchEvent(new PointerEvent('pointerdown', ptr(lb.left + 5))); await sleep(40)
+      line.dispatchEvent(new PointerEvent('pointermove', ptr(lb.left + 45))); await sleep(40)
+      line.dispatchEvent(new PointerEvent('pointerup', ptr(lb.left + 45))); await sleep(300)
+      await api.smokeShot!('skill-line.png')
+      const skillSec = latest.current.reel!.clips[first.id].skillSec ?? null
+      const movedJob = await startExport(exportTo.replace(/\.mp4$/i, '-moved.mp4'), { plan: currentPlan('scene'), name: 'moved' })
+      await sleep(500)
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'moved export done')
+      const movedClip = movedJob?.items.find(i => i.kind === 'clip')
+      const firstJobClip = job.items.find(i => i.kind === 'clip')
+      const layer = (c: typeof movedClip) => (c?.kind === 'clip' ? c.layers[1]?.to ?? null : null)
+      const skillLine = { skillSec, before: layer(firstJobClip), after: layer(movedClip) }
+      exported = { skillLine, state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
-    return { courtPoints: { counts, shots, exported } }
+    // Every serve of the search at once: the button beside 結果をシーンに追加 makes the slide on the
+    // frame on screen; seen in the editor, then flying in a through-play, then exported.
+    let serveFlights: unknown = null
+    if (exportTo) {
+      setFilter({ ...EMPTY_FILTER, skills: ['S'] })
+      await waitFor(() => (latest.current.results.length && latest.current.results.every(r => r.play.skill === 'S') ? true : null), 10000, 'serves only')
+      const serves = latest.current.results.length
+      await show('serve-frame', latest.current.results[0])
+      const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('サーブ軌道')) ?? null, 5000, 'serve flights button')
+      const before = latest.current.reel?.slides?.length ?? 0
+      btn.click()
+      await waitFor(() => ((latest.current.reel?.slides?.length ?? 0) > before ? true : null), 15000, 'serve flights slide')
+      await sleep(800)
+      await api.smokeShot!('serve-flights-edit.png')
+      const slide = latest.current.reel!.slides!.find(s => s.flights)!
+      const plan = currentPlan('scene').filter(p => p.kind === 'card' && p.card.slide?.id === slide.id)
+      const out = exportTo.replace(/\.mp4$/i, '-serves.mp4')
+      const job = await startExport(out, { plan, name: 'serve flights' })
+      if (!job) throw new Error('slide export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 120000, 'slide export done')
+      // In a through-play the curves grow, then stay: the slide is the scene's first item.
+      const finish = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('完了'))
+      finish?.click(); await sleep(300)
+      playThrough('scene', 0)
+      await waitFor(() => (playback.current.card?.slide?.id === slide.id ? true : null), 10000, 'slide playing')
+      await sleep(1100); await api.smokeShot!('serve-flights-fly.png')
+      await sleep(3000); await api.smokeShot!('serve-flights-whole.png')
+      // The heatmap of the same serves: on the same kind of slide, then exported.
+      playback.stopSequence(); await sleep(300)
+      const heatBtn = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('ヒートマップ'))!
+      heatBtn.click()
+      await waitFor(() => (latest.current.reel?.slides?.some(s => s.heat) ? true : null), 15000, 'heat slide')
+      await sleep(800); await api.smokeShot!('heat-edit.png')
+      const heat = latest.current.reel!.slides!.find(s => s.heat)!
+      const heatJob = await startExport(exportTo.replace(/\.mp4$/i, '-heat.mp4'), { plan: currentPlan('scene').filter(p => p.kind === 'card' && p.card.slide?.id === heat.id), name: 'heat' })
+      if (!heatJob) throw new Error('heat export did not start')
+      await sleep(500)
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 120000, 'heat export done')
+      const heatState = { state: latest.current.exportState?.status, points: heat.heat!.points.length }
+      const item = job.items[0]
+      serveFlights = { heatState, serves, paths: slide.flights!.paths.length, sec: slide.durationSec, state: latest.current.exportState?.status, message: latest.current.exportState?.message ?? null, layers: item?.kind === 'card' ? item.layers?.length ?? 0 : null, out }
+    }
+    return { courtPoints: { counts, shots, exported, serveFlights } }
   }
 
   // 「このカードだけ」: marker 1's card gets its own title place and size; marker 2's and the shared

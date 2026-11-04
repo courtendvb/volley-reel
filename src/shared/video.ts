@@ -3,6 +3,7 @@
 // every video that uses it (design §0). The overlay look belongs to the video.
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
+import type { SlideFlights, SlideHeat } from './court'
 import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
@@ -57,7 +58,7 @@ export function dropScene(v: Video, sceneId: string): Video {
 // slide: a slide of a scene, played like a card (drawn as its page instead of a title).
 // layout: this card's own title place and size, apart from its kind's.
 export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]; layout?: CardLayout
-  slide?: { id: string; bg: SlideBg } }
+  slide?: { id: string; bg: SlideBg; flights?: SlideFlights; heat?: SlideHeat } }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
   | { kind: 'clip'; clip: Clip; sceneId: string; group: Group } // group: the marker group it plays in ('none' = unmarked)
@@ -96,7 +97,7 @@ export function slideItem(s: Slide): PlanItem {
 }
 
 export function slideCard(s: Slide): Card {
-  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg }, annotations: s.annotations }
+  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg, ...(s.flights ? { flights: s.flights } : {}), ...(s.heat ? { heat: s.heat } : {}) }, annotations: s.annotations }
 }
 
 // A whole video: each scene in turn, led by a scene card (the scene's name) when scene cards are on.

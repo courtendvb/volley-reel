@@ -101,11 +101,9 @@ const sleep = (ms: number) => new Promise(ok => setTimeout(ok, ms))
 
 // Opens one of the panels under the video (StageTabs) by its tab, for steps that use it with the real mouse.
 async function openPanel(p: 'trim' | 'objects' | 'display' | 'court'): Promise<void> {
-  const label = p === 'trim' || p === 'objects' ? t('編集') : t('表示')
+  const label = p === 'trim' ? t('編集') : p === 'objects' ? t('図形・コメント') : t('表示')
   const tab = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === label && !b.disabled) ?? null, 10000, `${label} tab`)
   if (tab.getAttribute('aria-selected') !== 'true') { tab.click(); await sleep(250) }
-  const fold = document.querySelector<HTMLButtonElement>('.stage-fold')
-  if (p === 'objects' && fold?.getAttribute('aria-expanded') === 'false') { fold.click(); await sleep(250) }
 }
 
 function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() => string) = 'condition'): Promise<T> {

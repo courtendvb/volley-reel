@@ -123,10 +123,9 @@ export function App() {
   useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
   const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
-  const [objectsOpen, setObjectsOpen] = useState(false) // the objects' tools, under the trim bar
   useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
   // An object picked on the video (or a headline's 書式) opens the objects panel, unless the trim panel is up (its lanes show the object's times).
-  const showObjects = () => { setStagePanel('edit'); setObjectsOpen(true) }
+  const showObjects = () => setStagePanel('objects')
   const gridStyleRef = useRef(gridStyle)
   gridStyleRef.current = gridStyle
 
@@ -994,7 +993,7 @@ export function App() {
                 const court = match.court && (
                   <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
-                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && !(stagePanel === 'edit' && objectsOpen) ? courtClick : undefined} />
+                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )
                 return (
                   <>
@@ -1084,17 +1083,13 @@ export function App() {
               </div>
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
-              <button className="link stage-fold" aria-expanded={objectsOpen} onClick={() => setObjectsOpen(o => !o)}>
-                {objectsOpen ? '▾' : '▸'} {t('図形')}{activeAnns.length ? t('（{0}）', activeAnns.length) : ''}</button>
-              <div className="stage-fold-body" hidden={!objectsOpen}>
+              <div className="stage-panel" hidden={stagePanel !== 'objects'}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
                 court={matches[active.matchId]?.court?.corners ?? null}
               />
-              </div>
               </div>
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (

@@ -125,7 +125,7 @@ export function planVideoChapters(video: Video, scenes: Record<string, Reel>, or
     if (!parts.length) continue
     const card = sceneCard(s, order, overlay, matches, ourCodes)
     for (const [i, p] of parts.entries()) {
-      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('マーカー {0}', p.group)}`
+      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('グループ {0}', p.group)}`
       chapters.push({ at: chapters.length ? plan.length : 0, title: name })
       if (i === 0 && card) plan.push(card)
       plan.push(...p.items)

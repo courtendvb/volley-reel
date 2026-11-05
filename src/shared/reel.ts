@@ -23,6 +23,7 @@ export interface Clip {
   mode?: ClipMode // how it was cut when added from the search; missing = the scene's default
   tag?: string // a short note ("1", "A") to sort a group's clips by hand; never played or exported
   timing?: ClipTiming // slow stretches and holds (shared/timing.ts); video times like inSec / outSec
+  speedKmh?: number // a serve's speed through the air, estimated by hand: how fast its flight goes
   skillSec?: number // when the play really happens, moved by hand from the DVW's whole second (the red line); starts the ball's flight
 }
 
@@ -42,7 +43,7 @@ export interface Reel {
   sceneCard?: boolean // this scene's title card; missing = the video's setting
   markerOff?: Partial<Record<Marker, boolean>> // a marker group switched off: kept, but not played or exported
   annotations?: Annotation[] // objects shown on every clip of the scene (表示範囲: シーン全体)
-  markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
+  markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: グループ全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
   cardTitle?: string // the scene card's text when it differs from the name (may have line breaks: one line each)
@@ -435,6 +436,14 @@ export function setSkillTime(reel: Reel, clipId: string, sec: number | null): Re
   if (!c) return reel
   const { skillSec: _old, ...rest } = c
   return touch({ ...reel, clips: { ...reel.clips, [clipId]: sec === null ? rest : { ...rest, skillSec: sec } } })
+}
+
+// A serve's speed for its flight, or null back on the default.
+export function setServeSpeed(reel: Reel, clipId: string, kmh: number | null): Reel {
+  const c = reel.clips[clipId]
+  if (!c) return reel
+  const { speedKmh: _old, ...rest } = c
+  return touch({ ...reel, clips: { ...reel.clips, [clipId]: kmh === null ? rest : { ...rest, speedKmh: kmh } } })
 }
 
 export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {

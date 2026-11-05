@@ -14,6 +14,8 @@ interface Props {
   overrides: { in: boolean; out: boolean }
   overlapLabels: string[]
   onTrim: (edge: 'in' | 'out', t: number | null) => void
+  speed: { value: number | null; usual: number | null } | null // a serve's speed for its flight, in km/h; null on other skills
+  onSpeed: (kmh: number | null) => void
   skillTime: number | null // the red line, moved by hand from keyTime; null = on it
   onSkillTime: (t: number | null) => void
   loop: boolean // loop the clip (off: play on past OUT to see around it)
@@ -33,7 +35,7 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, speed, onSpeed, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
   // While a show / hide time sticks to another time: that time, drawn as a guide line.
   const [snapGuide, setSnapGuide] = useState<number | null>(null)
@@ -171,6 +173,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
           onSet={() => onTrim('out', playback.current.time)} onType={v => onTrim('out', keyTime + v)} onReset={() => onTrim('out', null)} />
         <Edge name={t('起点')} keyName="◎" value={rel(skillAt)} overridden={skillTime !== null}
           onSet={() => onSkillTime(Math.round(playback.current.time * 100) / 100)} onType={v => onSkillTime(v ? Math.round((keyTime + v) * 100) / 100 : null)} onReset={() => onSkillTime(null)} />
+        {speed?.usual && <Speed value={speed.value} usual={speed.usual} onChange={onSpeed} />}
         <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム')}</span>
       </div>
     </div>
@@ -216,6 +219,26 @@ function SlowHold({ timing, onTiming, range, rel, keyTime }: {
         </span>
       ))}
     </div>
+  )
+}
+
+// A serve's speed through the air: the flight takes as long as its distance at this speed. Empty
+// goes back to the usual time, whose speed shows in the field.
+function Speed({ value, usual, onChange }: { value: number | null; usual: number; onChange: (kmh: number | null) => void }) {
+  const [text, setText] = useState(value === null ? '' : String(value))
+  useEffect(() => setText(value === null ? '' : String(value)), [value])
+  const commit = () => {
+    const v = parseFloat(text)
+    if (!text.trim()) onChange(null)
+    else if (v >= 20 && v <= 160) onChange(v)
+    else setText(value === null ? '' : String(value))
+  }
+  return (
+    <span className="trim-edge" title={t('動画のボールに軌道が合うように、サーブの平均の速さを入れます。空にすると既定に戻ります')}>
+      {t('速度')}
+      <input type="number" min={20} max={160} step={1} value={text} placeholder={String(usual)} aria-label={t('サーブの速度（km/h）')}
+        onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} /> km/h
+    </span>
   )
 }
 

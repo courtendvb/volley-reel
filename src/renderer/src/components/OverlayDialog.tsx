@@ -84,16 +84,16 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
               <div className="filter-row"><span className="field-label wide">{t('タイトルカード')}</span>
                 {check(t('動画の頭（動画名）'), !!s.titleCard.videoCard, v => set('titleCard', { videoCard: v }))}
                 {check(t('シーンの頭（シーン名。動画のシーン一覧の「カード」でシーンごとに変えられる）'), s.titleCard.sceneCards, v => set('titleCard', { sceneCards: v }))}
-                {check(t('マーカーの頭（マーカー名。シーンの「カード」でマーカーごとに変えられる）'), s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
-                <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数')} title={t('シーンとマーカーのカードの秒数（一括）')}
+                {check(t('グループの頭（グループ名。シーンの「カード」でグループごとに変えられる）'), s.titleCard.enabled, v => set('titleCard', { enabled: v }))}<span className="spacer" />
+                <label className="check"><input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数')} title={t('シーンとグループのカードの秒数（一括）')}
                   onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) set('titleCard', { durationSec: n }) }} /> {t('秒')}</label></div>
               <div className="filter-row">
                 {check(t('切り替えでフェード（イン・アウト。クリップとカードの頭と終わり）'), s.transition.fade, v => set('transition', { fade: v }))}<span className="spacer" />
                 {s.transition.fade && <label className="check"><input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label={t('フェードの秒数')}
                   onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) set('transition', { durationSec: n }) }} /> {t('秒')}</label>}</div>
               <div className="filter-row indent">
-                {check(t('マーカー番号'), s.titleCard.showMarkerNumber !== false, v => set('titleCard', { showMarkerNumber: v }))}
-                {check(t('マーカー名'), s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
+                {check(t('グループ番号'), s.titleCard.showMarkerNumber !== false, v => set('titleCard', { showMarkerNumber: v }))}
+                {check(t('グループ名'), s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
                 {check(t('試合名'), s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}
                 <label className="check" title={t('すべてのタイトルカードと無地のスライドの背景色')}>{t('背景')}
                   <input type="color" aria-label={t('カードの背景色')} value={cardBackground(s.titleCard, s.theme)} onChange={e => set('titleCard', { background: e.target.value })} /></label>

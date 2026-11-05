@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
 import { t } from '../../../shared/i18n'
 
 interface Props {
+  part: 'head' | 'list' // the line above the right column's tabs, or the 動画の構成 tab
   videos: Video[]
   video: Video | null
   scenes: Reel[]
@@ -31,8 +32,6 @@ interface Props {
 }
 
 const DT_SCENE = 'application/x-vr-scene-index'
-const LIST_KEY = 'vr.sceneListHeight'
-const LIST_MIN = 64, LIST_MAX = 640
 
 // A video is a list of scenes (v3, design §0). Scenes are shared: the same scene can be in several
 // videos, and editing it changes all of them. The overlay look, through-play and export are per video.
@@ -40,54 +39,47 @@ export function VideoPanel(p: Props) {
   const v = p.video
   // Where a dragged scene will land: above or below the row under the pointer (shown as a line).
   const [dragOver, setDragOver] = useState<{ i: number; after: boolean } | null>(null)
-  // The scene list scrolls past about five rows so the scene editor below keeps its room; the
-  // handle under it sets its height (kept), a double-click goes back to the default.
   const listRef = useRef<HTMLOListElement>(null)
-  const [listH, setListH] = useState<number | null>(() => { try { const n = Number(localStorage.getItem(LIST_KEY)); return n > 0 ? n : null } catch { return null } })
-  useEffect(() => { try { if (listH) localStorage.setItem(LIST_KEY, String(listH)); else localStorage.removeItem(LIST_KEY) } catch { /* not kept */ } }, [listH])
-  const drag = useRef<{ y: number; h: number } | null>(null)
-  const onHandleDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (!listRef.current) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { y: e.clientY, h: listRef.current.getBoundingClientRect().height }
-  }
-  const onHandleMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (drag.current) setListH(Math.round(Math.max(LIST_MIN, Math.min(LIST_MAX, drag.current.h + e.clientY - drag.current.y))))
-  }
   // The open scene stays in view (it can be picked from the scene editor's select too).
   useEffect(() => { listRef.current?.querySelector('.video-scene.current')?.scrollIntoView({ block: 'nearest' }) }, [p.currentSceneId, v?.id])
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
   const total = v ? v.sceneIds.reduce((acc, id) => { const s = byId[id]; if (!s) return acc; const st = p.sceneStats(s); return { clips: acc.clips + st.clips, sec: acc.sec + st.sec } }, { clips: 0, sec: 0 }) : { clips: 0, sec: 0 }
 
-  if (!v) {
+  if (p.part === 'head') {
     return (
-      <section className="video-panel">
-        <div className="reel-head"><button className="primary" onClick={p.onNewVideo}>{t('動画を作成')}</button></div>
-        <p className="muted pad-x">{t('動画はシーンを並べたものです。シーン（マーカーで分けたクリップの集まり）を作って、動画に入れます。')}</p>
+      <section className="video-head">
+        {v ? (
+          <>
+            <span className="panel-kicker">{t('動画')}</span>
+            <select value={v.id} onChange={e => p.onSelectVideo(e.target.value)} aria-label={t('動画')}>
+          {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+            {p.playing
+              ? <button onClick={p.onStop}>{t('■ 停止')}</button>
+              : <><button className="primary" onClick={p.onPlay} disabled={!total.clips} title={t('動画を最初から再生')}>{t('▶ 再生')}</button>
+                <button onClick={p.onPlayMax} disabled={!total.clips} title={t('最大化して再生（終わると元に戻る）')} aria-label={t('最大化して再生')}>⛶</button></>}
+            <button onClick={p.onOpenOverlay} title={t('この動画の設定: スコアボード・テロップ・タイトルカード・フェード')} aria-label={t('動画の設定')}>⚙</button>
+          </>
+        ) : <button className="primary" onClick={p.onNewVideo}>{t('動画を作成')}</button>}
       </section>
     )
   }
+  if (!v) return <section className="video-panel"><p className="muted pad-x">{t('動画はシーンを並べたものです。シーン（グループで分けたクリップの集まり）を作って、動画に入れます。')}</p></section>
 
   return (
     <section className="video-panel">
       <div className="reel-head">
-        <span className="panel-kicker">{t('動画')}</span>
-        <select value={v.id} onChange={e => p.onSelectVideo(e.target.value)} aria-label={t('動画')}>
-          {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-        <button onClick={p.onNewVideo} title={t('新しい動画')}>＋</button>
-        <button onClick={() => { if (confirm(t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) p.onDeleteVideo(v.id) }} title={t('動画を削除')}>{t('削除')}</button>
-      </div>
-      <div className="reel-name-row">
         <input className="reel-name" value={v.name} onChange={e => p.onChange({ ...v, name: e.target.value, updatedAt: new Date().toISOString() })} aria-label={t('動画の名前')} />
         <button className={`card-toggle${p.videoCardOn ? ' on' : ''}`} aria-pressed={p.videoCardOn}
           title={p.videoCardOn ? t('動画の頭に動画名のカードを出す（クリックで出さない）') : t('動画の頭に動画名のカードを出さない（クリックで出す）')}
           onClick={() => p.onVideoCard(!p.videoCardOn)}>{t('カード')}</button>
         <button className="gear" aria-label={t('動画のタイトルカード')} title={t('動画の頭のタイトルカード（動画名）を動画の画面で編集')} onClick={p.onEditVideoCard}>⚙</button>
+        <button onClick={p.onNewVideo} title={t('新しい動画')}>＋</button>
+        <button onClick={() => { if (confirm(t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) p.onDeleteVideo(v.id) }} title={t('動画を削除')}>{t('削除')}</button>
       </div>
 
-      <ol ref={listRef} className="video-scenes" role="list" style={listH ? { maxHeight: listH } : undefined}>
+      <ol ref={listRef} className="video-scenes" role="list">
         {v.sceneIds.map((id, i) => {
           const s = byId[id]
           const st = s ? p.sceneStats(s) : { clips: 0, sec: 0 }
@@ -130,11 +122,6 @@ export function VideoPanel(p: Props) {
         })}
         {!v.sceneIds.length && <li className="muted pad-x">{t('まだシーンがありません')}</li>}
       </ol>
-      <div className="list-resize" role="separator" aria-orientation="horizontal" aria-label={t('シーン一覧の高さ')}
-        title={t('ドラッグでシーン一覧の高さを変える（ダブルクリックで元に戻す）')}
-        onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}
-        onDoubleClick={() => setListH(null)} />
-
       <div className="video-add">
         <select value="" onChange={e => { if (e.target.value) p.onChange(addScene(v, e.target.value)) }} aria-label={t('シーンを追加')}>
           <option value="">{t('シーンを追加…')}</option>
@@ -143,13 +130,6 @@ export function VideoPanel(p: Props) {
         <button onClick={p.onNewScene} title={t('新しいシーンを作ってこの動画に入れる')}>{t('新しいシーン')}</button>
       </div>
 
-      <div className="reel-controls">
-        <button onClick={p.onOpenOverlay} title={t('この動画の設定: スコアボード・テロップ・タイトルカード・フェード')}>{t('⚙ 設定')}</button>
-        {p.playing
-          ? <button onClick={p.onStop}>{t('■ 停止')}</button>
-          : <><button className="primary" onClick={p.onPlay} disabled={!total.clips}>{t('▶ 動画を再生')}</button>
-            <button onClick={p.onPlayMax} disabled={!total.clips} title={t('最大化して再生（終わると元に戻る）')} aria-label={t('最大化して再生')}>⛶</button></>}
-      </div>
       <p className="count">{v.sceneIds.length} {t('シーン・')}{total.clips} {t('クリップ・')}{fmtSec(total.sec)}{t('（タイトルカードを除く）')}</p>
     </section>
   )

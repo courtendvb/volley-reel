@@ -136,7 +136,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
       for (const m of reel.groupOrder) {
         if (!reel.groups[m].length && !reel.slides?.some(s => s.group === m)) continue
         const mp = planSec(markerPlan(reel, m))
-        out.push({ key: `marker:${m}`, label: t('マーカー {0}「{1}」だけ', m, reel.markerNames[m] || t('マーカー {0}', m)), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), fmtLen(mp.sec)), empty: mp.empty })
+        out.push({ key: `marker:${m}`, label: reel.markerNames[m] ? t('グループ {0}「{1}」だけ', m, reel.markerNames[m]) : t('グループ {0} だけ', m), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), fmtLen(mp.sec)), empty: mp.empty })
       }
     }
     return out
@@ -171,7 +171,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     if (!sc) return Promise.resolve(null)
     const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
     const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
-    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('マーカー{0}', m)}`
+    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('グループ{0}', m)}`
     return startExport(outPath, { plan, name })
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -363,5 +363,22 @@ describe('a serve with its speed', () => {
     expect(flightTiming({ ...serve, endClick: null }, 0, { speedKmh: 72 }).sec).toBe(1)
     expect(flightTiming({ ...serve, skill: 'A', code: '*05AH-' }, 0, { speedKmh: 72 }).sec).toBe(0.5)
     expect(serveSpeed({ ...serve, startClick: null })).toBeNull()
+  })
+})
+
+describe('the height line', () => {
+  const ctx = () => {
+    const calls: number[] = []
+    const noop = () => {}
+    return { calls, ctx: new Proxy({ setLineDash: (d: number[]) => { calls.push(d.length) } }, { get: (t, k) => (k in t ? t[k as 'setLineDash'] : noop), set: () => true }) as never }
+  }
+  const zones = { start: null, end: null, points: { start: { x: 0.5, y: 0.9 }, end: { x: 0.5, y: 0.1 }, startZ: 3, arc: 1 } }
+  const corners = [{ x: 0.3, y: 0.3 }, { x: 0.7, y: 0.3 }, { x: 0.05, y: 0.95 }, { x: 0.95, y: 0.95 }] as CourtFit['corners']
+  it('goes with the flight, and can be left out', () => {
+    const on = ctx(), off = ctx()
+    drawFlight(on.ctx, 1280, 720, { corners, nearSet1: '*' }, zones, 1)
+    drawFlight(off.ctx, 1280, 720, { corners, nearSet1: '*' }, zones, 1, false)
+    expect(on.calls.some(n => n > 0)).toBe(true)
+    expect(off.calls.some(n => n > 0)).toBe(false)
   })
 })

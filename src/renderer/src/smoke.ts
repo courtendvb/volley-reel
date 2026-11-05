@@ -727,7 +727,7 @@ export function installSmoke(h: SmokeHost): void {
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.8, 0.8))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointerup', apt(0.8, 0.8))); await sleep(300)
-    // マーカー全体: an object on marker 1's first clip moved to the marker group shows on its other
+    // グループ全体: an object on marker 1's first clip moved to the marker group shows on its other
     // clip, not on marker 2's.
     let markerScope: unknown = null
     {
@@ -755,11 +755,7 @@ export function installSmoke(h: SmokeHost): void {
       markerScope = { stored, onOtherClip, onMarker2, planGroups: plan.map(it => (it.kind === 'clip' ? it.group : null)), sceneDown, listMoved }
     }
 
-    // The export accordion lists what can be exported.
-    {
-      const head = document.querySelector<HTMLButtonElement>('[data-accordion="export"] .accordion-head')!
-      if (head.getAttribute('aria-expanded') !== 'true') { head.click(); await sleep(200) }
-    }
+    // The export tab lists what can be exported.
     const exportChoices = [...document.querySelectorAll('.export-target .export-label')].map(e => e.textContent)
     const cardObjects = (latest.current.reels.find(x => x.id === a.id)?.markerCardAnnotations?.[1] ?? []).map(x => x.kind)
     const planCard = currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1 && it.card.name === 'Kills')
@@ -1205,6 +1201,13 @@ export function installSmoke(h: SmokeHost): void {
     await playback.seekAndWait(pf.startSec + pf.sec * 0.5); await sleep(400)
     await api.smokeShot!('player-serve-mid.png')
     await show('player-attack', pick('A'))
+    // The heatmap's strength and the height line, switched in the court tab.
+    const heatRange = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('ヒートマップの濃さ') + '"]'), 5000, 'heat strength')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(heatRange, '0.3')
+    heatRange.dispatchEvent(new Event('input', { bubbles: true })); await sleep(300)
+    const liftBox = [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.trim() === t('打点の点線'))?.querySelector('input')
+    liftBox?.click(); await sleep(300)
+    await api.smokeShot!('heat-faint-no-lift.png')
     let exported: unknown = null
     if (exportTo) {
       const { reel: added } = addClips(newReel('points smoke'), [pick('S'), pick('A')].map(r => ({ matchId: r.matchId, play: r.play })))
@@ -1291,6 +1294,19 @@ export function installSmoke(h: SmokeHost): void {
       const item = job.items[0]
       serveFlights = { heatState, serves, paths: slide.flights!.paths.length, sec: slide.durationSec, state: latest.current.exportState?.status, message: latest.current.exportState?.message ?? null, layers: item?.kind === 'card' ? item.layers?.length ?? 0 : null, out }
     }
+    // The right column's tabs, each on its own.
+    for (const [i, name] of ['scene', 'video', 'export'].entries()) {
+      document.querySelectorAll<HTMLButtonElement>('.right-tabs button')[i].click(); await sleep(300)
+      await api.smokeShot!(`right-${name}.png`)
+    }
+    // Play from the line above the tabs: the video runs through, then is stopped.
+    document.querySelector<HTMLButtonElement>('.video-head .primary')!.click()
+    await waitFor(() => (playback.current.seq ? true : null), 10000, 'video playing from the head')
+    await sleep(1000)
+    const playedFromHead = !!playback.current.seq
+    document.querySelector<HTMLButtonElement>('.video-head button')?.click()
+    playback.stopSequence()
+    shots.playedFromHead = playedFromHead
     return { courtPoints: { counts, shots, exported, serveFlights } }
   }
 

@@ -21,7 +21,7 @@ interface Deps {
   matches: Record<string, Match>
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
-  markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
+  markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: グループ全体
   court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
   courtStyle?: GridStyle // the grid's look, as in the player
 }
@@ -65,7 +65,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
         drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
-        if (p.card.slide?.heat) drawHeat(ctx, W, H, p.card.slide.heat)
+        if (p.card.slide?.heat) drawHeat(ctx, W, H, p.card.slide.heat, d.courtStyle?.heatOpacity)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
       }), ...(p.card.slide?.flights ? { layers: await flightLayers(p.card.slide.flights, p.durationSec, png) } : {}) })
       continue
@@ -142,7 +142,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
       if (to - from < 0.001) continue
       layers.push({ from, to, png: await png(ctx => {
         if (court!.zones?.player?.flights) drawFlights(ctx, W, H, court!.zones.player.flights, i / steps)
-        if (hasFlight(d.courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps)
+        if (hasFlight(d.courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !d.courtStyle!.noLift)
       }) })
     }
   }

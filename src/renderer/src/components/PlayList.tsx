@@ -104,7 +104,7 @@ const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump
   return (
     <div role="listitem" style={{ top, height: ROW }}
       className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${marks === '' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
-      title={t('映像 {0}{1}', formatTime(videoTime), marks === '' ? t('・シーンに入っています（マーカーなし）') : '')}>
+      title={t('映像 {0}{1}', formatTime(videoTime), marks === '' ? t('・シーンに入っています（未分類）') : '')}>
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
@@ -115,7 +115,7 @@ const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump
           const on = !!marks && marks.split(',').includes(String(m))
           return (
             <button key={m} className={`mark${on ? ' on' : ''}`} style={on ? { background: MARKER_COLORS[m], borderColor: MARKER_COLORS[m] } : undefined}
-              title={on ? t('マーカー {0} を外す', m) : t('今のシーンにマーカー {0} で入れる（ほかのマーカーと同時にも付けられます）', m)}
+              title={on ? t('グループ {0} を外す', m) : t('今のシーンにグループ {0} で入れる（ほかのグループと同時にも付けられます）', m)}
               onClick={e => { e.stopPropagation(); onMark(r, m) }}>{m}</button>
           )
         })}

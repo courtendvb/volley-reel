@@ -10,6 +10,7 @@ import { t } from '../../../shared/i18n'
 
 interface Props {
   size: { w: number; h: number }
+  heatOpacity?: number // of a slide's heatmap
   card: Card
   settings: OverlaySettings
   onChange: (s: OverlaySettings) => void
@@ -23,7 +24,7 @@ const HANDLE = 9 // px, the resize corner
 
 // The title card drawn over the video window, with its title in a frame: drag it to move, drag the
 // corner to resize (a slide is only drawn: it has no title). Changes the video's layout for that kind of card (all scene cards, or all marker cards), or the card's own when it has one.
-export function CardEditor({ size, card, settings, onChange, onOwn, active }: Props) {
+export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn, active }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<Box | null>(null)
   const drag = useRef<Drag | null>(null)
@@ -38,7 +39,7 @@ export function CardEditor({ size, card, settings, onChange, onOwn, active }: Pr
     const ctx = prepareCanvas(c, size.w, size.h)
     const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp), assetImage)
     boxRef.current = b
-    if (card.slide?.heat) drawHeat(ctx, size.w, size.h, card.slide.heat)
+    if (card.slide?.heat) drawHeat(ctx, size.w, size.h, card.slide.heat, heatOpacity)
     if (card.slide?.flights) drawFlights(ctx, size.w, size.h, card.slide.flights, 1)
     if (!active || !b) return // a slide has no title to move
     ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#FACC15'
@@ -47,7 +48,7 @@ export function CardEditor({ size, card, settings, onChange, onOwn, active }: Pr
     ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#FACC15'
     ctx.fillRect(b.x + b.w + 6 - HANDLE / 2, b.y + b.h + 6 - HANDLE / 2, HANDLE, HANDLE)
     ctx.strokeRect(b.x + b.w + 6 - HANDLE / 2, b.y + b.h + 6 - HANDLE / 2, HANDLE, HANDLE)
-  }, [size.w, size.h, card, settings, tick, active])
+  }, [heatOpacity, size.w, size.h, card, settings, tick, active])
 
   const at = (e: PointerEvent): [number, number] => {
     const r = canvas.current!.getBoundingClientRect()
@@ -88,7 +89,7 @@ export function CardEditor({ size, card, settings, onChange, onOwn, active }: Pr
 
 const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' => (card.video ? 'videoLayout' : card.marker === null ? 'sceneLayout' : 'markerLayout')
 const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
-const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('マーカー'))
+const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('グループ'))
 
 // Below the video while a card is being edited: whether it is shown, its text (the name unless set;
 // a line break makes a second line), the background of every card, what the pointer edits (the

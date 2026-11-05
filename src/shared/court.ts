@@ -310,7 +310,7 @@ const FLIGHT_STEPS = 32
 
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
 // far with the ball at its tip, and the landing point once it is there.
-export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number): void {
+export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true): void {
   const p = zones.points
   if (!p?.start || !p.end || !p.startZ) return
   const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
@@ -319,7 +319,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   const a = p.start, b = p.end
   const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s))
   const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
-  drawLift(ctx, project(H, a.x, a.y), air, w)
+  if (lift) drawLift(ctx, project(H, a.x, a.y), air, w)
   if (done > 0) {
     const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done))
     ctx.save()
@@ -336,7 +336,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
     ctx.restore()
   }
   drawPoint(ctx, air, START_COLOR, w)
-  if (done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
+  if (lift && done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
   if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
@@ -387,7 +387,7 @@ export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
 export interface SlideHeat { fit: CourtFit; points: Pt[] }
 const COURT_W_M = 9, COURT_L_M = 18
 const HEAT_CELL_M = 0.25, HEAT_SIGMA_M = 0.8, HEAT_MARGIN_M = 3
-const HEAT_ALPHA = 0.75
+export const HEAT_OPACITY = 0.75 // the heatmap at its thickest, unless GridStyle.heatOpacity says otherwise
 const HEAT_RAMP: [number, [number, number, number]][] = [[0, [37, 99, 235]], [0.3, [6, 182, 212]], [0.5, [34, 197, 94]], [0.72, [250, 204, 21]], [1, [220, 38, 38]]]
 
 // The colour for a thickness of 0–1.
@@ -428,7 +428,7 @@ export function heatAt({ cols, rows, data }: HeatGrid, x: number, y: number): nu
 const grids = new WeakMap<SlideHeat, HeatGrid>()
 
 // Painted pixel by pixel from the picture back onto the floor, at half size and smoothed up.
-export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat): void {
+export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY): void {
   const grid = grids.get(heat) ?? heatGrid(heat.points)
   grids.set(heat, grid)
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
@@ -447,7 +447,7 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat): void 
       if (v < 0.04) continue
       const c = heatColor(v)
       px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]
-      px[i + 3] = 255 * HEAT_ALPHA * Math.min(1, v * 5)
+      px[i + 3] = 255 * opacity * Math.min(1, v * 5)
     }
   }
   out.putImageData(image, 0, 0)
@@ -476,6 +476,8 @@ export interface GridStyle {
   flight?: boolean // with the points: the ball's path as a curve
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
+  heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
+  noLift?: boolean // no dashed line from the floor up to a point in the air
   serveFlights?: boolean // on a serve: all the player's serves flying with it
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
@@ -505,7 +507,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
   }
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
-  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat) // on the floor, under everything
+  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
@@ -534,7 +536,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
 
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
   if (hasFlight(style, zones) && courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) {
-    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight)
+    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift)
   } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
@@ -543,9 +545,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     const ground = pts?.start ? at(pts.start.x, pts.start.y) : null
     const camera = pts?.start && pts.startZ ? courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h) : null
     const air = camera && pts?.start ? camera(pts.start.x, pts.start.y, pts.startZ!) : null
-    if (ground && air) drawLift(ctx, ground, air, w)
+    if (ground && air && !style.noLift) drawLift(ctx, ground, air, w)
     const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null
-    if (pts?.end && endAir) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
+    if (pts?.end && endAir && !style.noLift) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
     const a = air ?? place(pts?.start, zones.start), b = endAir ?? place(pts?.end, zones.end)
     if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w)

@@ -39,6 +39,7 @@ import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
+import { keyName } from '../../shared/keys'
 import { captionPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
@@ -637,7 +638,7 @@ export function App() {
     copied.current = { projectPath: latest.current.projectPath, anns: sel.map(a => shiftTimes(a, at === null ? null : -at)) }
     void api.markObjectsCopied() // so Ctrl+V pastes these until something else is copied
 
-    const msg = t('図形を {0} 個コピーしました（Ctrl+V で貼り付け）', sel.length)
+    const msg = keyName(t('図形を {0} 個コピーしました（Ctrl+V で貼り付け）', sel.length))
     setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) // a short note, not one to dismiss
     return true
   }

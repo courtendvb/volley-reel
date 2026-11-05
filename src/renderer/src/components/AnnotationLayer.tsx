@@ -135,7 +135,7 @@ export function AnnotationLayer(p: Props) {
       ctx.strokeRect(b.x * p.size.w - 6, b.y * p.size.h - 6, b.w * p.size.w + 12, b.h * p.size.h + 12)
       ctx.setLineDash([])
       if (SCOPE_TAG[scope]) {
-        ctx.font = 'bold 11px "Segoe UI", "Yu Gothic UI", sans-serif'
+        ctx.font = 'bold 11px "Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
         const tw = ctx.measureText(SCOPE_TAG[scope]).width + 10, tx = b.x * p.size.w - 6, ty = Math.max(0, b.y * p.size.h - 24)
         ctx.fillStyle = SCOPE_COLOR[scope]; ctx.fillRect(tx, ty, tw, 17)
         ctx.fillStyle = '#FFFFFF'; ctx.textBaseline = 'middle'; ctx.fillText(SCOPE_TAG[scope], tx + 5, ty + 9)

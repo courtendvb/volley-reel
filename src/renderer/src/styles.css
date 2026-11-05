@@ -29,7 +29,7 @@
   --skill-r: #047857;
   --skill-b: #7C3AED;
   color-scheme: light;
-  font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+  font-family: "Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif;
   font-size: 14px;
   color: var(--text);
 }
@@ -516,7 +516,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .palette-item.drop-after { box-shadow: 3px 0 0 var(--primary); }
 .palette-lock { padding: 0 3px; border: 0; background: transparent; font-size: 11px; opacity: 0.35; }
 .palette-lock:hover, .palette-lock.on { opacity: 1; }
-textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-width: 200px; font-family: "Segoe UI", "Yu Gothic UI", sans-serif; }
+textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-width: 200px; font-family: "Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif; }
 /* Right column accordions (palette, export): big full-width headers, the body scrolls on its own. */
 .accordion { flex: none; display: flex; flex-direction: column; min-height: 0; border-top: 2px solid var(--border); background: var(--surface); }
 .accordion.open { max-height: 34%; }

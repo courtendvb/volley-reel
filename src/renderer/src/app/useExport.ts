@@ -156,7 +156,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
   const exportScenes = async (dir?: string) => {
     const list = scenePlans()
     if (!list.length) return
-    const r = dir ? { paths: list.map(x => `${dir}\\${x.file}.mp4`), existing: [] } : await api.chooseExportFolder(list.map(x => x.file))
+    const r = dir ? { paths: list.map(x => `${dir}/${x.file}.mp4`), existing: [] } : await api.chooseExportFolder(list.map(x => x.file))
     if (!r) return
     if (r.existing.length && !confirm(t('同じ名前のファイルが {0} 本あります。上書きしますか？\n{1}', r.existing.length, r.existing.map(p => p.split(/[\\/]/).pop()).join('\n')))) return
     sceneRun.current = { items: list.map((x, i) => ({ name: x.name, plan: x.plan, path: r.paths[i] })), i: 0 }

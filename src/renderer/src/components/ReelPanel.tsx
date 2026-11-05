@@ -8,6 +8,7 @@ import type { PlayRef } from '../../../shared/filter'
 import { pad2 } from '../format'
 import { InlineTitle } from './InlineTitle'
 import { t } from '../../../shared/i18n'
+import { keyName } from '../../../shared/keys'
 
 export interface ClipInfo {
   ref: PlayRef | undefined
@@ -271,7 +272,7 @@ export function ReelPanel(p: Props) {
               {reel.markerOff?.[m] && <span className="excluded-note" title={t('番号をクリックするとオンに戻ります')}>{t('オフ（使わない）')}</span>}
               <span className="muted">{reel.groups[m].length}</span>
               {reel.groups[m].some(id => reel.clips[id]?.tag) && (
-                <button className="tag-sort" title={t('このグループのクリップをタグの順に並べる（タグなしは最後。Ctrl+Z で戻せる）')}
+                <button className="tag-sort" title={keyName(t('このグループのクリップをタグの順に並べる（タグなしは最後。Ctrl+Z で戻せる）'))}
                   onClick={() => change(sortByTag(reel, m))}>{t('タグ順')}</button>
               )}
               {(() => {

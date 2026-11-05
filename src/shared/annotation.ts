@@ -64,7 +64,7 @@ export type PointsAnnotation = Extract<Annotation, { points: [number, number][] 
 export const isPoints = (a: Annotation): a is PointsAnnotation => a.kind === 'freehand' || a.kind === 'polyline' || a.kind === 'polygon'
 
 export const REF_HEIGHT = 720
-export const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", sans-serif'
+export const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
 export const COLORS = ['#EF4444', '#FFFFFF', '#3B82F6', '#22C55E', '#0F172A']
 export const WIDTHS = [3, 6, 10]
 export const TEXT_SIZES = [24, 36, 52]

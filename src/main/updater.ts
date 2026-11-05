@@ -9,6 +9,10 @@
 // ("このアプリがデバイスに変更を加えることを許可しますか？"), which a per-user install never needs
 // and which then fails or installs for another account. Instead it is opened the normal way, as
 // when installed by hand. Every step goes to update.log in the app's logs folder.
+//
+// A Mac can only replace a signed app, and the Mac build isn't signed (README): there a newer version
+// is only announced, and the banner opens the download page. Without a Mac build in the latest
+// release (no latest-mac.yml) the check just fails quietly, into the log.
 import { spawn } from 'node:child_process'
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -23,6 +27,7 @@ export const RELEASES_PAGE = 'https://github.com/courtendvb/volley-reel-releases
 let send: (ev: UpdateEvent) => void = () => {}
 let downloaded: string | null = null // the installer, once downloaded and checked
 let installing = false
+const announceOnly = process.platform === 'darwin'
 
 export function updateLogPath(): string { return join(app.getPath('logs'), 'update.log') }
 
@@ -42,11 +47,11 @@ export function startUpdates(win: BrowserWindow): void {
   if ((!app.isPackaged && !test) || process.env.VR_SMOKE) return
   if (test) autoUpdater.forceDevUpdateConfig = true
   autoUpdater.logger = { info: m => log('info', m), warn: m => log('warn', m), error: m => log('error', m), debug: () => {} }
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = !announceOnly
   autoUpdater.autoInstallOnAppQuit = false // installed here instead (see above)
   send = ev => { if (!win.isDestroyed()) win.webContents.send('update:event', ev) }
   log('info', `volley-reel ${app.getVersion()} looking for updates`)
-  autoUpdater.on('update-available', info => { log('info', `${info.version} found`); send({ type: 'available', version: info.version }) })
+  autoUpdater.on('update-available', info => { log('info', `${info.version} found`); send({ type: announceOnly ? 'manual' : 'available', version: info.version }) })
   autoUpdater.on('download-progress', p => send({ type: 'progress', ratio: p.percent / 100 }))
   autoUpdater.on('update-downloaded', info => {
     downloaded = info.downloadedFile

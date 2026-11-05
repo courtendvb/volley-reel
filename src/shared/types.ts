@@ -293,6 +293,7 @@ export interface ExportJob {
 
 // A newer version for an installed copy: found, downloading, then ready to restart into.
 export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
+  | { type: 'manual'; version: string } // a newer version to get from the download page (Mac)
   | { type: 'error'; message: string } // the update couldn't be installed (the download page still works)
 
 export type ExportEvent =

@@ -104,7 +104,7 @@
 インストーラー:
 - electron-builder（26.17.0）で NSIS のインストーラー（`npm run dist`、設定は `electron-builder.yml`）。アプリ本体は `out/` を asar に、
   ffmpeg / ffprobe は別プロセスで動かすので asar の外の `resources/ffmpeg` に置く。場所は `ffmpegDir()`（FFMPEG_DIR → インストール版は
-  resources/ffmpeg → 開発時は vendor/ffmpeg/bin）。React・pdf.js は Vite がまとめるので devDependencies（インストーラーに node_modules を入れない）
+  resources/ffmpeg → 開発時は vendor/ffmpeg/bin、Mac は vendor/ffmpeg-mac/<arch>）。React・pdf.js は Vite がまとめるので devDependencies（インストーラーに node_modules を入れない）
 
 15 回目の試用を受けた修正:
 - 「オーバーレイ」ボタンは「⚙ 設定」（動画の設定）に改名

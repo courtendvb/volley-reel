@@ -452,8 +452,9 @@ async function walk(dir: string, depth: number, visit: (p: string) => void): Pro
   }
 }
 
-// Windows paths compare case-insensitively and with either slash.
-const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
+// Paths compare case-insensitively, with either slash, and however the system spells 濁点 (a Mac's
+// file names can decompose them).
+const norm = (p: string) => p.normalize('NFC').replace(/\\/g, '/').toLowerCase()
 const same = (a: string, b: string) => norm(a) === norm(b)
 
 // The packs in a folder: <id>/manifest.json (with its photos/ beside it); unreadable ones are left out.

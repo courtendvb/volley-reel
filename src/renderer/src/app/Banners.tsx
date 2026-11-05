@@ -40,6 +40,13 @@ export function Banners({ progress, update, updateLater, updateBusy, onRestart, 
           <button className="link" onClick={onUpdateLater} title={t('閉じても、アプリを終了するときに更新されます')}>{t('あとで')}</button>
         </div>
       )}
+      {update?.type === 'manual' && !updateLater && (
+        <div className="banner update" role="status">
+          {t('新しいバージョン')} {update.version} {t('があります')}
+          <button className="primary" onClick={() => void api.updateHelp('page')}>{t('ダウンロードページを開く')}</button>
+          <button className="link" onClick={onUpdateLater}>{t('閉じる')}</button>
+        </div>
+      )}
       {update?.type === 'error' && !updateLater && (
         // The installer couldn't be started: the download page always works (as installing by hand).
         <div className="banner update-failed" role="alert">

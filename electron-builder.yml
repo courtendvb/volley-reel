@@ -1,5 +1,6 @@
-# Windows installer (npm run dist → release/). The app is the built out/ folder; ffmpeg and ffprobe
-# go next to it in resources/ffmpeg (they run as separate processes, so not inside the asar).
+# Windows installer (npm run dist) and Mac disk images (npm run dist:mac, on a Mac) → release/. The app
+# is the built out/ folder; ffmpeg and ffprobe go next to it in resources/ffmpeg (they run as separate
+# processes, so not inside the asar).
 appId: com.courtendvb.volleyreel
 productName: volley-reel
 copyright: courtendvb
@@ -10,17 +11,6 @@ files:
   - out/**
   - package.json
 extraResources:
-  - from: vendor/ffmpeg/bin
-    to: ffmpeg
-    filter:
-      - ffmpeg.exe
-      - ffprobe.exe
-  # The ffmpeg build is GPL: its license and notes ship next to it.
-  - from: vendor/ffmpeg
-    to: ffmpeg
-    filter:
-      - LICENSE
-      - README.txt
   # League player photos (shared/pack.ts), shipped with the app; not in the repository (vendor/).
   - from: vendor/packs
     to: packs
@@ -31,6 +21,18 @@ win:
       arch: [x64]
   executableName: volley-reel
   icon: build/icon.png
+  extraResources:
+    - from: vendor/ffmpeg/bin
+      to: ffmpeg
+      filter:
+        - ffmpeg.exe
+        - ffprobe.exe
+    # The ffmpeg build is GPL: its license and notes ship next to it.
+    - from: vendor/ffmpeg
+      to: ffmpeg
+      filter:
+        - LICENSE
+        - README.txt
 nsis:
   oneClick: false
   perMachine: false # installs for the current user: no administrator rights needed
@@ -39,6 +41,23 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: volley-reel
   artifactName: volley-reel-setup-${version}.${ext}
+# Not signed by Apple yet: an ad-hoc signature is what lets it run on Apple silicon at all, and people
+# open it once through System Settings (README). Signing needs the Developer ID certificate, an
+# identity here instead of '-', hardenedRuntime and notarize, and ffmpeg signed along with the app.
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip # for latest-mac.yml, which tells installed copies a new version is out
+      arch: [arm64, x64]
+  category: public.app-category.video
+  icon: build/icon-mac.png
+  identity: '-'
+  extraResources:
+    - from: vendor/ffmpeg-mac/${arch} # npm run ffmpeg:mac; their license and notes are in there too
+      to: ffmpeg
+dmg:
+  artifactName: volley-reel-${version}-${arch}.${ext}
 # Updates for installed copies (src/main/updater.ts): `npm run release` uploads the installer and
 # latest.yml to this public repository's releases; the app's source stays in the private one.
 publish:

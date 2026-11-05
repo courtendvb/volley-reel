@@ -1,10 +1,8 @@
-// ffprobe / ffmpeg for import (design §3.1). Binaries: see ffmpegDir.
+// ffprobe / ffmpeg for import (design §3.1). Binaries: see ffmpegPath.
 import { spawn } from 'node:child_process'
-import { join } from 'node:path'
-import { ffmpegDir } from './ffmpegPath'
+import { ffmpegBin, ffprobeBin } from './ffmpegPath'
 import { t } from '../shared/i18n'
 
-const binDir = ffmpegDir
 
 export interface VideoInfo {
   codec: string
@@ -18,7 +16,7 @@ export interface VideoInfo {
 }
 
 export async function probe(file: string): Promise<VideoInfo> {
-  const out = await run(join(binDir(), 'ffprobe.exe'), ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file])
+  const out = await run(ffprobeBin(), ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file])
   const j = JSON.parse(out)
   const v = j.streams.find((s: { codec_type: string }) => s.codec_type === 'video')
   if (!v) throw new Error(t('動画トラックが見つかりません'))
@@ -44,7 +42,7 @@ export function prepare(src: string, dst: string, reason: 'reencode' | 'strip-au
   const video = reason === 'reencode'
     ? ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p']
     : ['-c:v', 'copy']
-  return run(join(binDir(), 'ffmpeg.exe'),
+  return run(ffmpegBin(),
     ['-hide_banner', '-y', '-progress', 'pipe:1', '-nostats', '-i', src, '-map', '0:v:0', '-an', ...video, '-movflags', '+faststart', dst],
     chunk => { for (const m of chunk.matchAll(/out_time_us=(\d+)/g)) onRatio(Math.min(1, +m[1] / 1e6 / durationSec)) },
   ).then(() => undefined)
@@ -52,7 +50,7 @@ export function prepare(src: string, dst: string, reason: 'reencode' | 'strip-au
 
 // One frame of a video as a PNG file (a slide made from the picture on screen), at full size.
 export function grabFrame(src: string, sec: number, dst: string): Promise<void> {
-  return run(join(binDir(), 'ffmpeg.exe'), ['-hide_banner', '-y', '-ss', String(Math.max(0, sec)), '-i', src, '-frames:v', '1', dst]).then(() => undefined)
+  return run(ffmpegBin(), ['-hide_banner', '-y', '-ss', String(Math.max(0, sec)), '-i', src, '-frames:v', '1', dst]).then(() => undefined)
 }
 
 function run(bin: string, args: string[], onStdout?: (s: string) => void): Promise<string> {

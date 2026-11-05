@@ -17,7 +17,7 @@ import { Exporter } from './export'
 import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './updater'
 import { Library } from './library'
 import { Project } from './project'
-import { ffmpegDir } from './ffmpegPath'
+import { ffmpegBin, ffprobeBin } from './ffmpegPath'
 import { grabFrame } from './media'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
 
@@ -496,12 +496,11 @@ async function serveMedia(req: Request): Promise<Response> {
 // Smoke only: probe the exported MP4, save frames at the check times, and confirm the cancelled
 // run left neither its output nor the work folder behind.
 function checkExport(r: { export: string; checks: { name: string; t: number }[]; cancelPath: string }): void {
-  const bin = ffmpegDir()
-  const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_name,width,height,r_frame_rate,nb_read_packets:format=duration,size', '-of', 'json', r.export], { encoding: 'utf8' })
+  const probe = spawnSync(ffprobeBin(), ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_name,width,height,r_frame_rate,nb_read_packets:format=duration,size', '-of', 'json', r.export], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
   for (const c of r.checks) {
     const out = r.export.replace(/\.mp4$/, `-${c.name}.png`)
-    spawnSync(join(bin, 'ffmpeg.exe'), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', r.export, '-frames:v', '1', out])
+    spawnSync(ffmpegBin(), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', r.export, '-frames:v', '1', out])
     console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
   }
   console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'export-work'))}`)
@@ -509,12 +508,11 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
 
 // Smoke only: probe an exported MP4 and save frames at the given times next to it.
 function grabFrames(file: string, checks: { name: string; t: number }[]): void {
-  const bin = ffmpegDir()
-  const probe = spawnSync(join(bin, 'ffprobe.exe'), ['-v', 'error', '-show_entries', 'format=duration,size', '-of', 'json', file], { encoding: 'utf8' })
+  const probe = spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration,size', '-of', 'json', file], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
   for (const c of checks) {
     const out = file.replace(/\.mp4$/, `-${c.name}.png`)
-    spawnSync(join(bin, 'ffmpeg.exe'), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', file, '-frames:v', '1', out])
+    spawnSync(ffmpegBin(), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', file, '-frames:v', '1', out])
     console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
   }
 }

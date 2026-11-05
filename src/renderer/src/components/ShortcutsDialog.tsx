@@ -1,4 +1,5 @@
 import { t } from '../../../shared/i18n'
+import { keyName } from '../../../shared/keys'
 // Every keyboard shortcut in one place (design M8). Keep in sync with the keydown handler in App.tsx.
 const GROUPS: { title: string; keys: [string, string][] }[] = [
   {
@@ -58,7 +59,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
               <h3>{g.title}</h3>
               <table>
                 <tbody>
-                  {g.keys.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}
+                  {g.keys.map(([k, what]) => <tr key={k}><td><kbd>{keyName(k)}</kbd></td><td>{what}</td></tr>)}
                 </tbody>
               </table>
             </section>

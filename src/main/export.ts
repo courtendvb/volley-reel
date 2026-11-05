@@ -9,11 +9,10 @@ import { join } from 'node:path'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
 import { chapterText } from '../shared/video'
 import { clipPlayedSec, pieces } from '../shared/timing'
-import { ffmpegDir } from './ffmpegPath'
+import { ffmpegBin } from './ffmpegPath'
 import { probe } from './media'
 import { t } from '../shared/i18n'
 
-const binDir = ffmpegDir
 
 export class ExportCancelled extends Error {
   constructor() { super('cancelled') }
@@ -98,7 +97,7 @@ export class Exporter {
   private ffmpeg(args: string[], onSec: (sec: number) => void): Promise<void> {
     if (this.cancelled) return Promise.reject(new ExportCancelled())
     return new Promise((resolve, reject) => {
-      const p = spawn(join(binDir(), 'ffmpeg.exe'), ['-hide_banner', '-y', '-progress', 'pipe:1', '-nostats', ...args], { windowsHide: true })
+      const p = spawn(ffmpegBin(), ['-hide_banner', '-y', '-progress', 'pipe:1', '-nostats', ...args], { windowsHide: true })
       this.child = p
       let err = ''
       p.stdout.on('data', d => { for (const m of String(d).matchAll(/out_time_us=(\d+)/g)) onSec(+m[1] / 1e6) })

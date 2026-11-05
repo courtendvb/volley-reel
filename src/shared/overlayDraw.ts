@@ -8,7 +8,8 @@ import type { SlideBg } from './reel'
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // Bahnschrift has no Japanese: names and titles in Japanese fall through to Yu Gothic / Meiryo.
-export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif'
+// A Mac has no Bahnschrift: Arial Narrow, then Hiragino for Japanese.
+export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", "Yu Gothic UI", "Yu Gothic", Meiryo, "Hiragino Sans", sans-serif'
 const TEXT = '#FFFFFF'
 const SUB = '#BDBDBD'
 const MUTED = '#8F8F8F'

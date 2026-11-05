@@ -6,6 +6,7 @@ import { AddonPacks } from './AddonPacks'
 import { TeamLogos } from './TeamLogos'
 import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
+import { IS_MAC } from '../../../shared/keys'
 
 interface Props {
   settings: ProjectSettings
@@ -81,7 +82,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <div className="filter-row">
             <span className="field-label">{t('画面')}</span>
             <div className="segmented" role="radiogroup" aria-label={t('ライト・ダーク')}>
-              {([['light', t('ライト')], ['dark', t('ダーク')], ['system', t('Windows に合わせる')]] as [ThemeMode, string][]).map(([m, l]) => (
+              {([['light', t('ライト')], ['dark', t('ダーク')], ['system', IS_MAC ? t('Mac に合わせる') : t('Windows に合わせる')]] as [ThemeMode, string][]).map(([m, l]) => (
                 <button key={m} role="radio" aria-checked={look.mode === m} className={look.mode === m ? 'on' : ''} onClick={() => changeLook({ ...look, mode: m })}>{l}</button>
               ))}
             </div>

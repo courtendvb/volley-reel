@@ -1,0 +1,45 @@
+# The Mac app, unsigned: built only by hand (Actions → Mac build → Run workflow) or when a pull
+# request touches how it is put together, because macOS runners use up Actions minutes ten times as
+# fast. The .dmg files stay on the run's page for 14 days. Nothing is published.
+name: Mac build
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/mac.yml
+      - electron-builder.yml
+      - scripts/fetch-ffmpeg-mac.mjs
+      - src/main/ffmpegPath.ts
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # electron-builder skips signing on pull requests, which leaves the app's signature broken. The
+      # signature here is ad-hoc, so this job holds no signing secrets for that rule to protect.
+      CSC_FOR_PULL_REQUEST: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run ffmpeg:mac
+      - run: npm run dist:mac
+      - name: Check the packaged app and its ffmpeg
+        run: |
+          app=release/mac-arm64/volley-reel.app
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/Resources/ffmpeg/ffprobe" -version
+          "$app/Contents/Resources/ffmpeg/ffmpeg" -hide_banner -f lavfi -i testsrc=d=1 -c:v libx264 -pix_fmt yuv420p "$RUNNER_TEMP/check.mp4"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volley-reel-mac
+          retention-days: 14
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/latest-mac.yml

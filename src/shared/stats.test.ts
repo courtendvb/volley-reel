@@ -33,7 +33,7 @@ describe('filterTitle', () => {
   it('says the search in words, leaving evaluations out', () => {
     expect(filterTitle(EMPTY_FILTER, [], 'HTH')).toBe('すべてのプレー')
     expect(filterTitle({ ...EMPTY_FILTER, team: 'our', effects: ['#'] }, [], 'HTH')).toBe('HTH')
-    expect(filterTitle({ ...EMPTY_FILTER, person: 'K', team: 'our', rots: [3, 1], sets: [2] }, people, 'HTH')).toBe('#7 ARAI・第 2 セット・ローテ 1・3')
+    expect(filterTitle({ ...EMPTY_FILTER, persons: ['K'], team: 'our', rots: [3, 1], sets: [2] }, people, 'HTH')).toBe('#7 ARAI・第 2 セット・ローテ 1・3')
   })
 })
 

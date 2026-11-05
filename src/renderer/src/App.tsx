@@ -1,11 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { effectName } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, chronological, clipRange, defaultRange, findClip, findOverlaps, groupRows, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
-import type { ImportProgress, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
-import { FilterPanel, type Scope } from './components/FilterPanel'
+import type { ImportProgress, MissingPart, ParsedDVW, Play, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
+import { CheckPicker } from './components/CheckPicker'
+import { ShotPick, type ShotRow } from './components/ShotPick'
+import { FilterPanel } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo, type SlideHow } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -35,7 +38,7 @@ import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
-import { DEFAULT_GRID_STYLE, serveSpeed, courtCamera, flightTiming, landingPoint, playMarks, servePath, type CourtFit, type GridStyle, type PlayPoints, type Pt } from '../../shared/court'
+import { DEFAULT_GRID_STYLE, floorAt, homography, nearestShots, project as onPicture, serveSpeed, flightTiming, playMarks, zoneAt, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
@@ -62,14 +65,13 @@ const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
 
 
-const SERVE_FLIGHTS_SEC = 5 // the slides of a search's serves and heatmap
-const HEAT_FEW = 30 // fewer shots than this read as dots, not a pattern
 
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
   const [matchId, setMatchId] = useState<string | null>(null)
-  const [scope, setScope] = useState<Scope>('all') // the list shows every match in the project unless one is picked
+  const [shotPick, setShotPick] = useState<{ at: Pt; rows: ShotRow[]; zone: number | null } | null>(null) // a click on the heatmap
+  const [matchIds, setMatchIds] = useState<string[]>([]) // the matches the list shows; none picked: all of the project's
   // How plays added from the search are cut: around the key play, or from it to the end of the rally.
   const [extract, setExtract] = useState<ClipMode>(() => { try { return localStorage.getItem('vr.extract') === 'toEnd' ? 'toEnd' : 'keyplay' } catch { return 'keyplay' } })
   useEffect(() => { try { localStorage.setItem('vr.extract', extract) } catch { /* not kept */ } }, [extract])
@@ -113,17 +115,18 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, heatOpacity, noLift, serveFlights } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, ...(typeof heatOpacity === 'number' ? { heatOpacity } : {}), noLift: !!noLift, serveFlights: !!serveFlights, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, heatOpacity, noLift, serveFlights, landings } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, ...(typeof heatOpacity === 'number' ? { heatOpacity } : {}), noLift: !!noLift, serveFlights: !!serveFlights, landings: !!landings, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
   // The right column's tab, kept on this computer.
   const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })
   useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
-  const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : 'trim' } catch { return 'trim' } })
+  const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
+  const [objectsOpen, setObjectsOpen] = useState(false) // the objects' tools, under the trim bar
   useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
   // An object picked on the video (or a headline's 書式) opens the objects panel, unless the trim panel is up (its lanes show the object's times).
-  const showObjects = () => setStagePanel(p => (p === 'trim' ? p : 'objects'))
+  const showObjects = () => { setStagePanel('edit'); setObjectsOpen(true) }
   const gridStyleRef = useRef(gridStyle)
   gridStyleRef.current = gridStyle
 
@@ -133,6 +136,18 @@ export function App() {
   const video = videos.find(v => v.id === videoId) ?? null
   useEffect(() => setCourtFitting(false), [matchId])
   // Shown at once, then saved to the match in the library.
+  // The court found in the video, left open for the corners to be finished by hand.
+  const autoFit = async (id: string) => {
+    try {
+      const corners = await api.detectCourt(id)
+      if (!corners) { setNotice(t('コートを見つけられませんでした。四隅を手で合わせてください')); return }
+      setCourt(id, { corners, nearSet1: matches[id]?.court?.nearSet1 ?? '*' })
+      setCourtFitting(true)
+      setNotice(t('コートの候補を置きました。線に合っているか確かめて、ずれていれば四隅を直してください'))
+    } catch (e) {
+      setError(String(e))
+    }
+  }
   const setCourt = (id: string, court: CourtFit | null) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
@@ -141,7 +156,7 @@ export function App() {
   const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
   const courtZones = useMemo(() => (match?.court && selectedPlay
     ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays))
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, dvws])
+    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, dvws])
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)
@@ -160,6 +175,7 @@ export function App() {
     latest.current.projectPath = p?.path ?? null
     setProject(p)
     setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
+    setMatchIds(ids => ids.filter(id => p?.matches.some(m => m.id === id)))
     if (!p) { setDvws({}); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
     const parsed: Record<string, ParsedDVW> = {}
     for (const m of p.matches) {
@@ -191,7 +207,7 @@ export function App() {
 
 
   const settings = project?.settings
-  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, scope, matchId, matchOrder, filter)
+  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter)
 
   // ---- reels --------------------------------------------------------------------------------
   // Undo puts back a scene or video (and shows it), or the project settings.
@@ -309,37 +325,40 @@ export function App() {
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group, extractRef.current).reel)
   }, [withReel])
-  // Every serve of the search flying at once, on the frame on screen, on a slide at the head of the
-  // open scene; opened for editing. All are turned to come down the court, so any match's serves fit.
-  const addServeFlights = () => {
-    const serves = results.filter(r => r.play.skill === 'S')
-    const paths = serves.flatMap((r): PlayPoints[] => { const p = servePath(r.play); return p ? [p] : [] })
-    if (!paths.length) { setNotice(t('座標のあるサーブがありません')); return }
-    return frameSlide(fit => ({ flights: { fit, paths } }), paths.length < serves.length ? t('座標がないサーブ {0} 本は入っていません', serves.length - paths.length) : null)
+  // A shot on the court: the row it has in the list of its match.
+  const goToShot = (p: Play) => {
+    setShotPick(null)
+    for (const id of Object.keys(dvws)) if (dvws[id].plays[p.id] === p) { const r = refsByMatch[id]?.[p.id]; if (r) jump(r); return }
   }
-  // Where the search's serves and attacks landed, as a heatmap on the same kind of slide.
-  const addHeatmap = () => {
-    const shots = results.filter(r => r.play.skill === 'S' || r.play.skill === 'A')
-    const points = shots.flatMap((r): Pt[] => { const p = landingPoint(r.play); return p ? [p] : [] })
-    if (!points.length) { setNotice(t('座標のあるサーブ・アタックがありません')); return }
-    return frameSlide(fit => ({ heat: { fit, points } }), points.length < HEAT_FEW ? t('{0} 本だけのヒートマップです。本数が少ないと点の集まりに見えます', points.length)
-      : points.length < shots.length ? t('座標がない {0} 本は入っていません', shots.length - points.length) : null)
-  }
-  const frameSlide = async (extra: (fit: CourtFit) => Partial<Slide>, note: string | null) => {
-    const key = playback.attachedKey, m = key ? latest.current.matches[key] : null
-    const w = m?.width ?? 0, h = m?.height ?? 0
-    if (!key || !m?.court || !courtCamera(m.court.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) { setNotice(t('コートの四隅を合わせた試合の動画を出してから押してください')); return }
-    try {
-      const assetId = await api.grabFrame(key, playback.current.time)
-      const r = withReel(x => x)
-      const group = r.groupOrder.find(g => r.groups[g].length) ?? r.groupOrder[0]
-      const slide = { ...newSlide({ kind: 'image', assetId }, SERVE_FLIGHTS_SEC), ...extra(m.court) }
-      updateScene(r.id, s => putSlides(s, [slide], { group, after: null, index: 0 }))
-      editCard(r.id, null, slide.id)
-      if (note) setNotice(note)
-    } catch (e) {
-      setError(String(e))
+  // A click on the court tab's marks: a landing point goes to that shot; the heatmap offers the
+  // shots nearest to the click. Anything else is left to the layers above.
+  const courtClick = (at: Pt) => {
+    const marks = courtZones?.player, fit = match?.court
+    setShotPick(null)
+    if (!marks || !fit) return false
+    if (marks.landings) {
+      const H = homography(fit.corners), w = match!.width, h = match!.height
+      const away = marks.landings.points.map(p => { const q = onPicture(H, p.x, p.y); return Math.hypot((q.x - at.x) * w, (q.y - at.y) * h) })
+      const i = away.indexOf(Math.min(...away))
+      if (away[i] < w / 80) { goToShot(marks.landings.plays[i]); return true }
     }
+    const floor = marks.heat && marks.heat.points.length ? floorAt(fit, at) : null
+    if (!floor || floor.x < -0.15 || floor.x > 1.15 || floor.y < -0.15 || floor.y > 1.15) return false
+    const heat = marks.heat!
+    const rows = nearestShots(heat.points, floor, 5).map(i => {
+      const p = heat.plays[i], id = Object.keys(dvws).find(m => dvws[m].plays[p.id] === p)
+      return { play: p, label: `${id ? matchLabels[id] ?? '' : ''} S${p.setNum} ${p.score.home}-${p.score.away} ${effectName(p.skill, p.effect)}` }
+    })
+    setShotPick({ at, rows, zone: zoneAt(floor) })
+    return true
+  }
+  // Everything of this player's that landed in the zone clicked, in the list.
+  const zoneList = () => {
+    const p = shotPick?.rows[0]?.play
+    if (!p || shotPick?.zone === null) return
+    setMatchIds([])
+    setFilter({ ...EMPTY_FILTER, skills: [p.skill], persons: [p.playerKey], endZone: shotPick!.zone })
+    setShotPick(null)
   }
   // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
@@ -693,6 +712,15 @@ export function App() {
     }
     return out
   }
+  // The picture on screen as a slide right after the open clip, in the group it was opened from.
+  const frameAfterClip = () => {
+    const r = latest.current.reel, id = latest.current.activeClipId
+    if (!r || !id) return
+    const group = activeGroup !== null && r.groups[activeGroup].includes(id) ? activeGroup : markersOf(r, id)[0] ?? 'none'
+    const ids = group === 'none' ? chronological(r, r.groups.none, whenIn(r)).map(c => c.id) : r.groups[group]
+    const rows = groupRows(r, group, ids)
+    return putSlide(spotAt(rows, group, rows.findIndex(x => x.kind === 'clip' && x.id === id) + 1), 'frame')
+  }
   const putSlide = async (spot: SlideSpot, how: SlideHow, files?: SlideFile[]) => {
     const sceneId = latest.current.reel?.id
     if (!sceneId) return
@@ -803,7 +831,7 @@ export function App() {
   // ---- dev self-check (VR_SMOKE): only loaded when the main process runs one (see smoke.ts)
   useEffect(() => {
     if (!SMOKE) return
-    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
+    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
     void import('./smoke').then(m => m.installSmoke(host))
   }, [jump, loadProject, playThrough, activateClip, updateReel, updateVideo, overlayData, setOverlay, startExport, currentPlan])
 
@@ -906,12 +934,10 @@ export function App() {
       ) : (
         <main className="workspace">
           <aside className="sidebar" onPointerDownCapture={() => { focusPane.current = 'list' }}>
-            <select className="match-select" value={scope === 'all' ? '' : matchId ?? ''} aria-label={t('検索する試合')}
-              onChange={e => { if (e.target.value) { setScope('match'); setMatchId(e.target.value) } else setScope('all') }}>
-              <option value="">{t('すべての試合（{0}）', project.matches.length)}</option>
-              {project.matches.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            {scope === 'all' && project.matches.length > 1 && (
+            <CheckPicker className="match-select" label={t('検索する試合')} all={t('すべての試合（{0}）', project.matches.length)}
+              options={project.matches.map(m => ({ key: m.id, label: m.name }))} selected={matchIds}
+              onChange={ids => { setMatchIds(ids); if (ids.length && !ids.includes(matchId ?? '')) setMatchId(ids[0]) }} />
+            {matchIds.length !== 1 && project.matches.length > 1 && (
               <div className="segmented match-order" role="radiogroup" aria-label={t('試合の並び')}>
                 {([['old', t('古い試合から')], ['new', t('新しい試合から')]] as const).map(([v, l]) => (
                   <button key={v} role="radio" aria-checked={matchOrder === v} className={matchOrder === v ? 'on' : ''} onClick={() => setMatchOrder(v)}>{l}</button>
@@ -924,12 +950,10 @@ export function App() {
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
-              serves={results.filter(r => r.play.skill === 'S').length} onServeFlights={() => void addServeFlights()}
-              shots={results.filter(r => r.play.skill === 'S' || r.play.skill === 'A').length} onHeatmap={() => void addHeatmap()}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
-              ? <PlayList refs={results} matches={matches} showMatch={scope === 'all' && (project?.matches.length ?? 0) > 1}
+              ? <PlayList refs={results} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
                   currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
               : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
@@ -951,7 +975,8 @@ export function App() {
                 }
                 const court = match.court && (
                   <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
-                    onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })} />
+                    onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
+                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && !(stagePanel === 'edit' && objectsOpen) ? courtClick : undefined} />
                 )
                 return (
                   <>
@@ -967,6 +992,10 @@ export function App() {
                     )}
                     {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
                     {courtFitting && court}
+                    {shotPick && (
+                      <ShotPick x={shotPick.at.x * size.w} y={shotPick.at.y * size.h} size={size} rows={shotPick.rows} zone={shotPick.zone}
+                        onPick={goToShot} onZone={zoneList} onClose={() => setShotPick(null)} />
+                    )}
                   </>
                 )
               }} />
@@ -993,15 +1022,15 @@ export function App() {
               <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting} />
             )}
             {!cardEdit && match && (
-              <div className="stage-panel" hidden={stagePanel !== 'court' && !courtFitting}>
+              <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               <CourtBar match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
-                onFit={fit => setCourt(match.id, fit)} />
+                onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
               </div>
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'trim'}>
+              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
               <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
-                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); setStagePanel('objects') }} />
+                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -1011,7 +1040,7 @@ export function App() {
                   const oi = reel!.clips[id] ? clipInfo(reel!.clips[id]) : null
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
-                onTrim={trim} loop={loopOn} onLoop={setLoopOn}
+                onTrim={trim} loop={loopOn} onLoop={setLoopOn} onFrameSlide={() => void frameAfterClip()}
                 speed={activeInfo.ref.play.skill === 'S' ? { value: active.speedKmh ?? null, usual: serveSpeed(activeInfo.ref.play) } : null}
                 onSpeed={kmh => { const r = latest.current.reel; if (r) updateReel(setServeSpeed(r, active.id, kmh)) }}
                 skillTime={active.skillSec ?? null}
@@ -1036,7 +1065,10 @@ export function App() {
               </div>
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'objects'}>
+              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
+              <button className="link stage-fold" aria-expanded={objectsOpen} onClick={() => setObjectsOpen(o => !o)}>
+                {objectsOpen ? '▾' : '▸'} {t('図形')}{activeAnns.length ? t('（{0}）', activeAnns.length) : ''}</button>
+              <div className="stage-fold-body" hidden={!objectsOpen}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
@@ -1044,9 +1076,10 @@ export function App() {
                 court={matches[active.matchId]?.court?.corners ?? null}
               />
               </div>
+              </div>
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'display'}>
+              <div className="stage-panel" hidden={stagePanel !== 'view'}>
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
@@ -1069,7 +1102,7 @@ export function App() {
               const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
               onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
-              onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={createReel}
+              onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={() => { createReel(); setRightTab('scene') }}
               onEditCard={id => editCard(id, null)} onEditVideoCard={() => editCard(null, null)}
               videoCardOn={!!overlay.titleCard.videoCard} onVideoCard={on => setOverlay({ ...overlay, titleCard: { ...overlay.titleCard, videoCard: on } })}
               sceneCardOn={s => s.sceneCard ?? overlay.titleCard.sceneCards}

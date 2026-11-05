@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react'
 import { EFFECTS, HITS, SKILLS, TEMPOS } from '../../../shared/labels'
 import { EMPTY_FILTER, sameFilter, type Person, type PlayFilter, type SavedFilter, type detailOptions } from '../../../shared/filter'
 import type { ClipMode, RangeDefaults } from '../../../shared/reel'
+import { CheckPicker } from './CheckPicker'
 import { SecInput } from './ReelPanel'
 import { t } from '../../../shared/i18n'
-
-export type Scope = 'match' | 'all' // picked with the match select above the filters
 
 interface Props {
   filter: PlayFilter
@@ -22,10 +21,6 @@ interface Props {
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
   dirUnknown: number // plays in scope whose way on screen isn't known (no fitted court); sets aren't counted
   onAddAll: () => void
-  serves: number // serves among the results, for the slide of their flights
-  onServeFlights: () => void
-  shots: number // serves and attacks among the results, for the heatmap of where they landed
-  onHeatmap: () => void
   saved: SavedFilter[] // the project's saved conditions
   onSaved: (list: SavedFilter[]) => void
 }
@@ -33,10 +28,10 @@ interface Props {
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, serves, onServeFlights, shots, onHeatmap, saved, onSaved }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
-  const detailCount = f.tempos.length + f.combos.length + f.hits.length
+  const detailCount = f.tempos.length + f.combos.length + f.hits.length + (f.startZone !== null ? 1 : 0) + (f.endZone !== null ? 1 : 0)
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
   // Set, rotations, phase and the plays around: folded like the detailed search, opened when one is in use.
@@ -45,6 +40,11 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
     + f.nextSkills.length + f.nextEffects.length + (f.nextTeam !== 'any' ? 1 : 0) + (f.nextSkipSet ? 1 : 0)
   const [situOpen, setSituOpen] = useState(situCount > 0)
   useEffect(() => { if (situCount > 0) setSituOpen(true) }, [situCount > 0])
+  // The target team's players, or the opponents' once the team says so; unknown teams (all-home
+  // files) stay, and so does anyone already picked.
+  const wanted = f.team === 'opp' ? 'opp' : 'our'
+  const inTeam = people.filter(p => p.teamRole === wanted || p.teamRole === null || f.persons?.includes(p.key))
+  const playerChoices = inTeam.length ? inTeam : people
   const comboName = (code: string) => details.combos.find(c => c.code === code)?.name
 
   return (
@@ -52,7 +52,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       <SavedRow filter={f} onChange={onChange} saved={saved} onSaved={onSaved} />
       <div className="filter-row">
         <label className="field-label">{t('チーム')}</label>
-        <Segmented value={f.team} onChange={team => set({ team })} options={[['all', t('すべて')], ['our', targetCode || t('対象チーム')], ['opp', t('相手')]]} />
+        <Segmented value={f.team} onChange={team => set({ team, persons: [] })} options={[['all', t('すべて')], ['our', targetCode || t('対象チーム')], ['opp', t('相手')]]} />
       </div>
       <div className="filter-row" title={t('シーンに入れるときの長さ。秒数は今開いているシーンの設定で、そのシーンのクリップすべてに効きます')}>
         <label className="field-label">{t('切り出し')}</label>
@@ -66,7 +66,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           : <span>{t('〜 ラリー終わり +')}<SecInput v={d.rallyTail} label={t('最後のプレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, rallyTail: n })} />{t('秒')}</span>}
       </div>
       <div className="filter-row" title={t('ボールが画面の上へ向かうか下へ向かうか。サーブ・アタックは打った側から、レセプション・ディグ・ブロックは相手側から。セットは向きで絞ると出ません。コートのグリッドを合わせた試合だけ分かります')}>
-        <label className="field-label">{t('向き')}</label>
+        <label className="field-label">{t('プレーの向き')}</label>
         <Segmented value={f.dir ?? 'all'} onChange={dir => set({ dir })} options={[['all', t('すべて')], ['up', t('↑ 下から上')], ['down', t('↓ 上から下')]]} />
       </div>
       {dirUnknown > 0 && f.dir !== 'all' && (
@@ -76,16 +76,10 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         <p className="hint">{t('全部ホーム入力の試合や対象チームが出ていない試合はチームを区別できないため、全プレーを含めています')}</p>
       )}
 
-      <div className="filter-row">
-        <label className="field-label" htmlFor="f-person">{t('選手')}</label>
-        <select id="f-person" value={f.person ?? ''} onChange={e => set({ person: e.target.value || null })}>
-          <option value="">{t('すべての選手')}</option>
-          {people.map(p => (
-            <option key={p.key} value={p.key}>
-              {`#${p.jerseys.join('/')} ${p.name}${p.teamCodes.length ? ` (${p.teamCodes.join('/')})` : ''} — ${p.plays}`}
-            </option>
-          ))}
-        </select>
+      <div className="filter-row" title={t('チームを「相手」にすると相手の選手を選べます。何も選ばなければ全員です')}>
+        <span className="field-label">{t('選手')}</span>
+        <CheckPicker label={t('選手')} all={t('すべての選手')} selected={f.persons ?? []} onChange={persons => set({ persons })}
+          options={playerChoices.map(p => ({ key: p.key, label: `#${p.jerseys.join('/')} ${p.name}${p.teamCodes.length ? ` (${p.teamCodes.join('/')})` : ''} — ${p.plays}` }))} />
       </div>
 
       <Chips label={t('スキル')} values={Object.keys(SKILLS)} selected={f.skills} onChange={skills => set({ skills })} render={k => SKILLS[k]} />
@@ -119,7 +113,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       )}
       <div className="filter-row">
         <button className="link" aria-expanded={detailOpen} onClick={() => setDetailOpen(o => !o)}>
-          {detailOpen ? '▾' : '▸'} {t('詳細（テンポ・コンビ・打ち方）')}{detailCount ? t('（{0}）', detailCount) : ''}</button>
+          {detailOpen ? '▾' : '▸'} {t('詳細（テンポ・コンビ・打ち方・ゾーン）')}{detailCount ? t('（{0}）', detailCount) : ''}</button>
       </div>
       {detailOpen && (
         <div className="filter-detail">
@@ -134,23 +128,18 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
               onChange={combos => set({ combos })} title={comboName}
               render={c => { const n = comboName(c); return n ? `${c} ${n}` : c }} />
           )}
+          <div className="filter-row">
+            <label className="field-label">{t('ゾーン')}</label>
+            <ZoneSelect label={t('開始')} value={f.startZone} onChange={startZone => set({ startZone })} />
+            <ZoneSelect label={t('終了')} value={f.endZone} onChange={endZone => set({ endZone })} />
+          </div>
           <p className="hint">{t('コンビはアタックのコンビネーションとセッターコール（DVW の表の名前つき）。スキルを選ぶと、そのスキルにあるものだけ出ます。')}</p>
         </div>
       )}
-      <div className="filter-row">
-        <label className="field-label">{t('ゾーン')}</label>
-        <ZoneSelect label={t('開始')} value={f.startZone} onChange={startZone => set({ startZone })} />
-        <ZoneSelect label={t('終了')} value={f.endZone} onChange={endZone => set({ endZone })} />
-        <span className="spacer" />
-        <button className="link" onClick={() => onChange(EMPTY_FILTER)} disabled={f === EMPTY_FILTER}>{t('条件をクリア')}</button>
-      </div>
       <div className="filter-row actions">
         <p className="count"><b>{shown.toLocaleString()}</b> / {total.toLocaleString()} {t('プレー')}</p>
         <span className="spacer" />
-        <button onClick={onServeFlights} disabled={!serves}
-          title={serves ? t('結果のサーブの軌道をすべて、画面のフレームの上で一斉に飛ばすスライドをシーンの先頭に作ります。どのサーブも奥から手前へ向けてそろえます') : t('結果にサーブがありません')}>{t('サーブ軌道')}</button>
-        <button onClick={onHeatmap} disabled={!shots}
-          title={shots ? t('結果のサーブとアタックの落下点の濃さを、画面のフレームのコートに塗るスライドをシーンの先頭に作ります。どれも奥から手前へ向けてそろえます。サーブかアタックに絞ってから押すのがおすすめです') : t('結果にサーブもアタックもありません')}>{t('ヒートマップ')}</button>
+        <button className="link" onClick={() => onChange(EMPTY_FILTER)} disabled={f === EMPTY_FILTER}>{t('条件をクリア')}</button>
         <button onClick={onAddAll} disabled={!shown || shown === total}
           title={shown === total ? t('条件で絞り込んでから追加してください') : undefined}>{t('結果をシーンに追加')}</button>
       </div>

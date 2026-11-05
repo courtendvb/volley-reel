@@ -230,6 +230,7 @@ export function ReelPanel(p: Props) {
             </>
           ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
+        <button onClick={p.onNewReel} title={t('新しいシーンを作ってこの動画に入れる')}>{t('＋ 新規')}</button>
         <button className={more ? 'on' : ''} aria-expanded={more} aria-label={t('シーンの設定')} title={t('シーンの名前、再生・書き出しに使うクリップ')} onClick={() => setMore(m => !m)}>⚙</button>
         <button onClick={() => { if (confirm(t('シーン「{0}」を削除しますか？{1}（reels/deleted/ に移動します）', reel.name, p.usedIn ? t('\n{0} 本の動画から外れます。', p.usedIn) : ''))) p.onDeleteReel(reel.id) }} title={t('シーンを削除')}>{t('削除')}</button>
       </div>
@@ -303,8 +304,12 @@ export function ReelPanel(p: Props) {
           }}>
           <header className="group-head" onContextMenu={e => openMenu(e, spotAt(groupRows(reel, 'none', none.map(c => c.id)), 'none', 0), AT_TOP)}>
             <span className="swatch none">–</span>
-            <span className="none-title">{t('未分類（一覧の順）')}{reel.scope === 'marked' && <span className="excluded-note" title={t('上の「再生・書き出し」を「全部」にすると使われます')}> {t('使わない（「グループのみ」のため）')}</span>}</span>
+            <span className="none-title">{t('未分類')}<span className="excluded-note" title={t('上の「再生・書き出し」で切り替えます')}> {reel.scope === 'marked' ? t('再生・書き出しに入りません') : t('グループのあとに一覧の順で入ります')}</span></span>
             <span className="muted">{none.length}</span>
+            {none.some(c => c.tag) && (
+              <button className={`tag-sort${reel.noneByTag ? ' on' : ''}`} aria-pressed={!!reel.noneByTag} title={t('未分類のクリップをメモの順に並べる（数字、アルファベットの順。メモなしは最後）。もう一度押すと時間順に戻る')}
+                onClick={() => change({ ...reel, noneByTag: !reel.noneByTag })}>{t('メモ順')}</button>
+            )}
           </header>
           {rowsOf('none', none.map(c => c.id))}
         </section>

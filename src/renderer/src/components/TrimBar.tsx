@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { snapTime } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
-import { composing } from '../keys'
+import { arrowSec, composing } from '../keys'
 import { t } from '../../../shared/i18n'
 import { SLOW_RATES, clipPlayedSec, type ClipTiming, type Hold, type Slow } from '../../../shared/timing'
 
@@ -27,6 +27,7 @@ interface Props {
   onObjectSpan: (id: string, edge: 'from' | 'to', t: number | null) => void // null = the clip's edge
   timing: ClipTiming | undefined // slow stretches and holds (video times)
   onTiming: (timing: ClipTiming) => void
+  onFrameSlide: () => void // the picture on screen as a slide right after this clip
 }
 
 export interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
@@ -35,7 +36,7 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, speed, onSpeed, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, speed, onSpeed, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming, onFrameSlide }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
   // While a show / hide time sticks to another time: that time, drawn as a guide line.
   const [snapGuide, setSnapGuide] = useState<number | null>(null)
@@ -118,6 +119,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <span className="muted">{(range.out - range.in).toFixed(1)}{t('秒')}{timing?.slows?.length || timing?.holds?.length ? t('（再生 {0} 秒）', clipPlayedSec(range, timing).toFixed(1)) : ''}</span>
         <label className="check muted" title={t('外すと OUT を過ぎても再生を続け、範囲の外も見られます')}>
           <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> {t('ループ再生')}{loop && <Playing />}</label>
+        <button onClick={onFrameSlide} title={t('動画の今のコマを、このクリップのすぐ後ろのスライドにします。矢印などを描けます')}>{t('＋ 今の画面をスライドに')}</button>
         {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} {t('本と範囲が重なっています')}</span>}
       </div>
 
@@ -174,7 +176,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <Edge name={t('起点')} keyName="◎" value={rel(skillAt)} overridden={skillTime !== null}
           onSet={() => onSkillTime(Math.round(playback.current.time * 100) / 100)} onType={v => onSkillTime(v ? Math.round((keyTime + v) * 100) / 100 : null)} onReset={() => onSkillTime(null)} />
         {speed?.usual && <Speed value={speed.value} usual={speed.usual} onChange={onSpeed} />}
-        <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム')}</span>
+        <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → {0} 秒、Shift+← → 1 フレーム', arrowSec())}</span>
       </div>
     </div>
   )

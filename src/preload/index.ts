@@ -55,6 +55,7 @@ const api: Api = {
   readSlideFile: path => ipcRenderer.invoke('slide:read', path),
   slideFileTimes: paths => ipcRenderer.invoke('slide:times', paths),
   grabFrame: (matchId, sec) => ipcRenderer.invoke('slide:frame', matchId, sec),
+  detectCourt: matchId => ipcRenderer.invoke('court:detect', matchId),
   smokePickSlides: paths => ipcRenderer.invoke('smoke:pickSlides', paths),
   smokeTouch: path => ipcRenderer.invoke('smoke:touch', path),
   getPalette: () => ipcRenderer.invoke('palette:get'),

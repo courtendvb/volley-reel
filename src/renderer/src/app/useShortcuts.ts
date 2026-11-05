@@ -6,7 +6,7 @@ import { mergeScoped, type ScopedAnnotations } from '../../../shared/annotationS
 import { withGroups, type Annotation } from '../../../shared/annotation'
 import type { PlayRef } from '../../../shared/filter'
 import type { Tool } from '../components/AnnotationLayer'
-import { composing } from '../keys'
+import { arrowSec, composing } from '../keys'
 import { playback } from '../playback'
 import { isMaximized, setMaximized, toggleMaximized } from '../maximize'
 import type { AppLatest } from './appState'
@@ -97,8 +97,8 @@ export function useShortcuts(handlers: ShortcutHandlers) {
         const next = res[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
         if (next) h.jump(next)
       }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-arrowSec()) }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(arrowSec()) }
       else if (e.key === 'Escape') { if (isMaximized()) void setMaximized(false); else playback.stopSequence() } // maximized: Esc only leaves it
       else if (/^m$/i.test(e.key) && !e.shiftKey) { e.preventDefault(); void toggleMaximized() }
       else if ((latest.activeClipId || h.editingCard()) && /^[vtacrglp]$/i.test(e.key)) h.setAnnTool(TOOLS[e.key.toLowerCase()])

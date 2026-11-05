@@ -113,6 +113,10 @@ button:disabled { opacity: 0.6; cursor: default; }
   background: var(--surface); border-right: 1px solid var(--border);
 }
 .match-select { margin: 10px 10px 6px; }
+.check-picker { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; flex: 1; text-align: left; }
+.match-select.check-picker { flex: none; }
+.check-picker > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.check-picker-list { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
 .warning { margin: 0 10px 8px; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); font-size: 12px; }
 
 .play-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
@@ -140,11 +144,12 @@ button:disabled { opacity: 0.6; cursor: default; }
 .trim-hold { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #F59E0B; pointer-events: none; }
 /* The tabs under the video (StageTabs) and their panels; a closed panel is kept, only hidden. */
 .stage-tabs { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); }
-.stage-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 4px 12px; color: var(--sub); }
+.stage-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 7px 16px; color: var(--sub); }
 .stage-tabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 .stage-tabs button:disabled { opacity: 0.45; }
-.stage-panel[hidden] { display: none; }
-.stage-panel { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: none; }
+.stage-panel[hidden], .stage-fold-body[hidden] { display: none; }
+.stage-fold { align-self: flex-start; }
+.stage-panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: none; padding: 4px 2px; }
 .trim-timing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .trim-timing-item { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; }
 .trim-timing input[type=number] { width: 56px; }
@@ -291,7 +296,7 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 
 .ann-tools { flex: none; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
 .ann-tools.disabled { opacity: 0.55; }
-.ann-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 26px; }
+.ann-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-height: 30px; }
 .ann-swatches { display: inline-flex; gap: 4px; }
 .ann-swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 2px solid var(--border-strong); }
 .ann-swatch.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
@@ -304,7 +309,14 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 
 .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
 .court-layer { position: absolute; inset: 0; display: block; touch-action: none; }
+.shot-pick { position: absolute; z-index: 20; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); font-size: 12px; }
+.shot-pick-head { display: flex; justify-content: space-between; align-items: center; }
+.shot-pick button:not(.link) { border: 0; background: transparent; text-align: left; padding: 3px 4px; }
+.shot-pick button:not(.link):hover { background: var(--soft); }
+.court-bar { display: flex; flex-direction: column; gap: 8px; }
 .court-bar select { margin-left: 4px; }
+.court-bar .near-team { max-width: 150px; }
+.court-row-label { flex: none; width: 84px; font-size: 12px; font-weight: 600; color: var(--sub); }
 .overlay-modal { width: min(1060px, 96vw); }
 .ov-body { display: flex; gap: 18px; min-height: 0; overflow-y: auto; }
 .ov-preview { flex: none; display: flex; flex-direction: column; gap: 8px; }
@@ -406,7 +418,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .scene-no { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--text); color: var(--surface); font-size: 11px; font-weight: 600; }
 .scene-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .shared { flex: none; font-size: 10.5px; padding: 0 5px; border-radius: 999px; background: var(--primary-light); color: var(--primary); }
-.video-add { display: flex; gap: 6px; padding: 6px 10px 0; }
+.video-add { display: flex; gap: 6px; padding: 2px 10px 8px; }
 .video-add select { flex: 1; min-width: 0; }
 .field-label.wide { width: auto; }
 .video-panel .count { padding: 4px 10px 8px; }

@@ -213,6 +213,7 @@ export interface Api {
   readSlideFile(path: string): Promise<SlideFile>
   slideFileTimes(paths: string[]): Promise<Record<string, number | null>>
   grabFrame(matchId: string, sec: number): Promise<string>
+  detectCourt(matchId: string): Promise<CourtCorners | null> // the court found in the video
   smokePickSlides?: (paths: string[]) => Promise<SlideFile[]> // copies them into the project first
   smokeTouch?: (path: string) => Promise<void> // a file in the project: marked as just changed
   // Team logos (library, by team code) for title cards. Each returns the codes that have one -> file.
@@ -293,6 +294,8 @@ export interface ExportJob {
 }
 
 // A newer version for an installed copy: found, downloading, then ready to restart into.
+export type CourtCorners = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
+
 export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
   | { type: 'manual'; version: string } // a newer version to get from the download page (Mac)
   | { type: 'error'; message: string } // the update couldn't be installed (the download page still works)

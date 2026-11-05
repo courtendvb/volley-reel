@@ -1,12 +1,11 @@
-// The left list: every match's plays as search rows, the ones in scope (one match or all, in the
-// chosen match order), and what the filter leaves of them.
+// The left list: every match's plays as search rows, the ones in scope (the picked matches, or all
+// when none is picked, in the chosen match order), and what the filter leaves of them.
 import { useMemo } from 'react'
 import { applyFilter, buildRefs, detailOptions, listPeople, type PlayFilter, type PlayRef } from '../../../shared/filter'
 import type { ParsedDVW, ProjectInfo } from '../../../shared/types'
-import type { Scope } from '../components/FilterPanel'
 import { labelMatches } from './appState'
 
-export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, ParsedDVW>, scope: Scope, matchId: string | null, matchOrder: 'old' | 'new', filter: PlayFilter) {
+export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, ParsedDVW>, matchIds: string[], matchOrder: 'old' | 'new', filter: PlayFilter) {
   const settings = project?.settings
   const refsByMatch = useMemo(() => {
     const out: Record<string, PlayRef[]> = {}
@@ -15,10 +14,9 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
   }, [dvws, settings, project])
 
   const scopeRefs = useMemo(() => {
-    if (scope === 'match') return matchId ? refsByMatch[matchId] ?? [] : []
-    const ms = project?.matches ?? [] // oldest first
+    const ms = (project?.matches ?? []).filter(m => !matchIds.length || matchIds.includes(m.id)) // oldest first
     return (matchOrder === 'new' ? [...ms].reverse() : ms).flatMap(m => refsByMatch[m.id] ?? [])
-  }, [scope, matchId, refsByMatch, project, matchOrder])
+  }, [matchIds, refsByMatch, project, matchOrder])
   const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
   const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
   // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).

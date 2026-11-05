@@ -356,6 +356,8 @@ export const EN: Record<string, string> = {
   "相手ローテ": "Opp. rotation",
   "レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません": "Reception: the receiving team's plays from its reception until the ball goes back over (the reception attack and its set). Transition: every other play (attacks from a dig, a freeball, a block cover…). Serves are in neither",
   "局面": "Phase",
+  "レセプション評価": "Reception eval",
+  "そのラリーのレセプションの評価で絞ります。レセプションアタックとそのトスは、もとのレセプションの評価で探します": "Filters by how the rally's reception was evaluated. Reception attacks and their sets are found by the reception they came from",
   "レセプション": "Reception",
   "トランジション": "Transition",
   "直前": "Previous",

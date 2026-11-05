@@ -139,6 +139,10 @@ describe('rally context', () => {
   it('puts the reception and its set in the reception phase, and nothing for a serve', () => {
     expect(codes({ phase: 'reception', skills: ['R', 'E'] })).toEqual(['a14RM#', 'a17EU+', 'a18RM+', 'a17EU+', '*05RQ/'])
     expect(codes({ phase: 'reception', skills: ['S'] })).toEqual([])
+    expect(codes({ skills: ['A'], phase: 'reception', recEffects: ['#'] })).toEqual(['a03AU+'])
+    expect(codes({ skills: ['A'], phase: 'reception', recEffects: ['+'] })).toEqual(['a18AU!'])
+    expect(codes({ skills: ['A'], phase: 'reception', recEffects: ['#', '+'] })).toEqual(['a03AU+', 'a18AU!'])
+    expect(codes({ skills: ['A'], recEffects: ['!'] })).toEqual([])
     expect(R.plays.filter(p => p.skill === 'S').map(p => p.phase)).toEqual([null, null, null])
   })
 

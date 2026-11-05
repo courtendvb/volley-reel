@@ -151,6 +151,7 @@ export function parseDVW(text: string): ParsedDVW {
   }
 
   markPossibilities(plays)
+  markReceptions(plays)
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })
   const allHome = plays.length > 0 && plays.every(p => p.side === '*')
@@ -169,6 +170,13 @@ function markPossibilities(plays: Play[]): void {
     if (!attack) continue
     for (const p of rally) if (p === serve || p === attack || (p.skill === 'B' && p.side === serve.side && p.id < attack.id)) p.possibility = true
   }
+}
+
+// The reception phase's plays carry their reception's evaluation, to search attacks by it.
+function markReceptions(plays: Play[]): void {
+  const received = new Map<number, string>()
+  for (const p of plays) if (p.skill === 'R' && p.rallyId !== null) received.set(p.rallyId, p.effect)
+  for (const p of plays) if (p.phase === 'r' && p.rallyId !== null && received.has(p.rallyId)) p.recEffect = received.get(p.rallyId)
 }
 
 // Reception phase: the receiving team's contacts from its reception until the ball goes to the other

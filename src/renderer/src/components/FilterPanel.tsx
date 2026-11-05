@@ -40,7 +40,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
   // Set, rotations, phase and the plays around: folded like the detailed search, opened when one is in use.
-  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.phase !== 'all' ? 1 : 0)
+  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.phase !== 'all' ? 1 : 0) + (f.recEffects?.length ?? 0)
     + f.prevSkills.length + f.prevEffects.length + (f.prevTeam !== 'any' ? 1 : 0) + (f.prevSkipSet ? 1 : 0)
     + f.nextSkills.length + f.nextEffects.length + (f.nextTeam !== 'any' ? 1 : 0) + (f.nextSkipSet ? 1 : 0)
   const [situOpen, setSituOpen] = useState(situCount > 0)
@@ -105,8 +105,12 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           title={() => t('相手チームのローテーション')} />
         <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
           <label className="field-label">{t('局面')}</label>
-          <Segmented value={f.phase} onChange={phase => set({ phase })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />
+          <Segmented value={f.phase} onChange={phase => set({ phase, recEffects: [] })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />
         </div>
+        {f.phase === 'reception' && (
+          <Chips label={t('レセプション評価')} values={EFFECT_KEYS} selected={f.recEffects ?? []} onChange={recEffects => set({ recEffects })}
+            render={k => `${k} ${EFFECTS.R[k]}`} title={() => t('そのラリーのレセプションの評価で絞ります。レセプションアタックとそのトスは、もとのレセプションの評価で探します')} />
+        )}
         <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）')}
           skipTitle={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')} />
         <Near f={f} set={set} which="next" label={t('直後')} title={t('同じラリーで一つ後のプレー（フリーボールも数えます）。ラリー最後のプレーは入りません')}

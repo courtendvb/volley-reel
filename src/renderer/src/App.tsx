@@ -122,10 +122,11 @@ export function App() {
   const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })
   useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
-  const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : 'trim' } catch { return 'trim' } })
+  const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
+  const [objectsOpen, setObjectsOpen] = useState(false) // the objects' tools, under the trim bar
   useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
   // An object picked on the video (or a headline's 書式) opens the objects panel, unless the trim panel is up (its lanes show the object's times).
-  const showObjects = () => setStagePanel(p => (p === 'trim' ? p : 'objects'))
+  const showObjects = () => { setStagePanel('edit'); setObjectsOpen(true) }
   const gridStyleRef = useRef(gridStyle)
   gridStyleRef.current = gridStyle
 
@@ -975,7 +976,7 @@ export function App() {
                 const court = match.court && (
                   <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
-                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
+                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && !(stagePanel === 'edit' && objectsOpen) ? courtClick : undefined} />
                 )
                 return (
                   <>
@@ -1021,15 +1022,15 @@ export function App() {
               <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting} />
             )}
             {!cardEdit && match && (
-              <div className="stage-panel" hidden={stagePanel !== 'court' && !courtFitting}>
+              <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               <CourtBar match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
               </div>
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'trim'}>
+              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
               <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
-                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); setStagePanel('objects') }} />
+                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -1064,7 +1065,10 @@ export function App() {
               </div>
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'objects'}>
+              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
+              <button className="link stage-fold" aria-expanded={objectsOpen} onClick={() => setObjectsOpen(o => !o)}>
+                {objectsOpen ? '▾' : '▸'} {t('図形')}{activeAnns.length ? t('（{0}）', activeAnns.length) : ''}</button>
+              <div className="stage-fold-body" hidden={!objectsOpen}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
@@ -1072,9 +1076,10 @@ export function App() {
                 court={matches[active.matchId]?.court?.corners ?? null}
               />
               </div>
+              </div>
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'display'}>
+              <div className="stage-panel" hidden={stagePanel !== 'view'}>
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}

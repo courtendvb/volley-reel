@@ -147,7 +147,8 @@ button:disabled { opacity: 0.6; cursor: default; }
 .stage-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 7px 16px; color: var(--sub); }
 .stage-tabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 .stage-tabs button:disabled { opacity: 0.45; }
-.stage-panel[hidden] { display: none; }
+.stage-panel[hidden], .stage-fold-body[hidden] { display: none; }
+.stage-fold { align-self: flex-start; }
 .stage-panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: none; padding: 4px 2px; }
 .trim-timing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .trim-timing-item { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; }

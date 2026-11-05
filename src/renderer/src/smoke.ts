@@ -101,9 +101,11 @@ const sleep = (ms: number) => new Promise(ok => setTimeout(ok, ms))
 
 // Opens one of the panels under the video (StageTabs) by its tab, for steps that use it with the real mouse.
 async function openPanel(p: 'trim' | 'objects' | 'display' | 'court'): Promise<void> {
-  const label = { trim: t('トリム'), objects: t('図形'), display: t('表示'), court: t('コート') }[p]
+  const label = p === 'trim' || p === 'objects' ? t('編集') : t('表示')
   const tab = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === label && !b.disabled) ?? null, 10000, `${label} tab`)
   if (tab.getAttribute('aria-selected') !== 'true') { tab.click(); await sleep(250) }
+  const fold = document.querySelector<HTMLButtonElement>('.stage-fold')
+  if (p === 'objects' && fold?.getAttribute('aria-expanded') === 'false') { fold.click(); await sleep(250) }
 }
 
 function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() => string) = 'condition'): Promise<T> {
@@ -1203,8 +1205,7 @@ export function installSmoke(h: SmokeHost): void {
     await tick('落下点')
     await api.smokeShot!('player-landings.png')
     // A landing clicked goes to that shot; the heatmap clicked offers the nearest five.
-    const canvas = document.querySelector<HTMLCanvasElement>('.court-layer')!, box = canvas.getBoundingClientRect()
-    const clickAt = async (p: { x: number; y: number }) => { canvas.parentElement!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: box.left + p.x * box.width, clientY: box.top + p.y * box.height })); await sleep(600) }
+    const clickAt = async (p: { x: number; y: number }) => { const canvas = document.querySelector<HTMLCanvasElement>('.court-layer')!, box = canvas.getBoundingClientRect(); canvas.parentElement!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: box.left + p.x * box.width, clientY: box.top + p.y * box.height })); await sleep(600) }
     const zoned = latest.current.selected
     await clickAt({ x: 0.5, y: 0.75 })
     await api.smokeShot!('shot-pick.png')
@@ -1292,7 +1293,7 @@ export function installSmoke(h: SmokeHost): void {
       const rl = latest.current.reel!, id = Object.keys(rl.clips)[0]
       activateClip(rl.clips[id], rl.groups.none.includes(id) ? 'none' : markersOf(rl, id)[0])
       await sleep(800)
-      const tab = [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === t('トリム'))!
+      const tab = [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === t('編集'))!
       if (!tab.classList.contains('on')) tab.click()
       await sleep(300)
       const before = latest.current.reel!.slides?.length ?? 0

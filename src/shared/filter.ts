@@ -37,6 +37,7 @@ export interface PlayFilter {
   combos: string[]
   hits: string[]
   phase: 'all' | 'reception' | 'transition' // dvw.ts phaseOf; serves are neither
+  recEffects: string[] // with the reception phase: how the reception was evaluated
   prevSkills: string[] // the contact just before in the rally (F: freeball)
   prevEffects: string[]
   prevTeam: 'any' | 'same' | 'opp' // relative to the play's own team
@@ -49,7 +50,7 @@ export interface PlayFilter {
 
 export const EMPTY_FILTER: PlayFilter = {
   team: 'all', dir: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
-  phase: 'all', prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
+  phase: 'all', recEffects: [], prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
   nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
 
@@ -172,6 +173,7 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.hits?.length && (!r.hit || !f.hits.includes(r.hit))) return false
     if (f.endZone !== null && p.endZone !== f.endZone) return false
     if (f.phase && f.phase !== 'all' && p.phase !== f.phase[0]) return false
+    if (f.recEffects?.length && (!p.recEffect || !f.recEffects.includes(p.recEffect))) return false
     return nearMatches(r, r.play.before, f.prevSkills, f.prevEffects, f.prevTeam, f.prevSkipSet)
       && nearMatches(r, r.play.after, f.nextSkills, f.nextEffects, f.nextTeam, f.nextSkipSet)
   })

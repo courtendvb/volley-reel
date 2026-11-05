@@ -1237,6 +1237,13 @@ export function installSmoke(h: SmokeHost): void {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await sleep(400)
     console.log(`[smoke-arrow] ${JSON.stringify({ moved: +(playback.current.time - t0).toFixed(2) })}`)
     localStorage.removeItem('vr.arrowSec')
+    document.querySelector('video')?.pause(); await sleep(200)
+    const t1 = playback.current.time
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', ctrlKey: true, bubbles: true })); await sleep(400)
+    console.log(`[smoke-ctrl-arrow] ${JSON.stringify({ moved: +(playback.current.time - t1).toFixed(2) })}`)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })); await sleep(300)
+    await api.smokeShot!('shortcuts.png')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })); await sleep(200)
     // The heatmap's strength and the height line, switched in the court tab.
     const heatRange = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('ヒートマップの濃さ') + '"]'), 5000, 'heat strength')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(heatRange, '0.3')
@@ -1302,6 +1309,18 @@ export function installSmoke(h: SmokeHost): void {
       add?.click()
       await waitFor(() => ((latest.current.reel!.slides?.length ?? 0) > before ? true : null), 10000, 'frame slide')
       const made = latest.current.reel!.slides!.at(-1)!
+      await sleep(800)
+      for (const box of document.querySelectorAll<HTMLInputElement>('.slide-marks input')) { box.click(); await sleep(250) }
+      await sleep(500)
+      await api.smokeShot!('slide-marks.png')
+      const sl = latest.current.reel!.slides!.find(x => x.zones)!
+      console.log(`[smoke-slide-marks] ${JSON.stringify({ zones: !!sl.zones, heat: sl.heat?.points.length, landings: sl.landings?.points.length, flights: sl.flights?.paths.length, notice: latest.current.notice })}`)
+      if (exportTo) {
+        const out = exportTo.replace(/\.mp4$/i, '-slide.mp4')
+        await startExport(out, { plan: currentPlan('scene').filter(p => p.kind === 'card' && p.card.slide?.id === sl.id), name: 'slide marks' })
+        await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 120000, 'slide export')
+        console.log(`[smoke-slide-export] ${JSON.stringify({ state: latest.current.exportState?.status, out })}`)
+      }
       console.log(`[smoke-frame] ${JSON.stringify({ button: !!add, after: made.after === id, group: made.group })}`)
       await sleep(500)
       ;[...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('完了'))?.click()

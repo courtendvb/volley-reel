@@ -54,6 +54,13 @@ export function subCenter(c: Cell, sub: string): [number, number] | null {
 export interface Homography { a: number; b: number; c: number; d: number; e: number; f: number; g: number; h: number }
 
 // The unit square (u across, v from far to near) onto the four corners.
+// Where a corner's handle goes: on the corner, or at the edge of the picture when the corner is
+// outside it, so it can always be grabbed. margin in pixels.
+export function handleAt(p: Pt, w: number, h: number, margin: number): Pt {
+  const keep = (v: number, size: number) => Math.min(1 - margin / size, Math.max(margin / size, v))
+  return { x: keep(p.x, w), y: keep(p.y, h) }
+}
+
 export function homography(corners: readonly [Pt, Pt, Pt, Pt]): Homography {
   const [p0, p1, p2, p3] = corners
   const dx1 = p1.x - p3.x, dx2 = p2.x - p3.x
@@ -388,6 +395,15 @@ export function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: Sl
     ctx.stroke()
   }
   ctx.restore()
+}
+
+// What a slide keeps of the court: the shots' marks and a play's zones, fixed when they were put on.
+export interface SlideZones { fit: CourtFit; zones: PlayZones; detail: GridStyle['detail'] }
+export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones }
+export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, heatOpacity?: number): void {
+  if (s.heat) drawHeat(ctx, w, h, s.heat, heatOpacity)
+  if (s.zones) drawCourt(ctx, w, h, s.zones.fit, { ...DEFAULT_GRID_STYLE, grid: false, playZones: true, detail: s.zones.detail }, s.zones.zones, 1)
+  if (s.landings) drawLandings(ctx, w, h, s.landings)
 }
 
 // Many flights at once on a slide: they leave together after a moment and then stay. `progress` as

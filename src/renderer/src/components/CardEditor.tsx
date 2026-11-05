@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, drawCard, type Box } from '../../../shared/overlayDraw'
-import { drawFlights, drawHeat } from '../../../shared/court'
+import { drawFlights, drawSlideMarks } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
 import type { Card } from '../../../shared/video'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
@@ -39,7 +39,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
     const ctx = prepareCanvas(c, size.w, size.h)
     const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp), assetImage)
     boxRef.current = b
-    if (card.slide?.heat) drawHeat(ctx, size.w, size.h, card.slide.heat, heatOpacity)
+    if (card.slide) drawSlideMarks(ctx, size.w, size.h, card.slide, heatOpacity)
     if (card.slide?.flights) drawFlights(ctx, size.w, size.h, card.slide.flights, 1)
     if (!active || !b) return // a slide has no title to move
     ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#FACC15'
@@ -141,8 +141,13 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
 }
 
 // Below the video while a slide is being edited: how long it stays up, reading its file again, done.
-export function SlideEditBar({ slide, onChange, onReload, onDone }: {
+// What can go on a slide from the court: from the play selected in the list.
+export type SlideMark = 'zones' | 'heat' | 'landings' | 'flights'
+
+export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark }: {
   slide: Slide; onChange: (s: Slide) => void; onReload: (() => void) | null; onDone: () => void
+  target: string | null // the play the court marks come from, in words; null: none to use
+  onMark: (mark: SlideMark, on: boolean) => void
 }) {
   const src = slide.bg.kind === 'image' ? slide.bg.source : undefined
   return (
@@ -155,6 +160,14 @@ export function SlideEditBar({ slide, onChange, onReload, onDone }: {
       {onReload && <button onClick={onReload} title={t('{0} を読み直す（PowerPoint で直して書き出し直したとき）', src?.path ?? '')}>{t('元のファイルを読み直す')}</button>}
       <span className="spacer" />
       <button className="primary" onClick={onDone}>{t('完了')}</button>
+      <div className="slide-marks">
+        <span className="court-row-label" title={t('左の一覧で選んだプレーから、コートの表示をこのスライドに載せます。載せた内容は固定され、あとでプレーを変えても変わりません')}>{t('コートの表示')}</span>
+        {([['zones', t('ゾーン')], ['heat', t('ヒートマップ')], ['landings', t('落下点')], ['flights', t('サーブ軌道')]] as [SlideMark, string][]).map(([m, label]) => (
+          <label key={m} className="check">
+            <input type="checkbox" checked={!!slide[m]} disabled={!target && !slide[m]} onChange={e => onMark(m, e.target.checked)} /> {label}</label>
+        ))}
+        <span className="muted">{target ? t('元のプレー: {0}', target) : t('左の一覧でプレーを選び、コートを合わせた試合の動画を出すと使えます')}</span>
+      </div>
     </div>
   )
 }

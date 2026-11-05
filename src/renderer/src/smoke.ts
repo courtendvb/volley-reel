@@ -1,7 +1,7 @@
 // Dev self-checks (VR_SMOKE): scripted runs through the real UI that report what they saw.
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { EMPTY_FILTER, sameFilter, type PlayFilter, type PlayRef } from '../../shared/filter'
-import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel, type SlideSpot } from '../../shared/reel'
+import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip, type Clip, type ClipMode, type Group, type Marker, type Reel, type SlideSpot , markersOf } from '../../shared/reel'
 import type { ExportJob, LibraryInfo, ProjectInfo, ScanResult, SlideFile } from '../../shared/types'
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import { mergeScoped, scopeOf, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
@@ -1240,7 +1240,7 @@ export function installSmoke(h: SmokeHost): void {
     const heatRange = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('ヒートマップの濃さ') + '"]'), 5000, 'heat strength')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(heatRange, '0.3')
     heatRange.dispatchEvent(new Event('input', { bubbles: true })); await sleep(300)
-    const liftBox = [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.trim() === t('打点の点線'))?.querySelector('input')
+    const liftBox = [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.trim() === t('打点の高さの線'))?.querySelector('input')
     liftBox?.click(); await sleep(300)
     await api.smokeShot!('heat-faint-no-lift.png')
     let exported: unknown = null
@@ -1286,6 +1286,25 @@ export function installSmoke(h: SmokeHost): void {
       const speedLine = { kmh: speedClip.speedKmh ?? null, usual: speedBox.placeholder, before: flightEnd(movedClip), after: flightEnd(fastJob?.items.find(i => i.kind === 'clip')) }
       const skillLine = { speedLine, skillSec, before: layer(firstJobClip), after: layer(movedClip) }
       exported = { skillLine, state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
+    }
+    // The trim tab's button: the picture on screen as a slide right after the open clip.
+    {
+      const rl = latest.current.reel!, id = Object.keys(rl.clips)[0]
+      activateClip(rl.clips[id], rl.groups.none.includes(id) ? 'none' : markersOf(rl, id)[0])
+      await sleep(800)
+      const tab = [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === t('トリム'))!
+      if (!tab.classList.contains('on')) tab.click()
+      await sleep(300)
+      const before = latest.current.reel!.slides?.length ?? 0
+      const add = [...document.querySelectorAll<HTMLButtonElement>('.trim button')].find(b => b.textContent === t('＋ 今の画面をスライドに'))
+      await api.smokeShot!('trim-slide-button.png')
+      add?.click()
+      await waitFor(() => ((latest.current.reel!.slides?.length ?? 0) > before ? true : null), 10000, 'frame slide')
+      const made = latest.current.reel!.slides!.at(-1)!
+      console.log(`[smoke-frame] ${JSON.stringify({ button: !!add, after: made.after === id, group: made.group })}`)
+      await sleep(500)
+      ;[...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('完了'))?.click()
+      await sleep(300)
     }
     // The right column's tabs, each on its own.
     for (const [i, name] of ['scene', 'video', 'export'].entries()) {

@@ -312,7 +312,10 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .shot-pick-head { display: flex; justify-content: space-between; align-items: center; }
 .shot-pick button:not(.link) { border: 0; background: transparent; text-align: left; padding: 3px 4px; }
 .shot-pick button:not(.link):hover { background: var(--soft); }
+.court-bar { display: flex; flex-direction: column; gap: 8px; }
 .court-bar select { margin-left: 4px; }
+.court-bar .near-team { max-width: 150px; }
+.court-row-label { flex: none; width: 84px; font-size: 12px; font-weight: 600; color: var(--sub); }
 .overlay-modal { width: min(1060px, 96vw); }
 .ov-body { display: flex; gap: 18px; min-height: 0; overflow-y: auto; }
 .ov-preview { flex: none; display: flex; flex-direction: column; gap: 8px; }
@@ -414,7 +417,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .scene-no { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--text); color: var(--surface); font-size: 11px; font-weight: 600; }
 .scene-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .shared { flex: none; font-size: 10.5px; padding: 0 5px; border-radius: 999px; background: var(--primary-light); color: var(--primary); }
-.video-add { display: flex; gap: 6px; padding: 6px 10px 0; }
+.video-add { display: flex; gap: 6px; padding: 2px 10px 8px; }
 .video-add select { flex: 1; min-width: 0; }
 .field-label.wide { width: auto; }
 .video-panel .count { padding: 4px 10px 8px; }

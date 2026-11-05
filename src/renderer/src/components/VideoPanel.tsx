@@ -32,6 +32,7 @@ interface Props {
 }
 
 const DT_SCENE = 'application/x-vr-scene-index'
+const NEW_VIDEO = '\0new' // the last row of the video select
 
 // A video is a list of scenes (v3, design §0). Scenes are shared: the same scene can be in several
 // videos, and editing it changes all of them. The overlay look, through-play and export are per video.
@@ -52,9 +53,10 @@ export function VideoPanel(p: Props) {
         {v ? (
           <>
             <span className="panel-kicker">{t('動画')}</span>
-            <select value={v.id} onChange={e => p.onSelectVideo(e.target.value)} aria-label={t('動画')}>
-          {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
+            <select value={v.id} onChange={e => { if (e.target.value === NEW_VIDEO) p.onNewVideo(); else p.onSelectVideo(e.target.value) }} aria-label={t('動画')}>
+              {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value={NEW_VIDEO}>{t('＋ 別の動画を作る')}</option>
+            </select>
             {p.playing
               ? <button onClick={p.onStop}>{t('■ 停止')}</button>
               : <><button className="primary" onClick={p.onPlay} disabled={!total.clips} title={t('動画を最初から再生')}>{t('▶ 再生')}</button>
@@ -75,8 +77,15 @@ export function VideoPanel(p: Props) {
           title={p.videoCardOn ? t('動画の頭に動画名のカードを出す（クリックで出さない）') : t('動画の頭に動画名のカードを出さない（クリックで出す）')}
           onClick={() => p.onVideoCard(!p.videoCardOn)}>{t('カード')}</button>
         <button className="gear" aria-label={t('動画のタイトルカード')} title={t('動画の頭のタイトルカード（動画名）を動画の画面で編集')} onClick={p.onEditVideoCard}>⚙</button>
-        <button onClick={p.onNewVideo} title={t('新しい動画')}>＋</button>
         <button onClick={() => { if (confirm(t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) p.onDeleteVideo(v.id) }} title={t('動画を削除')}>{t('削除')}</button>
+      </div>
+
+      <div className="video-add">
+        <button className="primary" onClick={p.onNewScene} title={t('新しいシーンを作ってこの動画に入れる')}>{t('＋ 新しいシーン')}</button>
+        <select value="" onChange={e => { if (e.target.value) p.onChange(addScene(v, e.target.value)) }} aria-label={t('作ったシーンを入れる')}>
+          <option value="">{t('作ったシーンを入れる…')}</option>
+          {p.scenes.map(s => <option key={s.id} value={s.id}>{s.name}{v.sceneIds.includes(s.id) ? t('（追加済み）') : ''}</option>)}
+        </select>
       </div>
 
       <ol ref={listRef} className="video-scenes" role="list">
@@ -122,14 +131,6 @@ export function VideoPanel(p: Props) {
         })}
         {!v.sceneIds.length && <li className="muted pad-x">{t('まだシーンがありません')}</li>}
       </ol>
-      <div className="video-add">
-        <select value="" onChange={e => { if (e.target.value) p.onChange(addScene(v, e.target.value)) }} aria-label={t('シーンを追加')}>
-          <option value="">{t('シーンを追加…')}</option>
-          {p.scenes.map(s => <option key={s.id} value={s.id}>{s.name}{v.sceneIds.includes(s.id) ? t('（追加済み）') : ''}</option>)}
-        </select>
-        <button onClick={p.onNewScene} title={t('新しいシーンを作ってこの動画に入れる')}>{t('新しいシーン')}</button>
-      </div>
-
       <p className="count">{v.sceneIds.length} {t('シーン・')}{total.clips} {t('クリップ・')}{fmtSec(total.sec)}{t('（タイトルカードを除く）')}</p>
     </section>
   )

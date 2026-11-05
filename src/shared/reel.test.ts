@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   setServeSpeed, setSkillTime, shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
-  groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
+  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -378,5 +378,20 @@ describe('setServeSpeed', () => {
     const fast = setServeSpeed(reel, ids[0], 95)
     expect(fast.clips[ids[0]].speedKmh).toBe(95)
     expect('speedKmh' in setServeSpeed(fast, ids[0], null).clips[ids[0]]).toBe(false)
+  })
+})
+
+describe('ungrouped clips by tag', () => {
+  const reel = (noneByTag: boolean) => {
+    let r = addClips(newReel('t'), [10, 20, 30, 40].map(id => ({ matchId: 'm', play: { id, time: id, fingerprint: `f${id}` } as never }))).reel
+    const ids = r.groups.none
+    r = setTag(setTag(setTag(r, ids[0], 'B'), ids[1], '10'), ids[3], '2')
+    return { ...r, noneByTag }
+  }
+  const when = (c: { playId: number }): [string, number] => ['m', c.playId]
+  const tags = (r: ReturnType<typeof reel>) => chronological(r, r.groups.none, when).map(c => c.tag ?? '')
+  it('goes numbers, letters, then untagged, and back to time order when off', () => {
+    expect(tags(reel(true))).toEqual(['2', '10', 'B', ''])
+    expect(tags(reel(false))).toEqual(['B', '10', '', '2'])
   })
 })

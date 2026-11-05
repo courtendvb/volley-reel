@@ -38,6 +38,7 @@ export interface Reel {
   groups: Record<Group, string[]> // array order = clip order inside the group ('none' is shown chronologically)
   clips: Record<string, Clip>
   scope: 'marked' | 'all'
+  noneByTag?: boolean // ungrouped clips by their tag, not in time order
   rangeDefaults?: RangeDefaults // added in M4; read through rangeDefaults()
   markerCards?: Partial<Record<Marker, boolean>> // title card per marker; missing = the video's setting
   sceneCard?: boolean // this scene's title card; missing = the video's setting
@@ -193,16 +194,17 @@ export function setTag(reel: Reel, clipId: string, tag: string | null): Reel {
   return touch({ ...reel, clips: { ...reel.clips, [clipId]: t ? { ...rest, tag: t } : rest } })
 }
 
-// A marker group's clips by tag ("2" before "10"), the order among equal tags kept; untagged clips
-// go last, in their order. Slides stay after the clip they follow.
+// Tags in order: numbers by size ("2" before "10"), then letters; no tag last.
+function byTag(a: string | undefined, b: string | undefined): number {
+  if (!a || !b) return Number(!a) - Number(!b)
+  return a.localeCompare(b, 'ja', { numeric: true })
+}
+
+// A marker group's clips by tag, the order among equal tags kept. Slides stay after the clip they follow.
 export function sortByTag(reel: Reel, m: Marker): Reel {
   const ids = reel.groups[m]
   const tagOf = (id: string) => reel.clips[id]?.tag
-  const sorted = [...ids].sort((a, b) => {
-    const ta = tagOf(a), tb = tagOf(b)
-    if (!ta || !tb) return Number(!ta) - Number(!tb)
-    return ta.localeCompare(tb, 'ja', { numeric: true })
-  })
+  const sorted = [...ids].sort((a, b) => byTag(tagOf(a), tagOf(b)))
   if (sorted.every((id, i) => id === ids[i])) return reel
   return touch({ ...reel, groups: { ...reel.groups, [m]: sorted } })
 }
@@ -295,10 +297,11 @@ export function playOrder(reel: Reel, when: (c: Clip) => [string, number], scope
   return [...marked, ...chronological(reel, reel.groups.none, when)]
 }
 
+// Ungrouped clips as they are shown and played: in time order, unless the scene sorts them by tag.
 export function chronological(reel: Reel, ids: string[], when: (c: Clip) => [string, number]): Clip[] {
   return ids.map(id => reel.clips[id]).sort((a, b) => {
     const [da, ta] = when(a), [db, tb] = when(b)
-    return da.localeCompare(db) || ta - tb
+    return (reel.noneByTag ? byTag(a.tag, b.tag) : 0) || da.localeCompare(db) || ta - tb
   })
 }
 

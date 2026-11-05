@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, chronological, clipRange, defaultRange, findClip, findOverlaps, groupRows, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
 import type { ImportProgress, MissingPart, ParsedDVW, Play, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
@@ -711,6 +711,15 @@ export function App() {
     }
     return out
   }
+  // The picture on screen as a slide right after the open clip, in the group it was opened from.
+  const frameAfterClip = () => {
+    const r = latest.current.reel, id = latest.current.activeClipId
+    if (!r || !id) return
+    const group = activeGroup !== null && r.groups[activeGroup].includes(id) ? activeGroup : markersOf(r, id)[0] ?? 'none'
+    const ids = group === 'none' ? chronological(r, r.groups.none, whenIn(r)).map(c => c.id) : r.groups[group]
+    const rows = groupRows(r, group, ids)
+    return putSlide(spotAt(rows, group, rows.findIndex(x => x.kind === 'clip' && x.id === id) + 1), 'frame')
+  }
   const putSlide = async (spot: SlideSpot, how: SlideHow, files?: SlideFile[]) => {
     const sceneId = latest.current.reel?.id
     if (!sceneId) return
@@ -1030,7 +1039,7 @@ export function App() {
                   const oi = reel!.clips[id] ? clipInfo(reel!.clips[id]) : null
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
-                onTrim={trim} loop={loopOn} onLoop={setLoopOn}
+                onTrim={trim} loop={loopOn} onLoop={setLoopOn} onFrameSlide={() => void frameAfterClip()}
                 speed={activeInfo.ref.play.skill === 'S' ? { value: active.speedKmh ?? null, usual: serveSpeed(activeInfo.ref.play) } : null}
                 onSpeed={kmh => { const r = latest.current.reel; if (r) updateReel(setServeSpeed(r, active.id, kmh)) }}
                 skillTime={active.skillSec ?? null}
@@ -1088,7 +1097,7 @@ export function App() {
               const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
               onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
-              onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={createReel}
+              onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={() => { createReel(); setRightTab('scene') }}
               onEditCard={id => editCard(id, null)} onEditVideoCard={() => editCard(null, null)}
               videoCardOn={!!overlay.titleCard.videoCard} onVideoCard={on => setOverlay({ ...overlay, titleCard: { ...overlay.titleCard, videoCard: on } })}
               sceneCardOn={s => s.sceneCard ?? overlay.titleCard.sceneCards}

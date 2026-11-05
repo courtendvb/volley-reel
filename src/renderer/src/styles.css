@@ -381,14 +381,24 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 
 /* ---- videos and scenes (v3) ---- */
 .right-col { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface); }
-.right-col .reel-panel { flex: 1; min-height: 0; border-left: 0; border-top: 2px solid var(--border); }
+.right-col .reel-panel { flex: 1; min-height: 0; border-left: 0; }
+.video-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--soft); }
+.video-head select { flex: 1; min-width: 0; }
+.right-tabs { flex: none; padding: 0 6px; background: var(--soft); }
+.right-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.right-pane[hidden] { display: none; }
+.right-pane .video-panel { flex: 1; max-height: none; background: var(--surface); }
+.right-pane .video-scenes { flex: 1; max-height: none; }
+.right-pane .reel-head .reel-name { flex: 1; min-width: 0; margin: 0; }
+.right-pane .reel-head button { flex: none; white-space: nowrap; }
+.reel-more { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 6px; border-bottom: 1px solid var(--line); }
+.reel-more[hidden] { display: none; }
+.reel-controls.end { justify-content: flex-end; }
+.export-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px 12px; font-size: 12.5px; }
 .video-panel { flex: none; display: flex; flex-direction: column; max-height: 60%; min-height: 0; background: var(--soft); }
 .panel-kicker { flex: none; align-self: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--sub); }
 .video-scenes { list-style: none; margin: 6px 10px 0; padding: 0; overflow-y: auto; min-height: 0; max-height: 172px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 /* Drag to set the scene list's height (about five rows by default, then it scrolls). */
-.list-resize { flex: none; height: 8px; margin: 0 10px; cursor: ns-resize; touch-action: none; position: relative; }
-.list-resize::after { content: ''; position: absolute; left: 50%; top: 2px; width: 32px; height: 4px; margin-left: -16px; border-radius: 2px; background: var(--border-strong); }
-.list-resize:hover::after { background: var(--primary); }
 .video-scene { display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 12.5px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .video-scene:hover { background: var(--soft); }
 .video-scene.current { background: var(--primary-light); }

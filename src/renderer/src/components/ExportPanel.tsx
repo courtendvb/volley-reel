@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Accordion } from './Accordion'
 import { t } from '../../../shared/i18n'
 
 export interface ExportTarget {
@@ -22,15 +21,14 @@ interface Props {
   onOpenOverlay: () => void
 }
 
-// Export, as the last section of the right column: pick what to export (the whole video, the open
+// Export, the last tab of the right column: pick what to export (the whole video, the open
 // scene, or one marker group), see what comes out, then one large button. Progress stays here too.
 export function ExportPanel({ targets, info, court, onCourt, state, onExport, onCancel, onShowFile, onOpenOverlay }: Props) {
   const [pick, setPick] = useState('video')
   const chosen = targets.find(t => t.key === pick) ?? targets[0]
   const busy = state?.status === 'running' || state?.status === 'preparing'
-  const badge = busy ? t('書き出し中 {0}%', Math.round((state?.ratio ?? 0) * 100)) : state?.status === 'done' ? t('✓ 書き出し済み') : undefined
   return (
-    <Accordion id="export" icon="⤓" title={t('書き出し')} badge={badge}>
+    <section className="export-panel" data-export>
       <div className="export-body">
         <div className="export-targets" role="radiogroup" aria-label={t('書き出す範囲')}>
           {targets.map(t => (
@@ -61,6 +59,6 @@ export function ExportPanel({ targets, info, court, onCourt, state, onExport, on
           </p>
         )}
       </div>
-    </Accordion>
+    </section>
   )
 }

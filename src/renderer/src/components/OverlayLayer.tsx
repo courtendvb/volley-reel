@@ -14,11 +14,12 @@ interface Props {
   scoreboard: ScoreboardData | null
   caption: CaptionData | null
   override?: ClipOverlayOverride
+  heatOpacity?: number // of a slide's heatmap
 }
 
 // Scoreboard and caption for the clip on screen, and title cards and slides during a through-play.
 // Drawn with the same functions the export will use. Sits under the annotation layer.
-export function OverlayLayer({ size, settings, clip, scoreboard, caption, override }: Props) {
+export function OverlayLayer({ size, settings, clip, scoreboard, caption, override, heatOpacity }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   // Redrawn when the playhead enters or leaves the clip or a card shows, not on every frame.
   const clipRef = useRef(clip)
@@ -55,7 +56,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     const ctx = prepareCanvas(c, size.w, size.h)
     if (st.card) {
       drawCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp), assetImage)
-      if (st.card.slide?.heat) drawHeat(ctx, size.w, size.h, st.card.slide.heat)
+      if (st.card.slide?.heat) drawHeat(ctx, size.w, size.h, st.card.slide.heat, heatOpacity)
       for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
       if (flights) drawFlights(ctx, size.w, size.h, flights, progress)
       return
@@ -63,7 +64,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     if (!inClip) return
     if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, settings.theme)
     if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, settings.theme, packPhotoImage(caption.photo))
-  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, st.card, logoTick, flights, progress])
+  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, st.card, logoTick, flights, progress, heatOpacity])
 
   return <canvas ref={canvas} className="overlay-layer" data-testid="overlay-canvas" style={{ width: size.w, height: size.h }} />
 }

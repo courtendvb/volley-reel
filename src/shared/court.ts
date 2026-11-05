@@ -158,8 +158,7 @@ export interface PlayerMarks { heat?: SlideHeat; flights?: SlideFlights }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
-// apex: how far along the top of the arc is (missing: halfway).
-export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number; apex?: number }
+export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -196,16 +195,18 @@ export function strikeHeight(code: string): number {
 
 // The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
 // attack (T, P) loops; a hard one goes straight down. A set goes by its tempo and by the attack it
-// is for (setTo): to a quick (Q) it goes straight; to a slower one in front (M, U) it is quicker and
-// peaks late, at three quarters of the way.
-const FAST_SET = 0.85
-function shotPath(code: string, setTo?: string): { sec: number; arc: number; apex?: number } {
+// is for (setTo): to a quick (Q) it goes straight; to a slower one in front (M, U) it is quicker,
+// and as high as gravity makes it in that time. Rising to the hitter's hand puts its top past halfway.
+const FAST_SET = 0.85, GRAVITY = 9.8
+function shotPath(code: string, setTo?: string): { sec: number; arc: number } {
   const skill = code.charAt(3), type = code.charAt(4)
   if (skill === 'A') return code.charAt(12) === 'T' || code.charAt(12) === 'P' ? { sec: 0.9, arc: 0.8 } : { sec: 0.5, arc: 0 }
   if (skill === 'E') {
     const set = type === 'H' ? { sec: 1.3, arc: 3 } : type === 'Q' ? { sec: 0.6, arc: 0.5 } : { sec: 1, arc: 1.5 }
     if (setTo === 'Q') return { ...set, arc: 0 }
-    return setTo === 'M' || setTo === 'U' ? { sec: set.sec * FAST_SET, arc: set.arc, apex: 0.75 } : set
+    if (setTo !== 'M' && setTo !== 'U') return set
+    const sec = set.sec * FAST_SET
+    return { sec, arc: (GRAVITY * sec * sec) / 8 }
   }
   return { sec: type === 'Q' ? 1 : 1.4, arc: 1.2 }
 }
@@ -225,8 +226,7 @@ export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick'
   const middle = coded ? spotArea(coded, true) : null
   const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
   const shot = play.shotCode ?? play.code, start = on(play.startClick) ?? setFrom, z = strikeHeight(shot)
-  const path = shotPath(shot, play.setTo)
-  return { start, end, ...(start && z ? { startZ: z, arc: path.arc, ...(path.apex ? { apex: path.apex } : {}) } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+  return { start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
 }
 
 // A click on the court, for a team whose end line is near or far.
@@ -268,13 +268,26 @@ export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, sty
 
 // The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
 // than following the real ball: a serve or attack leaves at the play's time, and a reception or dig
-// is reached at its time. `sec`: see shotPath. skillSec: the clip's own time for the play, moved by
-// hand (Clip.skillSec), in place of the DVW's.
+// is reached at its time. `sec`: see shotPath. A clip can put its own time on the play, moved by hand
+// (skillSec, in place of the DVW's), and on a serve its speed (speedKmh), which sets the time in the air.
 export interface Flight { startSec: number; sec: number }
-export function flightTiming(play: Pick<Play, 'time' | 'code' | 'shotCode' | 'skill' | 'setTo'>, offsetSec: number, skillSec?: number): Flight {
-  const { sec } = shotPath(play.shotCode ?? play.code, play.setTo)
-  const t = skillSec ?? play.time + offsetSec
+type FlightPlay = Pick<Play, 'time' | 'code' | 'shotCode' | 'skill' | 'setTo' | 'startClick' | 'endClick'>
+export function flightTiming(play: FlightPlay, offsetSec: number, clip?: { skillSec?: number; speedKmh?: number } | null): Flight {
+  const metres = play.skill === 'S' ? serveMetres(play) : null
+  const sec = metres && clip?.speedKmh ? metres / (clip.speedKmh / 3.6) : shotPath(play.shotCode ?? play.code, play.setTo).sec
+  const t = clip?.skillSec ?? play.time + offsetSec
   return { startSec: play.shotCode ? t - sec : t, sec }
+}
+
+// How far a serve goes along the floor, in metres; null without both clicks.
+function serveMetres({ startClick: a, endClick: b }: Pick<Play, 'startClick' | 'endClick'>): number | null {
+  return a && b ? Math.hypot((a.u - b.u) * COURT_W_M, (a.v - b.v) * COURT_L_M) : null
+}
+
+// The speed a serve flies at when the clip doesn't set one, in km/h, for the field to show.
+export function serveSpeed(play: FlightPlay): number | null {
+  const metres = serveMetres(play)
+  return metres ? Math.round((metres / flightTiming(play, 0).sec) * 3.6) : null
 }
 
 // Which flights can be drawn: the points are shown with the curve on, and the play has both ends and a height.
@@ -288,17 +301,16 @@ export function flightMoves(style: GridStyle, zones: PlayZones | null | undefine
   return (hasFlight(style, zones) || !!zones?.player?.flights) && !style.flightStill
 }
 
-// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc, which
-// is 1 at its top; a top at halfway makes it the parabola 4s(1 - s).
+// Height along the flight, s from 0 to 1: the straight line between the ends, plus the arc. Always a
+// parabola, as a ball under gravity flies.
 export function flightZ(p: PlayPoints, s: number): number {
-  const top = p.apex ?? 0.5, k = top / (1 - top)
-  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + ((p.arc ?? 0) * s ** k * (1 - s)) / (top ** k * (1 - top))
+  return (p.startZ ?? 0) * (1 - s) + (p.endZ ?? 0) * s + 4 * (p.arc ?? 0) * s * (1 - s)
 }
 const FLIGHT_STEPS = 32
 
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
 // far with the ball at its tip, and the landing point once it is there.
-export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number): void {
+export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true): void {
   const p = zones.points
   if (!p?.start || !p.end || !p.startZ) return
   const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
@@ -307,7 +319,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   const a = p.start, b = p.end
   const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s))
   const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
-  drawLift(ctx, project(H, a.x, a.y), air, w)
+  if (lift) drawLift(ctx, project(H, a.x, a.y), air, w)
   if (done > 0) {
     const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done))
     ctx.save()
@@ -324,7 +336,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
     ctx.restore()
   }
   drawPoint(ctx, air, START_COLOR, w)
-  if (done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
+  if (lift && done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
   if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
@@ -375,7 +387,7 @@ export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
 export interface SlideHeat { fit: CourtFit; points: Pt[] }
 const COURT_W_M = 9, COURT_L_M = 18
 const HEAT_CELL_M = 0.25, HEAT_SIGMA_M = 0.8, HEAT_MARGIN_M = 3
-const HEAT_ALPHA = 0.75
+export const HEAT_OPACITY = 0.75 // the heatmap at its thickest, unless GridStyle.heatOpacity says otherwise
 const HEAT_RAMP: [number, [number, number, number]][] = [[0, [37, 99, 235]], [0.3, [6, 182, 212]], [0.5, [34, 197, 94]], [0.72, [250, 204, 21]], [1, [220, 38, 38]]]
 
 // The colour for a thickness of 0–1.
@@ -416,7 +428,7 @@ export function heatAt({ cols, rows, data }: HeatGrid, x: number, y: number): nu
 const grids = new WeakMap<SlideHeat, HeatGrid>()
 
 // Painted pixel by pixel from the picture back onto the floor, at half size and smoothed up.
-export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat): void {
+export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY): void {
   const grid = grids.get(heat) ?? heatGrid(heat.points)
   grids.set(heat, grid)
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
@@ -435,7 +447,7 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat): void 
       if (v < 0.04) continue
       const c = heatColor(v)
       px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]
-      px[i + 3] = 255 * HEAT_ALPHA * Math.min(1, v * 5)
+      px[i + 3] = 255 * opacity * Math.min(1, v * 5)
     }
   }
   out.putImageData(image, 0, 0)
@@ -464,6 +476,8 @@ export interface GridStyle {
   flight?: boolean // with the points: the ball's path as a curve
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
+  heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
+  noLift?: boolean // no dashed line from the floor up to a point in the air
   serveFlights?: boolean // on a serve: all the player's serves flying with it
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
@@ -493,7 +507,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
   }
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
-  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat) // on the floor, under everything
+  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
@@ -522,7 +536,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
 
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
   if (hasFlight(style, zones) && courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) {
-    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight)
+    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift)
   } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
@@ -531,9 +545,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     const ground = pts?.start ? at(pts.start.x, pts.start.y) : null
     const camera = pts?.start && pts.startZ ? courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h) : null
     const air = camera && pts?.start ? camera(pts.start.x, pts.start.y, pts.startZ!) : null
-    if (ground && air) drawLift(ctx, ground, air, w)
+    if (ground && air && !style.noLift) drawLift(ctx, ground, air, w)
     const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null
-    if (pts?.end && endAir) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
+    if (pts?.end && endAir && !style.noLift) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
     const a = air ?? place(pts?.start, zones.start), b = endAir ?? place(pts?.end, zones.end)
     if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w)

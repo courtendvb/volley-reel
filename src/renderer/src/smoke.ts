@@ -727,7 +727,7 @@ export function installSmoke(h: SmokeHost): void {
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.8, 0.8))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointerup', apt(0.8, 0.8))); await sleep(300)
-    // マーカー全体: an object on marker 1's first clip moved to the marker group shows on its other
+    // グループ全体: an object on marker 1's first clip moved to the marker group shows on its other
     // clip, not on marker 2's.
     let markerScope: unknown = null
     {
@@ -755,11 +755,7 @@ export function installSmoke(h: SmokeHost): void {
       markerScope = { stored, onOtherClip, onMarker2, planGroups: plan.map(it => (it.kind === 'clip' ? it.group : null)), sceneDown, listMoved }
     }
 
-    // The export accordion lists what can be exported.
-    {
-      const head = document.querySelector<HTMLButtonElement>('[data-accordion="export"] .accordion-head')!
-      if (head.getAttribute('aria-expanded') !== 'true') { head.click(); await sleep(200) }
-    }
+    // The export tab lists what can be exported.
     const exportChoices = [...document.querySelectorAll('.export-target .export-label')].map(e => e.textContent)
     const cardObjects = (latest.current.reels.find(x => x.id === a.id)?.markerCardAnnotations?.[1] ?? []).map(x => x.kind)
     const planCard = currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1 && it.card.name === 'Kills')
@@ -1175,7 +1171,8 @@ export function installSmoke(h: SmokeHost): void {
     const tip = shotOf(c => c.charAt(3) === 'A' && (c.charAt(12) === 'T' || c.charAt(12) === 'P'))
     // Many DVWs leave out where a set was struck: the check takes any that says where it went.
     const highSet = all.find(r => r.play.skill === 'E' && r.play.code.charAt(4) === 'H' && r.play.endClick)
-    for (const [name, r] of [['flight-tip', tip], ['flight-set', highSet]] as const) {
+    const midSet = all.find(r => r.play.skill === 'E' && r.play.setTo === 'M' && r.play.code.charAt(4) !== 'Q' && r.play.endClick)
+    for (const [name, r] of [['flight-tip', tip], ['flight-set', highSet], ['flight-set-m', midSet]] as const) {
       if (!r) continue
       await show(name, r)
       const f = flightTiming(r.play, latest.current.matches[m.id].offsetSec)
@@ -1204,6 +1201,13 @@ export function installSmoke(h: SmokeHost): void {
     await playback.seekAndWait(pf.startSec + pf.sec * 0.5); await sleep(400)
     await api.smokeShot!('player-serve-mid.png')
     await show('player-attack', pick('A'))
+    // The heatmap's strength and the height line, switched in the court tab.
+    const heatRange = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('ヒートマップの濃さ') + '"]'), 5000, 'heat strength')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(heatRange, '0.3')
+    heatRange.dispatchEvent(new Event('input', { bubbles: true })); await sleep(300)
+    const liftBox = [...document.querySelectorAll<HTMLLabelElement>('.court-bar label')].find(l => l.textContent?.trim() === t('打点の点線'))?.querySelector('input')
+    liftBox?.click(); await sleep(300)
+    await api.smokeShot!('heat-faint-no-lift.png')
     let exported: unknown = null
     if (exportTo) {
       const { reel: added } = addClips(newReel('points smoke'), [pick('S'), pick('A')].map(r => ({ matchId: r.matchId, play: r.play })))
@@ -1233,7 +1237,19 @@ export function installSmoke(h: SmokeHost): void {
       const movedClip = movedJob?.items.find(i => i.kind === 'clip')
       const firstJobClip = job.items.find(i => i.kind === 'clip')
       const layer = (c: typeof movedClip) => (c?.kind === 'clip' ? c.layers[1]?.to ?? null : null)
-      const skillLine = { skillSec, before: layer(firstJobClip), after: layer(movedClip) }
+      // The serve's speed, typed in the trim tab: the flight's last step ends sooner or later with it.
+      const speedBox = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('サーブの速度（km/h）') + '"]'), 5000, 'speed field')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(speedBox, '110')
+      speedBox.dispatchEvent(new Event('input', { bubbles: true })); await sleep(100)
+      speedBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(400)
+      await api.smokeShot!('serve-speed.png')
+      const speedClip = latest.current.reel!.clips[first.id]
+      const fastJob = await startExport(exportTo.replace(/\.mp4$/i, '-fast.mp4'), { plan: currentPlan('scene'), name: 'fast' })
+      await sleep(500)
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'fast export done')
+      const flightEnd = (c: unknown) => { const it = c as { layers: { to?: number }[] } | undefined; const l = it?.layers ?? []; return l[l.length - 2]?.to ?? null }
+      const speedLine = { kmh: speedClip.speedKmh ?? null, usual: speedBox.placeholder, before: flightEnd(movedClip), after: flightEnd(fastJob?.items.find(i => i.kind === 'clip')) }
+      const skillLine = { speedLine, skillSec, before: layer(firstJobClip), after: layer(movedClip) }
       exported = { skillLine, state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
     // Every serve of the search at once: the button beside 結果をシーンに追加 makes the slide on the
@@ -1278,6 +1294,19 @@ export function installSmoke(h: SmokeHost): void {
       const item = job.items[0]
       serveFlights = { heatState, serves, paths: slide.flights!.paths.length, sec: slide.durationSec, state: latest.current.exportState?.status, message: latest.current.exportState?.message ?? null, layers: item?.kind === 'card' ? item.layers?.length ?? 0 : null, out }
     }
+    // The right column's tabs, each on its own.
+    for (const [i, name] of ['scene', 'video', 'export'].entries()) {
+      document.querySelectorAll<HTMLButtonElement>('.right-tabs button')[i].click(); await sleep(300)
+      await api.smokeShot!(`right-${name}.png`)
+    }
+    // Play from the line above the tabs: the video runs through, then is stopped.
+    document.querySelector<HTMLButtonElement>('.video-head .primary')!.click()
+    await waitFor(() => (playback.current.seq ? true : null), 10000, 'video playing from the head')
+    await sleep(1000)
+    const playedFromHead = !!playback.current.seq
+    document.querySelector<HTMLButtonElement>('.video-head button')?.click()
+    playback.stopSequence()
+    shots.playedFromHead = playedFromHead
     return { courtPoints: { counts, shots, exported, serveFlights } }
   }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DEFAULT_CORNERS, type CourtFit, type GridStyle } from '../../../shared/court'
+import { DEFAULT_CORNERS, HEAT_OPACITY, type CourtFit, type GridStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
@@ -45,10 +45,14 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       </select>
       <label className="check" title={t('座標（点）のとき、矢印の代わりに打点から着地までの軌道を放物線で描き、プレーに合わせて伸ばす。DVW の時刻は秒単位なので、実際のボールとは重なりません')}>
         <input type="checkbox" checked={!!s.flight} disabled={!s.playZones || s.detail !== 'point'} onChange={e => onStyle({ ...s, flight: e.target.checked })} /> {t('軌道（放物線）')}</label>
+      <label className="check" title={t('座標（点）のとき、地面の位置から空中の打点までの点線と地面の輪を出す（書き出しも同じ）')}>
+        <input type="checkbox" checked={!s.noLift} disabled={!s.playZones || s.detail !== 'point'} onChange={e => onStyle({ ...s, noLift: !e.target.checked })} /> {t('打点の点線')}</label>
       <label className="check" title={t('オン: プレーに合わせて放物線が伸びる。オフ: クリップの間、放物線の全体を出したままにする')}>
         <input type="checkbox" checked={!s.flightStill} disabled={!s.serveFlights && (!s.playZones || s.detail !== 'point' || !s.flight)} onChange={e => onStyle({ ...s, flightStill: !e.target.checked })} /> {t('アニメーション')}</label>
       <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点の多さをプロジェクトの全試合からコートに色で出す。サーブはスタートゾーンが同じもの、アタックはアタックコードが同じものだけ（書き出しも同じ）')}>
         <input type="checkbox" checked={!!s.heat} onChange={e => onStyle({ ...s, heat: e.target.checked })} /> {t('ヒートマップ')}</label>
+      <label className="check" title={t('ヒートマップの濃さ。下げると透けて床や選手が見えます。スライドのヒートマップも同じ（書き出しも同じ）')}>{t('濃さ')}
+        <input type="range" min={0.1} max={1} step={0.05} value={s.heatOpacity ?? HEAT_OPACITY} aria-label={t('ヒートマップの濃さ')} onChange={e => onStyle({ ...s, heatOpacity: +e.target.value })} /> {Math.round((s.heatOpacity ?? HEAT_OPACITY) * 100)}%</label>
       <label className="check" title={t('サーブを選ぶと、その選手のサーブの軌道をプロジェクトの全試合からすべて、そのサーブと一緒に飛ばす（書き出しも同じ）')}>
         <input type="checkbox" checked={!!s.serveFlights} onChange={e => onStyle({ ...s, serveFlights: e.target.checked })} /> {t('サーブ軌道')}</label>
       <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前（第1セット）')}

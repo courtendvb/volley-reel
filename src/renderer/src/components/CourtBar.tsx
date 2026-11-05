@@ -10,11 +10,17 @@ interface Props {
   fitting: boolean
   onFitting: (on: boolean) => void
   onFit: (fit: CourtFit | null) => void
+  onAuto: () => Promise<void>
 }
 
 // The court grid for the match on screen: fit its corners, what to show, which team is near.
-export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }: Props) {
+export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto }: Props) {
   const [gear, setGear] = useState(false)
+  const [finding, setFinding] = useState(false)
+  const auto = (
+    <button disabled={finding} title={t('動画の中のコートの線を探して、四隅の候補を置きます。少し時間がかかります。最後は線に合っているか確かめてください')}
+      onClick={() => { if (match.court && !confirm(t('今の四隅を置き換えますか？'))) return; setFinding(true); void onAuto().finally(() => setFinding(false)) }}>{finding ? t('探しています…') : t('自動で合わせる')}</button>
+  )
   const fit = match.court
   const [home, away] = match.teams
 
@@ -24,6 +30,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
         <span className="field-label">{t('コート')}</span>
         <button onClick={() => { onFit({ corners: DEFAULT_CORNERS, nearSet1: '*' }); onFitting(true) }}
           title={t('動画のコートにゾーンのグリッドを重ねます。四隅を一度合わせると、この試合では保存されます')}>{t('グリッドを合わせる')}</button>
+        {auto}
       </div>
     )
   }
@@ -33,6 +40,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
       <span className="field-label">{t('コート')}</span>
       <button className={fitting ? 'primary' : ''} onClick={() => onFitting(!fitting)}
         title={t('四隅の丸をドラッグして、コートのエンドラインとサイドラインの交点に合わせます')}>{fitting ? t('完了') : t('四隅を合わせる')}</button>
+      {auto}
       <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッド')}</label>
       <label className="check" title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')}>
         <input type="checkbox" checked={s.playZones} onChange={e => onStyle({ ...s, playZones: e.target.checked })} /> {t('プレーのゾーン')}</label>
@@ -49,12 +57,14 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit }
         <input type="checkbox" checked={!s.noLift} disabled={!s.playZones || s.detail !== 'point'} onChange={e => onStyle({ ...s, noLift: !e.target.checked })} /> {t('打点の点線')}</label>
       <label className="check" title={t('オン: プレーに合わせて放物線が伸びる。オフ: クリップの間、放物線の全体を出したままにする')}>
         <input type="checkbox" checked={!s.flightStill} disabled={!s.serveFlights && (!s.playZones || s.detail !== 'point' || !s.flight)} onChange={e => onStyle({ ...s, flightStill: !e.target.checked })} /> {t('アニメーション')}</label>
-      <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点の多さをプロジェクトの全試合からコートに色で出す。サーブはスタートゾーンが同じもの、アタックはアタックコードが同じものだけ（書き出しも同じ）')}>
+      <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点の多さをプロジェクトの全試合からコートに色で出す。サーブはスタートゾーンが同じもの、アタックはアタックコードが同じものだけ。コートをクリックすると近い 5 本を出す（書き出しも同じ）')}>
         <input type="checkbox" checked={!!s.heat} onChange={e => onStyle({ ...s, heat: e.target.checked })} /> {t('ヒートマップ')}</label>
       <label className="check" title={t('ヒートマップの濃さ。下げると透けて床や選手が見えます。スライドのヒートマップも同じ（書き出しも同じ）')}>{t('濃さ')}
         <input type="range" min={0.1} max={1} step={0.05} value={s.heatOpacity ?? HEAT_OPACITY} aria-label={t('ヒートマップの濃さ')} onChange={e => onStyle({ ...s, heatOpacity: +e.target.value })} /> {Math.round((s.heatOpacity ?? HEAT_OPACITY) * 100)}%</label>
       <label className="check" title={t('サーブを選ぶと、その選手のサーブの軌道をプロジェクトの全試合からすべて、そのサーブと一緒に飛ばす（書き出しも同じ）')}>
         <input type="checkbox" checked={!!s.serveFlights} onChange={e => onStyle({ ...s, serveFlights: e.target.checked })} /> {t('サーブ軌道')}</label>
+      <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点をプロジェクトの全試合から点で出す。軌道を出さず点だけ見るときは「サーブ軌道」を外す。アタックはアタックコードが同じものだけ。点をクリックするとそのプレーへ飛ぶ（書き出しも同じ）')}>
+        <input type="checkbox" checked={!!s.landings} onChange={e => onStyle({ ...s, landings: e.target.checked })} /> {t('落下点')}</label>
       <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前（第1セット）')}
         <select value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
           <option value="*">{home.name || home.code}</option>

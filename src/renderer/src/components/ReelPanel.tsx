@@ -303,7 +303,7 @@ export function ReelPanel(p: Props) {
           }}>
           <header className="group-head" onContextMenu={e => openMenu(e, spotAt(groupRows(reel, 'none', none.map(c => c.id)), 'none', 0), AT_TOP)}>
             <span className="swatch none">–</span>
-            <span className="none-title">{t('未分類（一覧の順）')}{reel.scope === 'marked' && <span className="excluded-note" title={t('上の「再生・書き出し」を「全部」にすると使われます')}> {t('使わない（「グループのみ」のため）')}</span>}</span>
+            <span className="none-title">{t('未分類')}<span className="excluded-note" title={t('上の「再生・書き出し」で切り替えます')}> {reel.scope === 'marked' ? t('再生・書き出しに入りません') : t('グループのあとに一覧の順で入ります')}</span></span>
             <span className="muted">{none.length}</span>
           </header>
           {rowsOf('none', none.map(c => c.id))}

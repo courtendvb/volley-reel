@@ -44,7 +44,7 @@ describe('team roles', () => {
 
 describe('the same player across matches', () => {
   it('is one person when home in one match and away in another', () => {
-    const r = applyFilter(refs(), { ...EMPTY_FILTER, person: 'TAN-TAR-02' })
+    const r = applyFilter(refs(), { ...EMPTY_FILTER, persons: ['TAN-TAR-02'] })
     expect(r.map(x => x.matchId)).toEqual(['A', 'B'])
   })
 
@@ -179,6 +179,7 @@ describe('saved filters', () => {
   it('reads back what was saved, and anything broken as "any"', () => {
     const f = { ...EMPTY_FILTER, team: 'our' as const, skills: ['A'], effects: ['#'], startZone: 4, phase: 'transition' as const, prevSkills: ['D'], prevSkipSet: true }
     expect(cleanFilter(JSON.parse(JSON.stringify(f)))).toEqual(f)
+    expect(cleanFilter({ person: 'K' })).toEqual({ ...EMPTY_FILTER, persons: ['K'] }) // saved when one could be picked
     expect(cleanFilter({ team: 'x', skills: 'A', sets: [1, 'two', 2.5], endZone: '3', nextSkipSet: 'yes', phase: 'serve' })).toEqual({ ...EMPTY_FILTER, sets: [1] })
     expect(cleanFilter(null)).toEqual(EMPTY_FILTER)
   })
@@ -192,7 +193,7 @@ describe('saved filters', () => {
   it('treats the same chips in another order as the same conditions', () => {
     expect(sameFilter({ ...EMPTY_FILTER, rots: [1, 3] }, { ...EMPTY_FILTER, rots: [3, 1] })).toBe(true)
     expect(sameFilter({ ...EMPTY_FILTER, rots: [1] }, { ...EMPTY_FILTER, oppRots: [1] })).toBe(false)
-    expect(sameFilter({ ...EMPTY_FILTER, person: 'TAN-TAR-02' }, EMPTY_FILTER)).toBe(false)
+    expect(sameFilter({ ...EMPTY_FILTER, persons: ['TAN-TAR-02'] }, EMPTY_FILTER)).toBe(false)
   })
 })
 

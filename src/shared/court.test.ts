@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, flightTiming, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -330,6 +330,12 @@ describe('playerMarks', () => {
     expect(playerMarks(plays[6], fit, style, () => plays)!.heat!.points).toHaveLength(1)
     expect(m.flights).toBeUndefined()
   })
+  it('shows landings as points: all the serves, attacks of the same code', () => {
+    const on = { ...DEFAULT_GRID_STYLE, landings: true }
+    expect(playerMarks(plays[0], fit, on, () => plays)!.landings!.points).toHaveLength(3)
+    expect(playerMarks(plays[4], fit, on, () => plays)!.landings!.points).toHaveLength(2)
+    expect(playerMarks(plays[0], fit, on, () => plays)!.flights).toBeUndefined()
+  })
   it('has nothing on other skills or with both off', () => {
     expect(playerMarks(shot('a', 'R', 0.5, 1), fit, style, () => plays)).toBeNull()
     expect(playerMarks(plays[0], fit, DEFAULT_GRID_STYLE, () => plays)).toBeNull()
@@ -380,5 +386,24 @@ describe('the height line', () => {
     drawFlight(off.ctx, 1280, 720, { corners, nearSet1: '*' }, zones, 1, false)
     expect(on.calls.some(n => n > 0)).toBe(true)
     expect(off.calls.some(n => n > 0)).toBe(false)
+  })
+})
+
+describe('clicks on the court', () => {
+  const corners = [{ x: 0.3, y: 0.3 }, { x: 0.7, y: 0.3 }, { x: 0.05, y: 0.95 }, { x: 0.95, y: 0.95 }] as CourtFit['corners']
+  it('finds the floor under a point of the picture', () => {
+    const q = project(homography(corners), 0.25, 0.8), p = floorAt({ corners, nearSet1: '*' }, q)!
+    expect(p.x).toBeCloseTo(0.25, 6)
+    expect(p.y).toBeCloseTo(0.8, 6)
+  })
+  it('has no floor above the horizon', () => {
+    expect(floorAt({ corners, nearSet1: '*' }, { x: 0.5, y: -2 })).toBeNull()
+  })
+  it('names the zone and stops at the lines', () => {
+    expect(zoneAt({ x: 0.1, y: 0.95 })).not.toBeNull()
+    expect(zoneAt({ x: 1.2, y: 0.5 })).toBeNull()
+  })
+  it('measures nearness in metres: the court is twice as long as wide', () => {
+    expect(nearestShots([{ x: 0.5, y: 0.3 }, { x: 0.7, y: 0.5 }, { x: 0.5, y: 0.52 }], { x: 0.5, y: 0.5 }, 2)).toEqual([2, 1])
   })
 })

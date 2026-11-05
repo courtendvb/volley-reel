@@ -1,12 +1,13 @@
 import { t } from '../../../shared/i18n'
 import { keyName } from '../../../shared/keys'
+import { arrowSec } from '../keys'
 // Every keyboard shortcut in one place (design M8). Keep in sync with the keydown handler in App.tsx.
-const GROUPS: { title: string; keys: [string, string][] }[] = [
+const groups = (): { title: string; keys: [string, string][] }[] => [
   {
     title: t('再生'),
     keys: [
       ['Space', t('再生 / 一時停止（クリップ選択中はループ再生）')],
-      ['← / →', t('0.5 秒戻る / 進む')],
+      ['← / →', t('{0} 秒戻る / 進む', arrowSec())],
       ['Shift + ← / →', t('1 フレーム戻る / 進む')],
       ['↑ / ↓', t('左の一覧の前 / 次のプレーへ')],
       ['M', t('動画を最大化 / 元に戻す')],
@@ -54,7 +55,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
       <div className="modal shortcuts" role="dialog" aria-label={t('ショートカット一覧')} onClick={e => e.stopPropagation()}>
         <h2>{t('ショートカット一覧')}</h2>
         <div className="shortcut-groups">
-          {GROUPS.map(g => (
+          {groups().map(g => (
             <section key={g.title}>
               <h3>{g.title}</h3>
               <table>

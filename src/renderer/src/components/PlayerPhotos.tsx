@@ -35,7 +35,7 @@ export function PlayerPhotos({ dvw, focus, disabled, onPick }: {
   const focused = focus ? teams.find(tm => tm.side === focus.side)?.players.find(x => x.p.jersey === focus.jersey) : undefined
   const found = useMemo(() => q.trim() ? packs.flatMap(pk => pk.players.filter(pp => matchesQuery(pp, q)).map(pp => ({ pack: pk.id, player: pp }))).slice(0, 60) : [], [packs, q])
 
-  if (!packs.length) return null
+  if (!packs.some(p => p.players.length)) return null
   const pick = async (ph: PackPhoto) => { setBusy(true); try { await onPick(ph.pack, ph.player.photo) } finally { setBusy(false) } }
   const off = disabled || busy
   const edit = async (fn: () => Promise<void>) => {

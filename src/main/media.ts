@@ -53,6 +53,23 @@ export function grabFrame(src: string, sec: number, dst: string): Promise<void> 
   return run(ffmpegBin(), ['-hide_banner', '-y', '-ss', String(Math.max(0, sec)), '-i', src, '-frames:v', '1', dst]).then(() => undefined)
 }
 
+// One frame as raw RGB, w × h, for looking at its pixels.
+export function rawFrame(src: string, sec: number, w: number, h: number): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(ffmpegBin(), ['-v', 'error', '-ss', String(Math.max(0, sec)), '-i', src, '-frames:v', '1', '-vf', `scale=${w}:${h}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'], { windowsHide: true })
+    const parts: Buffer[] = []
+    let err = ''
+    p.stdout.on('data', d => parts.push(d))
+    p.stderr.on('data', d => { err += d.toString() })
+    p.on('error', reject)
+    p.on('close', code => {
+      const all = Buffer.concat(parts)
+      if (code === 0 && all.length === w * h * 3) resolve(new Uint8Array(all))
+      else reject(new Error(err.trim() || `ffmpeg: ${all.length} bytes`))
+    })
+  })
+}
+
 function run(bin: string, args: string[], onStdout?: (s: string) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { windowsHide: true })

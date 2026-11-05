@@ -18,7 +18,8 @@ import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './upd
 import { Library } from './library'
 import { Project } from './project'
 import { ffmpegBin, ffprobeBin } from './ffmpegPath'
-import { grabFrame } from './media'
+import { grabFrame, rawFrame } from './media'
+import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
@@ -405,6 +406,14 @@ function registerIpc(): void {
     const id = `${randomUUID()}.png`
     await grabFrame(file, sec, join(dir, id))
     return id
+  })
+
+  // Frames spread over the match, so the median of them has no players on the floor.
+  ipcMain.handle('court:detect', async (_e, matchId: string) => {
+    const m = library?.getMatch(matchId)
+    if (!m?.videoPath || !existsSync(m.videoPath)) throw new Error(t('動画が見つかりません'))
+    const frames = await Promise.all([0.2, 0.35, 0.5, 0.65, 0.8].map(at => rawFrame(m.videoPath, m.durationSec * at, DETECT_W, DETECT_H)))
+    return detectCourt(frames)?.corners ?? null
   })
 
   ipcMain.handle('video:list', () => project?.listVideos() ?? [])

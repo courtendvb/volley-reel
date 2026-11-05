@@ -7,6 +7,7 @@ import { TeamLogos } from './TeamLogos'
 import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
 import { IS_MAC } from '../../../shared/keys'
+import { arrowSec, setArrowSec } from '../keys'
 
 interface Props {
   settings: ProjectSettings
@@ -75,6 +76,16 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
             {LANGS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
           <p className="hint">{t('アプリの表示の言語。このパソコンのすべてのプロジェクトに使います（変えると画面を読み直します。編集中の内容は保存されます）。')}</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">{t('キー操作')}</span>
+          <div className="filter-row">
+            <label className="field-label" htmlFor="arrow-sec">{t('← → の秒数')}</label>
+            <input id="arrow-sec" type="number" min={0.1} max={60} step={0.1} defaultValue={arrowSec()}
+              onChange={e => { const n = +e.target.value; if (n > 0 && n <= 60) setArrowSec(n) }} />
+          </div>
+          <p className="hint">{t('← → で動画が動く秒数。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。Shift + ← → は 1 フレームのままです。')}</p>
         </section>
 
         <section>

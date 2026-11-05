@@ -7,7 +7,6 @@ import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import { mergeScoped, scopeOf, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { overlaySettings, type OverlaySettings } from '../../shared/overlay'
 import { newVideo, type PlanItem, type Video } from '../../shared/video'
-import type { Scope } from './components/FilterPanel'
 import type { SlideHow } from './components/ReelPanel'
 import type { Tool } from './components/AnnotationLayer'
 import { assetStats, forgetLogo } from './assets'
@@ -15,7 +14,7 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
-import { courtQuad, flightTiming, nearSide, playZones } from '../../shared/court'
+import { DEFAULT_GRID_STYLE, courtQuad, flightTiming, homography, nearSide, playZones, playerMarks, project } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
 import type { AppLatest } from './app/appState'
@@ -24,7 +23,7 @@ import { clipPlayedSec } from '../../shared/timing'
 export interface SmokeOpts {
   play: number
   filter: Partial<PlayFilter> | null
-  scope: Scope
+  scope: 'match' | 'all'
   settings?: boolean
   keys?: string[]
   trim?: boolean
@@ -86,7 +85,7 @@ export interface SmokeHost {
   setReelId: Dispatch<SetStateAction<string | null>>
   setReels: Dispatch<SetStateAction<Reel[]>>
   setScan: Dispatch<SetStateAction<ScanResult | null>>
-  setScope: Dispatch<SetStateAction<Scope>>
+  setMatchIds: Dispatch<SetStateAction<string[]>>
   setSelectedAnn: Dispatch<SetStateAction<string | null>>
   setSettingsOpen: Dispatch<SetStateAction<boolean>>
   setVideoId: Dispatch<SetStateAction<string | null>>
@@ -123,7 +122,7 @@ function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() 
 // Installs window.__smoke, which the main process calls with the run's options (VR_SMOKE_*).
 // Loaded with a dynamic import only on a self-check run, so normal use never runs or parses it.
 export function installSmoke(h: SmokeHost): void {
-  const { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
+  const { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
   // A failure's stack is logged here: only its message reaches the main process.
   window.__smoke = (opts: SmokeOpts) => run(opts).catch(e => { console.error(`[smoke stack] ${(e as Error).stack}`); throw e })
   const run = async (opts: SmokeOpts) => {
@@ -132,7 +131,7 @@ export function installSmoke(h: SmokeHost): void {
     const p = await api.getProject()
     if (!p?.matches.length) throw new Error('no match in project')
     await loadProject(p)
-    setScope(opts.scope)
+    setMatchIds(opts.scope === 'match' ? [p.matches[0].id] : [])
     const want = { ...EMPTY_FILTER, ...(opts.filter ?? {}) }
     setFilter(want)
     const res = await waitFor(() => {
@@ -1201,6 +1200,42 @@ export function installSmoke(h: SmokeHost): void {
     await playback.seekAndWait(pf.startSec + pf.sec * 0.5); await sleep(400)
     await api.smokeShot!('player-serve-mid.png')
     await show('player-attack', pick('A'))
+    await tick('落下点')
+    await api.smokeShot!('player-landings.png')
+    // A landing clicked goes to that shot; the heatmap clicked offers the nearest five.
+    const canvas = document.querySelector<HTMLCanvasElement>('.court-layer')!, box = canvas.getBoundingClientRect()
+    const clickAt = async (p: { x: number; y: number }) => { canvas.parentElement!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: box.left + p.x * box.width, clientY: box.top + p.y * box.height })); await sleep(600) }
+    const zoned = latest.current.selected
+    await clickAt({ x: 0.5, y: 0.75 })
+    await api.smokeShot!('shot-pick.png')
+    const pickRows = [...document.querySelectorAll<HTMLButtonElement>('.shot-pick button')].map(b => b.textContent)
+    document.querySelectorAll<HTMLButtonElement>('.shot-pick button:not(.link)')[1]?.click(); await sleep(800)
+    console.log(`[smoke-shot] ${JSON.stringify({ pickRows, before: zoned, after: latest.current.selected })}`)
+    const chosen = latest.current.selected!, cur = latest.current.matches[chosen.matchId], play = latest.current.dvwsRef![chosen.matchId].plays[chosen.playId]
+    const marks = playerMarks(play, cur.court!, { ...DEFAULT_GRID_STYLE, landings: true }, () => latest.current.dvwsRef![chosen.matchId].plays)!.landings!
+    const k = marks.plays.findIndex(p => p.id !== play.id), to = project(homography(cur.court!.corners), marks.points[k].x, marks.points[k].y)
+    await clickAt(to); await sleep(400)
+    console.log(`[smoke-landing] ${JSON.stringify({ wanted: marks.plays[k].id, got: latest.current.selected?.playId })}`)
+    const found = await api.detectCourt(m.id)
+    console.log(`[smoke-court] ${JSON.stringify(found)}`)
+    // Two players ticked in the list's picker, and how far the arrow keys move.
+    const picker = [...document.querySelectorAll<HTMLButtonElement>('.filters .check-picker')][0]
+    const everyone = latest.current.results.length
+    picker.click(); await sleep(200)
+    const boxes = [...document.querySelectorAll<HTMLInputElement>('.check-picker-list input')]
+    boxes[1].click(); await sleep(200)
+    const onePlayer = latest.current.results.length
+    document.querySelectorAll<HTMLInputElement>('.check-picker-list input')[2].click(); await sleep(200)
+    const twoPlayers = latest.current.results.length
+    await api.smokeShot!('player-picker.png')
+    document.querySelector<HTMLElement>('.menu-backdrop')!.click(); await sleep(200)
+    console.log(`[smoke-picker] ${JSON.stringify({ everyone, choices: boxes.length - 1, onePlayer, twoPlayers, button: picker.textContent })}`)
+    setFilter({ ...EMPTY_FILTER }); await sleep(200)
+    localStorage.setItem('vr.arrowSec', '2')
+    const t0 = playback.current.time
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await sleep(400)
+    console.log(`[smoke-arrow] ${JSON.stringify({ moved: +(playback.current.time - t0).toFixed(2) })}`)
+    localStorage.removeItem('vr.arrowSec')
     // The heatmap's strength and the height line, switched in the court tab.
     const heatRange = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('ヒートマップの濃さ') + '"]'), 5000, 'heat strength')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(heatRange, '0.3')
@@ -1252,48 +1287,6 @@ export function installSmoke(h: SmokeHost): void {
       const skillLine = { speedLine, skillSec, before: layer(firstJobClip), after: layer(movedClip) }
       exported = { skillLine, state: latest.current.exportState?.status, flight: fl, firstClip: clip?.kind === 'clip' ? { in: clip.in, out: clip.out, layers: clip.layers.map(l => [l.from ?? null, l.to ?? null]) } : null }
     }
-    // Every serve of the search at once: the button beside 結果をシーンに追加 makes the slide on the
-    // frame on screen; seen in the editor, then flying in a through-play, then exported.
-    let serveFlights: unknown = null
-    if (exportTo) {
-      setFilter({ ...EMPTY_FILTER, skills: ['S'] })
-      await waitFor(() => (latest.current.results.length && latest.current.results.every(r => r.play.skill === 'S') ? true : null), 10000, 'serves only')
-      const serves = latest.current.results.length
-      await show('serve-frame', latest.current.results[0])
-      const btn = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('サーブ軌道')) ?? null, 5000, 'serve flights button')
-      const before = latest.current.reel?.slides?.length ?? 0
-      btn.click()
-      await waitFor(() => ((latest.current.reel?.slides?.length ?? 0) > before ? true : null), 15000, 'serve flights slide')
-      await sleep(800)
-      await api.smokeShot!('serve-flights-edit.png')
-      const slide = latest.current.reel!.slides!.find(s => s.flights)!
-      const plan = currentPlan('scene').filter(p => p.kind === 'card' && p.card.slide?.id === slide.id)
-      const out = exportTo.replace(/\.mp4$/i, '-serves.mp4')
-      const job = await startExport(out, { plan, name: 'serve flights' })
-      if (!job) throw new Error('slide export did not start')
-      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 120000, 'slide export done')
-      // In a through-play the curves grow, then stay: the slide is the scene's first item.
-      const finish = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('完了'))
-      finish?.click(); await sleep(300)
-      playThrough('scene', 0)
-      await waitFor(() => (playback.current.card?.slide?.id === slide.id ? true : null), 10000, 'slide playing')
-      await sleep(1100); await api.smokeShot!('serve-flights-fly.png')
-      await sleep(3000); await api.smokeShot!('serve-flights-whole.png')
-      // The heatmap of the same serves: on the same kind of slide, then exported.
-      playback.stopSequence(); await sleep(300)
-      const heatBtn = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('ヒートマップ'))!
-      heatBtn.click()
-      await waitFor(() => (latest.current.reel?.slides?.some(s => s.heat) ? true : null), 15000, 'heat slide')
-      await sleep(800); await api.smokeShot!('heat-edit.png')
-      const heat = latest.current.reel!.slides!.find(s => s.heat)!
-      const heatJob = await startExport(exportTo.replace(/\.mp4$/i, '-heat.mp4'), { plan: currentPlan('scene').filter(p => p.kind === 'card' && p.card.slide?.id === heat.id), name: 'heat' })
-      if (!heatJob) throw new Error('heat export did not start')
-      await sleep(500)
-      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 120000, 'heat export done')
-      const heatState = { state: latest.current.exportState?.status, points: heat.heat!.points.length }
-      const item = job.items[0]
-      serveFlights = { heatState, serves, paths: slide.flights!.paths.length, sec: slide.durationSec, state: latest.current.exportState?.status, message: latest.current.exportState?.message ?? null, layers: item?.kind === 'card' ? item.layers?.length ?? 0 : null, out }
-    }
     // The right column's tabs, each on its own.
     for (const [i, name] of ['scene', 'video', 'export'].entries()) {
       document.querySelectorAll<HTMLButtonElement>('.right-tabs button')[i].click(); await sleep(300)
@@ -1307,7 +1300,7 @@ export function installSmoke(h: SmokeHost): void {
     document.querySelector<HTMLButtonElement>('.video-head button')?.click()
     playback.stopSequence()
     shots.playedFromHead = playedFromHead
-    return { courtPoints: { counts, shots, exported, serveFlights } }
+    return { courtPoints: { counts, shots, exported } }
   }
 
   // 「このカードだけ」: marker 1's card gets its own title place and size; marker 2's and the shared

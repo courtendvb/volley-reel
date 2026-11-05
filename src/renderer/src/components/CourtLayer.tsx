@@ -11,6 +11,7 @@ interface Props {
   flight: Flight | null // when the selected play's ball flies (the moving curve)
   fitting: boolean // the corners can be dragged; clicks don't reach the layers underneath
   onCorners: (corners: CourtFit['corners']) => void // when a drag ends
+  onPoint?: (p: Pt) => boolean // a click on the picture (0..1); true when it was for the court
 }
 
 const HANDLE = 10
@@ -18,7 +19,7 @@ const HIT = 18
 
 // The court grid (CourtEnd Vision) and the selected play's zones. Under the scoreboard and the
 // annotations; while fitting it sits on top and the four corners are dragged onto the court.
-export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners }: Props) {
+export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners, onPoint }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [drag, setDrag] = useState<{ i: number; corners: CourtFit['corners'] } | null>(null)
   const corners = drag?.corners ?? fit.corners
@@ -45,6 +46,21 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
       ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill()
     }
   }, [size.w, size.h, fit, corners, style, zones, fitting, flies, progress])
+
+  // Clicks are looked at before the layers above see them, and pass on when they aren't for the court.
+  const point = useRef(onPoint)
+  point.current = onPoint
+  useEffect(() => {
+    const box = canvas.current?.parentElement
+    if (!box) return
+    const click = (e: MouseEvent) => {
+      if (!point.current || (e.target as Element).closest('.shot-pick')) return
+      const r = canvas.current!.getBoundingClientRect()
+      if (point.current({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })) { e.stopPropagation(); e.preventDefault() }
+    }
+    box.addEventListener('click', click, true)
+    return () => box.removeEventListener('click', click, true)
+  }, [])
 
   const pointAt = (e: React.PointerEvent): Pt => {
     const r = canvas.current!.getBoundingClientRect()

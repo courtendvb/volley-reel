@@ -25,7 +25,7 @@ export interface PlayRef {
 export interface PlayFilter {
   team: 'all' | TeamRole // the project's target team or its opponents, whichever side they played
   dir: 'all' | PlayDir // up the screen or down it; sets, and plays whose way isn't known, are left out
-  person: string | null
+  persons: string[] // empty = any
   skills: string[] // empty = any
   effects: string[]
   sets: number[]
@@ -49,7 +49,7 @@ export interface PlayFilter {
 }
 
 export const EMPTY_FILTER: PlayFilter = {
-  team: 'all', dir: 'all', person: null, skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
+  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
   phase: 'all', recEffects: [], prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
   nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
@@ -79,6 +79,7 @@ export function cleanFilter(x: unknown): PlayFilter {
       : typeof empty === 'boolean' ? v === true
       : ok(k, v) ? v : null
   }
+  if (typeof o.person === 'string' && o.person) out.persons = [o.person] // saved when one player could be picked
   return out as unknown as PlayFilter
 }
 
@@ -161,7 +162,7 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     const p = r.play
     if (f.team !== 'all' && r.teamRole !== null && r.teamRole !== f.team) return false
     if (f.dir && f.dir !== 'all' && r.dir !== f.dir) return false
-    if (f.person && r.personKey !== f.person) return false
+    if (f.persons?.length && !f.persons.includes(r.personKey)) return false
     if (f.skills.length && !f.skills.includes(p.skill)) return false
     if (f.effects.length && !f.effects.includes(p.effect)) return false
     if (f.sets.length && !f.sets.includes(p.setNum)) return false

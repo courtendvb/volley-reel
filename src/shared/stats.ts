@@ -44,9 +44,9 @@ export function playStats(refs: PlayRef[]): StatLine[] {
 
 // The search in words, for the card's title. Evaluations are left out: the numbers are about all of them.
 export function filterTitle(f: PlayFilter, people: Person[], targetCode: string): string {
-  const person = f.person ? people.find(p => p.key === f.person) : null
+  const picked = people.filter(p => f.persons?.includes(p.key))
   const parts = [
-    person ? `#${person.jerseys[0]} ${person.name}` : f.team === 'our' ? targetCode : f.team === 'opp' ? t('相手') : '',
+    picked.length ? picked.map(p => `#${p.jerseys[0]} ${p.name}`).join(t('、')) : f.team === 'our' ? targetCode : f.team === 'opp' ? t('相手') : '',
     f.sets.length ? t('第 {0} セット', [...f.sets].sort().join('・')) : '',
     f.rots.length ? t('ローテ {0}', [...f.rots].sort().join('・')) : '',
     f.oppRots?.length ? t('相手ローテ {0}', [...f.oppRots].sort().join('・')) : '',

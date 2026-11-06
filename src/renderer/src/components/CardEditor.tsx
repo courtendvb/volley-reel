@@ -89,7 +89,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
 
 const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' => (card.video ? 'videoLayout' : card.marker === null ? 'sceneLayout' : 'markerLayout')
 const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
-const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('グループ'))
+const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('マーカー'))
 
 // Below the video while a card is being edited: whether it is shown, its text (the name unless set;
 // a line break makes a second line), the background of every card, what the pointer edits (the

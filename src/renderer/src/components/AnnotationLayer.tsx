@@ -12,7 +12,7 @@ import type { AnnScope } from '../../../shared/annotationScope'
 import { t } from '../../../shared/i18n'
 
 const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AED', scene: '#D97706', video: '#059669' }
-const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('グループ全体'), scene: t('シーン全体'), video: t('動画全体') }
+const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
 
 // A triangle is drawn like a box and stored as a polygon.
 export type Tool = 'select' | AnnotationKind | 'triangle'

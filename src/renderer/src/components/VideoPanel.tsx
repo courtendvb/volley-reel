@@ -67,7 +67,7 @@ export function VideoPanel(p: Props) {
       </section>
     )
   }
-  if (!v) return <section className="video-panel"><p className="muted pad-x">{t('動画はシーンを並べたものです。シーン（グループで分けたクリップの集まり）を作って、動画に入れます。')}</p></section>
+  if (!v) return <section className="video-panel"><p className="muted pad-x">{t('動画はシーンを並べたものです。シーン（マーカーで分けたクリップの集まり）を作って、動画に入れます。')}</p></section>
 
   return (
     <section className="video-panel">

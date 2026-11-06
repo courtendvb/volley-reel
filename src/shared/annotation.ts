@@ -29,7 +29,7 @@ interface Base {
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
 }
 
-export interface Fillable {
+interface Fillable {
   fill?: string | null // none when missing or null
   fillOpacity?: number // 0..1; default 1
 }
@@ -63,11 +63,9 @@ export interface Crop { x: number; y: number; w: number; h: number }
 export type PointsAnnotation = Extract<Annotation, { points: [number, number][] }>
 export const isPoints = (a: Annotation): a is PointsAnnotation => a.kind === 'freehand' || a.kind === 'polyline' || a.kind === 'polygon'
 
-export const REF_HEIGHT = 720
-export const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
+const REF_HEIGHT = 720
+const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
 export const COLORS = ['#EF4444', '#FFFFFF', '#3B82F6', '#22C55E', '#0F172A']
-export const WIDTHS = [3, 6, 10]
-export const TEXT_SIZES = [24, 36, 52]
 export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, stroke: null, strokeWidth: 2, padding: 8 }
 
 export interface Rect { x: number; y: number; w: number; h: number } // normalized
@@ -338,7 +336,7 @@ export function affine(s: [P, P, P], d: [P, P, P]): [number, number, number, num
 }
 
 // Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
-export const textLines = (t: string): string[] => t.split('\n')
+const textLines = (t: string): string[] => t.split('\n')
 
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
   const px = a.size * s, lh = px * 1.2

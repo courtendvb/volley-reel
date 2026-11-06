@@ -20,11 +20,11 @@ export const DEFAULT_CORNERS: CourtFit['corners'] = [
 const COURT_W = 9 // metres
 const COURT_L = 18
 export const COLS = 3
-export const ROWS = 6
+const ROWS = 6
 const HALF = ROWS / 2
 
 // [row][col]: row 0 is the far end line, row 5 the near one; col 0 is the camera's left.
-export const ZONE_NUMBERS: number[][] = [
+const ZONE_NUMBERS: number[][] = [
   [1, 6, 5],
   [9, 8, 7],
   [2, 3, 4],
@@ -41,17 +41,17 @@ const SUB_FAR: Record<string, [number, number]> = { A: [0.25, 0.25], B: [0.25, 0
 // Serve start zones: behind the end line in five, 1-9-6-7-5 from the zone 1 side. In order from the
 // camera's left: the far side has zone 1 on the left, the near side on the right. The strip is one
 // zone row deep.
-export const SERVE_COLS = 5
+const SERVE_COLS = 5
 const SERVE_FAR = [1, 9, 6, 7, 5]
 const SERVE_NEAR = [5, 7, 6, 9, 1]
 
-export function subCenter(c: Cell, sub: string): [number, number] | null {
+function subCenter(c: Cell, sub: string): [number, number] | null {
   return (c.row < HALF ? SUB_FAR : SUB_NEAR)[sub] ?? null
 }
 
 // ---- geometry -------------------------------------------------------------------------------
 
-export interface Homography { a: number; b: number; c: number; d: number; e: number; f: number; g: number; h: number }
+interface Homography { a: number; b: number; c: number; d: number; e: number; f: number; g: number; h: number }
 
 // The unit square (u across, v from far to near) onto the four corners.
 export function homography(corners: readonly [Pt, Pt, Pt, Pt]): Homography {
@@ -146,7 +146,7 @@ export function nearSide(fit: CourtFit, play: Pick<Play, 'setNum' | 'score'>): S
 
 const other = (s: Side): Side => (s === '*' ? 'a' : '*')
 
-export interface Cell { row: number; col: number }
+interface Cell { row: number; col: number }
 
 export function zoneCell(zone: number, near: boolean): Cell | null {
   const rows = near ? [3, 4, 5] : [0, 1, 2]
@@ -158,7 +158,7 @@ export function zoneCell(zone: number, near: boolean): Cell | null {
 }
 
 // sub: A–D when known. behind: a serve zone behind the end line (row -1 far, ROWS near; col 0–4 of SERVE_COLS).
-export interface Spot { cell: Cell; sub: string | null; behind?: true }
+interface Spot { cell: Cell; sub: string | null; behind?: true }
 
 export function serveSpot(zone: number, near: boolean): Spot | null {
   const col = (near ? SERVE_NEAR : SERVE_FAR).indexOf(zone)
@@ -178,12 +178,12 @@ export interface PlayZones {
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
 }
-export interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
-export interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks }
+interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
+interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
-export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
+interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -213,7 +213,7 @@ export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
 export const ATTACK_Z = 3.15
 export const SET_Z = 2.4
-export function strikeHeight(code: string): number {
+function strikeHeight(code: string): number {
   const skill = code.charAt(3)
   return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : skill === 'E' ? SET_Z : 0
 }
@@ -372,7 +372,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
 }
 
 // Where shots came down, as points on the floor.
-export function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat): void {
+function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat): void {
   const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
   if (!camera) return
   const r = Math.max(2.5, w / 300)
@@ -447,7 +447,7 @@ export function heatColor(v: number): [number, number, number] {
   return [ca[0] + (cb[0] - ca[0]) * s, ca[1] + (cb[1] - ca[1]) * s, ca[2] + (cb[2] - ca[2]) * s]
 }
 
-export interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
+interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
 export function heatGrid(points: Pt[]): HeatGrid {
   const cols = Math.round((COURT_W_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1, rows = Math.round((COURT_L_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1
   const data = new Float32Array(cols * rows), reach = Math.ceil((3 * HEAT_SIGMA_M) / HEAT_CELL_M)

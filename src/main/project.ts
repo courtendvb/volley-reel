@@ -163,11 +163,6 @@ export class Project {
     await this.save()
   }
 
-  async rename(name: string): Promise<void> {
-    this.file.name = name.trim() || this.file.name
-    await this.save()
-  }
-
   async saveSettings(s: ProjectSettings): Promise<void> {
     this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes).slice(0, 1)
     if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }

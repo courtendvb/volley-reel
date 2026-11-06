@@ -93,7 +93,7 @@ export function MissingNote({ parts, busy, onRelocate }: { parts: MissingPart[];
 }
 
 // Every word must appear in the date, a team code or a team name (case-insensitive).
-export function filterMatches(ms: Match[], q: string): Match[] {
+function filterMatches(ms: Match[], q: string): Match[] {
   const words = q.toUpperCase().split(/\s+/).filter(Boolean)
   if (!words.length) return ms
   return ms.filter(m => {

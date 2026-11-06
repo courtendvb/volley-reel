@@ -8,12 +8,12 @@ import type { Video } from '../../../shared/video'
 const UNDO_MERGE_MS = 600
 const UNDO_LIMIT = 100
 
-export type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video } | { kind: 'settings'; value: ProjectSettings }
+type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video } | { kind: 'settings'; value: ProjectSettings }
 type Step = { key: string; prev: Snapshot; at: number }
 
 // What undo reads and puts back. now: the current version of a step's thing (undefined: deleted
 // since, so that step is skipped); restore: puts a version back.
-export interface UndoTarget {
+interface UndoTarget {
   now: (s: Snapshot) => Snapshot['value'] | undefined
   restore: (s: Snapshot) => void
 }

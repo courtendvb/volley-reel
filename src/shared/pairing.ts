@@ -10,7 +10,7 @@ export interface DvwInfo {
   away: string
 }
 
-export interface Pair {
+interface Pair {
   dvw: DvwInfo
   video: string | null
   score: number // 0 = no video found; higher = surer
@@ -44,7 +44,7 @@ export function matchDate(headerDate: string | null, dvwPath: string): string | 
   return fromName && fromName === swapDayMonth(headerDate) ? fromName : headerDate
 }
 
-export function swapDayMonth(d: string): string | null {
+function swapDayMonth(d: string): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
   return m && +m[3] <= 12 ? `${m[1]}-${m[3]}-${m[2]}` : null
 }

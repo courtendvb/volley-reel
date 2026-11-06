@@ -27,7 +27,7 @@ interface Deps {
 }
 
 // 720p at the source aspect, at the source frame rate when every match shares one (else 30).
-export function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: number; height: number; fpsStr: string } {
+function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: number; height: number; fpsStr: string } {
   const ms = [...new Set(clips.map(c => c.matchId))].map(id => matches[id]).filter(Boolean)
   const first = ms[0]
   const aspect = first?.width && first.height ? first.width / first.height : 16 / 9

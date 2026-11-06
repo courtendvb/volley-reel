@@ -8,7 +8,7 @@ import type { Video } from '../../../shared/video'
 import type { PlayKey } from '../components/PlayList'
 import type { ClipInfo } from '../components/ReelPanel'
 
-export type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData }
+type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData }
 
 export interface AppLatest {
   results: PlayRef[]; filter: PlayFilter; matches: Record<string, Match>; reels: Reel[]; reelId: string | null; reel: Reel | null

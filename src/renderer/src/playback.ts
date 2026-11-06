@@ -4,7 +4,7 @@
 import type { Card } from '../../shared/video'
 import { rateAt, type ClipTiming } from '../../shared/timing'
 
-export interface SeqItem {
+interface SeqItem {
   key: string // match id
   in: number
   out: number
@@ -12,7 +12,7 @@ export interface SeqItem {
 }
 
 // A title card in a through-play: shown over the paused video for durationSec, then the next item.
-export interface CardItem {
+interface CardItem {
   card: Card // marker null = scene card (or the video's opening card)
   durationSec: number
 }

@@ -30,7 +30,7 @@ interface Props {
   onFrameSlide: () => void // the picture on screen as a slide right after this clip
 }
 
-export interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
+interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
 
 const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default range
 

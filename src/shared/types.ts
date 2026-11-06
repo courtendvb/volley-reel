@@ -124,7 +124,7 @@ export interface LibraryInfo {
   missing: MissingFiles
 }
 
-export interface ScanPair {
+interface ScanPair {
   dvwPath: string
   date: string | null
   home: string
@@ -259,8 +259,8 @@ export interface Api {
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 
-export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[]; locked?: boolean; category?: string } // locked: can't be removed
-export interface PaletteCategory { id: string; name: string }
+interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[]; locked?: boolean; category?: string } // locked: can't be removed
+interface PaletteCategory { id: string; name: string }
 export interface Palette { colors: string[]; items: PaletteItem[]; categories?: PaletteCategory[] } // categories: the tabs, in order
 
 // A picture is copied into assets/ right away; a PDF's pages are rendered by the renderer.
@@ -294,7 +294,7 @@ export interface ExportJob {
 }
 
 // A newer version for an installed copy: found, downloading, then ready to restart into.
-export type CourtCorners = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
+type CourtCorners = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
 
 export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
   | { type: 'manual'; version: string } // a newer version to get from the download page (Mac)

@@ -14,7 +14,7 @@ import { probe } from './media'
 import { t } from '../shared/i18n'
 
 
-export class ExportCancelled extends Error {
+class ExportCancelled extends Error {
   constructor() { super('cancelled') }
 }
 
@@ -123,7 +123,7 @@ function encoderArgs(fpsStr: string): string[] {
 }
 
 // A card is its picture held for its length, with any layers over it in their windows.
-export async function cardArgs(it: Extract<ExportItem, { kind: 'card' }>, png: string, job: ExportJob, dir: string, i: number, enc: string[], seg: string): Promise<string[]> {
+async function cardArgs(it: Extract<ExportItem, { kind: 'card' }>, png: string, job: ExportJob, dir: string, i: number, enc: string[], seg: string): Promise<string[]> {
   const args = ['-loop', '1', '-framerate', job.fpsStr, '-t', it.durationSec.toFixed(3), '-i', png]
   const base = `scale=${job.width}:${job.height},format=yuv420p,setsar=1`
   const f = fades(job.fadeSec, it.durationSec)
@@ -175,7 +175,7 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
 // The clip's slow stretches and holds as a filter chain on the trimmed clip (times from 0 at IN), or
 // null when it has none: each piece cut from a copy of the clip, slowed by stretching its timestamps
 // or held by cloning one frame, then joined and put back on the frame rate.
-export function retime(it: Extract<ExportItem, { kind: 'clip' }>, fpsStr: string): string | null {
+function retime(it: Extract<ExportItem, { kind: 'clip' }>, fpsStr: string): string | null {
   const ps = pieces(it.in, it.out, it.timing)
   if (ps.length < 2 && !(ps[0]?.kind === 'play' && ps[0].rate !== 1)) return null
   const [n, d] = fpsStr.split('/').map(Number)

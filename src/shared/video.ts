@@ -92,7 +92,7 @@ function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matche
   return out
 }
 
-export function slideItem(s: Slide): PlanItem {
+function slideItem(s: Slide): PlanItem {
   return { kind: 'card', card: slideCard(s), durationSec: s.durationSec }
 }
 
@@ -153,7 +153,7 @@ function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Re
 // which titles are under that (lengths need the video's length, totalSec).
 // After a blank line, each chapter's title and a link to it, with the video's ID left as 〇×11:
 // once the video is up, replacing 〇〇〇〇〇〇〇〇〇〇〇 with its ID makes them work.
-export const VIDEO_ID_MARK = '〇'.repeat(11) // a YouTube video ID is 11 characters
+const VIDEO_ID_MARK = '〇'.repeat(11) // a YouTube video ID is 11 characters
 
 export function chapterText(chapters: { startSec: number; title: string }[], totalSec: number): { text: string; short: string[] } {
   const hours = totalSec >= 3600
@@ -196,14 +196,14 @@ export function cardMatch(scene: Reel, clipIds: string[], matches: Record<string
 }
 
 // The other team's code, or null when neither or both teams are ours.
-export function cardOpponent(m: Match, codes: string[]): string | null {
+function cardOpponent(m: Match, codes: string[]): string | null {
   const side = ourSide(m.teams, codes)
   if (side === null || codes.includes(m.teams[0].code) && codes.includes(m.teams[1].code)) return null
   return side === '*' ? m.teams[1].code : m.teams[0].code
 }
 
 // Title card match line: "VS SMT · 2026-10-11".
-export function cardMatchLabel(m: Match, codes: string[]): string {
+function cardMatchLabel(m: Match, codes: string[]): string {
   const side = ourSide(m.teams, codes)
   const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
   return `VS ${opp}${m.date ? ` · ${m.date}` : ''}`

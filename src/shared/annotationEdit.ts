@@ -3,15 +3,15 @@
 // to insert one, delete one. Pure functions on normalized coordinates, so they are unit-tested.
 import { isPoints, normalizeBox, withQuad, type Annotation, type PointsAnnotation, type Quad } from './annotation'
 
-export type HandleKind = 'end' | 'resize' | 'vertex' | 'mid'
+type HandleKind = 'end' | 'resize' | 'vertex' | 'mid'
 export interface Handle { id: string; kind: HandleKind; x: number; y: number }
 
-export const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
+const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
 export type BoxHandle = (typeof BOX_HANDLES)[number]
 
 // Freehand strokes can have hundreds of points; past this many, simplify before editing points.
 export const MAX_EDIT_POINTS = 80
-export const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
+const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
 
 // Point shapes show the 8 box handles (resize the whole shape) unless points are being edited,
 // as in Office's "Edit Points" mode.

@@ -1,4 +1,4 @@
-# volley-reel
+# SyncScout Video Editor
 
 DataVolley のスカウトファイル（.dvw）と試合動画を同期させ、
 選手に見せるハイライト動画（MP4）を作るローカルアプリ（Windows、Mac は準備中 / オフライン / Electron）。
@@ -185,7 +185,7 @@ node scripts/svleague-roster.mjs --out <フォルダ>/players.csv
 npm run dist
 ```
 
-- `release/volley-reel-setup-<版>.exe`（Windows x64、約 180 MB）ができる。ユーザーごとのインストールで管理者権限は不要。インストール先は選べ、デスクトップとスタートメニューにショートカットを作る
+- `release/syncscout-video-editor-setup-<版>.exe`（Windows x64、約 180 MB）ができる。ユーザーごとのインストールで管理者権限は不要。インストール先は選べ、デスクトップとスタートメニューにショートカットを作る
 - 先に `vendor/ffmpeg/bin` に ffmpeg.exe と ffprobe.exe を置いておく（「準備」参照）。インストーラーには `resources/ffmpeg` として入る（ffmpeg は GPL のビルド）
 - アイコンは `build/icon.png`。ffmpeg の LICENSE（GPL v3）と README は `resources/ffmpeg` に同梱する。GPL のため、配布するときは ffmpeg のソースの入手先（ビルド元の配布ページ）も案内すること
 - `npm run dist` は手元に作るだけ（公開しない）
@@ -203,6 +203,7 @@ npm run dist:mac    # Mac 上で release/ に .dmg を作る（Apple シリコ�
 - Apple の署名はしていない。初回はダブルクリックで開けないので、一度開こうとしてから「システム設定」→「プライバシーとセキュリティ」→「このまま開く」で進める
 - 署名がないと Mac では自動で入れ替えられないので、新しい版は上部に知らせるだけで、ダウンロードページから手で入れ替える。知らせるには、そのリリースに `latest-mac.yml` と Mac の .zip / .dmg を足す（`npm run release` は Windows 版だけを出す）
 - 実機で未確認。確かめること: 起動、動画の再生、書き出し、スコアボードなどの文字の見た目（Bahnschrift がないので Windows 版と書体が変わる）、⌘Z / ⌘C / ⌘V
+- 古い版の `volley-reel.app` は名前が変わったので上書きされない。新しい版を入れたら手で消す。設定は引き継ぐ
 - Windows で作った倉庫やプロジェクトを持ってくると、動画と DVW の場所は「場所を指定…」で指し直す
 - `build/icon-mac.png` は 256px の `build/icon.png` を拡大したもの（Mac は 512px 以上が必要）。元の絵があれば差し替える
 
@@ -212,11 +213,13 @@ npm run dist:mac    # Mac 上で release/ に .dmg を作る（Apple シリコ�
 npm run release
 ```
 
-- インストールされたアプリ（0.2.0 から）は、起動すると公開リポジトリ [courtendvb/volley-reel-releases](https://github.com/courtendvb/volley-reel-releases) のリリースに新しい版がないか調べ、あれば裏でダウンロードする。終わると上部に「新しいバージョン … の準備ができました」と出て、「再起動して更新」で保存してから新しい版で起動し直す。「あとで」でも、アプリを終了したときに更新される。データ（倉庫・プロジェクト・設定）はそのまま
+- インストールされたアプリ（0.2.0 から）は、起動すると公開リポジトリ [courtendvb/syncscout-video-editor-releases](https://github.com/courtendvb/syncscout-video-editor-releases) のリリースに新しい版がないか調べ、あれば裏でダウンロードする。終わると上部に「新しいバージョン … の準備ができました」と出て、「再起動して更新」で保存してから新しい版で起動し直す。「あとで」でも、アプリを終了したときに更新される。データ（倉庫・プロジェクト・設定）はそのまま
 - 出すとき: `package.json` の `version` を上げてから `npm run release`。インストーラーを作り、そのリリースとして `latest.yml` と一緒に公開する（アプリは自分より高い版だけを取る）。リリースはまず下書きで作り、ファイルがすべて上がってから公開する（アプリは下書きを見ないので、途中の状態を取らない）。アップロードには GitHub CLI のログイン（`gh auth token`）を使う。ソースは非公開のまま、公開されるのはインストーラーだけ
-- 公開に成功すると、手元の `release/` のインストーラーは新しい 5 バージョン分だけ残して消す（1 本 180 MB あるため。公開リポジトリのリリースは消さない）。消すのは `volley-reel-setup-*.exe` と `.blockmap` だけで、`release/packs/` などはそのまま
+- 公開に成功すると、手元の `release/` のインストーラーは新しい 5 バージョン分だけ残して消す（1 本 180 MB あるため。公開リポジトリのリリースは消さない）。消すのは `syncscout-video-editor-setup-*.exe`、`volley-reel-setup-*.exe`（0.2.25 までの名前）と `.blockmap` だけで、`release/packs/` などはそのまま
 - 0.1.0 には自動更新がないので、最初の 1 回だけ 0.2.0 以降のインストーラーを手で入れてもらう
 - 更新のインストーラーは管理者の許可なしで動く（ユーザーごとのインストール）。Windows やセキュリティソフトが裏での起動を止めたときは、管理者として起動し直さず、手で入れるときと同じようにインストーラーを開く。それもできないときは上部に「更新を入れられませんでした」と出て、ダウンロードページと記録を開ける
+- アプリ名は 0.2.25 まで volley-reel だった。更新を途切れさせず設定（倉庫の場所）を引き継ぐため、人の目に触れる名前だけを変え、次は変えていない（`scripts/app-identity.test.mjs` が確かめる）: `appId`（別のアプリとして二重に入る）、exe の名前 `volley-reel.exe` とインストール先の `volley-reel` フォルダ（ショートカットとタスクバーのピン留めを引き継ぐ）、`package.json` の `name` と `%APPDATA%\volley-reel`（設定の保存先）
+- 公開リポジトリの旧名は `volley-reel-releases`。0.2.25 までのアプリは旧名を見に行き、GitHub の転送で新しい名前に届く。旧名のリポジトリを作り直すと転送が止まって更新が途切れるので、作らない
 - 更新の記録: `%APPDATA%\volley-reel\logs\update.log`（「記録を見る」で開く）。うまくいかない人にはこれを送ってもらう
 - 上部のアプリ名の横に、今の版（`v0.2.0` など）が出る
 - 試すとき: `VR_UPDATE_TEST=1` で開発版が `dev-app-update.yml` の場所（`http://127.0.0.1:8766/`）を見る。インストーラーと、より高い版を書いた `latest.yml` を置いたフォルダを `python -m http.server 8766` などで出すと、見つけてダウンロードするまでを確かめられる。この試しでは更新を入れない（入れるとこの PC のインストール版が置き換わる）

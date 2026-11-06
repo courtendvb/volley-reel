@@ -31,6 +31,9 @@ protocol.registerSchemesAsPrivileged([
 // occlusion tracking counts a window behind another app as hidden). This is an editor: a
 // through-play must keep going while the user looks at another window.
 app.commandLine.appendSwitch('disable-background-media-suspend')
+// The name in package.json stays volley-reel (electron-builder.yml says why), and on Windows nothing
+// shows it. A Mac's default menu does ("Quit ..."): fix the settings folder first, as it follows the name.
+if (process.platform === 'darwin') { app.setPath('userData', app.getPath('userData')); app.setName('SyncScout Video Editor') }
 // A self-check keeps its own window state (panel tabs, the court's look), apart from everyday use.
 if (process.env.VR_SMOKE) app.setPath('userData', join(tmpdir(), 'volley-reel-smoke'))
 // The memory smoke check forces a GC before each heap sample.
@@ -120,7 +123,7 @@ app.whenReady().then(async () => {
   else if (last && library && process.env.VR_SMOKE) { await mkdir(last, { recursive: true }); project = await Project.create(last, library, { name: 'smoke', ourTeamCodes: ['HTH', 'HTA'], matchIds: [] }) }
 
   win = new BrowserWindow({
-    width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'volley-reel',
+    width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'SyncScout Video Editor',
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   })
   win.setMenuBarVisibility(false)
@@ -324,7 +327,7 @@ function registerIpc(): void {
   ipcMain.handle('pack:import', async () => {
     const r = await dialog.showOpenDialog(win!, {
       title: t('アドオンのパックを読み込む'), properties: ['openFile'],
-      filters: [{ name: t('volley-reel パック'), extensions: ['vrpack', 'zip'] }],
+      filters: [{ name: t('SyncScout Video Editor パック'), extensions: ['vrpack', 'zip'] }],
     })
     if (!r.canceled && r.filePaths[0]) await lib().importPack(r.filePaths[0])
     return lib().packs()
@@ -431,7 +434,7 @@ function registerIpc(): void {
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 const ASSET_ID = /^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/
-const OBJECTS_MARK = '[volley-reel: objects copied]' // on the system clipboard after copying objects
+const OBJECTS_MARK = '[SyncScout Video Editor: objects copied]' // on the system clipboard after copying objects
 
 // The picture on the system clipboard (a screenshot, an image copied in a browser or PowerPoint), or null.
 async function clipboardPicture(): Promise<Blob | null> {

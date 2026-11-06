@@ -3,6 +3,7 @@ import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
 import { t } from '../../../shared/i18n'
+import { formatLength } from '../format'
 
 interface Props {
   part: 'head' | 'list' // the line above the right column's tabs, or the 動画の構成 tab
@@ -115,7 +116,7 @@ export function VideoPanel(p: Props) {
               {s ? <InlineTitle className="scene-name" value={s.name} placeholder={t('（名前なし）')} label={t('シーンの名前')} onChange={name => p.onRenameScene(id, name)} />
                 : <span className="scene-name">{t('（削除されたシーン）')}</span>}
               {s && usedIn(id) > 1 && <span className="shared" title={t('{0} 本の動画で使っています。直すとすべてに反映されます', usedIn(id))}>{t('共有')} {usedIn(id)}</span>}
-              <span className="muted">{st.clips} {t('本・')}{fmtSec(st.sec)}</span>
+              <span className="muted">{st.clips} {t('本・')}{formatLength(st.sec)}</span>
               <span className="clip-actions" onClick={e => e.stopPropagation()}>
                 {s && (
                   <button className={`card-toggle${p.sceneCardOn(s) ? ' on' : ''}`} aria-pressed={p.sceneCardOn(s)}
@@ -131,12 +132,7 @@ export function VideoPanel(p: Props) {
         })}
         {!v.sceneIds.length && <li className="muted pad-x">{t('まだシーンがありません')}</li>}
       </ol>
-      <p className="count">{v.sceneIds.length} {t('シーン・')}{total.clips} {t('クリップ・')}{fmtSec(total.sec)}{t('（タイトルカードを除く）')}</p>
+      <p className="count">{v.sceneIds.length} {t('シーン・')}{total.clips} {t('クリップ・')}{formatLength(total.sec)}{t('（タイトルカードを除く）')}</p>
     </section>
   )
-}
-
-function fmtSec(sec: number): string {
-  const s = Math.round(sec)
-  return t('{0}分{1}秒', Math.floor(s / 60), String(s % 60).padStart(2, '0'))
 }

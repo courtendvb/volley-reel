@@ -1,7 +1,7 @@
 // Editing annotation geometry with handles (v3 step 3): arrow ends, 8-way box resize, and
 // Office-style "edit points" for polylines, polygons and freehand — drag a vertex, drag a midpoint
 // to insert one, delete one. Pure functions on normalized coordinates, so they are unit-tested.
-import { isPoints, normalizeBox, withQuad, type Annotation, type PointsAnnotation, type Quad } from './annotation'
+import { isPoints, normalizeBox, pointsBox, withQuad, type Annotation, type ImageAnnotation, type PointsAnnotation, type Rect, type Quad } from './annotation'
 
 type HandleKind = 'end' | 'resize' | 'vertex' | 'mid'
 export interface Handle { id: string; kind: HandleKind; x: number; y: number }
@@ -42,12 +42,6 @@ function boxHandles({ x, y, w, h }: { x: number; y: number; w: number; h: number
     se: [x + w, y + h], s: [x + w / 2, y + h], sw: [x, y + h], w: [x, y + h / 2],
   }
   return BOX_HANDLES.map(id => ({ id, kind: 'resize' as const, x: at[id][0], y: at[id][1] }))
-}
-
-export function pointsBox(pts: [number, number][]): { x: number; y: number; w: number; h: number } {
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
-  const x = Math.min(...xs), y = Math.min(...ys)
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
 }
 
 // An isosceles triangle in the box dragged from `from` to `to` (apex at the top middle).
@@ -147,16 +141,14 @@ function resizePoints(pts: [number, number][], h: BoxHandle, x: number, y: numbe
 
 // ---- cropping a picture (Office-style: the frame shows part of the picture; the picture can be
 // moved and zoomed under the frame). "full" is where the whole picture would be on the frame.
-type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
-type Box = { x: number; y: number; w: number; h: number }
 
-export function fullRect(a: ImageAnnotation): Box {
+export function fullRect(a: ImageAnnotation): Rect {
   const c = a.crop ?? { x: 0, y: 0, w: 1, h: 1 }
   const w = a.w / c.w, h = a.h / c.h
   return { x: a.x - c.x * w, y: a.y - c.y * h, w, h }
 }
 
-function withFrame(a: ImageAnnotation, box: Box, full: Box): ImageAnnotation {
+function withFrame(a: ImageAnnotation, box: Rect, full: Rect): ImageAnnotation {
   const crop = { x: (box.x - full.x) / full.w, y: (box.y - full.y) / full.h, w: box.w / full.w, h: box.h / full.h }
   const whole = Math.abs(crop.x) < 1e-6 && Math.abs(crop.y) < 1e-6 && Math.abs(crop.w - 1) < 1e-6 && Math.abs(crop.h - 1) < 1e-6
   const { crop: _c, ...rest } = a
@@ -164,14 +156,14 @@ function withFrame(a: ImageAnnotation, box: Box, full: Box): ImageAnnotation {
 }
 
 // Drags a frame handle: the frame changes, the picture stays; the frame can't leave the picture.
-export function cropHandle(a: ImageAnnotation, full: Box, h: BoxHandle, x: number, y: number): ImageAnnotation {
+export function cropHandle(a: ImageAnnotation, full: Rect, h: BoxHandle, x: number, y: number): ImageAnnotation {
   const b = resizeBox(a, h, Math.max(full.x, Math.min(full.x + full.w, x)), Math.max(full.y, Math.min(full.y + full.h, y)), false)
   if (b.w < 0.01 || b.h < 0.01) return a
   return withFrame(a, b, full)
 }
 
 // Moves the picture under the frame, so the frame stays on the picture.
-export function panCrop(a: ImageAnnotation, full: Box, dx: number, dy: number): ImageAnnotation {
+export function panCrop(a: ImageAnnotation, full: Rect, dx: number, dy: number): ImageAnnotation {
   const x = Math.min(a.x, Math.max(a.x + a.w - full.w, full.x + dx))
   const y = Math.min(a.y, Math.max(a.y + a.h - full.h, full.y + dy))
   return withFrame(a, a, { ...full, x, y })

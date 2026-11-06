@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { LibraryInfo, Match, MissingPart, RecentProject } from '../../../shared/types'
-import { formatTime } from '../format'
+import { MatchCells } from './MatchPicker'
 import { t } from '../../../shared/i18n'
 
 interface Props {
@@ -70,10 +70,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
 function MatchRow({ m, missing, busy, onRelocate }: { m: Match; missing?: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void }) {
   return (
     <div className={`match-row${missing ? ' lost' : ''}`} role="listitem" title={`${m.sourceVideoPath}\n${m.dvwPath}`}>
-      <span className="date">{m.date ?? '—'}</span>
-      <span className="teams"><b>{m.teams[0].code}</b> – <b>{m.teams[1].code}</b></span>
-      <span className="muted names">{m.teams[0].name} / {m.teams[1].name}</span>
-      <span className="muted dur">{formatTime(m.durationSec)}</span>
+      <MatchCells m={m} />
       {m.warnings.length > 0 && <span className="warn-dot" title={m.warnings.join('\n')}>⚠</span>}
       {missing && <MissingNote parts={missing} busy={busy} onRelocate={onRelocate} />}
     </div>

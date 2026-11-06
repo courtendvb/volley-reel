@@ -162,7 +162,7 @@ export function chapterText(chapters: { startSec: number; title: string }[], tot
     return hours ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${Math.floor(s / 60)}:${ss}`
   }
   const starts = chapters.map((c, i) => (i === 0 ? 0 : c.startSec))
-  const short = chapters.filter((c, i) => (starts[i + 1] ?? totalSec) - starts[i] < 10).map(c => c.title)
+  const short = chapters.filter((_, i) => (starts[i + 1] ?? totalSec) - starts[i] < 10).map(c => c.title)
   const list = chapters.map((c, i) => `${fmt(starts[i])} ${c.title}`).join('\n')
   const links = chapters.map((c, i) => `${c.title}\nhttps://youtu.be/${VIDEO_ID_MARK}?t=${Math.floor(starts[i])}`).join('\n')
   return { text: `${list}\n\n${links}\n`, short }
@@ -204,7 +204,11 @@ function cardOpponent(m: Match, codes: string[]): string | null {
 
 // Title card match line: "VS SMT · 2026-10-11".
 function cardMatchLabel(m: Match, codes: string[]): string {
+  return `VS ${opponentLabel(m, codes)}${m.date ? ` · ${m.date}` : ''}`
+}
+
+// The opponent's code; both teams' when neither is ours.
+export function opponentLabel(m: Match, codes: string[]): string {
   const side = ourSide(m.teams, codes)
-  const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
-  return `VS ${opp}${m.date ? ` · ${m.date}` : ''}`
+  return side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
 }

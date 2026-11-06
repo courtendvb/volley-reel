@@ -12,8 +12,10 @@ import { EXPORT_HEIGHT, buildExportJob } from '../exportRender'
 import type { AppLatest } from './appState'
 import { clipPlayedSec } from '../../../shared/timing'
 import { t } from '../../../shared/i18n'
+import { formatLength } from '../format'
 
 const api = window.api
+const onlyMarker = (sc: Reel, m: Marker) => ({ ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] })
 
 export type ExportState = { status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string }
 
@@ -98,9 +100,8 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     return { sec, clips, slides, empty: !clips && !slides }
   }
   const slidesNote = (n: number) => (n ? t('・スライド {0}', n) : '')
-  const fmtLen = (s: number) => t('{0}分{1}秒', Math.floor(Math.round(s) / 60), String(Math.round(s) % 60).padStart(2, '0'))
   const markerPlan = (sc: Reel, m: Marker) => {
-    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
+    const only = onlyMarker(sc, m)
     return planScene(orderOf(only), only, overlay, matches, settings?.ourTeamCodes ?? [])
   }
   // Each scene of the video with something to play, once, in the video's order: its plan as in the
@@ -122,21 +123,21 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     if (!video) return []
     const out: ExportTarget[] = []
     const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: t('すべて書き出し'), detail: t('{0} シーン・{1} クリップ{2}・{3}', video.sceneIds.length, vp.clips, slidesNote(vp.slides), fmtLen(vp.sec)), empty: vp.empty,
+    out.push({ key: 'video', label: t('すべて書き出し'), detail: t('{0} シーン・{1} クリップ{2}・{3}', video.sceneIds.length, vp.clips, slidesNote(vp.slides), formatLength(vp.sec)), empty: vp.empty,
       hint: t('動画「{0}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す', video.name) })
     const each = scenePlans()
     if (video.sceneIds.length > 1 || each.length > 1) {
       const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
-      out.push({ key: 'scenes', label: t('シーンごとに書き出し'), detail: t('{0} 本・{1}', each.length, fmtLen(sec)), empty: !each.length,
+      out.push({ key: 'scenes', label: t('シーンごとに書き出し'), detail: t('{0} 本・{1}', each.length, formatLength(sec)), empty: !each.length,
         hint: t('シーンを 1 本ずつ、シーンの名前のファイルに。フォルダを選ぶと順に書き出す') })
     }
     if (reel) {
       const sp = planSec(currentPlan('scene'))
-      out.push({ key: 'scene', label: t('シーン「{0}」だけ', reel.name), detail: t('{0} クリップ{1}・{2}', sp.clips, slidesNote(sp.slides), fmtLen(sp.sec)), empty: sp.empty })
+      out.push({ key: 'scene', label: t('シーン「{0}」だけ', reel.name), detail: t('{0} クリップ{1}・{2}', sp.clips, slidesNote(sp.slides), formatLength(sp.sec)), empty: sp.empty })
       for (const m of reel.groupOrder) {
         if (!reel.groups[m].length && !reel.slides?.some(s => s.group === m)) continue
         const mp = planSec(markerPlan(reel, m))
-        out.push({ key: `marker:${m}`, label: reel.markerNames[m] ? t('グループ {0}「{1}」だけ', m, reel.markerNames[m]) : t('グループ {0} だけ', m), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), fmtLen(mp.sec)), empty: mp.empty })
+        out.push({ key: `marker:${m}`, label: reel.markerNames[m] ? t('グループ {0}「{1}」だけ', m, reel.markerNames[m]) : t('グループ {0} だけ', m), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), formatLength(mp.sec)), empty: mp.empty })
       }
     }
     return out
@@ -169,7 +170,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     const { reels: rs, orderOf: of, overlay: ov, matches: ms, settings: st, video: v } = latest.current
     const sc = rs.find(x => x.id === sceneId)
     if (!sc) return Promise.resolve(null)
-    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
+    const only = onlyMarker(sc, m)
     const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
     const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('グループ{0}', m)}`
     return startExport(outPath, { plan, name })

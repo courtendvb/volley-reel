@@ -2,6 +2,7 @@
 // the picker's thumbnails.
 import { useEffect, useState } from 'react'
 import type { PackInfo, PhotoTarget } from '../../shared/pack'
+import { decodeImage } from './assets'
 
 const api = window.api
 let current: PackInfo[] = []
@@ -33,14 +34,7 @@ export function packPhoto(pack: string, photo: string): Promise<ImageBitmap | nu
   let p = photos.get(key)
   if (!p) {
     p = api.readPackPhoto(pack, photo)
-      .then(async data => {
-        const full = await createImageBitmap(new Blob([data as BlobPart]))
-        const k = 160 / Math.max(full.width, full.height)
-        if (k >= 1) return full
-        const small = await createImageBitmap(full, { resizeWidth: Math.round(full.width * k), resizeHeight: Math.round(full.height * k), resizeQuality: 'high' })
-        full.close()
-        return small
-      })
+      .then(data => decodeImage(data, 160))
       .catch(() => null)
     photos.set(key, p)
   }

@@ -2,10 +2,10 @@
 // slanted ends, an accent block for the number, Bahnschrift bold. One renderer for the preview and
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
+import type { Ctx } from './court'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // Bahnschrift has no Japanese: names and titles in Japanese fall through to Yu Gothic / Meiryo.
 // A Mac has no Bahnschrift: Arial Narrow, then Hiragino for Japanese.

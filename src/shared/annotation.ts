@@ -11,7 +11,7 @@
 // assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 // With a quad its four corners are placed one by one, so the picture (a heatmap from analysis
 // software, say) lies on the court with the camera's perspective; x, y, w, h are then its bounds.
-import { homography, project } from './court'
+import { homography, project, type Ctx } from './court'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
@@ -55,7 +55,7 @@ export type Annotation = Base & (
 
 // Corners of a picture laid with perspective: top-left, top-right, bottom-left, bottom-right of the picture.
 export type Quad = [[number, number], [number, number], [number, number], [number, number]]
-type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
+export type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
 
 export type ImageLookup = (assetId: string) => CanvasImageSource | null
 export interface Crop { x: number; y: number; w: number; h: number }
@@ -70,7 +70,6 @@ export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, st
 
 export interface Rect { x: number; y: number; w: number; h: number } // normalized
 
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // The objects that move together with these: the ids themselves and every member of their groups.
 export function withGroups(list: Annotation[], ids: string[]): string[] {
@@ -192,9 +191,9 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
       const left = a.align === 'center' ? a.x - w / 2 : a.x
       return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
-    case 'arrow': return box([[a.x1, a.y1], [a.x2, a.y2]])
+    case 'arrow': return pointsBox([[a.x1, a.y1], [a.x2, a.y2]])
     case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
-    default: return box(a.points)
+    default: return pointsBox(a.points)
   }
 }
 
@@ -411,7 +410,7 @@ export function pointInPolygon(x: number, y: number, pts: [number, number][]): b
   return inside
 }
 
-function box(points: [number, number][]): Rect {
+export function pointsBox(points: [number, number][]): Rect {
   const xs = points.map(p => p[0]), ys = points.map(p => p[1])
   const x = Math.min(...xs), y = Math.min(...ys)
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }

@@ -5,7 +5,7 @@ import {
   type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideSpot,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
-import { pad2 } from '../format'
+import { formatLength, pad2 } from '../format'
 import { InlineTitle } from './InlineTitle'
 import { t } from '../../../shared/i18n'
 import { keyName } from '../../../shared/keys'
@@ -259,7 +259,7 @@ export function ReelPanel(p: Props) {
           : <><button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title={t('このシーンだけを再生')}>{t('▶ シーンを再生')}</button>
             <button onClick={p.onPlayMax} disabled={!p.orderCount && !reel.slides?.length} title={t('最大化して再生（終わると元に戻る）')} aria-label={t('最大化して再生')}>⛶</button></>}
       </div>
-      <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatDur(p.orderSec)}{t('（グループ入り {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>
+      <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatLength(p.orderSec)}{t('（グループ入り {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
         onDragEnd={() => setDragOver(null)}>
@@ -389,9 +389,4 @@ export function SecInput({ v, label, onChange, disabled }: { v: number; label: s
     <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label} disabled={disabled}
       onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(n) }} />
   )
-}
-
-function formatDur(sec: number): string {
-  const s = Math.round(sec)
-  return t('{0}分{1}秒', Math.floor(s / 60), String(s % 60).padStart(2, '0'))
 }

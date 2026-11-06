@@ -2,7 +2,7 @@
 // Settings live on the reel; each clip can hide an element or rewrite the caption.
 import { displayName } from './dvw'
 import { ourSide } from './filter'
-import { EFFECTS, SKILLS } from './labels'
+import { effectName, skillName } from './labels'
 import type { ParsedDVW, Play } from './types'
 import { t } from './i18n'
 
@@ -104,9 +104,7 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
 
 // The name: the clip's own, else the video's name for the player (Video.captionNames), else the DVW's.
 export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption'], names?: Record<string, string>): CaptionData {
-  const skill = SKILLS[play.skill] ?? play.skill
-  const effect = EFFECTS[play.skill]?.[play.effect] ?? play.effect
-  const parts = [s.showSkill ? skill : null, s.showEvaluation ? effect : null].filter(Boolean) as string[]
+  const parts = [s.showSkill ? skillName(play.skill) : null, s.showEvaluation ? effectName(play.skill, play.effect) : null].filter(Boolean) as string[]
   const autoLine = parts.length ? parts.join(' · ').toUpperCase() : null
   const name = o?.name?.trim() || names?.[play.playerKey]?.trim() || displayName(dvw.players, play.side, play.jersey)
   return {

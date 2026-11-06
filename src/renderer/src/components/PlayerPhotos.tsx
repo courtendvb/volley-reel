@@ -5,6 +5,7 @@ import type { ParsedDVW, Player, Side } from '../../../shared/types'
 import { packPhoto, removePlayerPhoto, setPlayerPhoto, usePacks } from '../packs'
 import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
+import { errorText } from '../format'
 
 // Player photos from add-on packs (shared/pack.ts): the open clip's players with the photo that
 // fits each, the play's own player first; a search finds any photo in the packs for a player the
@@ -40,7 +41,7 @@ export function PlayerPhotos({ dvw, focus, disabled, onPick }: {
   const off = disabled || busy
   const edit = async (fn: () => Promise<void>) => {
     setBusy(true); setError(null)
-    try { await fn() } catch (e) { setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) } finally { setBusy(false) }
+    try { await fn() } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
   const target = (p: Player, team: string, photo: PackPhoto | null): PhotoTarget =>
     ({ key: p.key, team, jersey: p.jersey, lastName: p.lastName, firstName: p.firstName, ...(photo?.player.label ? { label: photo.player.label } : {}) })

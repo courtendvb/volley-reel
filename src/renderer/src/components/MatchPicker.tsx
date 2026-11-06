@@ -67,10 +67,7 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
           {candidates.map(m => (
             <label key={m.id} className={`match-row pick${selected.has(m.id) ? ' on' : ''}`} role="listitem">
               <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
-              <span className="date">{m.date ?? '—'}</span>
-              <span className="teams"><b>{m.teams[0].code}</b> – <b>{m.teams[1].code}</b></span>
-              <span className="muted names">{m.teams[0].name} / {m.teams[1].name}</span>
-              <span className="muted dur">{formatTime(m.durationSec)}</span>
+              <MatchCells m={m} />
             </label>
           ))}
           {!candidates.length && <p className="muted pad">{t('このチームの試合は倉庫にありません')}</p>}
@@ -88,5 +85,17 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
         </div>
       </div>
     </div>
+  )
+}
+
+// A match's date, teams and length: the columns of the match lists.
+export function MatchCells({ m }: { m: Match }) {
+  return (
+    <>
+      <span className="date">{m.date ?? '—'}</span>
+      <span className="teams"><b>{m.teams[0].code}</b> – <b>{m.teams[1].code}</b></span>
+      <span className="muted names">{m.teams[0].name} / {m.teams[1].name}</span>
+      <span className="muted dur">{formatTime(m.durationSec)}</span>
+    </>
   )
 }

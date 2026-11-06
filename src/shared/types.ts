@@ -293,9 +293,9 @@ export interface ExportJob {
   chapters?: { item: number; title: string }[] // YouTube chapters starting at these items: a .txt next to the MP4
 }
 
-// A newer version for an installed copy: found, downloading, then ready to restart into.
 type CourtCorners = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
 
+// A newer version for an installed copy: found, downloading, then ready to restart into.
 export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
   | { type: 'manual'; version: string } // a newer version to get from the download page (Mac)
   | { type: 'error'; message: string } // the update couldn't be installed (the download page still works)

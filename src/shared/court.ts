@@ -51,7 +51,7 @@ function subCenter(c: Cell, sub: string): [number, number] | null {
 
 // ---- geometry -------------------------------------------------------------------------------
 
-interface Homography { a: number; b: number; c: number; d: number; e: number; f: number; g: number; h: number }
+export interface Homography { a: number; b: number; c: number; d: number; e: number; f: number; g: number; h: number }
 
 // The unit square (u across, v from far to near) onto the four corners.
 export function homography(corners: readonly [Pt, Pt, Pt, Pt]): Homography {
@@ -338,14 +338,16 @@ export function flightZ(p: PlayPoints, s: number): number {
 }
 const FLIGHT_STEPS = 32
 
+const inPixels = (fit: CourtFit, w: number, h: number) => fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt]
+
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
 // far with the ball at its tip, and the landing point once it is there.
 export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true): void {
   const p = zones.points
   if (!p?.start || !p.end || !p.startZ) return
-  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
-  const H = homography(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt])
+  const H = homography(inPixels(fit, w, h))
   const a = p.start, b = p.end
   const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s))
   const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
@@ -373,7 +375,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
 
 // Where shots came down, as points on the floor.
 function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat): void {
-  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
   const r = Math.max(2.5, w / 300)
   ctx.save()
@@ -396,7 +398,7 @@ export interface SlideFlights { fit: CourtFit; paths: PlayPoints[] }
 export const FLIGHTS_LEAD_SEC = 0.5, FLIGHTS_SEC = 1.5
 export const flightsProgress = (sec: number) => Math.max(0, Math.min(1, (sec - FLIGHTS_LEAD_SEC) / FLIGHTS_SEC))
 export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: SlideFlights, progress: number): void {
-  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
   const done = Math.min(1, Math.max(0, progress)), many = paths.length > 12
   const at = (p: PlayPoints, s: number) => camera(p.start!.x + (p.end!.x - p.start!.x) * s, p.start!.y + (p.end!.y - p.start!.y) * s, flightZ(p, s))
@@ -481,7 +483,7 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacit
   const grid = grids.get(heat) ?? heatGrid(heat.points)
   grids.set(heat, grid)
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
-  const H = homography(heat.fit.corners.map(c => ({ x: c.x * sw, y: c.y * sh })) as [Pt, Pt, Pt, Pt])
+  const H = homography(inPixels(heat.fit, sw, sh))
   // The inverse of the homography (its adjugate); `side` tells the floor from what is above the horizon.
   const A = H.e - H.f * H.h, B = H.c * H.h - H.b, C = H.b * H.f - H.c * H.e
   const D = H.f * H.g - H.d, E = H.a - H.c * H.g, F = H.c * H.d - H.a * H.f
@@ -540,11 +542,11 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 // The grid and the play's zones over a w × h picture.
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
 export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null, flight: number | null = 1): void {
-  const H = homography(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt])
+  const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
   const area = (s: Spot) => spotArea(s, style.detail === 'sub')
   const spotPath = (s: Spot) => {
@@ -586,7 +588,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
 
   if (zones?.player?.landings) drawLandings(ctx, w, h, zones.player.landings)
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
-  if (hasFlight(style, zones) && courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) {
+  if (hasFlight(style, zones) && courtCamera(inPixels(fit, w, h), w, h)) {
     if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift)
   } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
@@ -594,7 +596,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     const place = (p: Pt | null | undefined, s: Spot | null) => (p ? at(p.x, p.y) : s ? mid(s) : null)
     // A struck ball starts in the air, over the spot on the floor (marked, with a line up to it).
     const ground = pts?.start ? at(pts.start.x, pts.start.y) : null
-    const camera = pts?.start && pts.startZ ? courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h) : null
+    const camera = pts?.start && pts.startZ ? courtCamera(inPixels(fit, w, h), w, h) : null
     const air = camera && pts?.start ? camera(pts.start.x, pts.start.y, pts.startZ!) : null
     if (ground && air && !style.noLift) drawLift(ctx, ground, air, w)
     const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null

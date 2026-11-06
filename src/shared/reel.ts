@@ -406,37 +406,29 @@ export function findOverlaps(items: { id: string; matchId: string; in: number; o
   return out
 }
 
-export function setAnnotations(reel: Reel, clipId: string, annotations: Annotation[]): Reel {
+const patchClip = (reel: Reel, clipId: string, patch: (c: Clip) => Clip): Reel => {
   const c = reel.clips[clipId]
-  if (!c) return reel
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, annotations: annotations.map(roundCoords) } } })
+  return c ? touch({ ...reel, clips: { ...reel.clips, [clipId]: patch(c) } }) : reel
+}
+
+export function setAnnotations(reel: Reel, clipId: string, annotations: Annotation[]): Reel {
+  return patchClip(reel, clipId, c => ({ ...c, annotations: annotations.map(roundCoords) }))
 }
 
 export function setTiming(reel: Reel, clipId: string, timing: ClipTiming): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  const { timing: _old, ...rest } = c
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: hasTiming(timing) ? { ...rest, timing } : rest } })
+  return patchClip(reel, clipId, ({ timing: _old, ...rest }) => (hasTiming(timing) ? { ...rest, timing } : rest))
 }
 
 // Where the red line of a clip is: a video time, or null back on the DVW's time.
 export function setSkillTime(reel: Reel, clipId: string, sec: number | null): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  const { skillSec: _old, ...rest } = c
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: sec === null ? rest : { ...rest, skillSec: sec } } })
+  return patchClip(reel, clipId, ({ skillSec: _old, ...rest }) => (sec === null ? rest : { ...rest, skillSec: sec }))
 }
 
 // A serve's speed for its flight, or null back on the default.
 export function setServeSpeed(reel: Reel, clipId: string, kmh: number | null): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  const { speedKmh: _old, ...rest } = c
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: kmh === null ? rest : { ...rest, speedKmh: kmh } } })
+  return patchClip(reel, clipId, ({ speedKmh: _old, ...rest }) => (kmh === null ? rest : { ...rest, speedKmh: kmh }))
 }
 
 export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, overlayOverride: o } } })
+  return patchClip(reel, clipId, c => ({ ...c, overlayOverride: o }))
 }

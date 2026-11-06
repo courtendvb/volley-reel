@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -267,13 +267,6 @@ describe('heatGrid', () => {
   it('is empty with no shots, and ignores what is off the map', () => {
     expect(heatGrid([]).data.every(v => v === 0)).toBe(true)
     expect(heatAt(heatGrid([{ x: 5, y: 5 }]), 0.5, 0.5)).toBe(0)
-  })
-})
-
-describe('landingPoint', () => {
-  it('turns the landing like the serve paths, and needs the click', () => {
-    expect(landingPoint({ endClick: { u: 0.25, v: 0.8 } })).toEqual({ x: 0.75, y: 0.8 })
-    expect(landingPoint({ endClick: null })).toBeNull()
   })
 })
 

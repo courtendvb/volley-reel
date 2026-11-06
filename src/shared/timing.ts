@@ -10,7 +10,7 @@ export interface ClipTiming { slows?: Slow[]; holds?: Hold[] }
 export const SLOW_RATES = [0.75, 0.5, 0.25] as const
 
 // One piece of a clip as played: a stretch of the video at a rate, or a held frame.
-export type Piece = { kind: 'play'; from: number; to: number; rate: number } | { kind: 'hold'; at: number; sec: number }
+type Piece = { kind: 'play'; from: number; to: number; rate: number } | { kind: 'hold'; at: number; sec: number }
 
 const EPS = 1e-6
 

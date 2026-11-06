@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { LOCAL_PACK } from '../../../shared/pack'
 import { importPack, removePack, usePacks } from '../packs'
 import { t } from '../../../shared/i18n'
+import { errorText } from '../format'
 
 // Add-on packs (.vrpack) in the library: read one in, or take one out. Saved at once, like the logos.
 export function AddonPacks() {
@@ -10,7 +11,7 @@ export function AddonPacks() {
   const [error, setError] = useState<string | null>(null)
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError(null)
-    try { await fn() } catch (e) { setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) } finally { setBusy(false) }
+    try { await fn() } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
   return (
     <div className="logo-table">

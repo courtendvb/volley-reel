@@ -2,14 +2,14 @@
 // slanted ends, an accent block for the number, Bahnschrift bold. One renderer for the preview and
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
+import type { Ctx } from './court'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // Bahnschrift has no Japanese: names and titles in Japanese fall through to Yu Gothic / Meiryo.
 // A Mac has no Bahnschrift: Arial Narrow, then Hiragino for Japanese.
-export const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", "Yu Gothic UI", "Yu Gothic", Meiryo, "Hiragino Sans", sans-serif'
+const OVERLAY_FONT = 'Bahnschrift, "Arial Narrow", "Segoe UI", "Yu Gothic UI", "Yu Gothic", Meiryo, "Hiragino Sans", sans-serif'
 const TEXT = '#FFFFFF'
 const SUB = '#BDBDBD'
 const MUTED = '#8F8F8F'
@@ -187,7 +187,7 @@ export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof
 
 // A slide's page: blank in the title cards' background color, or its picture fitted inside the
 // frame on black (a 4:3 page gets bars). Drawn black while the picture loads.
-export function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, cardBg: string, image: ImageLookup): void {
+function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, cardBg: string, image: ImageLookup): void {
   if (bg.kind === 'blank') { fillRect(ctx, cardBg, 0, 0, W, H); return }
   fillRect(ctx, '#000000', 0, 0, W, H)
   const img = image(bg.assetId)

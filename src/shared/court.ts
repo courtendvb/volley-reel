@@ -20,11 +20,11 @@ export const DEFAULT_CORNERS: CourtFit['corners'] = [
 const COURT_W = 9 // metres
 const COURT_L = 18
 export const COLS = 3
-export const ROWS = 6
+const ROWS = 6
 const HALF = ROWS / 2
 
 // [row][col]: row 0 is the far end line, row 5 the near one; col 0 is the camera's left.
-export const ZONE_NUMBERS: number[][] = [
+const ZONE_NUMBERS: number[][] = [
   [1, 6, 5],
   [9, 8, 7],
   [2, 3, 4],
@@ -41,11 +41,11 @@ const SUB_FAR: Record<string, [number, number]> = { A: [0.25, 0.25], B: [0.25, 0
 // Serve start zones: behind the end line in five, 1-9-6-7-5 from the zone 1 side. In order from the
 // camera's left: the far side has zone 1 on the left, the near side on the right. The strip is one
 // zone row deep.
-export const SERVE_COLS = 5
+const SERVE_COLS = 5
 const SERVE_FAR = [1, 9, 6, 7, 5]
 const SERVE_NEAR = [5, 7, 6, 9, 1]
 
-export function subCenter(c: Cell, sub: string): [number, number] | null {
+function subCenter(c: Cell, sub: string): [number, number] | null {
   return (c.row < HALF ? SUB_FAR : SUB_NEAR)[sub] ?? null
 }
 
@@ -153,7 +153,7 @@ export function nearSide(fit: CourtFit, play: Pick<Play, 'setNum' | 'score'>): S
 
 const other = (s: Side): Side => (s === '*' ? 'a' : '*')
 
-export interface Cell { row: number; col: number }
+interface Cell { row: number; col: number }
 
 export function zoneCell(zone: number, near: boolean): Cell | null {
   const rows = near ? [3, 4, 5] : [0, 1, 2]
@@ -165,7 +165,7 @@ export function zoneCell(zone: number, near: boolean): Cell | null {
 }
 
 // sub: A–D when known. behind: a serve zone behind the end line (row -1 far, ROWS near; col 0–4 of SERVE_COLS).
-export interface Spot { cell: Cell; sub: string | null; behind?: true }
+interface Spot { cell: Cell; sub: string | null; behind?: true }
 
 export function serveSpot(zone: number, near: boolean): Spot | null {
   const col = (near ? SERVE_NEAR : SERVE_FAR).indexOf(zone)
@@ -185,12 +185,12 @@ export interface PlayZones {
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
 }
-export interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
-export interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks }
+interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
+interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
-export interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
+interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -220,7 +220,7 @@ export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
 export const ATTACK_Z = 3.15
 export const SET_Z = 2.4
-export function strikeHeight(code: string): number {
+function strikeHeight(code: string): number {
   const skill = code.charAt(3)
   return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : skill === 'E' ? SET_Z : 0
 }
@@ -345,14 +345,16 @@ export function flightZ(p: PlayPoints, s: number): number {
 }
 const FLIGHT_STEPS = 32
 
+const inPixels = (fit: CourtFit, w: number, h: number) => fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt]
+
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
 // far with the ball at its tip, and the landing point once it is there.
 export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true): void {
   const p = zones.points
   if (!p?.start || !p.end || !p.startZ) return
-  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
-  const H = homography(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt])
+  const H = homography(inPixels(fit, w, h))
   const a = p.start, b = p.end
   const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s))
   const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
@@ -379,8 +381,8 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
 }
 
 // Where shots came down, as points on the floor.
-export function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat): void {
-  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat): void {
+  const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
   const r = Math.max(2.5, w / 300)
   ctx.save()
@@ -412,7 +414,7 @@ export interface SlideFlights { fit: CourtFit; paths: PlayPoints[] }
 export const FLIGHTS_LEAD_SEC = 0.5, FLIGHTS_SEC = 1.5
 export const flightsProgress = (sec: number) => Math.max(0, Math.min(1, (sec - FLIGHTS_LEAD_SEC) / FLIGHTS_SEC))
 export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: SlideFlights, progress: number): void {
-  const camera = courtCamera(fit.corners.map(c => ({ x: c.x * w, y: c.y * h })) as [Pt, Pt, Pt, Pt], w, h)
+  const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
   const done = Math.min(1, Math.max(0, progress)), many = paths.length > 12
   const at = (p: PlayPoints, s: number) => camera(p.start!.x + (p.end!.x - p.start!.x) * s, p.start!.y + (p.end!.y - p.start!.y) * s, flightZ(p, s))
@@ -440,12 +442,6 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
   ctx.restore()
 }
 
-// Where a shot landed, turned like servePath so any match's lie on one picture; null without the click.
-export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
-  const b = play.endClick
-  return b ? { x: 1 - b.u, y: b.v } : null
-}
-
 // A heatmap on the floor: how thick the landings are, in metres so the spread is the same both ways
 // along the court. Coloured like a thermal camera, blue through to red as the count rises; the
 // thinnest parts fade out so the floor shows.
@@ -463,7 +459,7 @@ export function heatColor(v: number): [number, number, number] {
   return [ca[0] + (cb[0] - ca[0]) * s, ca[1] + (cb[1] - ca[1]) * s, ca[2] + (cb[2] - ca[2]) * s]
 }
 
-export interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
+interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
 export function heatGrid(points: Pt[]): HeatGrid {
   const cols = Math.round((COURT_W_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1, rows = Math.round((COURT_L_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1
   const data = new Float32Array(cols * rows), reach = Math.ceil((3 * HEAT_SIGMA_M) / HEAT_CELL_M)
@@ -497,7 +493,7 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacit
   const grid = grids.get(heat) ?? heatGrid(heat.points)
   grids.set(heat, grid)
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
-  const H = homography(heat.fit.corners.map(c => ({ x: c.x * sw, y: c.y * sh })) as [Pt, Pt, Pt, Pt])
+  const H = homography(inPixels(heat.fit, sw, sh))
   // The inverse of the homography (its adjugate); `side` tells the floor from what is above the horizon.
   const A = H.e - H.f * H.h, B = H.c * H.h - H.b, C = H.b * H.f - H.c * H.e
   const D = H.f * H.g - H.d, E = H.a - H.c * H.g, F = H.c * H.d - H.a * H.f
@@ -556,11 +552,11 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 // The grid and the play's zones over a w × h picture.
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
 export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null, flight: number | null = 1): void {
-  const H = homography(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt])
+  const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
   const area = (s: Spot) => spotArea(s, style.detail === 'sub')
   const spotPath = (s: Spot) => {
@@ -602,7 +598,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
 
   if (zones?.player?.landings) drawLandings(ctx, w, h, zones.player.landings)
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
-  if (hasFlight(style, zones) && courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h)) {
+  if (hasFlight(style, zones) && courtCamera(inPixels(fit, w, h), w, h)) {
     if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift)
   } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
@@ -610,7 +606,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     const place = (p: Pt | null | undefined, s: Spot | null) => (p ? at(p.x, p.y) : s ? mid(s) : null)
     // A struck ball starts in the air, over the spot on the floor (marked, with a line up to it).
     const ground = pts?.start ? at(pts.start.x, pts.start.y) : null
-    const camera = pts?.start && pts.startZ ? courtCamera(fit.corners.map(p => ({ x: p.x * w, y: p.y * h })) as [Pt, Pt, Pt, Pt], w, h) : null
+    const camera = pts?.start && pts.startZ ? courtCamera(inPixels(fit, w, h), w, h) : null
     const air = camera && pts?.start ? camera(pts.start.x, pts.start.y, pts.startZ!) : null
     if (ground && air && !style.noLift) drawLift(ctx, ground, air, w)
     const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null

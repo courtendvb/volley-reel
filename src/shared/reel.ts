@@ -76,8 +76,8 @@ export interface Slide {
 // blank: the title card's background color. image: a picture in assets/. source: the file it was
 // read from (page: a PDF's page, 1-based), so it can be read again when that file changes.
 export type SlideBg = { kind: 'blank' } | { kind: 'image'; assetId: string; source?: SlideSource }
-export interface SlideSource { path: string; name: string; page: number | null; pages?: number; mtimeMs: number } // pages: the PDF's page count
-export const DEFAULT_SLIDE_SEC = 3
+interface SlideSource { path: string; name: string; page: number | null; pages?: number; mtimeMs: number } // pages: the PDF's page count
+const DEFAULT_SLIDE_SEC = 3
 
 const uid = () => globalThis.crypto.randomUUID()
 
@@ -168,20 +168,6 @@ export function toggleMarker(reel: Reel, clipId: string, m: Marker | null, when?
     groups.none = groups.none.filter(id => id !== clipId)
   }
   return keepSlides(reel, touch({ ...reel, groups }))
-}
-
-export function shiftClip(reel: Reel, clipId: string, delta: number): Reel {
-  const g = groupOf(reel, clipId)
-  if (!g || g === 'none') return reel
-  const i = reel.groups[g].indexOf(clipId)
-  return moveClip(reel, clipId, g, i + delta)
-}
-
-export function shiftGroup(reel: Reel, m: Marker, delta: number): Reel {
-  const order = reel.groupOrder.filter(x => x !== m)
-  const i = Math.max(0, Math.min(reel.groupOrder.indexOf(m) + delta, order.length))
-  order.splice(i, 0, m)
-  return touch({ ...reel, groupOrder: order })
 }
 
 // Tags are a few characters at most; an empty one takes the tag off.
@@ -311,7 +297,7 @@ export function chronological(reel: Reel, ids: string[], when: (c: Clip) => [str
 // (never drop them silently). Matching goes from strict to loose, because fixing the scout shifts
 // later fingerprints — a missed point added early changes every later score, a nudged timestamp
 // changes the time. Loose matches must be unambiguous, or the clip is reported instead of guessed.
-export type RelinkHow = 'id' | 'fingerprint' | 'code+time' | 'code+near-time'
+type RelinkHow = 'id' | 'fingerprint' | 'code+time' | 'code+near-time'
 
 export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Reel; missing: Set<string>; changed: boolean; how: Map<string, RelinkHow> } {
   const missing = new Set<string>()
@@ -331,7 +317,7 @@ export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Ree
   return { reel: changed ? { ...reel, clips } : reel, missing, changed, how }
 }
 
-export const NEAR_TIME_SEC = 2
+const NEAR_TIME_SEC = 2
 
 function findPlay(d: ParsedDVW, fingerprint: string): { play: Play; how: RelinkHow } | null {
   const exact = d.plays.find(p => p.fingerprint === fingerprint)
@@ -422,37 +408,29 @@ export function findOverlaps(items: { id: string; matchId: string; in: number; o
   return out
 }
 
-export function setAnnotations(reel: Reel, clipId: string, annotations: Annotation[]): Reel {
+const patchClip = (reel: Reel, clipId: string, patch: (c: Clip) => Clip): Reel => {
   const c = reel.clips[clipId]
-  if (!c) return reel
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, annotations: annotations.map(roundCoords) } } })
+  return c ? touch({ ...reel, clips: { ...reel.clips, [clipId]: patch(c) } }) : reel
+}
+
+export function setAnnotations(reel: Reel, clipId: string, annotations: Annotation[]): Reel {
+  return patchClip(reel, clipId, c => ({ ...c, annotations: annotations.map(roundCoords) }))
 }
 
 export function setTiming(reel: Reel, clipId: string, timing: ClipTiming): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  const { timing: _old, ...rest } = c
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: hasTiming(timing) ? { ...rest, timing } : rest } })
+  return patchClip(reel, clipId, ({ timing: _old, ...rest }) => (hasTiming(timing) ? { ...rest, timing } : rest))
 }
 
 // Where the red line of a clip is: a video time, or null back on the DVW's time.
 export function setSkillTime(reel: Reel, clipId: string, sec: number | null): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  const { skillSec: _old, ...rest } = c
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: sec === null ? rest : { ...rest, skillSec: sec } } })
+  return patchClip(reel, clipId, ({ skillSec: _old, ...rest }) => (sec === null ? rest : { ...rest, skillSec: sec }))
 }
 
 // A serve's speed for its flight, or null back on the default.
 export function setServeSpeed(reel: Reel, clipId: string, kmh: number | null): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  const { speedKmh: _old, ...rest } = c
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: kmh === null ? rest : { ...rest, speedKmh: kmh } } })
+  return patchClip(reel, clipId, ({ speedKmh: _old, ...rest }) => (kmh === null ? rest : { ...rest, speedKmh: kmh }))
 }
 
 export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {
-  const c = reel.clips[clipId]
-  if (!c) return reel
-  return touch({ ...reel, clips: { ...reel.clips, [clipId]: { ...c, overlayOverride: o } } })
+  return patchClip(reel, clipId, c => ({ ...c, overlayOverride: o }))
 }

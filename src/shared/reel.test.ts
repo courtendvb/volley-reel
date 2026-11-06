@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  setServeSpeed, setSkillTime, shiftClip, shiftGroup, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
+  setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
 } from './reel'
 
@@ -92,11 +92,11 @@ describe('markers', () => {
 })
 
 describe('reordering', () => {
-  it('shifts a clip inside its group and clamps at the ends', () => {
+  it('moves a clip inside its group and clamps at the ends', () => {
     let { reel, c } = reelWith([0, 2, 4])
     for (const id of c) reel = toggleMarker(reel, id, 1)
-    expect(shiftClip(reel, c[2], -1).groups[1]).toEqual([c[0], c[2], c[1]])
-    expect(shiftClip(reel, c[0], -1).groups[1]).toEqual(c)
+    expect(moveClip(reel, c[2], 1, 1).groups[1]).toEqual([c[0], c[2], c[1]])
+    expect(moveClip(reel, c[0], 1, -1).groups[1]).toEqual(c)
   })
 
   it('drops a clip at an index in another group', () => {
@@ -107,7 +107,6 @@ describe('reordering', () => {
 
   it('reorders marker groups', () => {
     const { reel } = reelWith([0])
-    expect(shiftGroup(reel, 3, -2).groupOrder).toEqual([3, 1, 2, 4, 5])
     expect(placeGroup(reel, 1, 4).groupOrder).toEqual([2, 3, 1, 4, 5])
     expect(placeGroup(reel, 1, null).groupOrder).toEqual([2, 3, 4, 5, 1])
   })
@@ -126,7 +125,7 @@ describe('play order', () => {
     let { reel, c } = reelWith([4, 0, 2, 1])
     reel = toggleMarker(reel, c[2], 2)
     reel = toggleMarker(reel, c[0], 1)
-    reel = shiftGroup(reel, 2, -1) // 2 before 1
+    reel = placeGroup(reel, 2, 1) // 2 before 1
     const when = (x: { playId: number }) => ['2026-10-11', d.plays[x.playId].time] as [string, number]
     expect(playOrder(reel, when, 'marked').map(x => x.playId)).toEqual([2, 4])
     expect(playOrder(reel, when, 'all').map(x => x.playId)).toEqual([2, 4, 0, 1])

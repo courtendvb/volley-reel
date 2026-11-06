@@ -221,7 +221,7 @@ function zone(ch: string): number | null {
 // as row * 100 + column + 1, seen by the player's team from behind its own end line. Columns span
 // 4 m-units across (the court is 0.5–3.5), rows 7 along (court 0.5–6.5, net at 3.5). Checked against
 // the coded zones and sub-zones of a season's files: 87–97% agree.
-export function clickPoint(raw: string | undefined): ClickPoint | null {
+function clickPoint(raw: string | undefined): ClickPoint | null {
   const i = parseInt(raw ?? '')
   if (!(i > 0)) return null
   const row = Math.floor((i - 1) / 100), col = (i - 1) % 100

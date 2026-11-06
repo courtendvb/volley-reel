@@ -1,14 +1,14 @@
 // What App keeps in its `latest` ref (the state as of the last render, for callbacks and the
 // self-checks), and small helpers App and its hooks share.
-import { ourSide, type PlayFilter, type PlayRef } from '../../../shared/filter'
+import type { PlayFilter, PlayRef } from '../../../shared/filter'
 import { markersOf, relink, type Clip, type Group, type Marker, type Reel } from '../../../shared/reel'
 import type { CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import type { LibraryInfo, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
-import type { Video } from '../../../shared/video'
+import { opponentLabel, type Video } from '../../../shared/video'
 import type { PlayKey } from '../components/PlayList'
 import type { ClipInfo } from '../components/ReelPanel'
 
-export type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData }
+type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData }
 
 export interface AppLatest {
   results: PlayRef[]; filter: PlayFilter; matches: Record<string, Match>; reels: Reel[]; reelId: string | null; reel: Reel | null
@@ -50,9 +50,7 @@ export function overlaySample(d: OverlayData | null, r: Reel | null) {
 // Short label for the match column: "10/11 SMT" (the opponent when one side is ours).
 export function labelMatches(ms: Match[], codes: string[]): Record<string, string> {
   return Object.fromEntries(ms.map(m => {
-    const side = ourSide(m.teams, codes)
-    const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
     const d = m.date ? `${+m.date.slice(5, 7)}/${+m.date.slice(8, 10)}` : ''
-    return [m.id, `${d} ${opp}`.trim()]
+    return [m.id, `${d} ${opponentLabel(m, codes)}`.trim()]
   }))
 }

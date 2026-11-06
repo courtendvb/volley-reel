@@ -15,7 +15,7 @@ export const ACCENTS: { name: string; color: string }[] = [
 ]
 
 const KEY = 'vr.appearance'
-export const DEFAULT_APPEARANCE: Appearance = { mode: 'system', accent: ACCENTS[0].color }
+const DEFAULT_APPEARANCE: Appearance = { mode: 'system', accent: ACCENTS[0].color }
 
 export function loadAppearance(): Appearance {
   try {

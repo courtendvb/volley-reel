@@ -13,7 +13,7 @@ import type { AppLatest } from './appState'
 
 const api = window.api
 
-export interface ShortcutHandlers {
+interface ShortcutHandlers {
   latest: RefObject<AppLatest>
   paused: boolean // a dialog that takes the keys is open (settings)
   focusPane: RefObject<'list' | 'scene'> // the list Up / Down walk: the one clicked last

@@ -17,7 +17,7 @@ const pinned = new Map<string, number>() // ids an export is drawing with: never
 const bytesOf = (b: ImageBitmap) => b.width * b.height * 4
 
 // Decodes image bytes, scaled down when larger than maxSide on its long side.
-async function decode(data: Uint8Array, maxSide: number): Promise<ImageBitmap> {
+export async function decodeImage(data: Uint8Array, maxSide: number): Promise<ImageBitmap> {
   const full = await createImageBitmap(new Blob([data as BlobPart]))
   const k = maxSide / Math.max(full.width, full.height)
   if (k >= 1) return full
@@ -42,7 +42,7 @@ function load(id: string): Promise<ImageBitmap | null> {
   let p = loading.get(id)
   if (!p) {
     p = api.readAsset(id)
-      .then(data => decode(data, MAX_SIDE))
+      .then(data => decodeImage(data, MAX_SIDE))
       .then(bmp => { keep(id, bmp); listeners.forEach(f => f()); return bmp })
       .catch(() => null) // missing or unreadable: drawn as a placeholder
     loading.set(id, p)
@@ -94,7 +94,7 @@ function loadLogo(code: string): Promise<ImageBitmap | null> {
   let p = logos.get(code)
   if (!p) {
     p = api.readLogo(code)
-      .then(data => (data ? decode(data, 800) : null)) // logos are drawn small
+      .then(data => (data ? decodeImage(data, 800) : null)) // logos are drawn small
       .catch(() => null)
       .then(bmp => { logoReady.set(code, bmp); listeners.forEach(f => f()); return bmp })
     logos.set(code, p)
@@ -173,7 +173,7 @@ function loadPackPhoto(r: PhotoRef): Promise<ImageBitmap | null> {
   let p = packPhotos.get(key)
   if (!p) {
     p = api.readPackPhoto(r.pack, r.photo)
-      .then(data => decode(data, 800))
+      .then(data => decodeImage(data, 800))
       .catch(() => null)
       .then(bmp => { packPhotoReady.set(key, bmp); listeners.forEach(f => f()); return bmp })
     packPhotos.set(key, p)

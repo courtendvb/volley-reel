@@ -11,7 +11,7 @@
 // assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 // With a quad its four corners are placed one by one, so the picture (a heatmap from analysis
 // software, say) lies on the court with the camera's perspective; x, y, w, h are then its bounds.
-import { homography, project } from './court'
+import { homography, project, type Ctx } from './court'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
@@ -29,7 +29,7 @@ interface Base {
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
 }
 
-export interface Fillable {
+interface Fillable {
   fill?: string | null // none when missing or null
   fillOpacity?: number // 0..1; default 1
 }
@@ -55,7 +55,7 @@ export type Annotation = Base & (
 
 // Corners of a picture laid with perspective: top-left, top-right, bottom-left, bottom-right of the picture.
 export type Quad = [[number, number], [number, number], [number, number], [number, number]]
-type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
+export type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
 
 export type ImageLookup = (assetId: string) => CanvasImageSource | null
 export interface Crop { x: number; y: number; w: number; h: number }
@@ -63,11 +63,9 @@ export interface Crop { x: number; y: number; w: number; h: number }
 export type PointsAnnotation = Extract<Annotation, { points: [number, number][] }>
 export const isPoints = (a: Annotation): a is PointsAnnotation => a.kind === 'freehand' || a.kind === 'polyline' || a.kind === 'polygon'
 
-export const REF_HEIGHT = 720
-export const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
+const REF_HEIGHT = 720
+const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
 export const COLORS = ['#EF4444', '#FFFFFF', '#3B82F6', '#22C55E', '#0F172A']
-export const WIDTHS = [3, 6, 10]
-export const TEXT_SIZES = [24, 36, 52]
 export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, stroke: null, strokeWidth: 2, padding: 8 }
 
 // How a new headline looks, set for the project; anything missing stays as it always was.
@@ -98,7 +96,6 @@ export function cleanHeadline(x: unknown): HeadlineStyle | undefined {
 
 export interface Rect { x: number; y: number; w: number; h: number } // normalized
 
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // The objects that move together with these: the ids themselves and every member of their groups.
 export function withGroups(list: Annotation[], ids: string[]): string[] {
@@ -220,9 +217,9 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
       const left = a.align === 'center' ? a.x - w / 2 : a.x
       return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
-    case 'arrow': return box([[a.x1, a.y1], [a.x2, a.y2]])
+    case 'arrow': return pointsBox([[a.x1, a.y1], [a.x2, a.y2]])
     case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
-    default: return box(a.points)
+    default: return pointsBox(a.points)
   }
 }
 
@@ -364,7 +361,7 @@ export function affine(s: [P, P, P], d: [P, P, P]): [number, number, number, num
 }
 
 // Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
-export const textLines = (t: string): string[] => t.split('\n')
+const textLines = (t: string): string[] => t.split('\n')
 
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
   const px = a.size * s, lh = px * 1.2
@@ -439,7 +436,7 @@ export function pointInPolygon(x: number, y: number, pts: [number, number][]): b
   return inside
 }
 
-function box(points: [number, number][]): Rect {
+export function pointsBox(points: [number, number][]): Rect {
   const xs = points.map(p => p[0]), ys = points.map(p => p[1])
   const x = Math.min(...xs), y = Math.min(...ys)
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }

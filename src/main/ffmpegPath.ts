@@ -4,7 +4,7 @@
 import { app } from 'electron'
 import { join } from 'node:path'
 
-export function ffmpegDir(): string {
+function ffmpegDir(): string {
   if (process.env.FFMPEG_DIR) return process.env.FFMPEG_DIR
   if (app.isPackaged) return join(process.resourcesPath, 'ffmpeg')
   return process.platform === 'darwin' ? join(app.getAppPath(), 'vendor', 'ffmpeg-mac', process.arch) : join(app.getAppPath(), 'vendor', 'ffmpeg', 'bin')

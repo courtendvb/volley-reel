@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { composing } from '../keys'
 import {
-  applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, translate, visibleAt, withGroups,
-  type Annotation, type AnnotationKind, type StylePatch,
+  applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
+  type Annotation, type AnnotationKind, type ImageAnnotation, type Rect, type StylePatch,
 } from '../../../shared/annotation'
-import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
+import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
@@ -45,11 +45,9 @@ type Drag =
   | { mode: 'move'; id: string; from: [number, number]; orig: Annotation; others: Annotation[] }
   | { mode: 'handle'; id: string; handle: string }
   | { mode: 'draw'; draft: Annotation; from: [number, number] }
-  | { mode: 'crop'; id: string; handle: BoxHandle; full: Box }
-  | { mode: 'pan'; id: string; from: [number, number]; orig: ImageAnn; full: Box }
+  | { mode: 'crop'; id: string; handle: BoxHandle; full: Rect }
+  | { mode: 'pan'; id: string; from: [number, number]; orig: ImageAnnotation; full: Rect }
 
-type ImageAnn = Extract<Annotation, { kind: 'image' }>
-type Box = { x: number; y: number; w: number; h: number }
 
 const uid = () => crypto.randomUUID()
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
@@ -163,7 +161,7 @@ export function AnnotationLayer(p: Props) {
   }
   const ctx2d = () => canvas.current!.getContext('2d')!
   // The wheel zooms the picture being cropped (a native listener: React's wheel handler can't prevent scrolling).
-  const cropRef = useRef<ImageAnn | null>(null)
+  const cropRef = useRef<ImageAnnotation | null>(null)
   cropRef.current = cropImg
   useEffect(() => {
     const c = canvas.current

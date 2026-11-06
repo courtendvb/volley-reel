@@ -74,6 +74,7 @@ export function AnnotationTools(p: Props) {
   const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
   const textKinds = kind === null || kind === 'text'
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
+  const deleteButton = sel && <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
   const rel = (at: number | undefined, fallback: string) => (at === undefined ? fallback : t('{0}秒', (at - p.clip.in).toFixed(1)))
 
   return (
@@ -237,13 +238,13 @@ export function AnnotationTools(p: Props) {
           <>
             <span className="muted">{t('タイトルカードの上の図形です')}</span>
             <span className="spacer" />
-            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
+            {deleteButton}
           </>
         ) : sel && scope !== 'clip' ? (
           <>
             <span className="muted">{scope === 'marker' ? t('マーカー {0} のすべてのクリップ', p.marker ?? '') : scope === 'scene' ? t('このシーンのすべてのクリップ') : t('この動画のすべてのクリップ')}{t('で、最初から最後まで表示します')}</span>
             <span className="spacer" />
-            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
+            {deleteButton}
           </>
         ) : sel ? (
           <>
@@ -254,7 +255,7 @@ export function AnnotationTools(p: Props) {
               <button className="link" onClick={() => { const { showFrom: _f, showTo: _t, ...rest } = sel; update(rest as Annotation) }}>{t('クリップ全体で表示')}</button>
             )}
             <span className="spacer" />
-            <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
+            {deleteButton}
           </>
         ) : (
           <span className="hint">

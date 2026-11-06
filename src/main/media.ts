@@ -3,8 +3,7 @@ import { spawn } from 'node:child_process'
 import { ffmpegBin, ffprobeBin } from './ffmpegPath'
 import { t } from '../shared/i18n'
 
-
-export interface VideoInfo {
+interface VideoInfo {
   codec: string
   pixFmt: string
   width: number

@@ -3,7 +3,7 @@ import { displayName } from './dvw'
 import { playDirection, type CourtFit, type PlayDir } from './court'
 import type { ParsedDVW, Play, ProjectSettings, Side, Team } from './types'
 
-export type TeamRole = 'our' | 'opp'
+type TeamRole = 'our' | 'opp'
 
 export interface PlayRef {
   matchId: string
@@ -97,7 +97,7 @@ export function sameFilter(a: PlayFilter, b: PlayFilter): boolean {
 }
 
 // The parts of a scout code after the skill and effect: *07AQ#X5~36BH1 → tempo Q, combo X5, hit H.
-export function codeDetail(code: string, skill: string): { tempo: string | null; combo: string | null; hit: string | null } {
+function codeDetail(code: string, skill: string): { tempo: string | null; combo: string | null; hit: string | null } {
   const at = (i: number) => { const ch = code[i]; return ch && ch !== '~' ? ch : null }
   const combo = code.slice(6, 8)
   return {
@@ -183,7 +183,7 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
 }
 
 // The contact next to a play (codes from p.before or p.after), past the team's own set if asked.
-export function nearCode(p: Play, codes: string[], skipSet: boolean): string | null {
+function nearCode(p: Play, codes: string[], skipSet: boolean): string | null {
   const [c, d] = codes
   return (skipSet && c?.[3] === 'E' && c[0] === p.side ? d : c) ?? null
 }

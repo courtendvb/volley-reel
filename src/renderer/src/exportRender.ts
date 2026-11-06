@@ -7,7 +7,7 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, drawHeat, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
+import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
@@ -65,7 +65,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
         drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
-        if (p.card.slide?.heat) drawHeat(ctx, W, H, p.card.slide.heat, d.courtStyle?.heatOpacity)
+        if (p.card.slide) drawSlideMarks(ctx, W, H, p.card.slide, d.courtStyle?.heatOpacity)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
       }), ...(p.card.slide?.flights ? { layers: await flightLayers(p.card.slide.flights, p.durationSec, png) } : {}) })
       continue

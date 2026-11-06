@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
-import { effectName } from '../../shared/labels'
+import { effectName, playLabel } from '../../shared/labels'
 import {
   DEFAULT_RANGE, addClips, chronological, clipRange, defaultRange, findClip, findOverlaps, groupRows, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
@@ -24,7 +24,7 @@ import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, slideCard, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
-import { CardEditBar, CardEditor, SlideEditBar } from './components/CardEditor'
+import { CardEditBar, CardEditor, SlideEditBar, type SlideMark } from './components/CardEditor'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
 import { PlayerPhotos } from './components/PlayerPhotos'
@@ -38,7 +38,7 @@ import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
-import { DEFAULT_GRID_STYLE, floorAt, homography, nearestShots, project as onPicture, serveSpeed, flightTiming, playMarks, zoneAt, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_GRID_STYLE, floorAt, homography, nearestShots, project as onPicture, serveSpeed, flightTiming, playMarks, playerMarks, zoneAt, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
@@ -123,10 +123,9 @@ export function App() {
   useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
   const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
-  const [objectsOpen, setObjectsOpen] = useState(false) // the objects' tools, under the trim bar
   useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
   // An object picked on the video (or a headline's 書式) opens the objects panel, unless the trim panel is up (its lanes show the object's times).
-  const showObjects = () => { setStagePanel('edit'); setObjectsOpen(true) }
+  const showObjects = () => setStagePanel('objects')
   const gridStyleRef = useRef(gridStyle)
   gridStyleRef.current = gridStyle
 
@@ -325,6 +324,24 @@ export function App() {
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group, extractRef.current).reel)
   }, [withReel])
+  // The court's marks on a slide: taken from the play selected in the list, and fixed there.
+  const slideTarget = selectedPlay && match?.court ? `#${selectedPlay.jersey} ${playLabel(selectedPlay.skill, selectedPlay.effect)}` : null
+  const markSlide = (s: Slide, mark: SlideMark, on: boolean) => {
+    const r = latest.current.reel
+    if (!r) return
+    if (!on) { const { [mark]: _gone, ...rest } = s; updateReel(setSlide(r, rest as Slide)); return }
+    const fit = match?.court
+    if (!selectedPlay || !fit) return
+    const all = () => Object.values(dvws).flatMap(d => d.plays)
+    const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true }, all)
+    const add: Partial<Slide> | null = mark === 'zones' ? { zones: { fit, zones: playMarks(selectedPlay, fit, nextPlay), detail: gridStyle.detail } }
+      : mark === 'heat' && shots?.heat ? { heat: { fit, points: shots.heat.points } }
+      : mark === 'landings' && shots?.landings ? { landings: { fit, points: shots.landings.points } }
+      : mark === 'flights' && shots?.flights ? { flights: shots.flights }
+      : null
+    if (add) updateReel(setSlide(r, { ...s, ...add }))
+    else setNotice(mark === 'flights' ? t('サーブ軌道はサーブを選ぶと載せられます') : t('サーブかアタックを選ぶと載せられます'))
+  }
   // A shot on the court: the row it has in the list of its match.
   const goToShot = (p: Play) => {
     setShotPick(null)
@@ -976,7 +993,7 @@ export function App() {
                 const court = match.court && (
                   <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
-                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && !(stagePanel === 'edit' && objectsOpen) ? courtClick : undefined} />
+                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )
                 return (
                   <>
@@ -1002,6 +1019,7 @@ export function App() {
             )}
             {cardEditCard && editingSlide && (
               <SlideEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
+                target={slideTarget} onMark={(mark, on) => markSlide(editingSlide, mark, on)}
                 onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
                 onReload={editingSource ? () => void reloadSlideFiles([editingSource.path]) : null} />
             )}
@@ -1065,17 +1083,13 @@ export function App() {
               </div>
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
-              <button className="link stage-fold" aria-expanded={objectsOpen} onClick={() => setObjectsOpen(o => !o)}>
-                {objectsOpen ? '▾' : '▸'} {t('図形')}{activeAnns.length ? t('（{0}）', activeAnns.length) : ''}</button>
-              <div className="stage-fold-body" hidden={!objectsOpen}>
+              <div className="stage-panel" hidden={stagePanel !== 'objects'}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
                 court={matches[active.matchId]?.court?.corners ?? null}
               />
-              </div>
               </div>
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (

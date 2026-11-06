@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, landingPoint, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -405,5 +405,12 @@ describe('clicks on the court', () => {
   })
   it('measures nearness in metres: the court is twice as long as wide', () => {
     expect(nearestShots([{ x: 0.5, y: 0.3 }, { x: 0.7, y: 0.5 }, { x: 0.5, y: 0.52 }], { x: 0.5, y: 0.5 }, 2)).toEqual([2, 1])
+  })
+})
+
+describe('handleAt', () => {
+  it('stays on a corner inside the picture and comes to the edge for one outside', () => {
+    expect(handleAt({ x: 0.5, y: 0.4 }, 1000, 500, 10)).toEqual({ x: 0.5, y: 0.4 })
+    expect(handleAt({ x: -0.2, y: 1.3 }, 1000, 500, 10)).toEqual({ x: 0.01, y: 0.98 })
   })
 })

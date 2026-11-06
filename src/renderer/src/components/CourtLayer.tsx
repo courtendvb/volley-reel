@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { drawCourt, flightMoves, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { drawCourt, flightMoves, handleAt, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
 import { playback } from '../playback'
 import { prepareCanvas } from '../canvas'
 
@@ -40,7 +40,7 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
     drawCourt(ctx, size.w, size.h, { ...fit, corners }, fitting ? { ...style, grid: true } : style, fitting ? null : zones, flies ? progress : 1)
     if (!fitting) return
     for (const p of corners) {
-      const x = p.x * size.w, y = p.y * size.h
+      const at = handleAt(p, size.w, size.h, HANDLE + 2), x = at.x * size.w, y = at.y * size.h
       ctx.beginPath(); ctx.arc(x, y, HANDLE + 2, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fill()
       ctx.beginPath(); ctx.arc(x, y, HANDLE, 0, Math.PI * 2); ctx.fillStyle = style.color; ctx.fill()
       ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill()
@@ -68,7 +68,7 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
   }
   const hit = (p: Pt) => {
     let best = -1, bestD = HIT
-    corners.forEach((c, i) => { const d = Math.hypot((c.x - p.x) * size.w, (c.y - p.y) * size.h); if (d < bestD) { best = i; bestD = d } })
+    corners.forEach((c, i) => { const at = handleAt(c, size.w, size.h, HANDLE + 2), d = Math.hypot((at.x - p.x) * size.w, (at.y - p.y) * size.h); if (d < bestD) { best = i; bestD = d } })
     return best
   }
 

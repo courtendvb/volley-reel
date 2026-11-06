@@ -8,12 +8,12 @@ export function composing(e: KeyboardEvent | globalThis.KeyboardEvent): boolean 
   return n.isComposing || n.keyCode === 229
 }
 
-// How far ← → move the video, in seconds; kept on this computer.
-const ARROW_KEY = 'vr.arrowSec'
-export const ARROW_SEC = 0.5
-export function arrowSec(): number {
-  try { const n = Number(localStorage.getItem(ARROW_KEY)); return n > 0 && n <= 60 ? n : ARROW_SEC } catch { return ARROW_SEC }
+// How far ← → and Ctrl + ← → move the video, in seconds; kept on this computer.
+const seconds = (key: string, usual: number) => {
+  try { const n = Number(localStorage.getItem(key)); return n > 0 && n <= 60 ? n : usual } catch { return usual }
 }
-export function setArrowSec(sec: number): void {
-  try { localStorage.setItem(ARROW_KEY, String(sec)) } catch { /* not kept */ }
-}
+const keep = (key: string, sec: number) => { try { localStorage.setItem(key, String(sec)) } catch { /* not kept */ } }
+export const arrowSec = () => seconds('vr.arrowSec', 0.5)
+export const setArrowSec = (sec: number) => keep('vr.arrowSec', sec)
+export const ctrlArrowSec = () => seconds('vr.ctrlArrowSec', 5)
+export const setCtrlArrowSec = (sec: number) => keep('vr.ctrlArrowSec', sec)

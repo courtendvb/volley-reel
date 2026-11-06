@@ -442,12 +442,6 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
   ctx.restore()
 }
 
-// Where a shot landed, turned like servePath so any match's lie on one picture; null without the click.
-export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
-  const b = play.endClick
-  return b ? { x: 1 - b.u, y: b.v } : null
-}
-
 // A heatmap on the floor: how thick the landings are, in metres so the spread is the same both ways
 // along the court. Coloured like a thermal camera, blue through to red as the count rises; the
 // thinnest parts fade out so the floor shows.

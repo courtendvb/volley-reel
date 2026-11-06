@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { HEADLINE_SIZE, type HeadlineStyle } from '../../../shared/annotation'
 import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
 import { ACCENTS, applyAppearance, loadAppearance, type Appearance, type ThemeMode } from '../appearance'
@@ -8,6 +9,9 @@ import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
 import { IS_MAC } from '../../../shared/keys'
 import { arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec } from '../keys'
+
+// Fonts every computer of its kind has; the list a project's headline can pick from.
+const FONTS = IS_MAC ? ['Hiragino Sans', 'Hiragino Mincho ProN', 'Helvetica Neue', 'Georgia', 'Impact'] : ['Yu Gothic UI', 'Meiryo', 'BIZ UDPGothic', 'Yu Mincho', 'Arial', 'Georgia', 'Impact']
 
 interface Props {
   settings: ProjectSettings
@@ -25,12 +29,14 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
   // The app's look shows at once and is kept at once, like the logos (it isn't part of the project).
   const [look, setLook] = useState<Appearance>(loadAppearance)
   const changeLook = (a: Appearance) => { setLook(a); applyAppearance(a) }
+  const [headline, setHeadline] = useState<HeadlineStyle>(settings.headline ?? {})
+  const head = (patch: HeadlineStyle) => setHeadline({ ...headline, ...patch })
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], theme })
+      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], theme, headline })
       onClose()
     } finally {
       setSaving(false)
@@ -55,6 +61,30 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <span className="field-label wide">{t('配色（プロジェクト全体）')}</span>
           <ThemePicker value={theme} onChange={setTheme} />
           <p className="hint">{t('スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。')}</p>
+        </section>
+
+        <section>
+          <span className="field-label wide">{t('見出し')}</span>
+          <div className="filter-row">
+            <label className="field-label" htmlFor="headline-font">{t('フォント')}</label>
+            <select id="headline-font" value={headline.font ?? ''} onChange={e => { const { font: _f, ...rest } = headline; setHeadline(e.target.value ? { ...rest, font: e.target.value } : rest) }}>
+              <option value="">{t('標準')}</option>
+              {[...new Set([...FONTS, ...(headline.font ? [headline.font] : [])])].map(f => <option key={f} value={f} style={{ fontFamily: `"${f}"` }}>{f}</option>)}
+            </select>
+            <label className="field-label" htmlFor="headline-size">{t('サイズ')}</label>
+            <input id="headline-size" type="number" min={12} max={200} step={2} value={headline.size ?? HEADLINE_SIZE} style={{ width: 64 }}
+              onChange={e => { const n = +e.target.value; if (n >= 12 && n <= 200) head({ size: n }) }} />
+          </div>
+          <div className="filter-row">
+            <label className="field-label" htmlFor="headline-color">{t('色')}</label>
+            <input id="headline-color" type="color" value={headline.color ?? '#FFFFFF'} onChange={e => head({ color: e.target.value.toUpperCase() })} />
+            <label className="check"><input type="checkbox" checked={headline.bold !== false} onChange={e => head({ bold: e.target.checked })} /> {t('太字')}</label>
+            <label className="check"><input type="checkbox" checked={headline.outline !== false} onChange={e => head({ outline: e.target.checked })} /> {t('黒縁')}</label>
+            <label className="check"><input type="checkbox" checked={!!headline.box} onChange={e => { const { box: _b, ...rest } = headline; setHeadline(e.target.checked ? { ...rest, box: '#0F172A' } : rest) }} /> {t('背景')}</label>
+            {headline.box && <input type="color" aria-label={t('背景の色')} value={headline.box} onChange={e => head({ box: e.target.value.toUpperCase() })} />}
+            <button className="link" onClick={() => setHeadline({})}>{t('標準に戻す')}</button>
+          </div>
+          <p className="hint">{t('これから入れる見出しの見た目。プロジェクトのすべての動画に使います。入れた見出しは変わりません（書式から個別に変えられます）。')}</p>
         </section>
 
         <section>

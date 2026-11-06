@@ -726,7 +726,7 @@ export function installSmoke(h: SmokeHost): void {
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.8, 0.8))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointerup', apt(0.8, 0.8))); await sleep(300)
-    // グループ全体: an object on marker 1's first clip moved to the marker group shows on its other
+    // マーカー全体: an object on marker 1's first clip moved to the marker group shows on its other
     // clip, not on marker 2's.
     let markerScope: unknown = null
     {

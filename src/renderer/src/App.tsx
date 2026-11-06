@@ -577,6 +577,8 @@ export function App() {
   // slideId: a slide of the scene instead, edited the same way (its objects; no title).
   const [cardEdit, setCardEdit] = useState<{ sceneId: string | null; marker: Marker | null; slideId?: string } | null>(null)
   const [cardTool, setCardTool] = useState<'objects' | 'title'>('objects') // what the pointer edits on the card
+  const [cardToolsOpen, setCardToolsOpen] = useState(false) // the object tools under a card or slide: folded until wanted
+  useEffect(() => { if (cardEdit && selectedAnn) setCardToolsOpen(true) }, [cardEdit, selectedAnn]) // an object picked on it opens them
   const cardEditCard = useMemo((): Card | null => {
     if (!cardEdit) return null
     const codes = settings?.ourTeamCodes ?? []
@@ -693,7 +695,7 @@ export function App() {
     return true
   }
   const editCard = (sceneId: string | null, marker: Marker | null, slideId?: string) => {
-    playback.stopSequence(); playback.pause(); setSelectedAnn(null); setCardTool('objects'); setCardEdit({ sceneId, marker, ...(slideId ? { slideId } : {}) })
+    playback.stopSequence(); playback.pause(); setSelectedAnn(null); setCardTool('objects'); setCardToolsOpen(false); setCardEdit({ sceneId, marker, ...(slideId ? { slideId } : {}) })
   }
   // A slide that was removed (or undone away) while open: back to the clips.
   useEffect(() => { if (cardEdit?.slideId && !cardEditCard) setCardEdit(null) }, [cardEdit, cardEditCard])
@@ -1029,12 +1031,19 @@ export function App() {
                 title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} />
             )}
             {cardEditCard && cardTool === 'objects' && (
+              <div className="filter-row">
+                <button className="link" aria-expanded={cardToolsOpen} onClick={() => setCardToolsOpen(o => !o)}>{cardToolsOpen ? '▾' : '▸'} {t('図形')}</button>
+              </div>
+            )}
+            {cardEditCard && cardTool === 'objects' && (
+              <div className="stage-panel" hidden={!cardToolsOpen}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle} cardMode
                 annotations={cardEditCard.annotations ?? []} scopeOf={() => 'clip'} onScope={() => {}} canVideo={false} selectedId={selectedAnn}
                 editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setCardAnns} onInsertImage={() => void insertImage()} clip={{ in: 0, out: 0 }} disabled={false}
               />
+              </div>
             )}
             {!cardEdit && match && (
               <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting} />
@@ -1047,7 +1056,7 @@ export function App() {
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <div className="stage-panel" hidden={stagePanel !== 'edit'}>
-              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
+              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} headline={settings?.headline} disabled={seqPlaying} clipIn={activeInfo.range.in}
                 onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
@@ -1151,7 +1160,7 @@ export function App() {
               onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
             </div>
             <div className="right-pane" hidden={rightTab !== 'export'}>
-            <ExportPanel targets={exportTargets} info={exportInfo} court={overlay.court.enabled} onCourt={on => setOverlay({ ...overlay, court: { enabled: on } })} state={exportState} onExport={exportTarget}
+            <ExportPanel targets={exportTargets} info={exportInfo} court={overlay.court.enabled} onCourt={on => setOverlay({ ...overlay, court: { enabled: on } })} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
             </div>
           </div>

@@ -21,7 +21,7 @@ interface Deps {
   matches: Record<string, Match>
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
-  markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: グループ全体
+  markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
   court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
   courtStyle?: GridStyle // the grid's look, as in the player
 }

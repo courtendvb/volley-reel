@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
+import { cleanHeadline, applyStyle, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
 
 // Enough of a 2D context for hit testing: text width = 0.5 * font px per character.
 const fake = { font: '', measureText: (t: string) => ({ width: t.length * 0.5 * parseFloat(/(\d+(\.\d+)?)px/.exec(fake.font)![1]) }) }
@@ -79,5 +79,13 @@ describe('copy and paste', () => {
     expect(moved.x).toBeCloseTo(0.62)
     const twice = pasteCopies(copy, [g1, moved as unknown as Annotation])[0] as unknown as { x: number }
     expect(twice.x).toBeCloseTo(0.64)
+  })
+})
+
+describe('cleanHeadline', () => {
+  it('keeps what is usable and drops the rest', () => {
+    expect(cleanHeadline({ font: 'Yu Gothic UI', size: 60, color: '#ff0000', bold: false, outline: true, box: 'red' })).toEqual({ font: 'Yu Gothic UI', size: 60, color: '#ff0000', bold: false, outline: true })
+    expect(cleanHeadline({ font: 'x"; color: red', size: 500 })).toBeUndefined()
+    expect(cleanHeadline(undefined)).toBeUndefined()
   })
 })

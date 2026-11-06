@@ -30,6 +30,8 @@ export interface OverlaySettings {
   // The court grid and the play's zones in the export, drawn as the player shows them (the
   // look is set under the video). Only for matches whose court is fitted.
   court: { enabled: boolean }
+  // YouTube chapters (a .txt beside the MP4) when the whole video is exported.
+  chapters: { enabled: boolean }
 }
 
 // x / y: the marker title's top-left, or the scene title's center (0..1 of the frame); scale: 1 = default size.
@@ -58,6 +60,7 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
+  chapters: { enabled: false },
 }
 
 // What gets saved: any part may be missing, and missing parts fall back to the defaults.
@@ -73,6 +76,7 @@ export function overlaySettings(saved: OverlayPatch | undefined): OverlaySetting
     titleCard: { ...DEFAULT_OVERLAY.titleCard, ...(s.titleCard ?? {}) },
     transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
     court: { ...DEFAULT_OVERLAY.court, ...(s.court ?? {}) },
+    chapters: { ...DEFAULT_OVERLAY.chapters, ...(s.chapters ?? {}) },
   }
 }
 

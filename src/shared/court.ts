@@ -452,7 +452,7 @@ export function landingPoint(play: Pick<Play, 'endClick'>): Pt | null {
 export interface SlideHeat { fit: CourtFit; points: Pt[] }
 const COURT_W_M = 9, COURT_L_M = 18
 const HEAT_CELL_M = 0.25, HEAT_SIGMA_M = 0.8, HEAT_MARGIN_M = 3
-export const HEAT_OPACITY = 0.75 // the heatmap at its thickest, unless GridStyle.heatOpacity says otherwise
+export const HEAT_OPACITY = 0.6 // the heatmap at its thickest, unless GridStyle.heatOpacity says otherwise
 const HEAT_RAMP: [number, [number, number, number]][] = [[0, [37, 99, 235]], [0.3, [6, 182, 212]], [0.5, [34, 197, 94]], [0.72, [250, 204, 21]], [1, [220, 38, 38]]]
 
 // The colour for a thickness of 0–1.

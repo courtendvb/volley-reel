@@ -14,6 +14,8 @@ interface Props {
   info: string // the output: size, frame rate, fade, cards
   court: boolean // the court grid and the play's zones in the export (the video's setting)
   onCourt: (on: boolean) => void
+  chapters: boolean // YouTube chapters beside the MP4 of the whole video (the video's setting)
+  onChapters: (on: boolean) => void
   state: { status: string; ratio: number; message: string; outPath?: string } | null
   onExport: (key: string) => void
   onCancel: () => void
@@ -23,7 +25,7 @@ interface Props {
 
 // Export, the last tab of the right column: pick what to export (the whole video, the open
 // scene, or one marker group), see what comes out, then one large button. Progress stays here too.
-export function ExportPanel({ targets, info, court, onCourt, state, onExport, onCancel, onShowFile, onOpenOverlay }: Props) {
+export function ExportPanel({ targets, info, court, onCourt, chapters, onChapters, state, onExport, onCancel, onShowFile, onOpenOverlay }: Props) {
   const [pick, setPick] = useState('video')
   const chosen = targets.find(t => t.key === pick) ?? targets[0]
   const busy = state?.status === 'running' || state?.status === 'preparing'
@@ -41,6 +43,10 @@ export function ExportPanel({ targets, info, court, onCourt, state, onExport, on
         </div>
         <label className="check export-court" title={t('コートのグリッドとプレーのゾーンを書き出しに入れる（この動画のすべてのクリップ。見た目は動画の下の「コート」の設定。コートを合わせた試合だけ）')}>
           <input type="checkbox" checked={court} disabled={busy || !targets.length} onChange={e => onCourt(e.target.checked)} /> {t('コートとゾーンを入れる')}</label>
+        {chosen?.key === 'video' && (
+          <label className="check export-court" title={t('シーンの先頭を YouTube のチャプターにしたテキスト（.txt）を MP4 の隣に書き出す（この動画の設定）')}>
+            <input type="checkbox" checked={chapters} disabled={busy} onChange={e => onChapters(e.target.checked)} /> {t('YouTube のチャプターも書き出す')}</label>
+        )}
         <p className="export-info">{info} <button className="link" onClick={onOpenOverlay}>{t('動画の設定')}</button></p>
         {busy ? (
           <div className="export-progress">

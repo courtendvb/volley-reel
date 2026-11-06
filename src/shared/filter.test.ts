@@ -209,3 +209,27 @@ describe('direction', () => {
     expect(applyFilter(refs(), { ...EMPTY_FILTER, dir: 'up' })).toEqual([])
   })
 })
+
+describe('front row condition', () => {
+  const D = parseDVW(dvw('HTH', 'OPP', ['TAN-TAR-02', 'TANAKA', 'Taro'], ['SMI-JOH-95', 'SMITH', 'John'], `
+*01SQ-~~~16A;;;;;;;;1;1;3;1;100;;2;1;3;4;5;6;7;8;9;10;11;12;
+a01AQ#PA~36BH1;;;;;;;;1;1;3;1;104;;2;1;3;4;5;6;7;8;9;10;11;12;
+ap00:01;;;;;;;;1;1;3;1;114;;
+*07SQ-~~~16A;;;;;;;;1;1;3;1;120;;1;2;3;4;5;6;7;8;9;10;11;12;
+a01AQ#PA~36BH1;;;;;;;;1;1;3;1;124;;1;2;3;4;5;6;7;8;9;10;11;12;
+`))
+  const refs = buildRefs('d', D, { ourTeamCodes: ['HTH'] })
+  const times = (f: Partial<typeof EMPTY_FILTER>) => applyFilter(refs, { ...EMPTY_FILTER, ...f }).map(r => r.play.time)
+
+  it("finds the opponent's attacks while our player is in front", () => {
+    expect(times({ team: 'opp', skills: ['A'], frontPlayers: ['TAN-TAR-02'] })).toEqual([104])
+  })
+  it('needs all the players picked in front together', () => {
+    expect(times({ skills: ['A'], frontPlayers: ['TAN-TAR-02', '*3'] })).toEqual([104])
+    expect(times({ skills: ['A'], frontPlayers: ['TAN-TAR-02', '*2'] })).toEqual([])
+  })
+  it('keeps the condition when saved, and reads old filters', () => {
+    expect(cleanFilter({ frontPlayers: ['TAN-TAR-02', 1] }).frontPlayers).toEqual(['TAN-TAR-02'])
+    expect(cleanFilter({}).frontPlayers).toEqual([])
+  })
+})

@@ -214,10 +214,10 @@ export function AnnotationTools(p: Props) {
           )}
           {sel && !p.cardMode && (
             <select aria-label={t('表示範囲')} value={scope} disabled={p.disabled} className={`scope-${scope}`}
-              title={t('このクリップだけ／このグループのすべてのクリップ／このシーンのすべてのクリップ／この動画のすべてのクリップ')}
+              title={t('このクリップだけ／このマーカーのすべてのクリップ／このシーンのすべてのクリップ／この動画のすべてのクリップ')}
               onChange={e => p.onScope(sel.id, e.target.value as AnnScope)}>
               <option value="clip">{t('表示: このクリップ')}</option>
-              {(p.marker || scope === 'marker') && <option value="marker">{t('表示: グループ全体{0}', p.marker ? t('（{0}）', p.marker) : '')}</option>}
+              {(p.marker || scope === 'marker') && <option value="marker">{t('表示: マーカー全体{0}', p.marker ? t('（{0}）', p.marker) : '')}</option>}
               <option value="scene">{t('表示: シーン全体')}</option>
               {(p.canVideo || scope === 'video') && <option value="video">{t('表示: 動画全体')}</option>}
             </select>
@@ -241,7 +241,7 @@ export function AnnotationTools(p: Props) {
           </>
         ) : sel && scope !== 'clip' ? (
           <>
-            <span className="muted">{scope === 'marker' ? t('グループ {0} のすべてのクリップ', p.marker ?? '') : scope === 'scene' ? t('このシーンのすべてのクリップ') : t('この動画のすべてのクリップ')}{t('で、最初から最後まで表示します')}</span>
+            <span className="muted">{scope === 'marker' ? t('マーカー {0} のすべてのクリップ', p.marker ?? '') : scope === 'scene' ? t('このシーンのすべてのクリップ') : t('この動画のすべてのクリップ')}{t('で、最初から最後まで表示します')}</span>
             <span className="spacer" />
             <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
           </>

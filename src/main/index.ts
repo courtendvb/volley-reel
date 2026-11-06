@@ -131,6 +131,8 @@ app.whenReady().then(async () => {
     width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'SyncScout Video Editor',
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   })
+  // A file dropped on the window would open in place of the app: nothing may lead it away.
+  win.webContents.on('will-navigate', (e, url) => { if (url !== win?.webContents.getURL()) e.preventDefault() })
   win.setMenuBarVisibility(false)
   // Closing: let the renderer write pending reel saves first (autosave runs on a short delay),
   // with a timeout so a stuck renderer can't keep the window open. A running export is cancelled.

@@ -37,6 +37,13 @@ describe('detectCourt', () => {
   it('wants the court in the middle of the picture', () => {
     expect(detectCourt([picture(true, corners.map(c => ({ ...c, x: c.x - 0.08 })) as CourtFit['corners'])])).toBeNull()
   })
+  it('stays quick on a floor with a line on every row', () => {
+    const data = new Uint8Array(w * h * 3)
+    for (let y = 0; y < h; y++) data.fill(120 + 60 * Math.sin(y / 3), y * w * 3, (y + 1) * w * 3)
+    const from = Date.now()
+    detectCourt([data])
+    expect(Date.now() - from).toBeLessThan(10000)
+  }, 30000)
   it('says nothing when there is no court', () => {
     expect(detectCourt([picture(false)])).toBeNull()
     expect(detectCourt([])).toBeNull()

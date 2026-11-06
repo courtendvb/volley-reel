@@ -12,6 +12,7 @@ const RIDGE = 60 // how far a pixel can count as standing out, so one bright spo
 const CONTRAST = 30, FLAT = 18 // how far colours are apart (R + G + B) at a change, and at most on flat floor
 const LEANS = [-0.015, -0.01, -0.005, 0, 0.005, 0.01, 0.015] // of end lines: pixels down per pixel across
 const RATIOS = 28 // far end's width to the near end's, tried from 0.45 in steps of 0.01
+const NEAR_ROWS = 20, FAR_ROWS = 60, STRONG_ROWS = 40 // rows tried for each end line, and looked at for stray lines
 const PAIRS = 10 // pairs of end lines taken on to look for sidelines
 const CENTRED = 0.04 // of the picture's width: how far each end's middle can be from the middle
 const SIDES = 4 // sidelines kept for each side of the court
@@ -123,17 +124,19 @@ function endLines(ridgeUp: Uint8Array, w: number, h: number): Ends[] {
     const close = (y: number) => { const r = Math.round(y); return Math.max(rows[r - 2] ?? 0, rows[r - 1] ?? 0, rows[r] ?? 0, rows[r + 1] ?? 0, rows[r + 2] ?? 0) }
     const peaks: number[] = []
     for (let y = Math.ceil(h * 0.25); y < h; y++) if (rows[y] >= 0.15 && rows[y] >= (rows[y - 1] ?? 0) && rows[y] >= (rows[y + 1] ?? 0)) peaks.push(y)
+    // Only the strongest: a textured floor has a peak on nearly every row, and every pair would be tried.
+    const strongest = (list: number[], count: number) => [...list].sort((a, b) => rows[b] - rows[a]).slice(0, count)
+    const nears = strongest(peaks.filter(y => y >= h * 0.8), NEAR_ROWS), fars = strongest(peaks.filter(y => y < h * 0.65), FAR_ROWS)
+    const strong = strongest(peaks.filter(y => rows[y] >= 0.6), STRONG_ROWS)
     const line = (y: number): Line => ({ slope: lean, at: y - lean * w / 2 })
-    for (const near of peaks) {
-      if (near < h * 0.8) continue
-      for (const far of peaks) {
-        if (far >= h * 0.65) continue
+    for (const near of nears) {
+      for (const far of fars) {
         for (let k = 0; k < RATIOS; k++) {
           const ratio = 0.45 + k * 0.01, inner = [1 / 3, 0.5, 2 / 3].map(v => rowAt(far, near, ratio, v))
           const at = (i: number) => close(inner[i])
           // A strong line inside that the court doesn't have: the real end, if this one is the net's.
           let stray = 0
-          for (const y of peaks) if (y > far + 3 && y < near - 3 && !inner.some(r => Math.abs(r - y) < 4) && rows[y] >= 0.6) stray += rows[y]
+          for (const y of strong) if (y > far + 3 && y < near - 3 && !inner.some(r => Math.abs(r - y) < 4)) stray += rows[y]
           found.push({ far: line(far), near: line(near), ratio, fit: rows[far] + rows[near] + (at(0) + at(2)) * 1.5 + at(1) / 2 - stray })
         }
       }

@@ -9,7 +9,7 @@ import { errorText } from '../format'
 
 interface Picture { name: string; image: ImageBitmap; crop: Crop }
 
-const LONGEST = 1600 // big camera files are read down to this: enough for a 600 px photo, and light
+const LONGEST = 1200 // big camera files are read down to this: twice a pack photo, and a team's worth stays light
 const isPicture = (f: File) => /\.(png|jpe?g)$/i.test(f.name) || f.type === 'image/png' || f.type === 'image/jpeg'
 
 async function readPicture(file: File): Promise<Picture> {
@@ -56,16 +56,16 @@ export function PackMaker({ onClose }: { onClose: () => void }) {
   const shown = (roster ?? []).filter(p => (!team || p.team === team) && (!lacking || !(photos[p.key] || inPack(p))))
   const given = (roster ?? []).filter(p => photos[p.key])
 
-  const add = async (files: File[]) => {
+  // one: the player the picker was opened for gets the first photo; any others find their own.
+  const add = async (files: File[], one: string | null = null) => {
     const pictures = files.filter(isPicture)
     if (!pictures.length) return
     setBusy(true); setError(null); setDone(null)
-    const unread: string[] = [], one = forPlayer.current
-    forPlayer.current = null
+    const unread: string[] = []
     const found: Record<string, Picture> = {}, rest: Picture[] = []
-    for (const f of pictures) {
+    for (const [i, f] of pictures.entries()) {
       try {
-        const pic = await readPicture(f), who = one ?? playerForFile(f.name, roster ?? [])?.key
+        const pic = await readPicture(f), who = (i === 0 ? one : null) ?? playerForFile(f.name, roster ?? [])?.key
         if (who) found[who] = pic; else rest.push(pic)
       } catch { unread.push(f.name) }
     }
@@ -113,7 +113,7 @@ export function PackMaker({ onClose }: { onClose: () => void }) {
           <label className="field-label" htmlFor="pack-name">{t('パック名')}</label>
           <input id="pack-name" value={name} placeholder={t('例: 2026 シーズン')} onChange={e => setName(e.target.value)} onKeyDown={e => e.stopPropagation()} />
           <button onClick={() => { forPlayer.current = null; input.current?.click() }} disabled={busy}>{t('写真を追加…')}</button>
-          <input ref={input} type="file" accept="image/png,image/jpeg" multiple hidden onChange={e => { void add([...(e.target.files ?? [])]); e.target.value = '' }} />
+          <input ref={input} type="file" accept="image/png,image/jpeg" multiple hidden onChange={e => { const one = forPlayer.current; forPlayer.current = null; void add([...(e.target.files ?? [])], one); e.target.value = '' }} />
         </div>
         <p className="hint">{t('写真をここにドラッグするか「写真を追加」で入れます。HTH_7.jpg のようなファイル名（チームコードと背番号）か、HTH_TANAKA.jpg、TANAKA.jpg なら自動で選手に割り当てます。選手をクリックすると 1 人ずつ入れられ、入れた写真をクリックすると切り抜きを直せます。')}</p>
         <div className="filter-row">

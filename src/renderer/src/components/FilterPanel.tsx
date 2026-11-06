@@ -3,6 +3,7 @@ import { EFFECTS, HITS, SKILLS, TEMPOS } from '../../../shared/labels'
 import { EMPTY_FILTER, sameFilter, type Person, type PlayFilter, type SavedFilter, type detailOptions } from '../../../shared/filter'
 import type { ClipMode, RangeDefaults } from '../../../shared/reel'
 import { CheckPicker } from './CheckPicker'
+import { ZoneCourts } from './ZoneCourts'
 import { SecInput } from './ReelPanel'
 import { t } from '../../../shared/i18n'
 
@@ -31,7 +32,7 @@ const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
-  const detailCount = f.tempos.length + f.combos.length + f.hits.length + (f.startZone !== null ? 1 : 0) + (f.endZone !== null ? 1 : 0)
+  const detailCount = f.tempos.length + f.combos.length + f.hits.length + f.startZones.length + f.endZones.length
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
   // Set, rotations, phase and the plays around: folded like the detailed search, opened when one is in use.
@@ -134,9 +135,8 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
               render={c => { const n = comboName(c); return n ? `${c} ${n}` : c }} />
           )}
           <div className="filter-row">
-            <label className="field-label">{t('ゾーン')}</label>
-            <ZoneSelect label={t('開始')} value={f.startZone} onChange={startZone => set({ startZone })} />
-            <ZoneSelect label={t('終了')} value={f.endZone} onChange={endZone => set({ endZone })} />
+            <span className="field-label">{t('ゾーン')}</span>
+            <ZoneCourts start={f.startZones} end={f.endZones} onStart={startZones => set({ startZones })} onEnd={endZones => set({ endZones })} />
           </div>
           <p className="hint">{t('コンビはアタックのコンビネーションとセッターコール（DVW の表の名前つき）。スキルを選ぶと、そのスキルにあるものだけ出ます。')}</p>
         </div>
@@ -233,14 +233,5 @@ function Chips<T extends string | number>({ label, values, selected, onChange, r
         ))}
       </div>
     </div>
-  )
-}
-
-function ZoneSelect({ label, value, onChange }: { label: string; value: number | null; onChange: (v: number | null) => void }) {
-  return (
-    <select aria-label={t('{0}ゾーン', label)} value={value ?? ''} onChange={e => onChange(e.target.value ? +e.target.value : null)}>
-      <option value="">{label} —</option>
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(z => <option key={z} value={z}>{label} {z}</option>)}
-    </select>
   )
 }

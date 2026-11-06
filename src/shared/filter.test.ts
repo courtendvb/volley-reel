@@ -86,8 +86,9 @@ describe('filters', () => {
   })
 
   it('match zones', () => {
-    expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZone: 3, endZone: 6 })).toHaveLength(1)
-    expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZone: 4 })).toHaveLength(0)
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZones: [3], endZones: [6] })).toHaveLength(1)
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZones: [4, 3] })).toHaveLength(1)
+    expect(applyFilter(refs(), { ...EMPTY_FILTER, skills: ['A'], startZones: [4] })).toHaveLength(0)
   })
 })
 
@@ -177,9 +178,10 @@ describe('rally context', () => {
 
 describe('saved filters', () => {
   it('reads back what was saved, and anything broken as "any"', () => {
-    const f = { ...EMPTY_FILTER, team: 'our' as const, skills: ['A'], effects: ['#'], startZone: 4, phase: 'transition' as const, prevSkills: ['D'], prevSkipSet: true }
+    const f = { ...EMPTY_FILTER, team: 'our' as const, skills: ['A'], effects: ['#'], startZones: [4], phase: 'transition' as const, prevSkills: ['D'], prevSkipSet: true }
     expect(cleanFilter(JSON.parse(JSON.stringify(f)))).toEqual(f)
     expect(cleanFilter({ person: 'K' })).toEqual({ ...EMPTY_FILTER, persons: ['K'] }) // saved when one could be picked
+    expect(cleanFilter({ startZone: 4, endZone: 6 })).toEqual({ ...EMPTY_FILTER, startZones: [4], endZones: [6] }) // saved when one zone could be picked
     expect(cleanFilter({ team: 'x', skills: 'A', sets: [1, 'two', 2.5], endZone: '3', nextSkipSet: 'yes', phase: 'serve' })).toEqual({ ...EMPTY_FILTER, sets: [1] })
     expect(cleanFilter(null)).toEqual(EMPTY_FILTER)
   })

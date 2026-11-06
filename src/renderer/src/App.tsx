@@ -374,7 +374,7 @@ export function App() {
     const p = shotPick?.rows[0]?.play
     if (!p || shotPick?.zone === null) return
     setMatchIds([])
-    setFilter({ ...EMPTY_FILTER, skills: [p.skill], persons: [p.playerKey], endZone: shotPick!.zone })
+    setFilter({ ...EMPTY_FILTER, skills: [p.skill], persons: [p.playerKey], endZones: [shotPick!.zone!] })
     setShotPick(null)
   }
   // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).

@@ -20,11 +20,11 @@ export const DEFAULT_CORNERS: CourtFit['corners'] = [
 const COURT_W = 9 // metres
 const COURT_L = 18
 export const COLS = 3
-const ROWS = 6
+export const ROWS = 6
 const HALF = ROWS / 2
 
 // [row][col]: row 0 is the far end line, row 5 the near one; col 0 is the camera's left.
-const ZONE_NUMBERS: number[][] = [
+export const ZONE_NUMBERS: number[][] = [
   [1, 6, 5],
   [9, 8, 7],
   [2, 3, 4],

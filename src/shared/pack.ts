@@ -27,7 +27,7 @@ export interface PackManifest {
 export interface PackInfo { id: string; name: string; players: PackPlayer[]; bundled?: true }
 
 export const PACK_PHOTO = /^[A-Za-z0-9_.-]{1,80}\.(png|jpg|jpeg)$/i // PNG or JPEG: what the app reads sizes of
-const PACK_ID = /^[a-z0-9_-]{1,40}$/
+export const PACK_ID = /^[a-z0-9_-]{1,40}$/
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 

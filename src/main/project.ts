@@ -36,8 +36,7 @@ export class Project {
   static async create(dir: string, library: Library, init: { name: string; ourTeamCodes: string[]; matchIds: string[] }): Promise<Project> {
     if (existsSync(join(dir, 'project.json'))) throw new Error(t('このフォルダにはすでにプロジェクトがあります。「開く」で開いてください'))
     const p = new Project(dir, library)
-    await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
-    await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
+    await makeFolders(dir)
     p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes).slice(0, 1), playerAliases: {}, matchIds: [...new Set(init.matchIds)], scenesVersion: 1 }
     await p.save()
     return p
@@ -47,8 +46,7 @@ export class Project {
     const p = new Project(dir, library)
     const file = join(dir, 'project.json')
     if (!existsSync(file) && !existsSync(`${file}.bak`)) throw new Error(t('プロジェクトが見つかりません（project.json がありません）'))
-    await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
-    await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
+    await makeFolders(dir)
     const { data: saved, fromBackup } = await readJSON<Partial<ProjectFile> & { version?: number }>(file)
     if (fromBackup) p.notices.push(t('プロジェクトの設定ファイルが読めなかったため、1つ前の保存から復元しました'))
     p.file = {
@@ -203,6 +201,11 @@ export class Project {
   private save(): Promise<void> {
     return writeJSON(join(this.dir, 'project.json'), this.file)
   }
+}
+
+async function makeFolders(dir: string): Promise<void> {
+  await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
+  await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
 }
 
 function validTheme(t: unknown): t is OverlayTheme {

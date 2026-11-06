@@ -12,7 +12,7 @@ import type { CourtFit } from '../shared/court'
 import type { PhotoTarget } from '../shared/pack'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
-import type { ExportJob, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
+import type { ExportJob, ImportProgress, Match, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
 import { Exporter } from './export'
 import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './updater'
 import { Library } from './library'
@@ -43,6 +43,10 @@ const exporter = new Exporter()
 let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
+const lib = () => { if (!library) throw new Error(t('先に倉庫を選んでください')); return library }
+const proj = () => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project }
+const assetsDir = () => join(proj().dir, 'assets')
+const exportsDir = async () => { const dir = join(proj().dir, 'exports'); await mkdir(dir, { recursive: true }); return dir }
 
 app.whenReady().then(async () => {
   // The interface language (設定 → Language); the first start follows Windows' display language.
@@ -165,21 +169,21 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('library:scan', async () => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const l = lib()
     const r = await dialog.showOpenDialog(win!, { title: t('動画と DVW があるフォルダを選択（複数可）'), properties: ['openDirectory', 'multiSelections'] })
     if (r.canceled || !r.filePaths.length) return null
-    return library.scan(r.filePaths)
+    return l.scan(r.filePaths)
   })
 
   ipcMain.handle('library:importPairs', async (e, pairs: { dvwPath: string; video: string }[]) => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
-    return importPairs(library, pairs, p => e.sender.send('import:progress', p))
+    const l = lib()
+    return importPairs(l, pairs, p => e.sender.send('import:progress', p))
   })
 
   ipcMain.handle('project:recent', () => recentProjects())
 
   ipcMain.handle('project:create', async (_e, init: ProjectInit) => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const l = lib()
     const name = init.name.trim() || t('{0} プロジェクト', init.ourTeamCodes[0] ?? '').trim()
     let dir: string
     if (init.chooseFolder) {
@@ -188,24 +192,24 @@ function registerIpc(): void {
       dir = r.filePaths[0]
     } else {
       // No folder to pick: a new one named after the project, next to the library's matches.
-      const root = join(library.dir, 'projects')
+      const root = join(l.dir, 'projects')
       dir = join(root, uniqueName(folderName(name), n => existsSync(join(root, n))))
       await mkdir(dir, { recursive: true })
     }
-    project = await Project.create(dir, library, { ...init, name })
+    project = await Project.create(dir, l, { ...init, name })
     rememberProject(project)
     return project.info()
   })
 
   ipcMain.handle('project:open', async (_e, path?: string) => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const l = lib()
     let dir = path
     if (!dir) {
       const r = await dialog.showOpenDialog(win!, { title: t('プロジェクトのフォルダを選択'), properties: ['openDirectory'] })
       if (r.canceled || !r.filePaths[0]) return null
       dir = r.filePaths[0]
     }
-    project = await Project.open(dir, library)
+    project = await Project.open(dir, l)
     rememberProject(project)
     return project.info()
   })
@@ -213,50 +217,48 @@ function registerIpc(): void {
   ipcMain.handle('project:close', () => { project = null })
 
   ipcMain.handle('project:setMatches', async (_e, ids: string[]) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
-    await project.setMatches(ids)
-    return project.info()
+    const p = proj()
+    await p.setMatches(ids)
+    return p.info()
   })
 
   ipcMain.handle('match:import', async e => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const l = lib()
     const v = await dialog.showOpenDialog(win!, { title: t('試合の動画を選択'), properties: ['openFile'],
-      filters: [{ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] })
+      filters: [videoFilter()] })
     if (v.canceled || !v.filePaths[0]) return null
     const d = await dialog.showOpenDialog(win!, { title: t('スカウトファイル（.dvw）を選択'), properties: ['openFile'],
-      filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
+      filters: [dvwFilter] })
     if (d.canceled || !d.filePaths[0]) return null
-    return library.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
+    return l.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
   })
 
   ipcMain.handle('match:relocate', async (e, id: string, part: 'video' | 'dvw') => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
-    const m = library.getMatch(id)
+    const l = lib()
+    const m = l.getMatch(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     const r = await dialog.showOpenDialog(win!, part === 'video'
-      ? { title: t('{0} の動画を選択（元: {1}）', m.name, basename(m.sourceVideoPath)), properties: ['openFile'], filters: [{ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] }] }
-      : { title: t('{0} の DVW を選択（元: {1}）', m.name, basename(m.dvwPath)), properties: ['openFile'], filters: [{ name: 'DataVolley', extensions: ['dvw', 'DVW'] }] })
+      ? { title: t('{0} の動画を選択（元: {1}）', m.name, basename(m.sourceVideoPath)), properties: ['openFile'], filters: [videoFilter()] }
+      : { title: t('{0} の DVW を選択（元: {1}）', m.name, basename(m.dvwPath)), properties: ['openFile'], filters: [dvwFilter] })
     if (r.canceled || !r.filePaths[0]) return null
-    const note = await library.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p))
-    return { library: library.info(), project: project?.info() ?? null, note }
+    const note = await l.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p))
+    return { library: l.info(), project: project?.info() ?? null, note }
   })
 
   ipcMain.handle('match:setCourt', async (_e, id: string, court: CourtFit | null) => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
-    await library.setCourt(id, court)
+    const l = lib()
+    await l.setCourt(id, court)
     return project?.info() ?? null
   })
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
-    await project.saveSettings(s)
-    return project.info()
+    const p = proj()
+    await p.saveSettings(s)
+    return p.info()
   })
 
   ipcMain.handle('export:choosePath', async (_e, name: string) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
-    const dir = join(project.dir, 'exports')
-    await mkdir(dir, { recursive: true })
+    const dir = await exportsDir()
     const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'reel'
     const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
     return r.canceled || !r.filePath ? null : r.filePath
@@ -265,9 +267,7 @@ function registerIpc(): void {
   // One MP4 per scene: a folder, then a path in it for each file name (names come safe and unique
   // from sceneFileNames). Returns which of them are already there, so the user can say whether to overwrite.
   ipcMain.handle('export:chooseFolder', async (_e, names: string[]) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
-    const dir = join(project.dir, 'exports')
-    await mkdir(dir, { recursive: true })
+    const dir = await exportsDir()
     const r = await dialog.showOpenDialog(win!, { title: t('シーンごとに書き出すフォルダ'), defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
     const paths = names.map(n => join(r.filePaths[0], `${n}.mp4`))
@@ -276,9 +276,8 @@ function registerIpc(): void {
 
   // Starts in the background and returns at once; progress and the result arrive as export:event.
   ipcMain.handle('export:start', (e, job: ExportJob) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
+    const p = proj()
     if (exporter.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
-    const p = project
     void exporter.run(job, join(p.dir, 'export-work'), id => p.getMatch(id)?.videoPath, ev => {
       if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
     })
@@ -294,8 +293,6 @@ function registerIpc(): void {
   ipcMain.handle('update:install', () => { updating = installUpdate() })
   ipcMain.handle('update:help', (_e, what: 'page' | 'log') => (what === 'page' ? shell.openExternal(RELEASES_PAGE) : shell.showItemInFolder(updateLogPath())))
 
-  const lib = () => { if (!library) throw new Error(t('先に倉庫を選んでください')); return library }
-  const assetsDir = () => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return join(project.dir, 'assets') }
   ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
   ipcMain.handle('palette:setColors', (_e, colors: string[]) => lib().setPaletteColors(colors))
   ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[], category: string | null) => lib().savePaletteItem(name, anns, assetsDir(), category))
@@ -309,13 +306,13 @@ function registerIpc(): void {
   ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {
-    if (!library) throw new Error(t('先に倉庫を選んでください'))
+    const l = lib()
     const r = await dialog.showOpenDialog(win!, {
       title: t('{0} のロゴを選ぶ', code), properties: ['openFile'],
-      filters: [{ name: t('画像'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+      filters: [{ name: t('画像'), extensions: IMAGE_EXT }],
     })
-    if (!r.canceled && r.filePaths[0]) await library.setLogo(code, r.filePaths[0])
-    return library.logos()
+    if (!r.canceled && r.filePaths[0]) await l.setLogo(code, r.filePaths[0])
+    return l.logos()
   })
   ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
   ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
@@ -347,7 +344,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('asset:pick', async () => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
+    proj() // needs an open project before asking for a file
     const r = await dialog.showOpenDialog(win!, {
       title: t('画像・PDF を挿入'), properties: ['openFile'],
       filters: [{ name: t('画像・PDF'), extensions: [...IMAGE_EXT, 'pdf'] }],
@@ -372,13 +369,13 @@ function registerIpc(): void {
     return { assetId: await saveAsset(img.toPNG(), 'png'), width, height }
   })
   ipcMain.handle('asset:read', (_e, id: string) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
+    const dir = assetsDir()
     if (!ASSET_ID.test(id)) throw new Error('bad asset id')
-    return readFile(join(project.dir, 'assets', id))
+    return readFile(join(dir, id))
   })
 
   ipcMain.handle('slide:pick', async () => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
+    proj() // needs an open project before asking for a file
     const r = await dialog.showOpenDialog(win!, {
       title: t('スライドを読み込む（PDF・画像。複数選べます）'), properties: ['openFile', 'multiSelections'],
       filters: [{ name: t('PDF・画像'), extensions: ['pdf', ...IMAGE_EXT] }],
@@ -417,18 +414,17 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('video:list', () => project?.listVideos() ?? [])
-  ipcMain.handle('video:save', (_e, v: Video) => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project.saveVideo(v) })
+  ipcMain.handle('video:save', (_e, v: Video) => proj().saveVideo(v))
   ipcMain.handle('video:delete', (_e, id: string) => project?.deleteVideo(id))
   ipcMain.handle('reel:list', () => project?.listReels() ?? [])
-  ipcMain.handle('reel:save', (_e, r: Reel) => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project.saveReel(r) })
+  ipcMain.handle('reel:save', (_e, r: Reel) => proj().saveReel(r))
   ipcMain.handle('reel:delete', (_e, id: string) => project?.deleteReel(id))
 
-  ipcMain.handle('match:parse', (_e, id: string) => {
-    if (!project) throw new Error(t('プロジェクトが開かれていません'))
-    return project.parse(id)
-  })
+  ipcMain.handle('match:parse', (_e, id: string) => proj().parse(id))
 }
 
+const videoFilter = () => ({ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] })
+const dvwFilter = { name: 'DataVolley', extensions: ['dvw', 'DVW'] }
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 const ASSET_ID = /^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/
 const OBJECTS_MARK = '[volley-reel: objects copied]' // on the system clipboard after copying objects
@@ -471,8 +467,7 @@ async function takeSlideFile(path: string): Promise<SlideFile> {
 
 // A copy in the project, so the project keeps working if the original file moves.
 async function saveAsset(data: Uint8Array, ext: string): Promise<string> {
-  if (!project) throw new Error(t('プロジェクトが開かれていません'))
-  const dir = join(project.dir, 'assets')
+  const dir = assetsDir()
   await mkdir(dir, { recursive: true })
   const id = `${randomUUID()}.${ext}`
   await writeFile(join(dir, id), data)
@@ -507,11 +502,7 @@ async function serveMedia(req: Request): Promise<Response> {
 function checkExport(r: { export: string; checks: { name: string; t: number }[]; cancelPath: string }): void {
   const probe = spawnSync(ffprobeBin(), ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_name,width,height,r_frame_rate,nb_read_packets:format=duration,size', '-of', 'json', r.export], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
-  for (const c of r.checks) {
-    const out = r.export.replace(/\.mp4$/, `-${c.name}.png`)
-    spawnSync(ffmpegBin(), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', r.export, '-frames:v', '1', out])
-    console.log(`[export-frame] ${c.name} t=${c.t.toFixed(2)} -> ${existsSync(out) ? out : 'missing'}`)
-  }
+  saveFrames(r.export, r.checks)
   console.log(`[export-cancel] output left behind: ${existsSync(r.cancelPath)}, work dir left: ${existsSync(join(project!.dir, 'export-work'))}`)
 }
 
@@ -519,6 +510,10 @@ function checkExport(r: { export: string; checks: { name: string; t: number }[];
 function grabFrames(file: string, checks: { name: string; t: number }[]): void {
   const probe = spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration,size', '-of', 'json', file], { encoding: 'utf8' })
   console.log(`[export-probe] ${probe.stdout.replace(/\s+/g, ' ')}`)
+  saveFrames(file, checks)
+}
+
+function saveFrames(file: string, checks: { name: string; t: number }[]): void {
   for (const c of checks) {
     const out = file.replace(/\.mp4$/, `-${c.name}.png`)
     spawnSync(ffmpegBin(), ['-v', 'error', '-y', '-ss', c.t.toFixed(3), '-i', file, '-frames:v', '1', out])
@@ -555,8 +550,8 @@ function rememberProject(p: Project): void {
 }
 
 // Bulk import, step 2: one match at a time (probing is quick; preparing a copy can take minutes).
-async function importPairs(lib: Library, pairs: { dvwPath: string; video: string }[], progress: (p: import('../shared/types').ImportProgress) => void) {
-  const imported: import('../shared/types').Match[] = [], failed: { dvwPath: string; message: string }[] = []
+async function importPairs(lib: Library, pairs: { dvwPath: string; video: string }[], progress: (p: ImportProgress) => void) {
+  const imported: Match[] = [], failed: { dvwPath: string; message: string }[] = []
   for (const [i, p] of pairs.entries()) {
     try {
       imported.push(await lib.importMatch(p.video, p.dvwPath, ev => progress({ ...ev, item: i, items: pairs.length, message: `${i + 1} / ${pairs.length}: ${ev.message}` })))

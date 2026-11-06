@@ -7,7 +7,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
-import { LOCAL_PACK, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
+import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
@@ -52,11 +52,7 @@ export class Library {
   async savePaletteItem(name: string, annotations: Annotation[], projectAssets: string, category: string | null = null): Promise<Palette> {
     const dir = join(this.dir, 'palette-assets')
     await mkdir(dir, { recursive: true })
-    for (const a of annotations) {
-      if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
-      const from = join(projectAssets, a.assetId), to = join(dir, a.assetId)
-      if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
-    }
+    await copyPictures(annotations, projectAssets, dir)
     const p = await this.palette()
     const known = category && p.categories?.some(c => c.id === category) ? category : null
     const item = { id: randomUUID(), name: name.trim() || t('オブジェクト'), createdAt: new Date().toISOString(), annotations, ...(known ? { category: known } : {}) }
@@ -125,11 +121,7 @@ export class Library {
     const item = (await this.palette()).items.find(i => i.id === id)
     if (!item) throw new Error(t('パレットに見つかりません'))
     await mkdir(projectAssets, { recursive: true })
-    for (const a of item.annotations) {
-      if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
-      const from = join(this.dir, 'palette-assets', a.assetId), to = join(projectAssets, a.assetId)
-      if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
-    }
+    await copyPictures(item.annotations, join(this.dir, 'palette-assets'), projectAssets)
     return item.annotations
   }
 
@@ -228,12 +220,12 @@ export class Library {
   }
 
   async removePack(id: string): Promise<void> {
-    if (!/^[a-z0-9_-]{1,40}$/.test(id)) return
+    if (!PACK_ID.test(id)) return
     await rm(join(this.dir, 'addons', id), { recursive: true, force: true })
   }
 
   private packPhotoPath(id: string, photo: string): string {
-    if (!/^[a-z0-9_-]{1,40}$/.test(id) || !PACK_PHOTO.test(photo)) throw new Error(t('写真が見つかりません'))
+    if (!PACK_ID.test(id) || !PACK_PHOTO.test(photo)) throw new Error(t('写真が見つかりません'))
     const own = join(this.dir, 'addons', id), f = join(own, 'photos', photo)
     if (existsSync(f)) return f
     const shipped = Library.bundledPacks && !existsSync(join(own, 'manifest.json')) ? join(Library.bundledPacks, id, 'photos', photo) : null
@@ -316,8 +308,7 @@ export class Library {
         : t('{0}: 動画の場所を更新しました', m.name)
     }
     progress({ stage: 'save', message: t('保存しています') })
-    await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
-    this.matches.set(id, next)
+    await this.saveMatch(next)
     return note
   }
 
@@ -328,8 +319,12 @@ export class Library {
       throw new Error(t('コートの四隅が不正です'))
     const { court: _old, ...rest } = m
     const next: Match = court ? { ...rest, court } : rest
-    await writeJSON(join(this.dir, 'matches', `${safeId(id)}.json`), next)
-    this.matches.set(id, next)
+    await this.saveMatch(next)
+  }
+
+  private async saveMatch(m: Match): Promise<void> {
+    await writeJSON(join(this.dir, 'matches', `${safeId(m.id)}.json`), m)
+    this.matches.set(m.id, m)
   }
 
   list(): Match[] {
@@ -358,8 +353,7 @@ export class Library {
     if (this.matches.has(m.id)) return m.id
     const same = this.findBySources(m.sourceVideoPath, m.dvwPath)
     if (same) return same.id
-    await writeJSON(join(this.dir, 'matches', `${safeId(m.id)}.json`), m)
-    this.matches.set(m.id, m)
+    await this.saveMatch(m)
     return m.id
   }
 
@@ -409,8 +403,7 @@ export class Library {
       importedAt: new Date().toISOString(),
     }
     progress({ stage: 'save', message: t('保存しています') })
-    await writeJSON(join(this.dir, 'matches', `${id}.json`), match)
-    this.matches.set(id, match)
+    await this.saveMatch(match)
     return match
   }
 
@@ -439,6 +432,15 @@ export class Library {
       video: p.video, score: p.score, note: p.note, inLibrary: inLibrary.has(norm(p.dvw.path)),
     }))
     return { pairs, videos, unreadable }
+  }
+}
+
+// The objects' pictures from one assets folder to another, unless they are there already.
+async function copyPictures(annotations: Annotation[], fromDir: string, toDir: string): Promise<void> {
+  for (const a of annotations) {
+    if (a.kind !== 'image' || !/^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/.test(a.assetId)) continue
+    const from = join(fromDir, a.assetId), to = join(toDir, a.assetId)
+    if (existsSync(from) && !existsSync(to)) await copyFile(from, to)
   }
 }
 

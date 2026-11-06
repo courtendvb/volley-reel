@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Reel } from '../../../shared/reel'
 import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
+import { NameSelect } from './NameSelect'
 import { t } from '../../../shared/i18n'
 import { formatLength } from '../format'
 
@@ -54,10 +55,12 @@ export function VideoPanel(p: Props) {
         {v ? (
           <>
             <span className="panel-kicker">{t('動画')}</span>
-            <select value={v.id} onChange={e => { if (e.target.value === NEW_VIDEO) p.onNewVideo(); else p.onSelectVideo(e.target.value) }} aria-label={t('動画')}>
-              {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-              <option value={NEW_VIDEO}>{t('＋ 別の動画を作る')}</option>
-            </select>
+            <NameSelect name={v.name} label={t('動画の名前を変更')} onRename={name => p.onChange({ ...v, name, updatedAt: new Date().toISOString() })}>
+              <select value={v.id} onChange={e => { if (e.target.value === NEW_VIDEO) p.onNewVideo(); else p.onSelectVideo(e.target.value) }} aria-label={t('動画')}>
+                {p.videos.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                <option value={NEW_VIDEO}>{t('＋ 別の動画を作る')}</option>
+              </select>
+            </NameSelect>
             {p.playing
               ? <button onClick={p.onStop}>{t('■ 停止')}</button>
               : <><button className="primary" onClick={p.onPlay} disabled={!total.clips} title={t('動画を最初から再生')}>{t('▶ 再生')}</button>

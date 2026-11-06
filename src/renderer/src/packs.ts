@@ -1,7 +1,7 @@
 // Add-on packs (kept in the library, shared by every project) and their photos, decoded once for
 // the picker's thumbnails.
 import { useEffect, useState } from 'react'
-import type { PackInfo, PhotoTarget } from '../../shared/pack'
+import type { PackInfo, PackManifest, PhotoTarget } from '../../shared/pack'
 import { decodeImage } from './assets'
 
 const api = window.api
@@ -23,6 +23,12 @@ export function usePacks(): PackInfo[] {
 // For the self-check, after it changed the packs from the main process.
 export async function refreshPacks(): Promise<void> { loaded = true; set(await api.listPacks()) }
 export async function importPack(): Promise<void> { photos.clear(); set(await api.importPack()) }
+// A pack made in the app; the file name, or null when the save was called off.
+export async function savePack(manifest: PackManifest, files: Record<string, Uint8Array>, install: boolean): Promise<string | null> {
+  const { saved, packs } = await api.savePack(manifest, files, install)
+  photos.clear(); set(packs)
+  return saved
+}
 export async function removePack(id: string): Promise<void> { set(await api.removePack(id)) }
 export async function setPlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.setPlayerPhoto(tg)) }
 export async function removePlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.removePlayerPhoto(tg)) }

@@ -247,12 +247,15 @@ function Speed({ value, usual, onChange }: { value: number | null; usual: number
 // Seconds from the key play, typed or set to the playhead (◎).
 function SecField({ value, label, onType, onNow }: { value: string; label: string; onType: (v: number) => void; onNow: () => void }) {
   const [text, setText] = useState(value)
-  useEffect(() => setText(value), [value])
-  const commit = () => { const v = parseFloat(text); if (isFinite(v)) onType(v); else setText(value) }
+  // What is being typed stays as it is ("1" is not put back as "1.0"); a value from elsewhere shows.
+  useEffect(() => { if (parseFloat(text) !== parseFloat(value)) setText(value) }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Every change counts at once, so the spin buttons and typing move the bar as they go. Leaving the
+  // field shows what was kept: a time outside the clip, or a slow's end before its start, isn't.
+  const change = (s: string) => { setText(s); const v = parseFloat(s); if (isFinite(v)) onType(v) }
   return (
     <span className="sec-field">
-      <input type="number" step={0.1} value={text} aria-label={label} onChange={e => setText(e.target.value)} onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
+      <input type="number" step={0.1} value={text} aria-label={label} onChange={e => change(e.target.value)} onBlur={() => setText(value)}
+        onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) setText(value) }} />
       <button className="link" onClick={onNow} title={t('再生位置にする')} aria-label={t('{0}を再生位置にする', label)}>◎</button>
     </span>
   )

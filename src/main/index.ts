@@ -9,7 +9,8 @@ import { Readable } from 'node:stream'
 import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage, protocol, shell } from 'electron'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
-import type { PhotoTarget } from '../shared/pack'
+import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pack'
+import { strToU8, zipSync } from 'fflate'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
 import type { ExportJob, ImportProgress, Match, PickedAsset, ProjectInit, ProjectSettings, RecentProject, SlideFile } from '../shared/types'
@@ -130,6 +131,8 @@ app.whenReady().then(async () => {
     width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'SyncScout Video Editor',
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   })
+  // A file dropped on the window would open in place of the app: nothing may lead it away.
+  win.webContents.on('will-navigate', (e, url) => { if (url !== win?.webContents.getURL()) e.preventDefault() })
   win.setMenuBarVisibility(false)
   // Closing: let the renderer write pending reel saves first (autosave runs on a short delay),
   // with a timeout so a stuck renderer can't keep the window open. A running export is cancelled.
@@ -328,6 +331,19 @@ function registerIpc(): void {
     })
     if (!r.canceled && r.filePaths[0]) await lib().importPack(r.filePaths[0])
     return lib().packs()
+  })
+  ipcMain.handle('pack:roster', () => lib().roster())
+  // A pack made in the app: to a file the user names, or straight into the library. The file name, or
+  // null when the save was called off.
+  ipcMain.handle('pack:save', async (_e, manifest: PackManifest, photos: Record<string, Uint8Array>, install: boolean) => {
+    const m = readManifest(manifest)
+    if (!m || !m.players.length) throw new Error(t('パックの内容が読めません'))
+    const zip = zipSync({ 'manifest.json': strToU8(JSON.stringify(m, null, 1)), ...Object.fromEntries(Object.entries(photos).map(([f, d]) => [`photos/${f}`, d])) }, { level: 0 })
+    if (install) { await lib().importPackData(zip); return { saved: m.name, packs: await lib().packs() } }
+    const r = await dialog.showSaveDialog(win!, { title: t('パックを書き出す'), defaultPath: `${m.name.replace(/[\\/:*?"<>|]/g, '_')}.vrpack`, filters: [{ name: t('SyncScout Video Editor パック'), extensions: ['vrpack'] }] })
+    if (r.canceled || !r.filePath) return { saved: null, packs: await lib().packs() }
+    await writeFile(r.filePath, zip)
+    return { saved: r.filePath, packs: await lib().packs() }
   })
   ipcMain.handle('pack:remove', async (_e, id: string) => { await lib().removePack(id); return lib().packs() })
   ipcMain.handle('pack:setPhoto', async (_e, tg: PhotoTarget) => {

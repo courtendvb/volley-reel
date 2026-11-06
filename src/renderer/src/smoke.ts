@@ -1334,7 +1334,7 @@ export function installSmoke(h: SmokeHost): void {
     await waitFor(() => (playback.current.seq ? true : null), 10000, 'video playing from the head')
     await sleep(1000)
     const playedFromHead = !!playback.current.seq
-    document.querySelector<HTMLButtonElement>('.video-head button')?.click()
+    document.querySelector<HTMLButtonElement>('.video-head > button')?.click()
     playback.stopSequence()
     shots.playedFromHead = playedFromHead
     return { courtPoints: { counts, shots, exported } }

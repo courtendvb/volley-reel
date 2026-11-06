@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { HEADLINE_SIZE, type HeadlineStyle } from '../../../shared/annotation'
 import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
@@ -32,6 +32,31 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
   const [headline, setHeadline] = useState<HeadlineStyle>(settings.headline ?? {})
   const head = (patch: HeadlineStyle) => setHeadline({ ...headline, ...patch })
   const [saving, setSaving] = useState(false)
+  // The list on the left: a click jumps to the setting, and scrolling lights the one in view.
+  const pane = useRef<HTMLDivElement>(null)
+  const jumped = useRef(false) // the scroll a jump makes; the last settings can't reach the top
+  const [here, setHere] = useState('team')
+  const jump = (id: string) => {
+    const el = pane.current, to = el?.querySelector<HTMLElement>(`[data-section="${id}"]`)
+    if (!el || !to) return
+    jumped.current = true
+    el.scrollTop = to.offsetTop
+    setHere(id)
+  }
+  const onScroll = () => {
+    if (jumped.current) { jumped.current = false; return }
+    const el = pane.current
+    if (!el) return
+    const all = [...el.querySelectorAll<HTMLElement>('[data-section]')]
+    const bottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
+    const now = bottom ? all[all.length - 1] : all.filter(s => s.offsetTop <= el.scrollTop + 8).pop()
+    if (now) setHere(now.dataset.section!)
+  }
+  const NAV: [string, [string, string][]][] = [
+    [t('このプロジェクト'), [['team', t('対象チーム')], ['theme', t('配色')], ['headline', t('見出し')]]],
+    [t('倉庫'), [['logos', t('チームのロゴ')], ['addons', t('アドオン')]]],
+    [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['look', t('アプリの見た目')]]],
+  ]
 
   const save = async () => {
     setSaving(true)
@@ -45,10 +70,20 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label={t('設定')} onClick={e => e.stopPropagation()}>
+      <div className="modal settings" role="dialog" aria-label={t('設定')} onClick={e => e.stopPropagation()}>
         <h2>{t('設定')}</h2>
 
-        <section>
+        <div className="settings-body">
+        <nav className="settings-nav" aria-label={t('設定の項目')}>
+          {NAV.map(([group, items]) => (
+            <div key={group} className="settings-nav-group">
+              <span className="settings-nav-title">{group}</span>
+              {items.map(([id, label]) => <button key={id} className={here === id ? 'on' : ''} aria-current={here === id ? 'true' : undefined} onClick={() => jump(id)}>{label}</button>)}
+            </div>
+          ))}
+        </nav>
+        <div className="settings-pane" ref={pane} onScroll={onScroll}>
+        <section data-section="team">
           <label className="field-label wide" htmlFor="our-code">{t('対象チーム（自チーム）')}</label>
           <select id="our-code" value={code} onChange={e => setCode(e.target.value)}>
             {!teams.some(t => t.code === code) && <option value={code}>{code || t('（なし）')}</option>}
@@ -57,13 +92,13 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。')}</p>
         </section>
 
-        <section>
+        <section data-section="theme">
           <span className="field-label wide">{t('配色（プロジェクト全体）')}</span>
           <ThemePicker value={theme} onChange={setTheme} />
           <p className="hint">{t('スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。')}</p>
         </section>
 
-        <section>
+        <section data-section="headline">
           <span className="field-label wide">{t('見出し')}</span>
           <div className="filter-row">
             <label className="field-label" htmlFor="headline-font">{t('フォント')}</label>
@@ -87,19 +122,19 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('これから入れる見出しの見た目。プロジェクトのすべての動画に使います。入れた見出しは変わりません（書式から個別に変えられます）。')}</p>
         </section>
 
-        <section>
+        <section data-section="logos">
           <span className="field-label wide">{t('チームのロゴ（タイトルカード）')}</span>
           <TeamLogos teams={teams} />
           <p className="hint">{t('1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。')}</p>
         </section>
 
-        <section>
+        <section data-section="addons">
           <span className="field-label wide">{t('アドオン')}</span>
           <AddonPacks />
           <p className="hint">{t('リーグの選手写真などを別ファイル（.vrpack）で足します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。写真は右の「選手写真」から入れます。')}</p>
         </section>
 
-        <section>
+        <section data-section="lang">
           {/* Both names, so it can be found whichever language is showing. */}
           <label className="field-label wide" htmlFor="app-lang">Language / 言語</label>
           <select id="app-lang" value={getLang()} onChange={e => onLanguage(e.target.value as Lang)}>
@@ -108,7 +143,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('アプリの表示の言語。このパソコンのすべてのプロジェクトに使います（変えると画面を読み直します。編集中の内容は保存されます）。')}</p>
         </section>
 
-        <section>
+        <section data-section="keys">
           <span className="field-label wide">{t('キー操作')}</span>
           <div className="filter-row">
             <label className="field-label" htmlFor="arrow-sec">{t('← →')}</label>
@@ -121,7 +156,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('動画が動く秒数。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。Shift + ← → は 1 フレームのままです。')}</p>
         </section>
 
-        <section>
+        <section data-section="look">
           <span className="field-label wide">{t('アプリの見た目')}</span>
           <div className="filter-row">
             <span className="field-label">{t('画面')}</span>
@@ -143,6 +178,8 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           </div>
           <p className="hint">{t('ボタンや選択中の行の色と、画面の明るさ。このパソコンのすべてのプロジェクトに使います（すぐ反映・保存されます）。書き出す動画には影響しません。')}</p>
         </section>
+        </div>
+        </div>
 
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>

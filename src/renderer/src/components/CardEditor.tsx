@@ -142,7 +142,7 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
 
 // Below the video while a slide is being edited: how long it stays up, reading its file again, done.
 // What can go on a slide from the court: from the play selected in the list.
-export type SlideMark = 'zones' | 'heat' | 'landings' | 'flights'
+export type SlideMark = 'zones' | 'heat' | 'landings' | 'flights' | 'cones'
 
 export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark }: {
   slide: Slide; onChange: (s: Slide) => void; onReload: (() => void) | null; onDone: () => void
@@ -162,7 +162,7 @@ export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
         <span className="court-row-label" title={t('左の一覧で選んだプレーから、コートの表示をこのスライドに載せます。載せた内容は固定され、あとでプレーを変えても変わりません')}>{t('コートの表示')}</span>
-        {([['zones', t('ゾーン')], ['heat', t('ヒートマップ')], ['landings', t('落下点')], ['flights', t('サーブ軌道')]] as [SlideMark, string][]).map(([m, label]) => (
+        {([['zones', t('ゾーン')], ['heat', t('ヒートマップ')], ['landings', t('落下点')], ['flights', t('サーブ軌道')], ['cones', t('コーン')]] as [SlideMark, string][]).map(([m, label]) => (
           <label key={m} className="check">
             <input type="checkbox" checked={!!slide[m]} disabled={!target && !slide[m]} onChange={e => onMark(m, e.target.checked)} /> {label}</label>
         ))}

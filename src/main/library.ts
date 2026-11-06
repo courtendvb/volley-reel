@@ -7,6 +7,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseDVW } from '../shared/dvw'
+import { rosterOf, type RosterPlayer } from '../shared/packMaker'
 import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
@@ -169,8 +170,12 @@ export class Library {
   // Reads a .vrpack (a zip) into addons/<id>/, replacing a pack with the same id. Only manifest.json
   // and the photos it names are taken; the manifest may sit in one top folder (a zipped folder).
   async importPack(file: string): Promise<PackInfo> {
+    return this.importPackData(new Uint8Array(await readFile(file)))
+  }
+
+  async importPackData(data: Uint8Array): Promise<PackInfo> {
     let zip: Record<string, Uint8Array>
-    try { zip = unzipSync(new Uint8Array(await readFile(file))) } catch { throw new Error(t('パックを開けませんでした（.vrpack ではないようです）')) }
+    try { zip = unzipSync(data) } catch { throw new Error(t('パックを開けませんでした（.vrpack ではないようです）')) }
     const at = Object.keys(zip).find(k => /^([^/]+\/)?manifest\.json$/.test(k))
     if (!at) throw new Error(t('パックに manifest.json がありません'))
     const root = at.slice(0, -'manifest.json'.length)
@@ -337,6 +342,12 @@ export class Library {
 
   findBySources(videoPath: string, dvwPath: string): Match | undefined {
     return this.list().find(m => same(m.sourceVideoPath, videoPath) && same(m.dvwPath, dvwPath))
+  }
+
+  // Everyone in the library's matches, for making a pack. A DVW that can't be read is left out.
+  async roster(): Promise<RosterPlayer[]> {
+    const dvws = await Promise.all([...this.matches.keys()].map(id => this.parse(id).catch(() => null)))
+    return rosterOf(dvws.filter(d => d !== null))
   }
 
   // Parsed every time from the DVW; plays are never saved (design §6).

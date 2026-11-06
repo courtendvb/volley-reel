@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DEFAULT_CORNERS, HEAT_OPACITY, type CourtFit, type GridStyle } from '../../../shared/court'
+import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, type CourtFit, type GridStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
@@ -74,7 +74,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         <label className="check" title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')}>
           <input type="checkbox" checked={s.playZones} onChange={e => onStyle({ ...s, playZones: e.target.checked })} /> {t('表示する')}</label>
       <select value={s.detail} aria-label={t('ゾーンの細かさ')} hidden={!s.playZones}
-        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点（3.15 m）まで（セットの開始座標がない DVW はセットのゾーンの中央、ゾーンもなければネット際のセッター位置から）。座標がないプレーはゾーンを塗る')}
+        title={t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点（3.15 m）まで（セットの開始座標がない DVW はセットのゾーンの中央、ゾーンもなければネット際のセッター位置から）。座標がないプレーはゾーンを塗り、ゾーンの中央を近似の位置として白抜きの点で出す（軌道は破線）')}
         onChange={e => onStyle({ ...s, detail: e.target.value as GridStyle['detail'] })}>
         <option value="zone">{t('ゾーン')}</option>
         <option value="sub">{t('サブゾーン')}</option>
@@ -102,6 +102,9 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           <input type="checkbox" checked={!!s.serveFlights} onChange={e => onStyle({ ...s, serveFlights: e.target.checked })} /> {t('サーブ軌道')}</label>
         <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点をプロジェクトの全試合から点で出す。軌道を出さず点だけ見るときは「サーブ軌道」を外す。アタックはアタックコードが同じものだけ。点をクリックするとそのプレーへ飛ぶ（書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.landings} onChange={e => onStyle({ ...s, landings: e.target.checked })} /> {t('落下点')}</label>
+        <label className="check" title={t('アタックを選ぶと、その選手の同じアタックコードのアタックが、打った位置から相手コートのどの方向へ行ったかを 5 つのコーンと割合で出す。多いコーンほど濃い（全試合の分。書き出しも同じ）')}>
+          <input type="checkbox" checked={!!s.cones} onChange={e => onStyle({ ...s, cones: e.target.checked })} /> {t('コーン')}</label>
+        {s.cones && <input type="color" aria-label={t('コーンの色')} title={t('コーンの色')} value={s.coneColor ?? CONE_COLOR} onChange={e => onStyle({ ...s, coneColor: e.target.value.toUpperCase() })} />}
         {s.serveFlights && !(points && s.flight) && animate}
       </div>
     </div>

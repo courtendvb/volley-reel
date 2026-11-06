@@ -32,8 +32,8 @@ export interface PlayFilter {
   rots: number[] // our team's rotation
   oppRots: number[] // the opponent's rotation
   frontPlayers: string[] // players of either team who are all in the front row at the play
-  startZone: number | null
-  endZone: number | null
+  startZones: number[] // empty = any
+  endZones: number[]
   tempos: string[] // detailed search
   combos: string[]
   hits: string[]
@@ -50,7 +50,7 @@ export interface PlayFilter {
 }
 
 export const EMPTY_FILTER: PlayFilter = {
-  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], frontPlayers: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
+  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], frontPlayers: [], startZones: [], endZones: [], tempos: [], combos: [], hits: [],
   phase: 'all', recEffects: [], prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
   nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
@@ -67,7 +67,7 @@ export interface SavedFilter {
 const CHOICES: Partial<Record<keyof PlayFilter, readonly string[]>> = {
   team: ['all', 'our', 'opp'], dir: ['all', 'up', 'down'], phase: ['all', 'reception', 'transition'], prevTeam: ['any', 'same', 'opp'], nextTeam: ['any', 'same', 'opp'],
 }
-const NUMBERS = new Set<keyof PlayFilter>(['sets', 'rots', 'oppRots', 'startZone', 'endZone'])
+const NUMBERS = new Set<keyof PlayFilter>(['sets', 'rots', 'oppRots', 'startZones', 'endZones'])
 
 export function cleanFilter(x: unknown): PlayFilter {
   const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
@@ -81,6 +81,8 @@ export function cleanFilter(x: unknown): PlayFilter {
       : ok(k, v) ? v : null
   }
   if (typeof o.person === 'string' && o.person) out.persons = [o.person] // saved when one player could be picked
+  if (Number.isInteger(o.startZone)) out.startZones = [o.startZone] // saved when one zone could be picked
+  if (Number.isInteger(o.endZone)) out.endZones = [o.endZone]
   return out as unknown as PlayFilter
 }
 
@@ -170,11 +172,11 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.rots.length && (r.ourRot === null || !f.rots.includes(r.ourRot))) return false
     if (f.oppRots?.length && (r.oppRot === null || !f.oppRots.includes(r.oppRot))) return false
     if (f.frontPlayers?.length && !f.frontPlayers.every(k => p.front?.includes(k))) return false
-    if (f.startZone !== null && p.startZone !== f.startZone) return false
+    if (f.startZones?.length && (p.startZone === null || !f.startZones.includes(p.startZone))) return false
     if (f.tempos?.length && (!r.tempo || !f.tempos.includes(r.tempo))) return false
     if (f.combos?.length && (!r.combo || !f.combos.includes(r.combo))) return false
     if (f.hits?.length && (!r.hit || !f.hits.includes(r.hit))) return false
-    if (f.endZone !== null && p.endZone !== f.endZone) return false
+    if (f.endZones?.length && (p.endZone === null || !f.endZones.includes(p.endZone))) return false
     if (f.phase && f.phase !== 'all' && p.phase !== f.phase[0]) return false
     if (f.recEffects?.length && (!p.recEffect || !f.recEffects.includes(p.recEffect))) return false
     return nearMatches(r, r.play.before, f.prevSkills, f.prevEffects, f.prevTeam, f.prevSkipSet)

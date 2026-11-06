@@ -101,11 +101,9 @@ const sleep = (ms: number) => new Promise(ok => setTimeout(ok, ms))
 
 // Opens one of the panels under the video (StageTabs) by its tab, for steps that use it with the real mouse.
 async function openPanel(p: 'trim' | 'objects' | 'display' | 'court'): Promise<void> {
-  const label = p === 'trim' || p === 'objects' ? t('編集') : t('表示')
+  const label = p === 'trim' ? t('編集') : p === 'objects' ? t('図形・コメント') : t('表示')
   const tab = await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('.stage-tabs button')].find(b => b.textContent === label && !b.disabled) ?? null, 10000, `${label} tab`)
   if (tab.getAttribute('aria-selected') !== 'true') { tab.click(); await sleep(250) }
-  const fold = document.querySelector<HTMLButtonElement>('.stage-fold')
-  if (p === 'objects' && fold?.getAttribute('aria-expanded') === 'false') { fold.click(); await sleep(250) }
 }
 
 function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() => string) = 'condition'): Promise<T> {
@@ -728,7 +726,7 @@ export function installSmoke(h: SmokeHost): void {
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.7, 0.7))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointermove', apt(0.8, 0.8))); await sleep(40)
     ac.dispatchEvent(new PointerEvent('pointerup', apt(0.8, 0.8))); await sleep(300)
-    // グループ全体: an object on marker 1's first clip moved to the marker group shows on its other
+    // マーカー全体: an object on marker 1's first clip moved to the marker group shows on its other
     // clip, not on marker 2's.
     let markerScope: unknown = null
     {
@@ -1237,6 +1235,13 @@ export function installSmoke(h: SmokeHost): void {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await sleep(400)
     console.log(`[smoke-arrow] ${JSON.stringify({ moved: +(playback.current.time - t0).toFixed(2) })}`)
     localStorage.removeItem('vr.arrowSec')
+    document.querySelector('video')?.pause(); await sleep(200)
+    const t1 = playback.current.time
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', ctrlKey: true, bubbles: true })); await sleep(400)
+    console.log(`[smoke-ctrl-arrow] ${JSON.stringify({ moved: +(playback.current.time - t1).toFixed(2) })}`)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })); await sleep(300)
+    await api.smokeShot!('shortcuts.png')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })); await sleep(200)
     // The heatmap's strength and the height line, switched in the court tab.
     const heatRange = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="' + t('ヒートマップの濃さ') + '"]'), 5000, 'heat strength')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(heatRange, '0.3')
@@ -1302,6 +1307,18 @@ export function installSmoke(h: SmokeHost): void {
       add?.click()
       await waitFor(() => ((latest.current.reel!.slides?.length ?? 0) > before ? true : null), 10000, 'frame slide')
       const made = latest.current.reel!.slides!.at(-1)!
+      await sleep(800)
+      for (const box of document.querySelectorAll<HTMLInputElement>('.slide-marks input')) { box.click(); await sleep(250) }
+      await sleep(500)
+      await api.smokeShot!('slide-marks.png')
+      const sl = latest.current.reel!.slides!.find(x => x.zones)!
+      console.log(`[smoke-slide-marks] ${JSON.stringify({ zones: !!sl.zones, heat: sl.heat?.points.length, landings: sl.landings?.points.length, flights: sl.flights?.paths.length, notice: latest.current.notice })}`)
+      if (exportTo) {
+        const out = exportTo.replace(/\.mp4$/i, '-slide.mp4')
+        await startExport(out, { plan: currentPlan('scene').filter(p => p.kind === 'card' && p.card.slide?.id === sl.id), name: 'slide marks' })
+        await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 120000, 'slide export')
+        console.log(`[smoke-slide-export] ${JSON.stringify({ state: latest.current.exportState?.status, out })}`)
+      }
       console.log(`[smoke-frame] ${JSON.stringify({ button: !!add, after: made.after === id, group: made.group })}`)
       await sleep(500)
       ;[...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('完了'))?.click()

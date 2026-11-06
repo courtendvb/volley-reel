@@ -31,6 +31,7 @@ export interface PlayFilter {
   sets: number[]
   rots: number[] // our team's rotation
   oppRots: number[] // the opponent's rotation
+  frontPlayers: string[] // players of either team who are all in the front row at the play
   startZone: number | null
   endZone: number | null
   tempos: string[] // detailed search
@@ -49,7 +50,7 @@ export interface PlayFilter {
 }
 
 export const EMPTY_FILTER: PlayFilter = {
-  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
+  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], frontPlayers: [], startZone: null, endZone: null, tempos: [], combos: [], hits: [],
   phase: 'all', recEffects: [], prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
   nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
 }
@@ -168,6 +169,7 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.sets.length && !f.sets.includes(p.setNum)) return false
     if (f.rots.length && (r.ourRot === null || !f.rots.includes(r.ourRot))) return false
     if (f.oppRots?.length && (r.oppRot === null || !f.oppRots.includes(r.oppRot))) return false
+    if (f.frontPlayers?.length && !f.frontPlayers.every(k => p.front?.includes(k))) return false
     if (f.startZone !== null && p.startZone !== f.startZone) return false
     if (f.tempos?.length && (!r.tempo || !f.tempos.includes(r.tempo))) return false
     if (f.combos?.length && (!r.combo || !f.combos.includes(r.combo))) return false

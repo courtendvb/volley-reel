@@ -6,7 +6,7 @@ import { mergeScoped, type ScopedAnnotations } from '../../../shared/annotationS
 import { withGroups, type Annotation } from '../../../shared/annotation'
 import type { PlayRef } from '../../../shared/filter'
 import type { Tool } from '../components/AnnotationLayer'
-import { arrowSec, composing } from '../keys'
+import { arrowSec, composing, ctrlArrowSec } from '../keys'
 import { playback } from '../playback'
 import { isMaximized, setMaximized, toggleMaximized } from '../maximize'
 import type { AppLatest } from './appState'
@@ -65,7 +65,8 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       if (t instanceof HTMLInputElement && t.type === 'range' && !t.closest('.transport') && /^(Arrow|Page|Home$|End$)/.test(e.key)) return
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         const k = e.key.toLowerCase()
-        if (k === 'z' && !e.shiftKey) { e.preventDefault(); h.undoRedo('undo') }
+        if (k === 'arrowleft' || k === 'arrowright') { e.preventDefault(); playback.nudge(k === 'arrowleft' ? -ctrlArrowSec() : ctrlArrowSec()) }
+        else if (k === 'z' && !e.shiftKey) { e.preventDefault(); h.undoRedo('undo') }
         else if (k === 'c' && !e.shiftKey && !window.getSelection()?.toString()) { if (h.copyObjects()) e.preventDefault() }
         else if (k === 'v' && !e.shiftKey) {
           // Whatever was copied last: a picture from elsewhere, or objects copied here (they leave a

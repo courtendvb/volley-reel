@@ -55,7 +55,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     else setExportState({ status: 'cancelled', ratio: 0, message: t('書き出しをキャンセルしました{0}', run ? t('（{0} / {1} 本は書き出し済み）', run.i, n) : '') })
   }), [])
 
-  // The whole video by default, with its YouTube chapters (a .txt beside the MP4); part of it (a
+  // The whole video by default, with its YouTube chapters (a .txt beside the MP4) when they are on; part of it (a
   // scene, one marker group) when a plan and a file name are given.
   const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
     const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf, orderOf: of, settings: st } = latest.current
@@ -77,7 +77,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
             const dvws = latest.current.dvwsRef ?? {}
             return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays)), flight: flightTiming(play, ms[c.matchId].offsetSec, c) } : null
           },
-          courtStyle: gridStyleRef.current }, outPath, whole?.chapters)
+          courtStyle: gridStyleRef.current }, outPath, ov.chapters.enabled ? whole?.chapters : undefined)
       await api.startExport(job)
       return job
     } catch (e) {
@@ -124,7 +124,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     const out: ExportTarget[] = []
     const vp = planSec(currentPlan('video'))
     out.push({ key: 'video', label: t('すべて書き出し'), detail: t('{0} シーン・{1} クリップ{2}・{3}', video.sceneIds.length, vp.clips, slidesNote(vp.slides), formatLength(vp.sec)), empty: vp.empty,
-      hint: t('動画「{0}」全体を 1 本に。YouTube のチャプター（.txt）も隣に書き出す', video.name) })
+      hint: t('動画「{0}」全体を 1 本に', video.name) })
     const each = scenePlans()
     if (video.sceneIds.length > 1 || each.length > 1) {
       const sec = each.reduce((a, x) => a + planSec(x.plan).sec, 0)
@@ -137,7 +137,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
       for (const m of reel.groupOrder) {
         if (!reel.groups[m].length && !reel.slides?.some(s => s.group === m)) continue
         const mp = planSec(markerPlan(reel, m))
-        out.push({ key: `marker:${m}`, label: reel.markerNames[m] ? t('グループ {0}「{1}」だけ', m, reel.markerNames[m]) : t('グループ {0} だけ', m), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), formatLength(mp.sec)), empty: mp.empty })
+        out.push({ key: `marker:${m}`, label: reel.markerNames[m] ? t('マーカー {0}「{1}」だけ', m, reel.markerNames[m]) : t('マーカー {0} だけ', m), detail: t('{0} クリップ{1}・{2}', mp.clips, slidesNote(mp.slides), formatLength(mp.sec)), empty: mp.empty })
       }
     }
     return out
@@ -172,7 +172,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     if (!sc) return Promise.resolve(null)
     const only = onlyMarker(sc, m)
     const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
-    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('グループ{0}', m)}`
+    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || t('マーカー{0}', m)}`
     return startExport(outPath, { plan, name })
   }
 

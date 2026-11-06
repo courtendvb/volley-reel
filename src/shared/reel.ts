@@ -2,7 +2,7 @@
 // so the UI can treat a reel as immutable state and every change is unit-testable.
 import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
-import type { SlideFlights, SlideHeat } from './court'
+import type { SlideFlights, SlideHeat, SlideZones } from './court'
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
@@ -44,7 +44,7 @@ export interface Reel {
   sceneCard?: boolean // this scene's title card; missing = the video's setting
   markerOff?: Partial<Record<Marker, boolean>> // a marker group switched off: kept, but not played or exported
   annotations?: Annotation[] // objects shown on every clip of the scene (表示範囲: シーン全体)
-  markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: グループ全体)
+  markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
   cardTitle?: string // the scene card's text when it differs from the name (may have line breaks: one line each)
@@ -69,6 +69,8 @@ export interface Slide {
   annotations: Annotation[]
   flights?: SlideFlights // balls flying over the picture, all at once (a search's serves)
   heat?: SlideHeat // a heatmap on the floor of the picture (where a search's shots landed)
+  landings?: SlideHeat // where a player's shots landed, as points
+  zones?: SlideZones // a play's zones or clicks
 }
 
 // blank: the title card's background color. image: a picture in assets/. source: the file it was

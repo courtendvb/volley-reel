@@ -35,7 +35,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
   // Set, rotations, phase and the plays around: folded like the detailed search, opened when one is in use.
-  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.phase !== 'all' ? 1 : 0) + (f.recEffects?.length ?? 0)
+  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.frontPlayers?.length ?? 0) + (f.phase !== 'all' ? 1 : 0) + (f.recEffects?.length ?? 0)
     + f.prevSkills.length + f.prevEffects.length + (f.prevTeam !== 'any' ? 1 : 0) + (f.prevSkipSet ? 1 : 0)
     + f.nextSkills.length + f.nextEffects.length + (f.nextTeam !== 'any' ? 1 : 0) + (f.nextSkipSet ? 1 : 0)
   const [situOpen, setSituOpen] = useState(situCount > 0)
@@ -45,6 +45,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
   const wanted = f.team === 'opp' ? 'opp' : 'our'
   const inTeam = people.filter(p => p.teamRole === wanted || p.teamRole === null || f.persons?.includes(p.key))
   const playerChoices = inTeam.length ? inTeam : people
+  const personOption = (p: Person) => ({ key: p.key, label: `#${p.jerseys.join('/')} ${p.name}${p.teamCodes.length ? ` (${p.teamCodes.join('/')})` : ''} — ${p.plays}` })
   const comboName = (code: string) => details.combos.find(c => c.code === code)?.name
 
   return (
@@ -79,7 +80,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       <div className="filter-row" title={t('チームを「相手」にすると相手の選手を選べます。何も選ばなければ全員です')}>
         <span className="field-label">{t('選手')}</span>
         <CheckPicker label={t('選手')} all={t('すべての選手')} selected={f.persons ?? []} onChange={persons => set({ persons })}
-          options={playerChoices.map(p => ({ key: p.key, label: `#${p.jerseys.join('/')} ${p.name}${p.teamCodes.length ? ` (${p.teamCodes.join('/')})` : ''} — ${p.plays}` }))} />
+          options={playerChoices.map(personOption)} />
       </div>
 
       <Chips label={t('スキル')} values={Object.keys(SKILLS)} selected={f.skills} onChange={skills => set({ skills })} render={k => SKILLS[k]} />
@@ -87,7 +88,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         render={k => effectHint ? `${k} ${effectHint[k]}` : k} />
       <div className="filter-row">
         <button className="link" aria-expanded={situOpen} onClick={() => setSituOpen(o => !o)}>
-          {situOpen ? '▾' : '▸'} {t('試合の状況（セット・ローテ・局面・直前直後）')}{situCount ? t('（{0}）', situCount) : ''}</button>
+          {situOpen ? '▾' : '▸'} {t('試合の状況（セット・ローテ・前衛・局面・直前直後）')}{situCount ? t('（{0}）', situCount) : ''}</button>
       </div>
       {situOpen && (
         <div className="filter-detail">
@@ -97,6 +98,10 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           title={() => t('{0}のローテーション', targetCode || t('対象チーム'))} />
         <Chips label={t('相手ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
           title={() => t('相手チームのローテーション')} />
+        <div className="filter-row" title={t('選んだ選手が前衛にいるときのプレーに絞ります（どちらのチームの選手でも選べます）。複数選ぶと全員が前衛のとき。例: チームを相手、スキルをアタックにして、自チームのブロッカーを選ぶと、その選手が前衛のときの相手アタック')}>
+          <span className="field-label">{t('前衛')}</span>
+          <CheckPicker label={t('前衛にいる選手')} all={t('指定なし')} selected={f.frontPlayers ?? []} onChange={frontPlayers => set({ frontPlayers })} options={people.map(personOption)} />
+        </div>
         <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
           <label className="field-label">{t('局面')}</label>
           <Segmented value={f.phase} onChange={phase => set({ phase, recEffects: [] })} options={[['all', t('すべて')], ['reception', t('レセプション')], ['transition', t('トランジション')]]} />

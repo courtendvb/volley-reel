@@ -75,7 +75,7 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
         <button className="ov-gear" aria-label={t('タイトルカードとフェード')} aria-expanded={gear} title={t('タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」')} onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
           <div className="ov-gear-pop" role="dialog" aria-label={t('タイトルカード')}>
-            <label className="check">{t('タイトルカード（シーン・グループ）')}
+            <label className="check">{t('タイトルカード（シーン・マーカー）')}
               <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数（一括）')}
                 onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> {t('秒')}</label>
             <label className="check"><input type="checkbox" checked={s.transition.fade} aria-label={t('フェード')}

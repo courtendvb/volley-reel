@@ -1,4 +1,4 @@
-import { applyStyle, type Annotation } from '../../../shared/annotation'
+import { DEFAULT_TEXT_BOX, HEADLINE_SIZE, applyStyle, type Annotation, type HeadlineStyle } from '../../../shared/annotation'
 import { playback } from '../playback'
 import { textStyle, type AnnStyle } from './AnnotationLayer'
 import { composing } from '../keys'
@@ -9,13 +9,14 @@ interface Props {
   onChange: (list: Annotation[]) => void
   onFormat: (id: string) => void // select the headline so the format panel edits it
   style: AnnStyle
+  headline?: HeadlineStyle // the project's look for new headlines (設定)
   disabled: boolean
   clipIn: number // the clip's IN: show / hide times are shown in seconds from it
 }
 
-// The headline, apart from the object tools: one centered text at the top middle (48 px at 720p),
+// The headline, apart from the object tools: one centered text at the top middle (48 px at 720p unless 設定 says otherwise),
 // kept in step with this field. Typing creates it, clearing the field removes it.
-export function HeadlineBar({ annotations, onChange, onFormat, style, disabled, clipIn }: Props) {
+export function HeadlineBar({ annotations, onChange, onFormat, style, headline: h = {}, disabled, clipIn }: Props) {
   const quick = annotations.find(a => a.kind === 'text' && a.quick) as Extract<Annotation, { kind: 'text' }> | undefined
   // Setting when it shows also selects it, so the timeline below draws its bar to adjust.
   const setTimes = (patch: { showFrom?: number; showTo?: number }) => {
@@ -26,8 +27,9 @@ export function HeadlineBar({ annotations, onChange, onFormat, style, disabled, 
   const setText = (text: string) => {
     if (!text) { if (quick) onChange(annotations.filter(a => a.id !== quick.id)); return }
     if (quick) { onChange(annotations.map(a => (a.id === quick.id ? { ...quick, text } : a))); return }
-    const ts = { ...textStyle(style), size: 48 }
-    onChange([...annotations, applyStyle({ id: crypto.randomUUID(), kind: 'text', color: ts.color, x: 0.5, y: 0.05, text, size: 48, align: 'center', quick: true }, ts)])
+    const ts = { ...textStyle(style), size: h.size ?? HEADLINE_SIZE, ...(h.color ? { color: h.color } : {}), ...(h.bold !== undefined ? { bold: h.bold } : {}),
+      ...(h.outline !== undefined ? { outline: h.outline } : {}), ...(h.box ? { box: { ...DEFAULT_TEXT_BOX, fill: h.box } } : {}) }
+    onChange([...annotations, applyStyle({ id: crypto.randomUUID(), kind: 'text', color: ts.color, x: 0.5, y: 0.05, text, size: ts.size, align: 'center', quick: true, ...(h.font ? { font: h.font } : {}) }, ts)])
   }
   return (
     <div className={`headline-bar${disabled ? ' disabled' : ''}`}>

@@ -1,5 +1,5 @@
 import type { Lang } from './i18n'
-import type { Annotation } from './annotation'
+import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
@@ -57,6 +57,7 @@ export interface Play {
   after: string[] // the next two after it, in order
   phase: 'r' | 't' | null // reception phase or transition (dvw.ts phaseOf); null for serves
   recEffect?: string // in the reception phase: the evaluation of the reception it came from
+  front?: string[] // player keys of both teams' front rows at this play (dvw.ts); missing: the file has no lineups
 }
 
 export interface Rally {
@@ -102,6 +103,7 @@ export interface ProjectSettings {
   ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
   theme?: OverlayTheme // overlay colors for the whole project (scoreboard, captions, title cards); missing = each video's own
   filters?: SavedFilter[] // search conditions saved under a name, in the order they were saved
+  headline?: HeadlineStyle // how new headlines look; missing = as they always were
 }
 
 export interface ProjectInfo {

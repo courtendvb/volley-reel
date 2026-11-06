@@ -44,7 +44,7 @@ export interface TextBox {
 
 export type Annotation = Base & (
   // align center: x is the middle of the text. quick: the clip's headline from the text field in the tools.
-  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean }
+  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean; font?: string }
   | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
@@ -67,6 +67,32 @@ const REF_HEIGHT = 720
 const FONT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
 export const COLORS = ['#EF4444', '#FFFFFF', '#3B82F6', '#22C55E', '#0F172A']
 export const DEFAULT_TEXT_BOX: TextBox = { fill: '#0F172A', fillOpacity: 0.7, stroke: null, strokeWidth: 2, padding: 8 }
+
+// How a new headline looks, set for the project; anything missing stays as it always was.
+export interface HeadlineStyle {
+  font?: string // a font's name; a computer without it uses the usual ones
+  size?: number // px at 720p
+  color?: string
+  bold?: boolean
+  outline?: boolean
+  box?: string // the plate's color behind the text; missing: no plate
+}
+export const HEADLINE_SIZE = 48
+
+// As read back from project.json: what isn't usable is dropped. Undefined when nothing is left.
+export function cleanHeadline(x: unknown): HeadlineStyle | undefined {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+  const hex = (v: unknown): v is string => typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v)
+  const out: HeadlineStyle = {
+    ...(typeof o.font === 'string' && /^[\p{L}\p{N} _-]{1,60}$/u.test(o.font) ? { font: o.font } : {}), // it goes into a canvas font string
+    ...(typeof o.size === 'number' && o.size >= 12 && o.size <= 200 ? { size: o.size } : {}),
+    ...(hex(o.color) ? { color: o.color } : {}),
+    ...(typeof o.bold === 'boolean' ? { bold: o.bold } : {}),
+    ...(typeof o.outline === 'boolean' ? { outline: o.outline } : {}),
+    ...(hex(o.box) ? { box: o.box } : {}),
+  }
+  return Object.keys(out).length ? out : undefined
+}
 
 export interface Rect { x: number; y: number; w: number; h: number } // normalized
 
@@ -184,7 +210,7 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
   switch (a.kind) {
     case 'text': {
       const s = H / REF_HEIGHT
-      setTextFont(ctx, a.size * s, a.bold !== false)
+      setTextFont(ctx, a.size * s, a.bold !== false, a.font)
       const lines = textLines(a.text)
       const w = Math.max(...lines.map(l => ctx.measureText(l || ' ').width)) / W
       const pad = a.box ? a.box.padding / REF_HEIGHT : 0
@@ -339,7 +365,7 @@ const textLines = (t: string): string[] => t.split('\n')
 
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
   const px = a.size * s, lh = px * 1.2
-  setTextFont(ctx, px, a.bold !== false)
+  setTextFont(ctx, px, a.bold !== false, a.font)
   ctx.textBaseline = 'top'
   const lines = textLines(a.text)
   const widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
@@ -385,8 +411,8 @@ function setDash(ctx: Ctx, d: Dash | undefined, lw: number): void {
   else ctx.setLineDash([])
 }
 
-function setTextFont(ctx: Ctx, px: number, bold = true): void {
-  ctx.font = `${bold ? 'bold' : 'normal'} ${px}px ${FONT_FAMILY}`
+function setTextFont(ctx: Ctx, px: number, bold = true, font?: string): void {
+  ctx.font = `${bold ? 'bold' : 'normal'} ${px}px ${font ? `"${font}", ` : ''}${FONT_FAMILY}`
 }
 
 // Keeps saved JSON readable (0.65, not 0.6499999999999998); 4 places is finer than a pixel at 1080p.

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CaptionData, ClipOverlayOverride, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { drawCaption, drawCard, drawScoreboard } from '../../../shared/overlayDraw'
 import { drawAnnotation } from '../../../shared/annotation'
-import { drawFlights, drawHeat, flightsProgress } from '../../../shared/court'
+import { drawFlights, drawSlideMarks, flightsProgress } from '../../../shared/court'
 import { assetImage, logoImage, packPhotoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback, type PlaybackState } from '../playback'
@@ -56,7 +56,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     const ctx = prepareCanvas(c, size.w, size.h)
     if (st.card) {
       drawCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp), assetImage)
-      if (st.card.slide?.heat) drawHeat(ctx, size.w, size.h, st.card.slide.heat, heatOpacity)
+      if (st.card.slide) drawSlideMarks(ctx, size.w, size.h, st.card.slide, heatOpacity)
       for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
       if (flights) drawFlights(ctx, size.w, size.h, flights, progress)
       return

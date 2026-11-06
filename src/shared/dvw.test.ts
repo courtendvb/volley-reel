@@ -173,3 +173,22 @@ a04SM+~~~58A;;;;0619;-1-1;7348;14.00.07;1;4;2;1;214;;
   })
 })
 
+describe('front row', () => {
+  const lines = (lineups: string) => parseDVW(`[3TEAMS]
+HTH;HOME;;;;
+OPP;AWAY;;;;
+[3PLAYERS-H]
+0;2;2;;;;;;TAN-TAR-02;TANAKA;Taro;
+[3PLAYERS-V]
+1;9;16;;;;;;;BROWN;Bob;
+[3SCOUT]
+*02SQ-~~~16A;;;;;;;;1;1;1;1;100;;${lineups}
+`).plays[0]
+
+  it('takes P2 to P4 of both lineups, by player key', () => {
+    expect(lines('1;2;3;4;5;6;7;16;9;10;11;12;').front).toMatchObject({ 0: 'TAN-TAR-02', 1: '*3', 2: '*4', 3: 'a16', 5: 'a10', length: 6 })
+  })
+  it('leaves it out for a file without lineups', () => {
+    expect(lines('').front).toBeUndefined()
+  })
+})

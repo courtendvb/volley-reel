@@ -139,7 +139,7 @@ export function ReelPanel(p: Props) {
     e.preventDefault(); e.stopPropagation()
     setMenu({ spot, where, x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 130) })
   }
-  const BELOW = t('この行の下にスライドを入れる'), AT_TOP = t('グループの先頭にスライドを入れる')
+  const BELOW = t('この行の下にスライドを入れる'), AT_TOP = t('マーカーの先頭にスライドを入れる')
   const rowsOf = (g: Group, ids: string[]) => {
     const rows = groupRows(reel, g, ids)
     let clipNo = 0
@@ -189,7 +189,7 @@ export function ReelPanel(p: Props) {
         onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
         onClick={() => p.onActivate(c, g)}
       >
-        <span className="grip" aria-hidden title={t('ドラッグで並べ替え・グループへ移動')}>⠿</span>
+        <span className="grip" aria-hidden title={t('ドラッグで並べ替え・マーカーへ移動')}>⠿</span>
         {p.missing.has(c.id) || !r ? (
           <span className="clip-main missing">{t('プレーが見つかりません（DVW が変更された可能性）')}</span>
         ) : (
@@ -246,9 +246,9 @@ export function ReelPanel(p: Props) {
         <span className="field-label">{t('再生・書き出し')}</span>
         <div className="segmented" role="radiogroup" aria-label={t('再生・書き出しに使うクリップ')}>
           <button role="radio" aria-checked={reel.scope === 'marked'} className={reel.scope === 'marked' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'marked' })}
-            title={t('グループに入れたクリップだけを使う（未分類は使わない）')}>{t('グループのみ')}</button>
+            title={t('マーカーの付いたクリップだけを使う（マーカーなしは使わない）')}>{t('マーカー付きだけ')}</button>
           <button role="radio" aria-checked={reel.scope === 'all'} className={reel.scope === 'all' ? 'on' : ''} onClick={() => change({ ...reel, scope: 'all' })}
-            title={t('未分類のクリップも、グループのあとにプレー一覧の順（試合の並び・試合の中は時間順）で使う')}>{t('全部')}</button>
+            title={t('マーカーなしのクリップも、マーカーのあとにプレー一覧の順（試合の並び・試合の中は時間順）で使う')}>{t('全部')}</button>
         </div>
       </div>
       {Object.values(reel.clips).some(c => !c.mode) && <Legacy d={rangeDefaults(reel)} onChange={d => change({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() })} />}
@@ -259,7 +259,7 @@ export function ReelPanel(p: Props) {
           : <><button className="primary" onClick={p.onPlayThrough} disabled={!p.orderCount && !reel.slides?.length} title={t('このシーンだけを再生')}>{t('▶ シーンを再生')}</button>
             <button onClick={p.onPlayMax} disabled={!p.orderCount && !reel.slides?.length} title={t('最大化して再生（終わると元に戻る）')} aria-label={t('最大化して再生')}>⛶</button></>}
       </div>
-      <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatLength(p.orderSec)}{t('（グループ入り {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>
+      <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatLength(p.orderSec)}{t('（マーカー付き {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
         onDragEnd={() => setDragOver(null)}>
@@ -268,29 +268,29 @@ export function ReelPanel(p: Props) {
             onDragOver={overGroup(m)} onDrop={e => onDropGroup(e, m)}>
             <header className="group-head" draggable onDragStart={e => e.dataTransfer.setData(DT_GROUP, String(m))}
               onContextMenu={e => openMenu(e, spotAt(groupRows(reel, m), m, 0), AT_TOP)}>
-              <span className="grip" aria-hidden title={t('ドラッグでグループの順番を変える')}>⠿</span>
+              <span className="grip" aria-hidden title={t('ドラッグでマーカーの順番を変える')}>⠿</span>
               {/* The number itself switches the group on (its color) or off (grey: not played or exported). */}
               <button className="swatch swatch-toggle" style={reel.markerOff?.[m] ? undefined : { background: MARKER_COLORS[m] }}
-                aria-pressed={!reel.markerOff?.[m]} aria-label={t('グループ {0} を使う', m)}
+                aria-pressed={!reel.markerOff?.[m]} aria-label={t('マーカー {0} を使う', m)}
                 title={reel.markerOff?.[m] ? t('オフ: 再生・書き出しに使わない（クリックでオン）') : t('オン: 再生・書き出しに使う（クリックでオフ）')}
                 onClick={() => change({ ...reel, markerOff: { ...reel.markerOff, [m]: !reel.markerOff?.[m] }, updatedAt: new Date().toISOString() })}>{m}</button>
-              <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={t('グループ {0}', m)} label={t('グループ {0} の名前', m)}
+              <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={t('マーカー {0}', m)} label={t('マーカー {0} の名前', m)}
                 onChange={v => change(renameMarker(reel, m, v))} />
               {reel.markerOff?.[m] && <span className="excluded-note" title={t('番号をクリックするとオンに戻ります')}>{t('オフ（使わない）')}</span>}
               <span className="muted">{reel.groups[m].length}</span>
               {reel.groups[m].some(id => reel.clips[id]?.tag) && (
-                <button className="tag-sort" title={keyName(t('このグループのクリップをメモの順に並べる（メモなしは最後。Ctrl+Z で戻せる）'))}
+                <button className="tag-sort" title={keyName(t('このマーカーのクリップをメモの順に並べる（メモなしは最後。Ctrl+Z で戻せる）'))}
                   onClick={() => change(sortByTag(reel, m))}>{t('メモ順')}</button>
               )}
               {(() => {
                 const on = markerCardOn(reel, m, p.markerCardDefault)
                 return (
                   <button className={`card-toggle${on ? ' on' : ''}`} aria-pressed={on}
-                    title={`${on ? t('このグループの前にタイトルカードを出す（クリックで出さない）') : t('このグループの前にタイトルカードを出さない（クリックで出す）')}${reel.markerCards?.[m] === undefined ? t('。今は動画の設定どおり') : ''}`}
+                    title={`${on ? t('このマーカーの前にタイトルカードを出す（クリックで出さない）') : t('このマーカーの前にタイトルカードを出さない（クリックで出す）')}${reel.markerCards?.[m] === undefined ? t('。今は動画の設定どおり') : ''}`}
                     onClick={() => change({ ...reel, markerCards: { ...reel.markerCards, [m]: !on }, updatedAt: new Date().toISOString() })}>{t('カード')}</button>
                 )
               })()}
-              <button className="gear" aria-label={t('グループ {0} のタイトルカードの見た目', m)} title={t('グループのタイトルカードの見た目（位置・大きさ）を動画の画面で編集')}
+              <button className="gear" aria-label={t('マーカー {0} のタイトルカードの見た目', m)} title={t('マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集')}
                 onClick={() => p.onEditCard(m)}>⚙</button>
             </header>
             {rowsOf(m, reel.groups[m])}
@@ -304,10 +304,10 @@ export function ReelPanel(p: Props) {
           }}>
           <header className="group-head" onContextMenu={e => openMenu(e, spotAt(groupRows(reel, 'none', none.map(c => c.id)), 'none', 0), AT_TOP)}>
             <span className="swatch none">–</span>
-            <span className="none-title">{t('未分類')}<span className="excluded-note" title={t('上の「再生・書き出し」で切り替えます')}> {reel.scope === 'marked' ? t('再生・書き出しに入りません') : t('グループのあとに一覧の順で入ります')}</span></span>
+            <span className="none-title">{t('マーカーなし')}<span className="excluded-note" title={t('上の「再生・書き出し」で切り替えます')}> {reel.scope === 'marked' ? t('再生・書き出しに入りません') : t('マーカーのあとに一覧の順で入ります')}</span></span>
             <span className="muted">{none.length}</span>
             {none.some(c => c.tag) && (
-              <button className={`tag-sort${reel.noneByTag ? ' on' : ''}`} aria-pressed={!!reel.noneByTag} title={t('未分類のクリップをメモの順に並べる（数字、アルファベットの順。メモなしは最後）。もう一度押すと時間順に戻る')}
+              <button className={`tag-sort${reel.noneByTag ? ' on' : ''}`} aria-pressed={!!reel.noneByTag} title={t('マーカーなしのクリップをメモの順に並べる（数字、アルファベットの順。メモなしは最後）。もう一度押すと時間順に戻る')}
                 onClick={() => change({ ...reel, noneByTag: !reel.noneByTag })}>{t('メモ順')}</button>
             )}
           </header>
@@ -328,7 +328,7 @@ export function ReelPanel(p: Props) {
           </div>
         </>
       )}
-      {!Object.keys(reel.clips).length && <p className="hint pad-x">{t('数字キー 1〜5 で選択中のクリップをグループに入れる（複数入れられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でメモ（並べ替え用）、「メモ順」でグループをメモの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、グループの見出しを右クリックで先頭にスライドを入れる。')}</p>}
+      {!Object.keys(reel.clips).length && <p className="hint pad-x">{t('数字キー 1〜5 で選択中のクリップにマーカーを付ける（複数入れられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でメモ（並べ替え用）、「メモ順」でマーカーをメモの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、マーカーの見出しを右クリックで先頭にスライドを入れる。')}</p>}
     </aside>
   )
 }

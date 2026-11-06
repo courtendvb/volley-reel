@@ -47,6 +47,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         <button className={fitting ? 'primary' : ''} onClick={() => onFitting(!fitting)}
           title={t('四隅の丸をドラッグして、コートのエンドラインとサイドラインの交点に合わせます')}>{fitting ? t('完了') : t('四隅を合わせる')}</button>
         {auto}
+        {fitting && <button onClick={() => onFit({ ...fit, corners: DEFAULT_CORNERS })} title={t('四隅を画面の中の初めの位置に戻します')}>{t('四隅をリセット')}</button>}
         <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッド')}</label>
         <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前')}
         <select className="near-team" value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>

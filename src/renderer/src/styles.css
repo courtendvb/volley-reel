@@ -357,6 +357,22 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .save-state.error { color: var(--danger-text); font-weight: 600; }
 .banner.notice { background: var(--warn-bg); color: var(--warn-text); cursor: pointer; }
 .modal.shortcuts { width: min(860px, 94vw); }
+.modal.pack-maker { width: min(980px, 96vw); height: 90vh; gap: 10px; }
+.pack-maker .filter-row input:not([type="checkbox"]) { flex: 1; min-width: 0; }
+.pack-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); grid-auto-rows: max-content; gap: 8px; align-content: start; padding: 2px; }
+.pack-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; min-width: 0; }
+.pack-tile.has { border-color: var(--primary); }
+.pack-tile canvas { display: block; border-radius: 3px; }
+.pack-empty { display: flex; align-items: center; justify-content: center; width: 72px; height: 90px; border: 1px dashed var(--border-strong); border-radius: 3px; color: var(--sub); font-size: 20px; }
+.pack-tile-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.pack-loose { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; background: var(--soft); border-radius: 6px; }
+.pack-loose-row { display: flex; gap: 4px; overflow-x: auto; }
+.pack-loose-row button { flex: none; padding: 2px; }
+.pack-loose-row button.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.pack-loose-row canvas { display: block; }
+.modal.pack-crop { width: 340px; align-items: center; }
+.pack-crop-view { cursor: move; touch-action: none; border-radius: 4px; }
+.pack-crop .modal-actions { align-self: stretch; }
 .modal.settings { width: min(900px, 94vw); height: 86vh; }
 .settings-body { flex: 1; min-height: 0; display: flex; gap: 16px; }
 .settings-nav { flex: none; width: 170px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-right: 12px; border-right: 1px solid var(--border); }

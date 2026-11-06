@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -169,10 +169,10 @@ describe('playPoints', () => {
     expect(g.end!.x).toBeCloseTo(a.end!.x); expect(g.end!.y).toBeCloseTo(a.end!.y)
   })
 
-  it('turns with the sides, and is empty without clicks; marks carry the zones too', () => {
+  it('turns with the sides, and is empty with neither clicks nor zones; marks carry the zones too', () => {
     const swapped: CourtFit = { ...fit, nearSet1: 'a' }
     expect(playPoints(serve, swapped).start!.y).toBeGreaterThan(0.99)
-    expect(playPoints({ ...attack, startClick: null, endClick: undefined }, fit)).toEqual({ start: null, end: null })
+    expect(playPoints({ ...attack, startZone: null, endZone: null, startClick: null, endClick: undefined }, fit)).toEqual({ start: null, end: null })
     expect(playMarks(attack, fit)).toMatchObject({ start: { cell: { row: 3, col: 0 } }, points: { start: expect.anything() } })
   })
 })
@@ -271,7 +271,7 @@ describe('heatGrid', () => {
 })
 
 describe('flightTiming with the red line moved', () => {
-  const serve = { time: 100, code: '*05SM-', skill: 'S' }, reception = { time: 102, code: 'a01RM+', shotCode: '*05SM-', skill: 'R' }
+  const serve = { time: 100, code: '*05SM-', skill: 'S' } as never, reception = { time: 102, code: 'a01RM+', shotCode: '*05SM-', skill: 'R' } as never
   it('leaves from it, or reaches it for a reception, in place of the DVW time', () => {
     expect(flightTiming(serve, 5).startSec).toBe(105)
     expect(flightTiming(serve, 5, { skillSec: 106.3 }).startSec).toBe(106.3)
@@ -303,6 +303,97 @@ describe('a set by the attack it is for', () => {
   it('keeps its own shape to other attacks', () => {
     expect(flightTiming({ ...set, time: 10, setTo: 'H' } as never, 0).sec).toBe(1)
     expect(playPoints({ ...set, setTo: 'H' } as never, fit).arc).toBe(1.5)
+  })
+})
+
+describe('a DVW with zones but no clicks', () => {
+  const base = { side: '*', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, playerKey: 'a', startSub: null, endSub: null, startClick: null, endClick: null }
+  const attack = { ...base, skill: 'A', startZone: 4, endZone: 6, code: '*05AQ-X5~46' } as never
+  const serve = { ...base, skill: 'S', startZone: 1, endZone: 5, code: '*05SQ-~~~15' } as never
+  const near = { ...fit, nearSet1: '*' as const }
+  it('puts the point in the middle of the zone, marked as rough', () => {
+    const p = playPoints(attack, near)
+    expect(p.start!.x).toBeCloseTo(1 / 6); expect(p.start!.y).toBeCloseTo(3.5 / 6)
+    expect(p.end!.x).toBeCloseTo(0.5); expect(p.end!.y).toBeCloseTo(0.5 / 6)
+    expect(p).toMatchObject({ startRough: true, endRough: true })
+  })
+  it('turns with the sides', () => {
+    expect(playPoints(attack, { ...fit, nearSet1: 'a' }).start!.y).toBeCloseTo(2.5 / 6)
+  })
+  it('uses the sub-zone when there is one', () => {
+    const p = playPoints({ ...(attack as object), endSub: 'A' } as never, near)
+    expect(p.end!.y).not.toBeCloseTo(0.5 / 6)
+  })
+  it('starts a serve behind the end line', () => {
+    expect(playPoints(serve, near).start!.y).toBeGreaterThan(1)
+  })
+  it('keeps a real click, and only guesses the end that lacks one', () => {
+    const p = playPoints({ ...(attack as object), startClick: { u: 0.3, v: 0.4 } } as never, near)
+    expect(p.start!.x).toBeCloseTo(0.3)
+    expect(p.startRough).toBeUndefined(); expect(p.endRough).toBe(true)
+    expect(playClicks({ ...(attack as object), startClick: { u: 0.3, v: 0.4 }, endClick: { u: 0.5, v: 0.9 } } as never)).toEqual({ start: { u: 0.3, v: 0.4 }, end: { u: 0.5, v: 0.9 } })
+  })
+  it('leaves a set alone', () => {
+    expect(playClicks({ ...base, skill: 'E', startZone: null, endZone: 3 } as never)).toEqual({ start: null, end: null })
+  })
+  it('gives the player heatmap, landings and flights, the rough ones scattered and told apart', () => {
+    const plays = [serve, serve, serve, { ...(serve as object), endClick: { u: 0.5, v: 0.8 } } as never]
+    const m = playerMarks(serve, near, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true }, () => plays)!
+    expect(m.heat!.points).toHaveLength(4)
+    expect(m.heat!.rough).toEqual([1.4, 1.4, 1.4, 0])
+    expect(playerMarks(serve, near, { ...DEFAULT_GRID_STYLE, heat: true }, () => [{ ...(serve as object), endSub: 'A' } as never])!.heat!.rough).toEqual([1])
+    expect(m.heat!.points[0]).toEqual(m.heat!.points[1]) // the heatmap spreads them itself
+    expect(m.landings!.points[0]).not.toEqual(m.landings!.points[1])
+    expect(m.landings!.points[0]).toEqual(playerMarks(serve, near, { ...DEFAULT_GRID_STYLE, landings: true }, () => plays)!.landings!.points[0])
+    expect(m.flights!.paths).toHaveLength(4)
+    expect(m.flights!.paths[0].endRough).toBe(true)
+  })
+  it('finds a serve its length', () => {
+    expect(serveSpeed({ ...(serve as object), time: 1 } as never)).toBeGreaterThan(0)
+  })
+  it('spreads a rough point wider and thinner in the heatmap', () => {
+    const at = { x: 0.5, y: 0.5 }
+    const sharp = heatGrid([at, { x: 0.1, y: 0.1 }]), rough = heatGrid([at, { x: 0.1, y: 0.1 }], [1.4, 0])
+    expect(heatAt(rough, 0.5, 0.5)).toBeLessThan(heatAt(sharp, 0.5, 0.5))
+    expect(heatAt(rough, 0.5 + 2 / 9, 0.5)).toBeGreaterThan(heatAt(sharp, 0.5 + 2 / 9, 0.5))
+  })
+})
+
+describe('attackCones', () => {
+  const near = { x: 0.1, y: 0.55 } // a left-side hitter on the near half, a little off the net
+  const shot = (x: number, y: number) => ({ start: near, end: { x, y } })
+  it('fans from where they hit over the other half, sideline to sideline at the attack line', () => {
+    const c = attackCones(fit, [shot(0.1, 0.05)])!
+    expect(c.apex).toEqual(near)
+    expect(c.rays).toHaveLength(6)
+    const depth = (0.55 - 1 / 3) * 18
+    expect(c.rays[0]).toBeCloseTo(Math.atan2(-0.9, depth))
+    expect(c.rays[5]).toBeCloseTo(Math.atan2(8.1, depth))
+  })
+  it('counts each shot in its cone, down the line to the sharp cross', () => {
+    const c = attackCones(fit, [shot(0.1, 0.05), shot(0.12, 0.1), shot(0.95, 0.35), shot(0.5, 0.05)])!
+    expect(c.shares).toEqual([0.5, 0, 0.25, 0, 0.25])
+    expect(c.shares.reduce((a, b) => a + b)).toBeCloseTo(1)
+  })
+  it('puts a shot outside the fan in the nearest cone', () => {
+    expect(attackCones(fit, [shot(0.95, 0.48)])!.shares[4]).toBe(1)
+  })
+  it('mirrors for the far half, and has nothing to show without shots', () => {
+    const far = attackCones(fit, [{ start: { x: 0.9, y: 0.45 }, end: { x: 0.9, y: 0.95 } }])!
+    expect(far.shares[4]).toBe(1)
+    expect(attackCones(fit, [])).toBeNull()
+  })
+  it('carries the colour picked', () => {
+    const base = { side: '*', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, playerKey: 'a', startSub: null, endSub: null, startClick: { u: 0.1, v: 0.45 }, endClick: { u: 0.5, v: 0.9 } }
+    const attack = { ...base, skill: 'A', startZone: 4, endZone: 6, code: '*05AQ-X5~46' } as never
+    expect(playerMarks(attack, fit, { ...DEFAULT_GRID_STYLE, cones: true, coneColor: '#2563EB' }, () => [attack])!.cones!.color).toBe('#2563EB')
+    expect(playerMarks(attack, fit, { ...DEFAULT_GRID_STYLE, cones: true }, () => [attack])!.cones!.color).toBeUndefined()
+  })
+  it('only comes with an attack', () => {
+    const base = { side: '*', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, playerKey: 'a', startSub: null, endSub: null, startClick: { u: 0.1, v: 0.45 }, endClick: { u: 0.5, v: 0.9 } }
+    const attack = { ...base, skill: 'A', startZone: 4, endZone: 6, code: '*05AQ-X5~46' } as never, serve = { ...base, skill: 'S', startZone: 1, endZone: 6, code: '*05SQ-~~~16' } as never
+    expect(playerMarks(attack, fit, { ...DEFAULT_GRID_STYLE, cones: true }, () => [attack])!.cones!.shares).toHaveLength(5)
+    expect(playerMarks(serve, fit, { ...DEFAULT_GRID_STYLE, cones: true }, () => [serve])).toBeNull()
   })
 })
 
@@ -350,7 +441,7 @@ describe('flightZ', () => {
 })
 
 describe('a serve with its speed', () => {
-  const serve = { time: 100, code: '*05SQ-', skill: 'S', startClick: { u: 0.5, v: 0 }, endClick: { u: 0.5, v: 1 } }
+  const serve = { time: 100, code: '*05SQ-', skill: 'S', startClick: { u: 0.5, v: 0 }, endClick: { u: 0.5, v: 1 } } as never
   it('takes its distance at that speed', () => {
     expect(flightTiming(serve, 0, { speedKmh: 72 }).sec).toBeCloseTo(18 / 20)
   })
@@ -359,9 +450,9 @@ describe('a serve with its speed', () => {
     expect(serveSpeed(serve)).toBe(65)
   })
   it('needs both clicks, and is only for serves', () => {
-    expect(flightTiming({ ...serve, endClick: null }, 0, { speedKmh: 72 }).sec).toBe(1)
-    expect(flightTiming({ ...serve, skill: 'A', code: '*05AH-' }, 0, { speedKmh: 72 }).sec).toBe(0.5)
-    expect(serveSpeed({ ...serve, startClick: null })).toBeNull()
+    expect(flightTiming({ ...(serve as object), endClick: null } as never, 0, { speedKmh: 72 }).sec).toBe(1)
+    expect(flightTiming({ ...(serve as object), skill: 'A', code: '*05AH-' } as never, 0, { speedKmh: 72 }).sec).toBe(0.5)
+    expect(serveSpeed({ ...(serve as object), startClick: null } as never)).toBeNull()
   })
 })
 

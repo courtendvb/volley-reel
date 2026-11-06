@@ -186,11 +186,12 @@ export interface PlayZones {
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
-interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks }
+interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
-interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number }
+// startRough, endRough: the DVW has no click there, so the point is the middle of the coded zone.
+interface PlayPoints { start: Pt | null; end: Pt | null; startZ?: number; endZ?: number; arc?: number; startRough?: boolean; endRough?: boolean }
 
 type ZonePlay = Pick<Play, 'skill' | 'side' | 'startZone' | 'endZone' | 'startSub' | 'endSub' | 'setNum' | 'score' | 'rallyId'>
 const spot = (zone: number | null, sub: string | null, near: boolean): Spot | null => {
@@ -203,7 +204,10 @@ const spot = (zone: number | null, sub: string | null, near: boolean): Spot | nu
 // with where it was set from; where it went is the start of the attack that follows it (`next`,
 // the rally's next play), when that is the same team's.
 export function playZones(play: ZonePlay, fit: CourtFit, next?: ZonePlay | null): PlayZones {
-  const ownNear = nearSide(fit, play) === play.side
+  return zonesFrom(play, nearSide(fit, play) === play.side, next)
+}
+
+function zonesFrom(play: ZonePlay, ownNear: boolean, next?: ZonePlay | null): PlayZones {
   if (play.skill === 'E') {
     const hit = next && next.skill === 'A' && next.side === play.side && next.rallyId === play.rallyId ? next : null
     return { start: spot(play.endZone, play.endSub, ownNear), end: hit ? spot(hit.startZone, hit.startSub, ownNear) : null }
@@ -250,15 +254,32 @@ const SETTER_SPOT: ClickPoint = { u: 0.6, v: 0.444 }
 // The play's clicks on the court. They are seen from the play's team, whose end line is on the near
 // side (v 0 is the bottom) or the far one (turned round). Many DVWs click where a set went but not
 // where it left: its coded zone stands in, and without one the usual setter's spot.
-export function playPoints(play: ZonePlay & Pick<Play, 'startClick' | 'endClick' | 'code' | 'shotCode' | 'setTo'>, fit: CourtFit): PlayPoints {
+export function playPoints(play: ClickPlay & Pick<Play, 'code' | 'shotCode' | 'setTo'>, fit: CourtFit): PlayPoints {
   const near = nearSide(fit, play) === play.side
-  const on = clickOn(near)
-  const end = on(play.endClick)
+  const on = clickOn(near), clicks = playClicks(play)
+  const end = on(clicks.end)
   const coded = play.skill === 'E' ? spot(play.endZone, play.endSub, near) : null
   const middle = coded ? spotArea(coded, true) : null
   const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
-  const shot = play.shotCode ?? play.code, start = on(play.startClick) ?? setFrom, z = strikeHeight(shot)
-  return { start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}) }
+  const shot = play.shotCode ?? play.code, start = on(clicks.start) ?? setFrom, z = strikeHeight(shot)
+  return {
+    start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}),
+    ...(clicks.startRough ? { startRough: true } : {}), ...(clicks.endRough ? { endRough: true } : {}),
+  }
+}
+
+// A play's clicks, or where its coded zones say when the DVW has none: the middle of the zone or
+// sub-zone, seen from the play's team like a click. A set's zones say too little, so it keeps to
+// playPoints' own guess.
+type ClickPlay = ZonePlay & Pick<Play, 'startClick' | 'endClick'>
+interface Clicks { start: ClickPoint | null; end: ClickPoint | null; startRough?: boolean; endRough?: boolean }
+export function playClicks(play: ClickPlay): Clicks {
+  const start = play.startClick ?? null, end = play.endClick ?? null
+  if ((start && end) || play.skill === 'E') return { start, end }
+  const zones = zonesFrom(play, true)
+  const middle = (s: Spot | null): ClickPoint | null => { if (!s) return null; const a = spotArea(s, true); return { u: a.u0 + a.du / 2, v: 1 - (a.v0 + a.dv / 2) } }
+  const roughStart = start ? null : middle(zones.start), roughEnd = end ? null : middle(zones.end)
+  return { start: start ?? roughStart, end: end ?? roughEnd, ...(roughStart ? { startRough: true } : {}), ...(roughEnd ? { endRough: true } : {}) }
 }
 
 // A click on the court, for a team whose end line is near or far.
@@ -267,23 +288,42 @@ const clickOn = (near: boolean) => (c: ClickPoint | null | undefined): Pt | null
 // The tell of a shot that a heatmap keeps to: a serve's start zone, an attack's code (P1, X5...).
 const shotKind = (p: Pick<Play, 'skill' | 'startZone' | 'code'>) => (p.skill === 'S' ? p.startZone : p.code.slice(6, 8))
 
+// The i-th rough point moved a little around its zone's middle, the same way every time.
+const ROUGH_SCATTER_M = 1
+function scattered(c: ClickPoint, i: number): ClickPoint {
+  const r = ROUGH_SCATTER_M * Math.sqrt(((i % 16) + 0.5) / 16), turn = i * 2.4
+  return { u: c.u + (r * Math.cos(turn)) / COURT_W_M, v: c.v + (r * Math.sin(turn)) / COURT_L_M }
+}
+
 // A serve's or attack's player, from `plays` (every match of the project), on the side of the court
 // this play is on: where their shots of the same kind landed (shotKind), all their serves' flights,
 // and the landings as points: all their serves, or their attacks of the same code.
 export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style: GridStyle, plays: () => Play[]): PlayerMarks | null {
   if (play.skill !== 'S' && play.skill !== 'A') return null
   const heatOn = !!style.heat, flightsOn = !!style.serveFlights && play.skill === 'S'
-  const landingsOn = !!style.landings
-  if (!heatOn && !flightsOn && !landingsOn) return null
+  const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A'
+  if (!heatOn && !flightsOn && !landingsOn && !conesOn) return null
   const on = clickOn(nearSide(fit, play) === play.side)
-  const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && p.endClick)
-  const flying = shots.filter(p => p.startClick), kind = shotKind(play)
+  const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && playClicks(p).end)
+  const flying = shots.filter(p => playClicks(p).start), kind = shotKind(play)
   const same = shots.filter(p => shotKind(p) === kind)
-  const marks = (list: Play[]): ShotMarks => ({ fit, points: list.map(p => on(p.endClick)!), plays: list })
+  // A heatmap spreads a rough point over its zone; as points they are scattered, so they can be told apart.
+  const marks = (list: Play[], scatter: boolean): ShotMarks => {
+    const clicks = list.map(playClicks), rough = clicks.map((c, i) => (c.endRough ? (list[i].endSub ? HEAT_SUB_SIGMA_M : HEAT_ZONE_SIGMA_M) : 0))
+    return { fit, points: clicks.map((c, i) => on(scatter && c.endRough ? scattered(c.end!, i) : c.end)!), plays: list, ...(rough.some(Boolean) ? { rough } : {}) }
+  }
+  const path = (p: Play, i: number): PlayPoints => {
+    const c = playClicks(p)
+    return {
+      start: on(c.startRough ? scattered(c.start!, i) : c.start), end: on(c.endRough ? scattered(c.end!, i) : c.end), startZ: strikeHeight(p.code), arc: shotPath(p.code).arc,
+      ...(c.startRough ? { startRough: true } : {}), ...(c.endRough ? { endRough: true } : {}),
+    }
+  }
   return {
-    ...(heatOn ? { heat: marks(same) } : {}),
-    ...(landingsOn ? { landings: marks(play.skill === 'S' ? shots : same) } : {}),
-    ...(flightsOn ? { flights: { fit, paths: flying.map(p => ({ start: on(p.startClick), end: on(p.endClick), startZ: strikeHeight(p.code), arc: shotPath(p.code).arc })) } } : {}),
+    ...(heatOn ? { heat: marks(same, false) } : {}),
+    ...(landingsOn ? { landings: marks(play.skill === 'S' ? shots : same, true) } : {}),
+    ...(flightsOn ? { flights: { fit, paths: flying.map(path) } } : {}),
+    ...(conesOn ? coneMark(fit, style.coneColor, same.flatMap(p => { const c = playClicks(p), start = on(c.start), end = on(c.end); return start && end ? [{ start, end }] : [] })) : {}),
   }
 }
 
@@ -303,12 +343,99 @@ export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, sty
   return { ...playZones(play, fit, next), points: playPoints(play, fit), ...(player ? { player } : {}) }
 }
 
+// An attacker's cones: from where they hit, five equal angles over the other half, each with its share
+// of the shots. The fan runs from one sideline to the other at the attack line, so a line shot, a
+// cross and a sharp cross each fall in a cone from any place along the net. A shot outside the fan
+// (a tip by the net) counts in the cone nearest it. apex: the shots' mean start; angles in radians
+// on the floor, measured from straight across the court.
+export interface SlideCones { fit: CourtFit; apex: Pt; rays: number[]; shares: number[]; color?: string }
+const CONES = 5
+export function attackCones(fit: CourtFit, shots: { start: Pt; end: Pt }[]): SlideCones | null {
+  if (!shots.length) return null
+  const apex = { x: shots.reduce((s, p) => s + p.start.x, 0) / shots.length, y: shots.reduce((s, p) => s + p.start.y, 0) / shots.length }
+  const away = apex.y > 0.5 ? 1 : -1 // up the picture, or down it
+  const across = (apex.y - (0.5 - away / ROWS)) * away * COURT_L_M, x = apex.x * COURT_W_M
+  const lo = Math.atan2(-x, across), hi = Math.atan2(COURT_W_M - x, across), step = (hi - lo) / CONES
+  const counts = new Array<number>(CONES).fill(0)
+  for (const { end } of shots) {
+    const a = Math.atan2((end.x - apex.x) * COURT_W_M, (apex.y - end.y) * away * COURT_L_M)
+    counts[Math.max(0, Math.min(CONES - 1, Math.floor((a - lo) / step)))]++
+  }
+  return { fit, apex, rays: counts.concat(0).map((_, i) => lo + step * i), shares: counts.map(n => n / shots.length) }
+}
+const coneMark = (fit: CourtFit, color: string | undefined, shots: { start: Pt; end: Pt }[]): { cones?: SlideCones } => {
+  const cones = attackCones(fit, shots)
+  return cones ? { cones: { ...cones, ...(color ? { color } : {}) } } : {}
+}
+
+// Where a ray from the apex goes through the other half: into it and out of it, in court units.
+function coneSpan({ apex }: SlideCones, angle: number): [Pt, Pt] | null {
+  const away = apex.y > 0.5 ? 1 : -1, ax = apex.x * COURT_W_M, ay = apex.y * COURT_L_M
+  const dx = Math.sin(angle), dy = -Math.cos(angle) * away
+  const [y0, y1] = away > 0 ? [0, COURT_L_M / 2] : [COURT_L_M / 2, COURT_L_M]
+  let t0 = 0, t1 = Infinity
+  for (const [p, q] of [[-dx, ax], [dx, COURT_W_M - ax], [-dy, ay - y0], [dy, y1 - ay]]) {
+    if (p === 0) { if (q < 0) return null; continue }
+    const r = q / p
+    if (p < 0) t0 = Math.max(t0, r); else t1 = Math.min(t1, r)
+  }
+  if (t0 >= t1) return null
+  const at = (t: number): Pt => ({ x: (ax + dx * t) / COURT_W_M, y: (ay + dy * t) / COURT_L_M })
+  return [at(t0), at(t1)]
+}
+
+// On the floor, thicker where more shots go: the fill, the rays, and each cone's share.
+export const CONE_COLOR = '#DC2626'
+const CONE_STEPS = 16
+export function drawCones(ctx: Ctx, w: number, h: number, cones: SlideCones): void {
+  const H = homography(inPixels(cones.fit, w, h)), top = Math.max(...cones.shares), color = cones.color ?? CONE_COLOR
+  const show = (p: Pt) => project(H, p.x, p.y)
+  ctx.save()
+  cones.shares.forEach((share, i) => {
+    const from = cones.rays[i], to = cones.rays[i + 1]
+    const spans = Array.from({ length: CONE_STEPS + 1 }, (_, k) => coneSpan(cones, from + ((to - from) * k) / CONE_STEPS)).filter(s => !!s)
+    if (spans.length < 2) return
+    const outline = [...spans.map(s => s[0]), ...spans.map(s => s[1]).reverse()].map(show)
+    ctx.fillStyle = color
+    ctx.globalAlpha = 0.08 + (0.6 * share) / (top || 1)
+    ctx.beginPath()
+    outline.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+    ctx.closePath()
+    ctx.fill()
+  })
+  ctx.globalAlpha = 0.9
+  ctx.strokeStyle = color
+  ctx.lineWidth = Math.max(1.5, w / 640)
+  for (const angle of cones.rays) {
+    const s = coneSpan(cones, angle)
+    if (!s) continue
+    const a = show(s[0]), b = show(s[1])
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+  ctx.font = `bold ${Math.max(13, Math.round(w / 55))}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = Math.max(3, w / 320)
+  cones.shares.forEach((share, i) => {
+    const s = coneSpan(cones, (cones.rays[i] + cones.rays[i + 1]) / 2)
+    if (!s) return
+    const p = show({ x: s[0].x + (s[1].x - s[0].x) * 0.62, y: s[0].y + (s[1].y - s[0].y) * 0.62 }), text = `${Math.round(share * 100)}%`
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.strokeText(text, p.x, p.y)
+    ctx.fillStyle = color
+    ctx.fillText(text, p.x, p.y)
+  })
+  ctx.restore()
+}
+
 // The ball's flight, for the moving curve. DVW times are whole seconds, so this shows the shot rather
 // than following the real ball: a serve or attack leaves at the play's time, and a reception or dig
 // is reached at its time. `sec`: see shotPath. A clip can put its own time on the play, moved by hand
 // (skillSec, in place of the DVW's), and on a serve its speed (speedKmh), which sets the time in the air.
 export interface Flight { startSec: number; sec: number }
-type FlightPlay = Pick<Play, 'time' | 'code' | 'shotCode' | 'skill' | 'setTo' | 'startClick' | 'endClick'>
+type FlightPlay = ClickPlay & Pick<Play, 'time' | 'code' | 'shotCode' | 'setTo'>
 export function flightTiming(play: FlightPlay, offsetSec: number, clip?: { skillSec?: number; speedKmh?: number } | null): Flight {
   const metres = play.skill === 'S' ? serveMetres(play) : null
   const sec = metres && clip?.speedKmh ? metres / (clip.speedKmh / 3.6) : shotPath(play.shotCode ?? play.code, play.setTo).sec
@@ -316,8 +443,9 @@ export function flightTiming(play: FlightPlay, offsetSec: number, clip?: { skill
   return { startSec: play.shotCode ? t - sec : t, sec }
 }
 
-// How far a serve goes along the floor, in metres; null without both clicks.
-function serveMetres({ startClick: a, endClick: b }: Pick<Play, 'startClick' | 'endClick'>): number | null {
+// How far a serve goes along the floor, in metres, from its zones without clicks; null without both ends.
+function serveMetres(play: ClickPlay): number | null {
+  const { start: a, end: b } = playClicks(play)
   return a && b ? Math.hypot((a.u - b.u) * COURT_W_M, (a.v - b.v) * COURT_L_M) : null
 }
 
@@ -357,7 +485,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   const H = homography(inPixels(fit, w, h))
   const a = p.start, b = p.end
   const at = (s: number) => camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s))
-  const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress))
+  const air = at(0), lineW = Math.max(3, w / 320), done = Math.min(1, Math.max(0, progress)), rough = p.startRough || p.endRough
   if (lift) drawLift(ctx, project(H, a.x, a.y), air, w)
   if (done > 0) {
     const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done))
@@ -368,20 +496,21 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
     ctx.lineJoin = 'round'
     ctx.shadowColor = 'rgba(0,0,0,0.6)'
     ctx.shadowBlur = lineW * 1.5
+    if (rough) ctx.setLineDash(ROUGH_DASH(lineW))
     ctx.beginPath()
     ctx.moveTo(air.x, air.y)
     for (let i = 1; i <= n; i++) { const q = at((done * i) / n); ctx.lineTo(q.x, q.y) }
     ctx.stroke()
     ctx.restore()
   }
-  drawPoint(ctx, air, START_COLOR, w)
+  drawPoint(ctx, air, START_COLOR, w, p.startRough)
   if (lift && done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
-  if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w)
+  if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w, p.endRough)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
 
 // Where shots came down, as points on the floor.
-function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat): void {
+function drawLandings(ctx: Ctx, w: number, h: number, { fit, points, rough }: SlideHeat): void {
   const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
   const r = Math.max(2.5, w / 300)
@@ -389,21 +518,21 @@ function drawLandings(ctx: Ctx, w: number, h: number, { fit, points }: SlideHeat
   ctx.fillStyle = END_COLOR
   ctx.strokeStyle = '#FFFFFF'
   ctx.lineWidth = Math.max(1, w / 900)
-  for (const p of points) {
+  points.forEach((p, i) => {
     const q = camera(p.x, p.y, 0)
     ctx.beginPath()
     ctx.arc(q.x, q.y, r, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.stroke()
-  }
+    ringOr(ctx, !!rough?.[i], END_COLOR)
+  })
   ctx.restore()
 }
 
 // What a slide keeps of the court: the shots' marks and a play's zones, fixed when they were put on.
 export interface SlideZones { fit: CourtFit; zones: PlayZones; detail: GridStyle['detail'] }
-export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones }
+export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones }
 export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, heatOpacity?: number): void {
   if (s.heat) drawHeat(ctx, w, h, s.heat, heatOpacity)
+  if (s.cones) drawCones(ctx, w, h, s.cones)
   if (s.zones) drawCourt(ctx, w, h, s.zones.fit, { ...DEFAULT_GRID_STYLE, grid: false, playZones: true, detail: s.zones.detail }, s.zones.zones, 1)
   if (s.landings) drawLandings(ctx, w, h, s.landings)
 }
@@ -418,7 +547,12 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
   if (!camera) return
   const done = Math.min(1, Math.max(0, progress)), many = paths.length > 12
   const at = (p: PlayPoints, s: number) => camera(p.start!.x + (p.end!.x - p.start!.x) * s, p.start!.y + (p.end!.y - p.start!.y) * s, flightZ(p, s))
-  const dot = (q: Pt, color: string) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(2.5, w / (many ? 320 : 240)), 0, Math.PI * 2); ctx.fill() }
+  const dot = (q: Pt, color: string, rough?: boolean) => {
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.arc(q.x, q.y, Math.max(2.5, w / (many ? 320 : 240)), 0, Math.PI * 2)
+    if (rough) { ctx.strokeStyle = color; ctx.stroke() } else ctx.fill()
+  }
   const drawn = paths.filter(p => p.start && p.end)
   ctx.save()
   ctx.strokeStyle = '#FACC15'
@@ -428,15 +562,17 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
   ctx.globalAlpha = many ? Math.max(0.35, 12 / paths.length) : 0.95
   if (done > 0) for (const p of drawn) {
     const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done)), o = at(p, 0)
+    ctx.setLineDash(p.startRough || p.endRough ? ROUGH_DASH(ctx.lineWidth as number) : [])
     ctx.beginPath()
     ctx.moveTo(o.x, o.y)
     for (let i = 1; i <= n; i++) { const q = at(p, (done * i) / n); ctx.lineTo(q.x, q.y) }
     ctx.stroke()
   }
   ctx.globalAlpha = 1
+  ctx.setLineDash([])
   for (const p of drawn) {
-    dot(at(p, 0), START_COLOR)
-    if (done >= 1) dot(at(p, 1), END_COLOR)
+    dot(at(p, 0), START_COLOR, p.startRough)
+    if (done >= 1) dot(at(p, 1), END_COLOR, p.endRough)
     else if (done > 0) dot(at(p, done), '#FFFFFF')
   }
   ctx.restore()
@@ -445,9 +581,13 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
 // A heatmap on the floor: how thick the landings are, in metres so the spread is the same both ways
 // along the court. Coloured like a thermal camera, blue through to red as the count rises; the
 // thinnest parts fade out so the floor shows.
-export interface SlideHeat { fit: CourtFit; points: Pt[] }
+// rough: for points that only know their zone, how wide the heatmap spreads them, in metres; 0 for a click.
+export interface SlideHeat { fit: CourtFit; points: Pt[]; rough?: number[] }
 const COURT_W_M = 9, COURT_L_M = 18
 const HEAT_CELL_M = 0.25, HEAT_SIGMA_M = 0.8, HEAT_MARGIN_M = 3
+// Measured on a season's files against their clicks: 1 m fits best with a sub-zone, whose middle is
+// about 0.6 m off; the wider one is for a whole zone, about 1.5 m off.
+const HEAT_SUB_SIGMA_M = 1, HEAT_ZONE_SIGMA_M = 1.4
 export const HEAT_OPACITY = 0.6 // the heatmap at its thickest, unless GridStyle.heatOpacity says otherwise
 const HEAT_RAMP: [number, [number, number, number]][] = [[0, [37, 99, 235]], [0.3, [6, 182, 212]], [0.5, [34, 197, 94]], [0.72, [250, 204, 21]], [1, [220, 38, 38]]]
 
@@ -460,15 +600,17 @@ export function heatColor(v: number): [number, number, number] {
 }
 
 interface HeatGrid { cols: number; rows: number; data: Float32Array } // 0–1, the thickest spot is 1
-export function heatGrid(points: Pt[]): HeatGrid {
+export function heatGrid(points: Pt[], rough?: number[]): HeatGrid {
   const cols = Math.round((COURT_W_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1, rows = Math.round((COURT_L_M + 2 * HEAT_MARGIN_M) / HEAT_CELL_M) + 1
-  const data = new Float32Array(cols * rows), reach = Math.ceil((3 * HEAT_SIGMA_M) / HEAT_CELL_M)
-  for (const p of points) {
+  const data = new Float32Array(cols * rows)
+  // A rough point spreads wider and so thinner: still one shot's worth.
+  for (const [i, p] of points.entries()) {
+    const sigma = rough?.[i] || HEAT_SIGMA_M, weight = (HEAT_SIGMA_M / sigma) ** 2, reach = Math.ceil((3 * sigma) / HEAT_CELL_M)
     const cx = (p.x * COURT_W_M + HEAT_MARGIN_M) / HEAT_CELL_M, cy = (p.y * COURT_L_M + HEAT_MARGIN_M) / HEAT_CELL_M
     for (let r = Math.max(0, Math.ceil(cy - reach)); r <= Math.min(rows - 1, Math.floor(cy + reach)); r++) {
       for (let c = Math.max(0, Math.ceil(cx - reach)); c <= Math.min(cols - 1, Math.floor(cx + reach)); c++) {
         const d2 = ((c - cx) ** 2 + (r - cy) ** 2) * HEAT_CELL_M ** 2
-        data[r * cols + c] += Math.exp(-d2 / (2 * HEAT_SIGMA_M ** 2))
+        data[r * cols + c] += weight * Math.exp(-d2 / (2 * sigma ** 2))
       }
     }
   }
@@ -490,7 +632,7 @@ const grids = new WeakMap<SlideHeat, HeatGrid>()
 
 // Painted pixel by pixel from the picture back onto the floor, at half size and smoothed up.
 export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY): void {
-  const grid = grids.get(heat) ?? heatGrid(heat.points)
+  const grid = grids.get(heat) ?? heatGrid(heat.points, heat.rough)
   grids.set(heat, grid)
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
   const H = homography(inPixels(heat.fit, sw, sh))
@@ -541,6 +683,8 @@ export interface GridStyle {
   noLift?: boolean // no dashed line from the floor up to a point in the air
   serveFlights?: boolean // on a serve: all the player's serves flying with it
   landings?: boolean // on a serve or attack: where the player's shots landed, as points
+  cones?: boolean // on an attack: the player's shots of that code as cones across the court
+  coneColor?: string // their colour, unless the usual one
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
 
@@ -570,11 +714,12 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
   if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
+  if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
-    if (zones.start && !pts?.start) { ctx.globalAlpha = 0.35; ctx.fillStyle = START_COLOR; spotPath(zones.start); ctx.fill() }
-    if (zones.end && !pts?.end) { ctx.globalAlpha = 0.35; ctx.fillStyle = END_COLOR; spotPath(zones.end); ctx.fill() }
+    if (zones.start && (!pts?.start || pts.startRough)) { ctx.globalAlpha = 0.35; ctx.fillStyle = START_COLOR; spotPath(zones.start); ctx.fill() }
+    if (zones.end && (!pts?.end || pts.endRough)) { ctx.globalAlpha = 0.35; ctx.fillStyle = END_COLOR; spotPath(zones.end); ctx.fill() }
     ctx.restore()
   }
 
@@ -613,8 +758,8 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     if (pts?.end && endAir && !style.noLift) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
     const a = air ?? place(pts?.start, zones.start), b = endAir ?? place(pts?.end, zones.end)
     if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
-    if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w)
-    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w)
+    if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
+    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
 }
 
@@ -631,16 +776,25 @@ function drawLift(ctx: Ctx, ground: Pt, air: Pt, w: number): void {
   ctx.restore()
 }
 
-function drawPoint(ctx: Ctx, p: Pt, color: string, w: number): void {
+// A point from a zone rather than a click: a ring, and a flight's line dashed, here and in the export.
+function drawPoint(ctx: Ctx, p: Pt, color: string, w: number, rough?: boolean): void {
   ctx.save()
   ctx.fillStyle = color
   ctx.strokeStyle = '#FFFFFF'
   ctx.lineWidth = Math.max(1.5, w / 640)
   ctx.beginPath()
   ctx.arc(p.x, p.y, Math.max(4, w / 160), 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
+  ringOr(ctx, !!rough, color)
   ctx.restore()
+}
+
+const ROUGH_DASH = (width: number) => [width * 3, width * 2.5]
+function ringOr(ctx: Ctx, rough: boolean, color: string): void {
+  if (!rough) { ctx.fill(); ctx.stroke(); return }
+  const width = ctx.lineWidth as number
+  ctx.lineWidth = width * 3; ctx.stroke() // the white edge, for any floor
+  ctx.lineWidth = width * 1.6; ctx.strokeStyle = color; ctx.stroke()
+  ctx.lineWidth = width; ctx.strokeStyle = '#FFFFFF'
 }
 
 function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {

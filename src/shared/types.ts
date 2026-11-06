@@ -4,7 +4,8 @@ import type { CourtFit } from './court'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
 import type { OverlayTheme } from './overlay'
-import type { PackInfo, PhotoTarget } from './pack'
+import type { PackInfo, PackManifest, PhotoTarget } from './pack'
+import type { RosterPlayer } from './packMaker'
 import type { Reel } from './reel'
 import type { Video } from './video'
 import type { ClipTiming } from './timing'
@@ -239,6 +240,8 @@ export interface Api {
   listPacks(): Promise<PackInfo[]>
   importPack(): Promise<PackInfo[]> // asks for a .vrpack; the packs after
   removePack(id: string): Promise<PackInfo[]>
+  packRoster(): Promise<RosterPlayer[]> // everyone in the library's matches
+  savePack(manifest: PackManifest, photos: Record<string, Uint8Array>, install: boolean): Promise<{ saved: string | null; packs: PackInfo[] }>
   readPackPhoto(id: string, photo: string): Promise<Uint8Array>
   setPlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // asks for a picture; kept in the local pack
   removePlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // only a photo set in the app

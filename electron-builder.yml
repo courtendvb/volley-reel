@@ -1,8 +1,18 @@
 # Windows installer (npm run dist) and Mac disk images (npm run dist:mac, on a Mac) → release/. The app
 # is the built out/ folder; ffmpeg and ffprobe go next to it in resources/ffmpeg (they run as separate
 # processes, so not inside the asar).
+#
+# The app was called volley-reel first, and installed copies update over the old version. So only what
+# people read is the new name; these stay, and scripts/app-identity.test.mjs checks that they do:
+# - appId: the installer finds the copy to replace by it (a new one would install a second app)
+# - executableName: shortcuts and the install folder carry over, taskbar pins keep working
+# - publish: installed copies look for updates in that repository. It was renamed from
+#   volley-reel-releases, and copies up to 0.2.25 still ask for the old name: GitHub forwards them.
+#   A new repository with the old name would end that, so never create one.
+# - package.json has a name but no productName: the settings folder follows it, and the settings say
+#   where the library is. productName is here, where only the build reads it.
 appId: com.courtendvb.volleyreel
-productName: volley-reel
+productName: SyncScout Video Editor
 copyright: courtendvb
 directories:
   output: release
@@ -39,8 +49,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: volley-reel
-  artifactName: volley-reel-setup-${version}.${ext}
+  shortcutName: SyncScout Video Editor
+  artifactName: syncscout-video-editor-setup-${version}.${ext}
 # Not signed by Apple yet: an ad-hoc signature is what lets it run on Apple silicon at all, and people
 # open it once through System Settings (README). Signing needs the Developer ID certificate, an
 # identity here instead of '-', hardenedRuntime and notarize, and ffmpeg signed along with the app.
@@ -50,6 +60,7 @@ mac:
       arch: [arm64, x64]
     - target: zip # for latest-mac.yml, which tells installed copies a new version is out
       arch: [arm64, x64]
+  artifactName: syncscout-video-editor-${version}-${arch}-mac.${ext} # the .zip
   category: public.app-category.video
   icon: build/icon-mac.png
   identity: '-'
@@ -57,11 +68,11 @@ mac:
     - from: vendor/ffmpeg-mac/${arch} # npm run ffmpeg:mac; their license and notes are in there too
       to: ffmpeg
 dmg:
-  artifactName: volley-reel-${version}-${arch}.${ext}
+  artifactName: syncscout-video-editor-${version}-${arch}.${ext}
 # Updates for installed copies (src/main/updater.ts): `npm run release` uploads the installer and
 # latest.yml to this public repository's releases; the app's source stays in the private one.
 publish:
   provider: github
   owner: courtendvb
-  repo: volley-reel-releases
+  repo: syncscout-video-editor-releases
   releaseType: release # published at once (a draft would not be seen by the apps)

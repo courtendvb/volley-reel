@@ -4,7 +4,8 @@
 import { readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
-const INSTALLER = /^volley-reel-setup-(\d+)\.(\d+)\.(\d+)\.exe(\.blockmap)?$/
+// (Installers up to 0.2.25 are named volley-reel-setup-*.)
+const INSTALLER = /^(?:syncscout-video-editor|volley-reel)-setup-(\d+)\.(\d+)\.(\d+)\.exe(\.blockmap)?$/
 
 // Removes all but the `keep` newest versions from dir; returns the versions removed, newest first.
 export function pruneReleases(dir = 'release', keep = 5) {

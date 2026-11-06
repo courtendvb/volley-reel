@@ -31,13 +31,13 @@ jobs:
       - run: npm run dist:mac
       - name: Check the packaged app and its ffmpeg
         run: |
-          app=release/mac-arm64/volley-reel.app
+          app="release/mac-arm64/SyncScout Video Editor.app"
           codesign --verify --deep --strict "$app"
           "$app/Contents/Resources/ffmpeg/ffprobe" -version
           "$app/Contents/Resources/ffmpeg/ffmpeg" -hide_banner -f lavfi -i testsrc=d=1 -c:v libx264 -pix_fmt yuv420p "$RUNNER_TEMP/check.mp4"
       - uses: actions/upload-artifact@v4
         with:
-          name: volley-reel-mac
+          name: syncscout-video-editor-mac
           retention-days: 14
           path: |
             release/*.dmg

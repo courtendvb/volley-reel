@@ -2,7 +2,7 @@
   "name": "volley-reel",
   "version": "0.2.25",
   "private": true,
-  "description": "DataVolley (.dvw) + match video -> highlight reel MP4 editor",
+  "description": "SyncScout Video Editor: DataVolley (.dvw) + match video -> MP4 video editor",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

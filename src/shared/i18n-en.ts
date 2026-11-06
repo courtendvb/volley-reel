@@ -724,7 +724,7 @@ export const EN: Record<string, string> = {
   "日付と片方のチーム": "Date and one team",
   "日付のみ（要確認）": "Date only (check it)",
   "動画なし": "No video",
-  "volley-reel パック": "volley-reel pack",
+  "SyncScout Video Editor パック": "SyncScout Video Editor pack",
   "{0} の写真を入れる": "Put in the photo of {0}",
   "{0} 人": "{0} players",
   "このプレーの選手": "This play's player",

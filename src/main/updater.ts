@@ -1,5 +1,5 @@
 // Updates for testers (installed copies): on start, look for a newer version among the releases
-// (electron-builder.yml's publish: the public volley-reel-releases repository), download it in the
+// (electron-builder.yml's publish: the public syncscout-video-editor-releases repository), download it in the
 // background and tell the renderer; the banner's button saves, then restarts into the new version.
 // Quitting without the button installs it too, so the next start is new either way.
 // Runs only in an installed copy (or with VR_UPDATE_TEST, against dev-app-update.yml), never in smoke runs.
@@ -22,7 +22,7 @@ import type { UpdateEvent } from '../shared/types'
 import { t } from '../shared/i18n'
 
 const { autoUpdater } = electronUpdater
-export const RELEASES_PAGE = 'https://github.com/courtendvb/volley-reel-releases/releases/latest'
+export const RELEASES_PAGE = 'https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest'
 
 let send: (ev: UpdateEvent) => void = () => {}
 let downloaded: string | null = null // the installer, once downloaded and checked
@@ -50,7 +50,7 @@ export function startUpdates(win: BrowserWindow): void {
   autoUpdater.autoDownload = !announceOnly
   autoUpdater.autoInstallOnAppQuit = false // installed here instead (see above)
   send = ev => { if (!win.isDestroyed()) win.webContents.send('update:event', ev) }
-  log('info', `volley-reel ${app.getVersion()} looking for updates`)
+  log('info', `SyncScout Video Editor ${app.getVersion()} looking for updates`)
   autoUpdater.on('update-available', info => { log('info', `${info.version} found`); send({ type: announceOnly ? 'manual' : 'available', version: info.version }) })
   autoUpdater.on('download-progress', p => send({ type: 'progress', ratio: p.percent / 100 }))
   autoUpdater.on('update-downloaded', info => {

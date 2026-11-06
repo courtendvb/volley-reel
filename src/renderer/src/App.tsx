@@ -919,7 +919,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <strong className="brand">volley-reel</strong>
+        <strong className="brand">SyncScout Video Editor</strong>
         {appVersion && <span className="app-version" title={t('このアプリのバージョン')}>v{appVersion}</span>}
         {project && <button onClick={() => void goHome()} title={t('倉庫とプロジェクトの一覧に戻る')}>{t('ホーム')}</button>}
         {project && <strong className="project-name" title={project.path}>{project.name}</strong>}

@@ -223,6 +223,9 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .reel-head { display: flex; gap: 6px; padding: 10px 10px 6px; }
 .reel-head select { flex: 1; min-width: 0; }
 .reel-name { margin: 0 10px; width: auto !important; font-weight: 600; }
+.name-select { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.name-select .gear { font-size: 17px; }
+.name-select input { flex: 1; min-width: 0; width: auto !important; font-weight: 600; }
 .reel-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 0; }
 .reel-panel .count { padding: 4px 10px 6px; }
 .reel-groups { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
@@ -450,8 +453,6 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .clip-overlay { gap: 8px; flex-wrap: nowrap; }
 .clip-overlay .check { white-space: nowrap; }
 .clip-overlay .ov-text { flex: 1 1 80px; min-width: 60px; }
-.reel-name-row { display: flex; align-items: center; gap: 6px; margin: 0 10px; }
-.reel-name-row .reel-name { flex: 1; min-width: 0; margin: 0; }
 .group-head .swatch-toggle { border: 0; padding: 0; cursor: pointer; color: #fff; }
 .group.off .group-head .swatch-toggle { background: var(--faint); }
 .group.off > .group-head > :not(.swatch-toggle), .group.off > :not(.group-head) { opacity: 0.4; filter: grayscale(1); }

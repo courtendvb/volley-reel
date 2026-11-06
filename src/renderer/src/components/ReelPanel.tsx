@@ -7,6 +7,7 @@ import {
 import type { PlayRef } from '../../../shared/filter'
 import { formatLength, pad2 } from '../format'
 import { InlineTitle } from './InlineTitle'
+import { NameSelect } from './NameSelect'
 import { t } from '../../../shared/i18n'
 import { keyName } from '../../../shared/keys'
 
@@ -218,30 +219,28 @@ export function ReelPanel(p: Props) {
     <aside className="reel-panel">
       <div className="reel-head">
         <span className="panel-kicker">{t('シーン')}</span>
-        <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={t('シーン')}>
-          {p.videoSceneIds ? (
-            <>
-              <optgroup label={t('この動画のシーン')}>
-                {p.reels.filter(r => p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </optgroup>
-              <optgroup label={t('ほかのシーン（この動画には入っていない）')}>
-                {p.reels.filter(r => !p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </optgroup>
-            </>
-          ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
+        <NameSelect name={reel.name} label={t('シーンの名前を変更')} onRename={name => change({ ...reel, name })}>
+          <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={t('シーン')}>
+            {p.videoSceneIds ? (
+              <>
+                <optgroup label={t('この動画のシーン')}>
+                  {p.reels.filter(r => p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </optgroup>
+                <optgroup label={t('ほかのシーン（この動画には入っていない）')}>
+                  {p.reels.filter(r => !p.videoSceneIds!.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </optgroup>
+              </>
+            ) : p.reels.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </NameSelect>
         <button onClick={p.onNewReel} title={t('新しいシーンを作ってこの動画に入れる')}>{t('＋ 新規')}</button>
-        <button className={more ? 'on' : ''} aria-expanded={more} aria-label={t('シーンの設定')} title={t('シーンの名前、再生・書き出しに使うクリップ')} onClick={() => setMore(m => !m)}>⚙</button>
+        <button className={more ? 'on' : ''} aria-expanded={more} aria-label={t('シーンの設定')} title={t('再生・書き出しに使うクリップ')} onClick={() => setMore(m => !m)}>⚙</button>
         <button onClick={() => { if (confirm(t('シーン「{0}」を削除しますか？{1}（reels/deleted/ に移動します）', reel.name, p.usedIn ? t('\n{0} 本の動画から外れます。', p.usedIn) : ''))) p.onDeleteReel(reel.id) }} title={t('シーンを削除')}>{t('削除')}</button>
       </div>
       {p.videoSceneIds && !p.videoSceneIds.includes(reel.id) && (
         <p className="hint pad-x">{t('このシーンは今の動画に入っていません')} <button className="link" onClick={() => p.onAddToVideo(reel.id)}>{t('動画に追加')}</button></p>
       )}
       <div className="reel-more" hidden={!more}>
-      <label className="reel-name-row"><span className="field-label">{t('名前')}</span>
-        <input className="reel-name" value={reel.name} onChange={e => change({ ...reel, name: e.target.value })} aria-label={t('シーンの名前')}
-          title={t('シーンの名前。シーンのタイトルカードに出ます')} /></label>
-
       <div className="reel-controls">
         <span className="field-label">{t('再生・書き出し')}</span>
         <div className="segmented" role="radiogroup" aria-label={t('再生・書き出しに使うクリップ')}>

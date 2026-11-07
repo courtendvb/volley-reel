@@ -2,6 +2,7 @@
 // so the UI can treat a reel as immutable state and every change is unit-testable.
 import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
+import type { BoardMade, PlacedChart } from './board'
 import type { DirectionChart } from './chart'
 import type { SlideCones, SlideFlights, SlideHeat, SlideZones } from './court'
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
@@ -73,12 +74,14 @@ export interface Slide {
   landings?: SlideHeat // where a player's shots landed, as points
   cones?: SlideCones // where a player's attacks went, as cones
   chart?: DirectionChart // a player's direction chart, fixed when it was put on
+  charts?: PlacedChart[] // the charts of a slide comparing players (shared/board.ts)
+  board?: BoardMade // how that slide was made
   zones?: SlideZones // a play's zones or clicks
 }
 
 // blank: the title card's background color. image: a picture in assets/. source: the file it was
 // read from (page: a PDF's page, 1-based), so it can be read again when that file changes.
-export type SlideBg = { kind: 'blank' } | { kind: 'image'; assetId: string; source?: SlideSource }
+export type SlideBg = { kind: 'blank'; color?: string } | { kind: 'image'; assetId: string; source?: SlideSource }
 interface SlideSource { path: string; name: string; page: number | null; pages?: number; mtimeMs: number } // pages: the PDF's page count
 const DEFAULT_SLIDE_SEC = 3
 

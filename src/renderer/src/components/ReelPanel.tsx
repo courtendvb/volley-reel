@@ -361,10 +361,11 @@ function tagColor(tag: string) {
 }
 
 function slideLabel(s: Slide): string {
+  if (s.charts) return t('データスライド')
   if (s.bg.kind === 'blank') return t('スライド（無地）')
   const src = s.bg.source
   if (!src) return t('スライド（静止画）')
-  return t('スライド {0}{1}', src.name, src.page ? ` p.${src.page}` : '')
+  return t('カード {0}{1}', src.name, src.page ? ` p.${src.page}` : '')
 }
 
 // Clips added before each clip carried its own cut (design §3.5) follow the scene's mode select.

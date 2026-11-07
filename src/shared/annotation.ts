@@ -40,6 +40,19 @@ export interface TextBox {
   stroke: string | null
   strokeWidth: number // px at 720p
   padding: number // px at 720p
+  radius?: number // corners, px at 720p
+  width?: number // the box's width as a share of the picture, however short the text; missing: the text's
+  circle?: boolean // a round box around centred text: a numbered circle
+}
+
+// A numbered circle at a point (x and y its middle), and the next number for a set of objects.
+export function numberCircle(id: string, x: number, y: number, n: number, color: string, size: number): Annotation {
+  const light = /^#(F|E|D)/i.test(color)
+  return { id, kind: 'text', color: light ? '#0F172A' : '#FFFFFF', x, y: y - (size * 1.2) / 2 / REF_HEIGHT, text: String(n), size, bold: true, outline: false, align: 'center',
+    box: { fill: color, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: Math.round(size * 0.22), circle: true } }
+}
+export function nextNumber(list: Annotation[]): number {
+  return 1 + Math.max(0, ...list.map(a => (a.kind === 'text' && a.box?.circle ? parseInt(a.text) || 0 : 0)))
 }
 
 export type Annotation = Base & (
@@ -212,9 +225,13 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
       const s = H / REF_HEIGHT
       setTextFont(ctx, a.size * s, a.bold !== false, a.font)
       const lines = textLines(a.text)
-      const w = Math.max(...lines.map(l => ctx.measureText(l || ' ').width)) / W
       const pad = a.box ? a.box.padding / REF_HEIGHT : 0
+      const w = Math.max(...lines.map(l => ctx.measureText(l || ' ').width), a.box?.width ? (a.box.width - pad * 2 * (H / W)) * W : 0) / W
       const left = a.align === 'center' ? a.x - w / 2 : a.x
+      if (a.box?.circle) {
+        const tall = (a.size * 1.2 * lines.length) / REF_HEIGHT, side = Math.max(w * (W / H), tall) + 2 * pad
+        return { x: a.x - (side * (H / W)) / 2, y: a.y + tall / 2 - side / 2, w: side * (H / W), h: side }
+      }
       return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
     case 'arrow': return pointsBox([[a.x1, a.y1], [a.x2, a.y2]])
@@ -372,10 +389,20 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
   const x = a.align === 'center' ? a.x * W - wMax / 2 : a.x * W, y = a.y * H
   const lineX = (i: number) => (a.align === 'center' ? a.x * W - widths[i] / 2 : x)
   if (a.box) {
-    const pad = a.box.padding * s, w = wMax, h = lh * lines.length
+    const pad = a.box.padding * s, h = lh * lines.length, w = Math.max(wMax, a.box.width ? a.box.width * W - 2 * pad : 0)
+    const x = a.align === 'center' ? a.x * W - w / 2 : a.x * W // a wide box stays centred on the text
+    if (a.box.circle) {
+      ctx.save(); ctx.globalAlpha *= a.box.fillOpacity; ctx.fillStyle = a.box.fill ?? a.color
+      ctx.beginPath(); ctx.arc(a.x * W, y + h / 2, Math.max(wMax, h) / 2 + pad, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+      ctx.fillStyle = a.color
+      lines.forEach((l, i) => ctx.fillText(l, lineX(i), y + i * lh))
+      return
+    }
     if (a.box.fill) {
       ctx.save(); ctx.globalAlpha *= a.box.fillOpacity; ctx.fillStyle = a.box.fill
-      ctx.fillRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
+      if (a.box.radius) { ctx.beginPath(); ctx.roundRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad, a.box.radius * s); ctx.fill() }
+      else ctx.fillRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad)
+      ctx.restore()
     }
     if (a.box.stroke && a.box.strokeWidth > 0) {
       ctx.save(); ctx.strokeStyle = a.box.stroke; ctx.lineWidth = a.box.strokeWidth * s

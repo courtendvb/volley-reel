@@ -332,6 +332,13 @@ function registerIpc(): void {
     if (!r.canceled && r.filePaths[0]) await lib().importPack(r.filePaths[0])
     return lib().packs()
   })
+  // A card as a picture, or the cards as a PDF: to a file the user names; the path, or null.
+  ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf', data: Uint8Array) => {
+    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: `${name.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
+    if (r.canceled || !r.filePath) return null
+    await writeFile(r.filePath, data)
+    return r.filePath
+  })
   ipcMain.handle('pack:roster', () => lib().roster())
   // A pack made in the app: to a file the user names, or straight into the library. The file name, or
   // null when the save was called off.

@@ -21,10 +21,17 @@ describe('chartStats', () => {
   })
   it('shares out hard, pushed and tipped attacks', () => {
     const s = chartStats([shot('#', 'H'), shot('#', 'H'), shot('#', 'P'), shot('#', 'T')])
-    expect([s.hard, s.push, s.tip]).toEqual([0.5, 0.25, 0.25])
+    expect(s.mix).toEqual([['H', 0.5], ['P', 0.25], ['T', 0.25]])
   })
   it('is empty without attacks', () => {
-    expect(chartStats([])).toMatchObject({ att: 0, pos: 0, hard: 0 })
+    expect(chartStats([])).toMatchObject({ att: 0, pos: 0 })
+    expect(chartStats([], 'S').mix).toEqual([])
+  })
+  it('shares out a serve by its type, the most used first', () => {
+    const serve = (type: string, effect = '-') => ({ effect, code: `*05S${type}${effect}~~~16C` })
+    const s = chartStats([serve('Q', '#'), serve('M'), serve('M', '='), serve('M', '/')], 'S')
+    expect(s.mix).toEqual([['M', 0.75], ['Q', 0.25]])
+    expect(s).toMatchObject({ att: 4, k: 1, e: 1, b: 1 })
   })
   it('sorts each result', () => {
     expect(['#', '=', '/', '+', '-', '!'].map(chartResult)).toEqual(['kill', 'error', 'blocked', 'pos', 'neg', 'neg'])
@@ -34,11 +41,12 @@ describe('chartStats', () => {
 describe('cleanChart', () => {
   it('puts back the usual values', () => {
     expect(cleanChart(null)).toEqual(DEFAULT_CHART)
+    expect(cleanChart({ lineOpacity: 5, points: false, heat: true })).toMatchObject({ lineOpacity: 0.7, points: false, heat: true })
     expect(cleanChart({ scope: 'x', corner: 'x', scale: 9, lines: 'no', colors: { kill: 3 } })).toEqual({ ...DEFAULT_CHART, lines: true })
   })
   it('keeps what was set', () => {
-    expect(cleanChart({ lines: false, stats: false, scope: 'filter', corner: 'bl', scale: 1.5, colors: { kill: '#000000' } }))
-      .toMatchObject({ lines: false, stats: false, scope: 'filter', corner: 'bl', scale: 1.5, colors: { kill: '#000000', error: DEFAULT_CHART.colors.error } })
+    expect(cleanChart({ lines: false, stats: true, name: true, scope: 'filter', corner: 'bl', scale: 1.5, colors: { kill: '#000000' } }))
+      .toMatchObject({ lines: false, stats: true, name: true, scope: 'filter', corner: 'bl', scale: 1.5, colors: { kill: '#000000', error: DEFAULT_CHART.colors.error } })
   })
 })
 
@@ -50,6 +58,10 @@ describe('chartBox', () => {
       expect(b.y).toBeGreaterThanOrEqual(0)
       expect(b.y + b.h).toBeLessThanOrEqual(720)
     }
+  })
+  it('gives the title bar room back without the name, and shows neither until asked', () => {
+    expect(chartBox(1280, 720, 'tr', 1, false).x).toBeLessThan(chartBox(1280, 720, 'tr', 1, true).x)
+    expect([DEFAULT_CHART.name, DEFAULT_CHART.stats]).toEqual([false, false])
   })
   it('sits in the middle on a slide', () => {
     expect(chartBox(1280, 720, 'center').y).toBeCloseTo(720 * 0.04)
@@ -68,7 +80,7 @@ describe('the chart of a player', () => {
   const base = { side: '*', setNum: 1, score: { home: 0, away: 0 }, rallyId: 1, playerKey: 'a', startSub: null, endSub: null, skill: 'A', startZone: 4, endZone: 6, effect: '#' }
   const hit = (extra: object) => ({ ...base, code: code('H'), startClick: { u: 0.1, v: 0.45 }, endClick: { u: 0.5, v: 0.9 }, ...extra }) as unknown as Play
   const plays = [hit({}), hit({ effect: '=' }), hit({ code: '*07AQ#V5~46CH2' }), hit({ playerKey: 'b' }), hit({ skill: 'S' }), hit({ startClick: null, endClick: null })]
-  const marks = (chart: object, extra?: object, play = plays[0]) => playerMarks(play, fit, { ...DEFAULT_GRID_STYLE, chart: { ...DEFAULT_CHART, ...chart } }, () => plays, extra)
+  const marks = (chart: object, extra?: object, play = plays[0]) => playerMarks(play, fit, { ...DEFAULT_GRID_STYLE, chart: { ...DEFAULT_CHART, scope: 'player', ...chart } }, () => plays, extra)
   it('takes all their attacks, zones only ones too, and marks those', () => {
     const c = marks({})!.chart!
     expect(c.stats.att).toBe(4)
@@ -81,18 +93,31 @@ describe('the chart of a player', () => {
     expect(d.start!.y).toBeLessThan(0.5)
     expect(d.end!.y).toBeGreaterThan(0.5)
   })
+  it('keeps to the attack code unless told otherwise', () => {
+    expect(playerMarks(plays[0], fit, { ...DEFAULT_GRID_STYLE, chart: DEFAULT_CHART }, () => plays)!.chart!.stats.att).toBe(3)
+    expect(playerMarks(plays[2], fit, { ...DEFAULT_GRID_STYLE, chart: DEFAULT_CHART }, () => plays)!.chart!.stats.att).toBe(1)
+  })
   it('can keep to the attack code, or the search', () => {
     expect(marks({ scope: 'code' })!.chart!.stats.att).toBe(3)
     expect(marks({ scope: 'filter' }, { filtered: () => [plays[1], plays[3]] })!.chart!.stats.att).toBe(1)
   })
-  it('only comes with an attack, and carries the name', () => {
-    expect(marks({}, undefined, plays[4])).toBeNull()
+  it('keeps to the serving player, and their start zone', () => {
+    const serve = hit({ skill: 'S', code: '*05SQ-~~~16C', startZone: 1 }), other = hit({ skill: 'S', code: '*05SM+~~~56C', startZone: 5 })
+    const list = [serve, other, plays[0]]
+    const m = (chart: object) => playerMarks(serve, fit, { ...DEFAULT_GRID_STYLE, chart: { ...DEFAULT_CHART, ...chart } }, () => list)!.chart!
+    expect(m({})).toMatchObject({ skill: 'S', stats: { att: 2 } }) // a serve has no attack code: the default shows them all
+    expect(m({ scope: 'zone' }).stats.att).toBe(1)
+    const log = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : () => {}), set: () => true }) as unknown as CanvasRenderingContext2D
+    expect(() => drawChart(log, m({}), chartBox(1280, 720, 'center'))).not.toThrow()
+  })
+  it('does not come with other skills, and carries the name', () => {
+    expect(marks({}, undefined, hit({ skill: 'R' }))).toBeNull()
     expect(marks({}, { name: '#7 Ken' })!.chart!.name).toBe('#7 Ken')
   })
   it('draws whatever is set', () => {
     const log = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : () => {}), set: () => true }) as unknown as CanvasRenderingContext2D
     const c = marks({})!.chart!
     expect(() => drawChart(log, c, chartBox(1280, 720, 'tr'))).not.toThrow()
-    expect(() => drawChart(log, { ...c, dots: [], look: { ...c.look, lines: false, stats: false } }, chartBox(1280, 720, 'center'))).not.toThrow()
+    expect(() => drawChart(log, { ...c, dots: [], look: { ...c.look, lines: false, stats: true, name: true } }, chartBox(1280, 720, 'center', 1, true))).not.toThrow()
   })
 })

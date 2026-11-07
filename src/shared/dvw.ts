@@ -1,6 +1,8 @@
 // DVW parser. Pure: no file or DOM access.
 // Ported from HTH_videoviewer/dvw-parser.js and m0/lib/dvw.mjs (docs/design.md §7).
-import type { ClickPoint, ParsedDVW, Play, Player, Rally, Side, Team } from './types'
+import type { ClickPoint, ParsedDVW, Play, Player, Rally, Side, Team, PlayerRole } from './types'
+
+const ROLES: Record<string, PlayerRole> = { 1: 'L', 2: 'OH', 3: 'OP', 4: 'MB', 5: 'S' } // the player's position, as DataVolley numbers them
 
 export function parseDVW(text: string): ParsedDVW {
   const teams: Team[] = []
@@ -43,7 +45,8 @@ export function parseDVW(text: string): ParsedDVW {
       if (isNaN(jersey)) continue
       const lastName = (c[9] || '').trim()
       const firstName = (c[10] || '').trim()
-      players[`${side}${jersey}`] = { key: playerKey(c[8], lastName, firstName, jersey), side, jersey, lastName, firstName }
+      const role = ROLES[c[13]?.trim()]
+      players[`${side}${jersey}`] = { key: playerKey(c[8], lastName, firstName, jersey), side, jersey, lastName, firstName, ...(role ? { role } : {}) }
       continue
     }
     if (section === '[3ATTACKCOMBINATION]' || section === '[3SETTERCALL]') {

@@ -39,6 +39,7 @@ interface Props {
 const TOOLS: [Tool, string, string, string][] = [
   ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')],
   ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
+  ['number', '①', '', t('丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）')],
   ['polygon', '⬠', 'P', t('多角形（クリックで頂点）')], ['freehand', '✎', '', t('フリーハンド')], // no key: F and D step through the scene's clips
 ]
 export const KIND_LABEL: Record<Annotation['kind'], string> = {
@@ -57,7 +58,7 @@ export function AnnotationTools(p: Props) {
 
   // What the controls show: the selection's values with the old-look defaults filled in.
   const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' ? 'polygon' : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,

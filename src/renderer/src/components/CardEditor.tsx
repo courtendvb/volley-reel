@@ -1,3 +1,5 @@
+import { restyleBoard } from '../../../shared/board'
+import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, drawCard, type Box } from '../../../shared/overlayDraw'
@@ -142,23 +144,50 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
 
 // Below the video while a slide is being edited: how long it stays up, reading its file again, done.
 // What can go on a slide from the court: from the play selected in the list.
+// The bar for a data slide: a sheet of data, so only what makes up that sheet.
+export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
+  slide: Slide; onChange: (s: Slide) => void; onBoard: () => void; onSave: (as: 'png' | 'pdf') => void; onDone: () => void
+}) {
+  const look = slide.charts?.[0]?.chart.look
+  return (
+    <div className="card-edit-bar">
+      <b>{t('データスライド')}</b>
+      <button onClick={onBoard} title={t('選手・アタックコード・人数などを変えて作り直します。手で足した図形とノートは残ります')}>{t('構成を変える…')}</button>
+      <span className="spacer" />
+      <button onClick={() => onSave('png')} title={t('このスライドを画像に書き出します')}>{t('PNG に書き出す…')}</button>
+      <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
+      <button className="primary" onClick={onDone}>{t('完了')}</button>
+      <div className="slide-marks">
+        {look && <ChartShow value={look} onChange={p => onChange(restyleBoard(slide, p))} />}
+        <span className="spacer" />
+        <label className="check muted" title={t('動画の中で流すときの秒数')}>{t('動画では')}
+          <input type="number" aria-label={t('動画で出す秒数')} min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 56 }}
+            onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0.5) onChange({ ...slide, durationSec: Math.min(120, n) }) }} />{t('秒')}</label>
+      </div>
+    </div>
+  )
+}
+
 export type SlideMark = 'zones' | 'heat' | 'landings' | 'flights' | 'cones' | 'chart'
 
-export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark }: {
+export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark, onSave }: {
   slide: Slide; onChange: (s: Slide) => void; onReload: (() => void) | null; onDone: () => void
+  onSave: (as: 'png' | 'pdf') => void
   target: string | null // the play the court marks come from, in words; null: none to use
   onMark: (mark: SlideMark, on: boolean) => void
 }) {
   const src = slide.bg.kind === 'image' ? slide.bg.source : undefined
   return (
     <div className="card-edit-bar">
-      <b>{t('スライド')}{src ? t('「{0}」', `${src.name}${src.page ? ` p.${src.page}` : ''}`) : slide.bg.kind === 'blank' ? t('（無地）') : t('（静止画）')}</b>
+      <b>{slide.charts || src ? t('カード') : t('スライド')}{src ? t('「{0}」', `${src.name}${src.page ? ` p.${src.page}` : ''}`) : slide.bg.kind === 'blank' ? t('（無地）') : t('（静止画）')}</b>
       <label className="check">{t('表示')}
         <input type="number" aria-label={t('スライドを出す秒数')} min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 64 }}
           onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0.5) onChange({ ...slide, durationSec: Math.min(120, n) }) }} />{t('秒')}</label>
       <span className="muted">{t('下の道具で文字・図形・画像を置けます')}</span>
       {onReload && <button onClick={onReload} title={t('{0} を読み直す（PowerPoint で直して書き出し直したとき）', src?.path ?? '')}>{t('元のファイルを読み直す')}</button>}
       <span className="spacer" />
+      <button onClick={() => onSave('png')} title={t('このカードを画像に書き出します')}>{t('PNG に書き出す…')}</button>
+      <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
         <span className="court-row-label" title={t('左の一覧で選んだプレーから、コートの表示をこのスライドに載せます。載せた内容は固定され、あとでプレーを変えても変わりません')}>{t('コートの表示')}</span>

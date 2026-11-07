@@ -188,7 +188,7 @@ export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof
 // A slide's page: blank in the title cards' background color, or its picture fitted inside the
 // frame on black (a 4:3 page gets bars). Drawn black while the picture loads.
 function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, cardBg: string, image: ImageLookup): void {
-  if (bg.kind === 'blank') { fillRect(ctx, cardBg, 0, 0, W, H); return }
+  if (bg.kind === 'blank') { fillRect(ctx, bg.color ?? cardBg, 0, 0, W, H); return }
   fillRect(ctx, '#000000', 0, 0, W, H)
   const img = image(bg.assetId)
   if (!img) return

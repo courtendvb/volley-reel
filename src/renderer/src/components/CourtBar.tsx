@@ -15,17 +15,22 @@ interface Props {
 }
 
 function ChartRow({ chart: c, onChange }: { chart: NonNullable<GridStyle['chart']>; onChange: (c: NonNullable<GridStyle['chart']>) => void }) {
-  const results: [ChartResult, string][] = [['kill', t('決定')], ['error', t('ミス')], ['blocked', t('被ブロック')], ['pos', t('Pos')], ['neg', t('Neg')]]
+  const results: [ChartResult, string][] = [['kill', t('決定・エース')], ['error', t('ミス')], ['blocked', t('被ブロック・Overpass')], ['pos', t('Pos')], ['neg', t('Neg')]]
   return (
     <div className="ann-row">
       <span className="court-row-label">{t('チャート')}</span>
-      <select value={c.scope} aria-label={t('チャートの対象')} title={t('チャートに入れるアタック')} onChange={e => onChange({ ...c, scope: e.target.value as ChartScope })}>
-        <option value="player">{t('全アタック')}</option>
+      <select value={c.scope} aria-label={t('チャートの対象')} title={t('チャートに入れるプレー。サーブにアタックコードはないので、同じアタックコードでは全本を出す')} onChange={e => onChange({ ...c, scope: e.target.value as ChartScope })}>
         <option value="code">{t('同じアタックコード')}</option>
+        <option value="zone">{t('同じ開始ゾーン')}</option>
+        <option value="player">{t('全本')}</option>
         <option value="filter">{t('絞り込みの結果')}</option>
       </select>
+      <label className="check"><input type="checkbox" checked={c.points !== false} onChange={e => onChange({ ...c, points: e.target.checked })} /> {t('点')}</label>
       <label className="check"><input type="checkbox" checked={c.lines} onChange={e => onChange({ ...c, lines: e.target.checked })} /> {t('線')}</label>
-      <label className="check"><input type="checkbox" checked={c.stats} onChange={e => onChange({ ...c, stats: e.target.checked })} /> {t('数字')}</label>
+      <label className="check"><input type="checkbox" checked={!!c.heat} onChange={e => onChange({ ...c, heat: e.target.checked })} /> {t('ヒートマップ')}</label>
+      {c.lines && <label className="check">{t('線の濃さ')} <input type="range" min={0.1} max={1} step={0.05} value={c.lineOpacity ?? 0.7} aria-label={t('線の濃さ')} onChange={e => onChange({ ...c, lineOpacity: +e.target.value })} /></label>}
+      <label className="check"><input type="checkbox" checked={c.stats} onChange={e => onChange({ ...c, stats: e.target.checked })} /> {t('データ')}</label>
+      <label className="check"><input type="checkbox" checked={c.name} onChange={e => onChange({ ...c, name: e.target.checked })} /> {t('名前')}</label>
       <select value={c.corner} aria-label={t('チャートの位置')} onChange={e => onChange({ ...c, corner: e.target.value as ChartCorner })}>
         <option value="tl">{t('左上')}</option><option value="tr">{t('右上')}</option><option value="bl">{t('左下')}</option><option value="br">{t('右下')}</option>
       </select>
@@ -129,7 +134,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         <label className="check" title={t('アタックを選ぶと、その選手の同じアタックコードのアタックが、打った位置から相手コートのどの方向へ行ったかを 5 つのコーンと割合で出す。多いコーンほど濃い（全試合の分。書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.cones} onChange={e => onStyle({ ...s, cones: e.target.checked })} /> {t('コーン')}</label>
         {s.cones && <input type="color" aria-label={t('コーンの色')} title={t('コーンの色')} value={s.coneColor ?? CONE_COLOR} onChange={e => onStyle({ ...s, coneColor: e.target.value.toUpperCase() })} />}
-        <label className="check" title={t('アタックを選ぶと、その選手のディレクションチャートを動画に重ねる。落ちた位置を結果ごとの色で出し、本数・決定率なども出す（書き出しも同じ）')}>
+        <label className="check" title={t('サーブかアタックを選ぶと、その選手のディレクションチャートを動画に重ねる。落ちた位置を結果ごとの色で出し、本数・決定率なども出す（書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.chart} onChange={e => { const { chart: _c, ...rest } = s; onStyle(e.target.checked ? { ...s, chart: DEFAULT_CHART } : rest) }} /> {t('チャート')}</label>
         {s.serveFlights && !(points && s.flight) && animate}
       </div>

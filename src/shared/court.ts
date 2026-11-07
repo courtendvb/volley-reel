@@ -2,7 +2,8 @@
 // split 3 × 6 into zones 1–9 for each side (the DVW's zone layout), drawn with perspective. The
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
-import { chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
+import type { PlacedChart } from './board'
+import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play, Side } from './types'
 
 export interface Pt { x: number; y: number }
@@ -289,17 +290,18 @@ const clickOn = (near: boolean) => (c: ClickPoint | null | undefined): Pt | null
 // The tell of a shot that a heatmap keeps to: a serve's start zone, an attack's code (P1, X5...).
 const shotKind = (p: Pick<Play, 'skill' | 'startZone' | 'code'>) => (p.skill === 'S' ? p.startZone : p.code.slice(6, 8))
 
-// The chart of a play's attacker: seen with them at the top, as the camera sees the far team.
-function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code'>, style: ChartStyle, plays: () => Play[], source?: ChartSource): DirectionChart {
+// The chart of a serve's or attack's player: seen with them at the top, as the camera sees the far team.
+export function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code' | 'startZone'>, style: ChartStyle, plays: () => Play[], source?: ChartSource): DirectionChart {
   const from = style.scope === 'filter' && source?.filtered ? source.filtered() : plays()
-  const mine = from.filter(p => p.skill === 'A' && p.playerKey === play.playerKey && (style.scope !== 'code' || p.code.slice(6, 8) === play.code.slice(6, 8)))
+  const skill = play.skill === 'S' ? 'S' : 'A', kind = shotKind(play)
+  const mine = from.filter(p => p.skill === skill && p.playerKey === play.playerKey && (style.scope === 'zone' ? p.startZone === play.startZone : style.scope !== 'code' || skill === 'S' || shotKind(p) === kind))
   const on = clickOn(false)
   const dots = mine.flatMap((p, i): ChartDot[] => {
     const c = playClicks(p), rough = c.startRough || c.endRough
     const start = c.startRough ? scattered(c.start!, i) : c.start, end = c.endRough ? scattered(c.end!, i) : c.end
     return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), ...(rough ? { rough } : {}) }] : []
   })
-  return { name: source?.name ?? '', dots, stats: chartStats(mine), look: { lines: style.lines, stats: style.stats, colors: style.colors } }
+  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
 }
 
 // The i-th rough point moved a little around its zone's middle, the same way every time.
@@ -317,7 +319,7 @@ export interface ChartSource { filtered?: () => Play[]; name?: string }
 export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style: GridStyle, plays: () => Play[], source?: ChartSource): PlayerMarks | null {
   if (play.skill !== 'S' && play.skill !== 'A') return null
   const heatOn = !!style.heat, flightsOn = !!style.serveFlights && play.skill === 'S'
-  const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A', chartOn = !!style.chart && play.skill === 'A'
+  const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A', chartOn = !!style.chart && (play.skill === 'A' || play.skill === 'S')
   if (!heatOn && !flightsOn && !landingsOn && !conesOn && !chartOn) return null
   const on = clickOn(nearSide(fit, play) === play.side)
   const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && playClicks(p).end)
@@ -530,7 +532,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
 function drawLandings(ctx: Ctx, w: number, h: number, { fit, points, rough }: SlideHeat): void {
   const camera = courtCamera(inPixels(fit, w, h), w, h)
   if (!camera) return
-  const r = Math.max(2.5, w / 300)
+  const r = Math.max(2.2, w / 333)
   ctx.save()
   ctx.fillStyle = END_COLOR
   ctx.strokeStyle = '#FFFFFF'
@@ -546,13 +548,14 @@ function drawLandings(ctx: Ctx, w: number, h: number, { fit, points, rough }: Sl
 
 // What a slide keeps of the court: the shots' marks and a play's zones, fixed when they were put on.
 export interface SlideZones { fit: CourtFit; zones: PlayZones; detail: GridStyle['detail'] }
-export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones; chart?: DirectionChart }
+export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones; chart?: DirectionChart; charts?: PlacedChart[] }
 export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, heatOpacity?: number): void {
   if (s.heat) drawHeat(ctx, w, h, s.heat, heatOpacity)
   if (s.cones) drawCones(ctx, w, h, s.cones)
   if (s.zones) drawCourt(ctx, w, h, s.zones.fit, { ...DEFAULT_GRID_STYLE, grid: false, playZones: true, detail: s.zones.detail }, s.zones.zones, 1)
   if (s.landings) drawLandings(ctx, w, h, s.landings)
-  if (s.chart) drawChart(ctx, s.chart, chartBox(w, h, 'center'))
+  if (s.chart) drawChart(ctx, s.chart, chartBox(w, h, 'center', 1, s.chart.look.name))
+  for (const c of s.charts ?? []) drawChart(ctx, c.chart, { x: c.x * w, y: c.y * h, h: c.h * h })
 }
 
 // Many flights at once on a slide: they leave together after a moment and then stay. `progress` as
@@ -780,7 +783,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
     if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
-  if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale))
+  if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
 
 // A small ring on the floor and a thin dashed line up to the point in the air.

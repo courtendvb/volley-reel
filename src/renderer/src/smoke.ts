@@ -1101,7 +1101,7 @@ export function installSmoke(h: SmokeHost): void {
     await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'slow reel')
     const clip = () => latest.current.reel!.clips[ids[0]]
     activateClip(clip()); await sleep(800)
-    await openPanel('trim') // the buttons are on the trim panel (with the headline above the bar)
+    await openPanel('trim') // the buttons are on the trim panel
     const range = latest.current.clipInfo(clip()).range!
     const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.trim-timing button')].find(b => b.textContent === label)!
     playback.pause(); await playback.seekAndWait(range.in + 1)

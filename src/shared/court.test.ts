@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -479,6 +479,14 @@ describe('clicks on the court', () => {
     const q = project(homography(corners), 0.25, 0.8), p = floorAt({ corners, nearSet1: '*' }, q)!
     expect(p.x).toBeCloseTo(0.25, 6)
     expect(p.y).toBeCloseTo(0.8, 6)
+  })
+  it('lays a rectangle on the floor in the court perspective', () => {
+    const H = homography(corners), pt = (u: number, v: number) => project(H, u, v)
+    const r = floorRect(corners, pt(0.2, 0.3), pt(0.8, 0.9))!
+    const want = [pt(0.2, 0.3), pt(0.8, 0.3), pt(0.8, 0.9), pt(0.2, 0.9)]
+    r.forEach(([x, y], i) => { expect(x).toBeCloseTo(want[i].x, 6); expect(y).toBeCloseTo(want[i].y, 6) })
+    expect(r[1][0] - r[0][0]).toBeLessThan(r[2][0] - r[3][0]) // narrower far away: a trapezoid
+    expect(floorRect(corners, { x: 0.5, y: -2 }, pt(0.5, 0.5))).toBeNull()
   })
   it('has no floor above the horizon', () => {
     expect(floorAt({ corners, nearSet1: '*' }, { x: 0.5, y: -2 })).toBeNull()

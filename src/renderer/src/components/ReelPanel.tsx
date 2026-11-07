@@ -1,7 +1,7 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react'
 import { playLabel } from '../../../shared/labels'
 import {
-  MARKERS, MARKER_COLORS, chronological, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, setTag, sortByTag, spotAt, TAG_MAX,
+  MARKERS, MARKER_COLORS, chronological, clipEdits, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, setTag, sortByTag, spotAt, TAG_MAX,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideSpot,
 } from '../../../shared/reel'
 import type { PlayRef } from '../../../shared/filter'
@@ -203,6 +203,7 @@ export function ReelPanel(p: Props) {
           </span>
         )}
         {p.overlaps.has(c.id) && <span className="overlap" title={t('同じ試合の別のクリップと範囲が重なっています')}>⚠</span>}
+        <EditMarks c={c} />
         <TagChip tag={c.tag} onChange={t => change(setTag(reel, c.id, t))} />
         <span className={`clip-dur${trimmed ? ' trimmed' : ''}`} title={trimmed ? t('長さを個別に調整済み') : t('初期値の長さ')}>{dur.toFixed(1)}s</span>
         <span className="clip-actions" onClick={e => e.stopPropagation()}>
@@ -388,5 +389,20 @@ export function SecInput({ v, label, onChange, disabled }: { v: number; label: s
   return (
     <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label} disabled={disabled}
       onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(n) }} />
+  )
+}
+
+// Marks for what was done to the clip by hand: a headline, objects drawn on it, slow / hold, and the
+// auto overlays hidden or rewritten (a changed length shows in its blue seconds). Hover for the details.
+function EditMarks({ c }: { c: Clip }) {
+  const e = clipEdits(c)
+  if (!e.headline && !e.objects && !e.timing && !e.overlay) return null
+  return (
+    <span className="edit-marks">
+      {e.headline && <span className="edit-mark head" title={t('見出し: {0}', e.headline)}>{t('見')}</span>}
+      {e.objects > 0 && <span className="edit-mark" title={t('図形・コメント {0} 個', e.objects)}>◇{e.objects}</span>}
+      {e.timing && <span className="edit-mark" title={t('スロー・停止あり')}>◷</span>}
+      {e.overlay && <span className="edit-mark" title={t('スコアボード・テロップを個別に変更')}>▣</span>}
+    </span>
   )
 }

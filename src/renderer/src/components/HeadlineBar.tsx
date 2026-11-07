@@ -12,11 +12,12 @@ interface Props {
   headline?: HeadlineStyle // the project's look for new headlines (設定)
   disabled: boolean
   clipIn: number // the clip's IN: show / hide times are shown in seconds from it
+  compact?: boolean // beside the tabs: the field and 書式 only (its times are on the timelines under 編集 and 図形)
 }
 
 // The headline, apart from the object tools: one centered text at the top middle (48 px at 720p unless 設定 says otherwise),
 // kept in step with this field. Typing creates it, clearing the field removes it.
-export function HeadlineBar({ annotations, onChange, onFormat, style, headline: h = {}, disabled, clipIn }: Props) {
+export function HeadlineBar({ annotations, onChange, onFormat, style, headline: h = {}, disabled, clipIn, compact }: Props) {
   const quick = annotations.find(a => a.kind === 'text' && a.quick) as Extract<Annotation, { kind: 'text' }> | undefined
   // Setting when it shows also selects it, so the timeline below draws its bar to adjust.
   const setTimes = (patch: { showFrom?: number; showTo?: number }) => {
@@ -36,7 +37,7 @@ export function HeadlineBar({ annotations, onChange, onFormat, style, headline: 
       <label className="field-label" htmlFor="headline">{t('見出し')}</label>
       <input id="headline" aria-label={t('見出し')} value={quick?.text ?? ''} placeholder={t('ここに入力すると、動画の中央上部に表示します')} disabled={disabled}
         onChange={e => setText(e.target.value)} onKeyDown={e => { if ((e.key === 'Enter' || e.key === 'Escape') && !composing(e)) e.currentTarget.blur() }} />
-      {quick && (
+      {quick && !compact && (
         <span className="headline-times">
           <span className="muted">{quick.showFrom === undefined ? t('最初') : t('{0}秒', (quick.showFrom - clipIn).toFixed(1))} {t('〜')} {quick.showTo === undefined ? t('最後') : t('{0}秒', (quick.showTo - clipIn).toFixed(1))}</span>
           <button disabled={disabled} title={t('今の再生位置から見出しを出す（下のバーで調整できる）')} onClick={() => setTimes({ showFrom: playback.current.time })}>{t('ここから表示')}</button>

@@ -42,6 +42,8 @@ export interface TextBox {
   padding: number // px at 720p
   radius?: number // corners, px at 720p
   width?: number // the box's width as a share of the picture, however short the text; missing: the text's
+  height?: number // a cell of fixed height (share of the picture): the text sits in its middle and is made
+  // smaller when it would not fit (with a width, across too), so the box keeps its shape whatever is written
   circle?: boolean // a round box around centred text: a numbered circle
 }
 
@@ -233,7 +235,7 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
         const tall = (a.size * 1.2 * lines.length) / REF_HEIGHT, side = Math.max(w * (W / H), tall) + 2 * pad
         return { x: a.x - (side * (H / W)) / 2, y: a.y + tall / 2 - side / 2, w: side * (H / W), h: side }
       }
-      return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
+      return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: a.box?.height ?? (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
     case 'arrow': return pointsBox([[a.x1, a.y1], [a.x2, a.y2]])
     case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
@@ -382,15 +384,25 @@ export function affine(s: [P, P, P], d: [P, P, P]): [number, number, number, num
 const textLines = (t: string): string[] => t.split('\n')
 
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
-  const px = a.size * s, lh = px * 1.2
+  let px = a.size * s, lh = px * 1.2
   setTextFont(ctx, px, a.bold !== false, a.font)
   ctx.textBaseline = 'top'
   const lines = textLines(a.text)
-  const widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
+  let widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
+  const cell = a.box?.height ? a.box : null
+  if (cell) {
+    const pad = cell.padding * s, roomW = cell.width ? cell.width * W - 2 * pad : Infinity, roomH = cell.height! * H - 2 * pad
+    const k = Math.min(1, roomW / Math.max(wMax, 1), roomH / (lh * lines.length))
+    if (k < 1) {
+      px *= k; lh = px * 1.2
+      setTextFont(ctx, px, a.bold !== false, a.font)
+      widths = lines.map(l => ctx.measureText(l).width); wMax = Math.max(...widths)
+    }
+  }
   const x = a.align === 'center' ? a.x * W - wMax / 2 : a.x * W, y = a.y * H
   const lineX = (i: number) => (a.align === 'center' ? a.x * W - widths[i] / 2 : x)
   if (a.box) {
-    const pad = a.box.padding * s, h = lh * lines.length, w = Math.max(wMax, a.box.width ? a.box.width * W - 2 * pad : 0)
+    const pad = a.box.padding * s, h = cell ? cell.height! * H - 2 * pad : lh * lines.length, w = Math.max(wMax, a.box.width ? a.box.width * W - 2 * pad : 0)
     const x = a.align === 'center' ? a.x * W - w / 2 : a.x * W // a wide box stays centred on the text
     if (a.box.circle) {
       // The number sits in the middle of the circle by the ink of its digits, not the font's line box,
@@ -416,13 +428,20 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
       ctx.strokeRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
     }
   }
+  // A number alone in a box (a jersey number) sits in its middle by the ink of its digits: the font's
+  // line box leaves digits high in some fonts.
+  let ty = cell ? y + (cell.height! * H - 2 * cell.padding * s - lh * lines.length) / 2 : y
+  if (a.box && !cell && lines.length === 1 && /^\d+$/.test(lines[0])) {
+    const m = ctx.measureText(lines[0])
+    ty = y + lh / 2 - (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2
+  }
   // A black outline keeps light text readable on a bright court (on by default).
   if (a.outline !== false && a.color.toUpperCase() !== '#0F172A') {
     ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'
-    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), y + i * lh)); ctx.restore()
+    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), ty + i * lh)); ctx.restore()
   }
   ctx.fillStyle = a.color
-  lines.forEach((l, i) => ctx.fillText(l, lineX(i), y + i * lh))
+  lines.forEach((l, i) => ctx.fillText(l, lineX(i), ty + i * lh))
 }
 
 function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash }, lw: number): void {

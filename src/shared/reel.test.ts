@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
-  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag,
+  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -392,5 +392,23 @@ describe('ungrouped clips by tag', () => {
   it('goes numbers, letters, then untagged, and back to time order when off', () => {
     expect(tags(reel(true))).toEqual(['2', '10', 'B', ''])
     expect(tags(reel(false))).toEqual(['B', '10', '', '2'])
+  })
+})
+
+describe('marks of what was done to a clip', () => {
+  it('names the headline, counts the other objects, and notes slow / hold and overlay changes', () => {
+    const { reel, c } = reelWith([0])
+    const clip = reel.clips[c[0]]
+    expect(clipEdits(clip)).toEqual({ headline: null, objects: 0, timing: false, overlay: false })
+    const done = {
+      ...clip,
+      annotations: [
+        { id: 'h', kind: 'text', color: '#FFF', x: 0.5, y: 0.05, text: 'SIDE OUT', size: 48, quick: true },
+        { id: 'a', kind: 'arrow', color: '#FFF', width: 4, from: [0, 0], to: [1, 1] },
+      ],
+      timing: { holds: [{ at: 101, sec: 1 }] },
+      overlayOverride: { scoreboard: { hidden: true } },
+    } as unknown as typeof clip
+    expect(clipEdits(done)).toEqual({ headline: 'SIDE OUT', objects: 1, timing: true, overlay: true })
   })
 })

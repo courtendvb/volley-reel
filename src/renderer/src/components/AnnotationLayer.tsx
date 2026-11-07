@@ -9,11 +9,13 @@ import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { t } from '../../../shared/i18n'
+import { floorRect, type CourtFit } from '../../../shared/court'
 
 const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AED', scene: '#D97706', video: '#059669' }
 const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
 
-// A triangle is drawn like a box and stored as a polygon.
+// A triangle is drawn like a box and stored as a polygon; so is a rectangle laid on the court's floor,
+// which follows its perspective (a plain box when there is no court or the drag leaves the floor).
 // The field text is typed in shows it in its own colour on a ground it can be read on, with a caret that
 // stands out from both: dark text on light, light text on dark.
 function editColors(color: string): { color: string; background: string; caretColor: string } {
@@ -22,7 +24,7 @@ function editColors(color: string): { color: string; background: string; caretCo
   return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
 }
 
-export type Tool = 'select' | AnnotationKind | 'triangle' | 'number'
+export type Tool = 'select' | AnnotationKind | 'triangle' | 'number' | 'floorRect'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
 export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string }
@@ -42,6 +44,7 @@ interface Props {
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
   cropping: boolean // the selected picture is being cropped: handles move the frame, dragging moves the picture
   always?: boolean // a title card's objects: shown whatever the video is doing
+  floor?: CourtFit['corners'] | null // the court fitted to the video: shapes can be laid on its floor
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
 }
@@ -57,6 +60,7 @@ type Drag =
 
 
 const uid = () => crypto.randomUUID()
+const plainBox = (a: [number, number], b: [number, number]): [number, number][] => [a, [b[0], a[1]], b, [a[0], b[1]]]
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const HANDLE_PX = 7 // grab radius around a handle
 
@@ -206,6 +210,8 @@ export function AnnotationLayer(p: Props) {
     p.onSelect(a.id)
   }
 
+  const onFloor = (a: [number, number], b: [number, number]): [number, number][] =>
+    (p.floor && floorRect(p.floor, { x: a[0], y: a[1] }, { x: b[0], y: b[1] })) || plainBox(a, b)
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
     const pt = at(e)
@@ -256,6 +262,7 @@ export function AnnotationLayer(p: Props) {
     const draft: Annotation = p.tool === 'arrow' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width }
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
       : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
+      : p.tool === 'floorRect' ? { ...base, kind: 'polygon', points: onFloor(pt, pt), width: p.style.width }
       : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
     setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
   }
@@ -297,7 +304,7 @@ export function AnnotationLayer(p: Props) {
     const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
-      : d.kind === 'polygon' ? { ...d, points: trianglePoints(drag.from, [x, y]) }
+      : d.kind === 'polygon' ? { ...d, points: p.tool === 'floorRect' ? onFloor(drag.from, [x, y]) : trianglePoints(drag.from, [x, y]) }
       : d
     setDrag({ ...drag, draft: next })
   }

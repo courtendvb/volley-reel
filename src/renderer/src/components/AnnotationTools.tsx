@@ -1,10 +1,11 @@
+import { PaletteColor } from './PaletteColor'
 import type { ReactNode } from 'react'
 import {
   COLORS, DEFAULT_TEXT_BOX, applyStyle, boxQuad, hasFill, isPoints, withGroups, withQuad,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
-import { forgetColor, rememberColor, usePalette } from '../palette'
+import { forgetColor, usePalette } from '../palette'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { courtQuad, type CourtFit, type CourtPart } from '../../../shared/court'
@@ -273,10 +274,9 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   return <div className="fmt-group"><span className="fmt-title">{title}</span><div className="fmt-body">{children}</div></div>
 }
 
-let colorTimer = 0
 
-// The base colors, then my colors (colors picked freely are remembered there, in the library, so
-// every project has them; right-click one to drop it), then the free picker.
+// The base colors, then my colors (colors picked before, kept in the library; right-click one to drop
+// it), then the 20 of the palette.
 function ColorPick({ label, value, onChange, disabled }: { label: string; value: string; onChange: (c: string) => void; disabled: boolean }) {
   const mine = usePalette().colors.filter(c => !COLORS.includes(c))
   const swatch = (c: string, own: boolean) => (
@@ -289,15 +289,7 @@ function ColorPick({ label, value, onChange, disabled }: { label: string; value:
       {COLORS.map(c => swatch(c, false))}
       {mine.length > 0 && <span className="swatch-sep" aria-hidden />}
       {mine.map(c => swatch(c, true))}
-      <input type="color" aria-label={t('{0}（自由に選ぶ）', label)} value={value.length === 7 ? value : '#FFFFFF'} disabled={disabled}
-        title={t('自由に選んだ色はマイカラーに残ります')}
-        onChange={e => {
-          const c = e.target.value.toUpperCase()
-          onChange(c)
-          // Remembered once the picker settles (it reports every step while dragging).
-          clearTimeout(colorTimer)
-          if (!COLORS.includes(c)) colorTimer = window.setTimeout(() => void rememberColor(c), 800)
-        }} />
+      {!disabled && <PaletteColor value={value.length === 7 ? value : '#FFFFFF'} label={t('{0}（20 色から選ぶ）', label)} onChange={onChange} />}
     </span>
   )
 }

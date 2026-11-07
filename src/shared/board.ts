@@ -98,6 +98,7 @@ export interface BoardPhoto { assetId: string; width: number; height: number }
 export interface BoardConfig {
   skill: BoardSkill; team: string; columns: { key: string; code: string | null }[]
   split: boolean; notes: boolean; photos: boolean; background: string; searched: boolean
+  noteSize?: number; noteFills?: [string, string]
   display?: ChartDisplay // what the charts show
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
@@ -108,12 +109,18 @@ export interface BoardOptions {
   background?: string // the text is made to show on it
   style?: ChartStyle
   noteTexts?: string[] // what was written in the note boxes, by column
+  noteSize?: number // the notes' height, 1 = the usual (NOTE_SIZE)
+  noteFills?: [string, string] // the notes' lines by turns
   display?: ChartDisplay
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
 // Notes to read from across a room: a headline line, then three. Heights as shares of the picture.
-const NOTE_LINES = [0.064, 0.044, 0.044, 0.044], NOTES_Y = 0.975 - NOTE_LINES.reduce((a, b) => a + b, 0)
+const NOTE_LINES = [0.064, 0.044, 0.044, 0.044]
+// The notes' lines and where they start, made taller or shorter (1 = as above); the type follows.
+export const NOTE_SIZE = { min: 0.6, max: 1.6, step: 0.1 }
+export const NOTE_FILLS: [string, string] = ['#E2E8F0', '#FFFFFF'] // the lines by turns
+const noteLines = (scale = 1) => { const lines = NOTE_LINES.map(h => h * scale); return { lines, top: 0.975 - lines.reduce((a, b) => a + b, 0) } }
 const NARROW = 4 // from this many columns the card stacks above the chart
 export const MOST_PER_SLIDE = 6
 
@@ -143,14 +150,15 @@ function rateCard(p: BoardPlayer, skill: BoardSkill, x: number, y: number, w: nu
 
 // Four text boxes to write in, centred, grey and white by turns; the first is the headline. The narrower
 // the column the smaller the type, but still large enough to give the point at a glance.
-function notesBox(x: number, w: number, notes: string[], columns: number): Annotation[] {
-  const big = columns >= 6 ? 26 : columns >= 4 ? 30 : 34, small = columns >= 6 ? 18 : columns >= 4 ? 19 : 22
-  let y = NOTES_Y
-  return NOTE_LINES.map((h, i) => {
-    const size = i ? small : big, pad = Math.max(1, (h * 720 - size * 1.2) / 2), top = y
+function notesBox(x: number, w: number, notes: string[], columns: number, scale = 1, fills: [string, string] = NOTE_FILLS): Annotation[] {
+  const big = Math.round((columns >= 6 ? 26 : columns >= 4 ? 30 : 34) * scale), small = Math.round((columns >= 6 ? 18 : columns >= 4 ? 19 : 22) * scale)
+  const { lines, top: start } = noteLines(scale)
+  let y = start
+  return lines.map((h, i) => {
+    const size = i ? small : big, pad = Math.max(1, (h * 720 - size * 1.2) / 2), top = y, fill = fills[i % 2]
     y += h
-    return words(x + w / 2, top + pad / 720, notes[i] ?? '', size, '#0F172A', {
-      bold: i === 0, align: 'center', box: { fill: i % 2 ? '#FFFFFF' : '#E2E8F0', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: pad, width: w },
+    return words(x + w / 2, top + pad / 720, notes[i] ?? '', size, isLight(fill) ? '#0F172A' : '#FFFFFF', {
+      bold: i === 0, align: 'center', box: { fill, fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: pad, width: w },
     })
   })
 }
@@ -175,7 +183,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   const annotations: Annotation[] = [], charts: PlacedChart[] = [], noteIds: string[] = []
   const style = { ...(opts.style ?? DEFAULT_CHART), ...opts.display, scope: 'player' as const, name: false, stats: false }
   const col = 1 / Math.max(1, columns.length), ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
-  const bottom = opts.notes ? NOTES_Y - 0.015 : 0.95
+  const bottom = opts.notes ? noteLines(opts.noteSize).top - 0.015 : 0.95
   const widthOf = (h: number) => chartWidth(h) / ASPECT
   columns.forEach((p, i) => {
     const chartOf = (plays: Play[]) => directionChart(plays[0], style, () => plays)
@@ -205,7 +213,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
       annotations.push(...underline(left + numberW, left + headW, 0.028 + (nameSize * 1.25) / 720, role.fill === NO_ROLE.fill ? ink : role.fill, nameGroup))
     }
     if (opts.notes) {
-      const note = notesBox(left, width, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length)
+      const note = notesBox(left, width, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length, opts.noteSize, opts.noteFills)
       noteIds.push(...note.map(a => a.id))
       annotations.push(...note)
     }

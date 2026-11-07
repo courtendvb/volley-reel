@@ -14,6 +14,14 @@ const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AE
 const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
 
 // A triangle is drawn like a box and stored as a polygon.
+// The field text is typed in shows it in its own colour on a ground it can be read on, with a caret that
+// stands out from both: dark text on light, light text on dark.
+function editColors(color: string): { color: string; background: string; caretColor: string } {
+  const m = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  const light = m ? 0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16) > 150 : true
+  return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
+}
+
 export type Tool = 'select' | AnnotationKind | 'triangle' | 'number'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
@@ -373,7 +381,7 @@ export function AnnotationLayer(p: Props) {
         <textarea
           ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder={t('テキスト（Alt+Enter で改行）')}
           rows={Math.max(1, textEdit.value.split('\n').length)}
-          style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? textStyle(p.style).color }}
+          style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, ...editColors(editingText?.color ?? textStyle(p.style).color) }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}
         />
       )}

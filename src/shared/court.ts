@@ -301,7 +301,7 @@ export function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code' |
     const start = c.startRough ? scattered(c.start!, i) : c.start, end = c.endRough ? scattered(c.end!, i) : c.end
     return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect, ...(rough ? { rough } : {}) }] : []
   })
-  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, lineOpacity: style.lineOpacity ?? LINE_OPACITY, ...(style.lineColors ? { lineColors: style.lineColors } : {}) } }
+  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
 }
 
 // The i-th rough point moved a little around its zone's middle, the same way every time.

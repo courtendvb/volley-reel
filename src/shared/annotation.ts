@@ -47,9 +47,10 @@ export interface TextBox {
 
 // A numbered circle at a point (x and y its middle), and the next number for a set of objects.
 export function numberCircle(id: string, x: number, y: number, n: number, color: string, size: number): Annotation {
-  const light = /^#(F|E|D)/i.test(color)
+  const m = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  const light = !!m && 0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16) > 170
   return { id, kind: 'text', color: light ? '#0F172A' : '#FFFFFF', x, y: y - (size * 1.2) / 2 / REF_HEIGHT, text: String(n), size, bold: true, outline: false, align: 'center',
-    box: { fill: color, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: Math.round(size * 0.22), circle: true } }
+    box: { fill: color, fillOpacity: 1, stroke: '#FFFFFF', strokeWidth: 2, padding: Math.round(size * 0.22), circle: true } }
 }
 export function nextNumber(list: Annotation[]): number {
   return 1 + Math.max(0, ...list.map(a => (a.kind === 'text' && a.box?.circle ? parseInt(a.text) || 0 : 0)))
@@ -392,10 +393,16 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
     const pad = a.box.padding * s, h = lh * lines.length, w = Math.max(wMax, a.box.width ? a.box.width * W - 2 * pad : 0)
     const x = a.align === 'center' ? a.x * W - w / 2 : a.x * W // a wide box stays centred on the text
     if (a.box.circle) {
-      ctx.save(); ctx.globalAlpha *= a.box.fillOpacity; ctx.fillStyle = a.box.fill ?? a.color
-      ctx.beginPath(); ctx.arc(a.x * W, y + h / 2, Math.max(wMax, h) / 2 + pad, 0, Math.PI * 2); ctx.fill(); ctx.restore()
-      ctx.fillStyle = a.color
-      lines.forEach((l, i) => ctx.fillText(l, lineX(i), y + i * lh))
+      // The number sits in the middle of the circle by the ink of its digits, not the font's line box,
+      // which puts it off centre in some fonts. Ring, fill and number each have their own colour.
+      const cx = a.x * W, cy = y + h / 2, radius = Math.max(wMax, h) / 2 + pad
+      ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+      if (a.box.fill) { ctx.save(); ctx.globalAlpha *= a.box.fillOpacity; ctx.fillStyle = a.box.fill; ctx.fill(); ctx.restore() }
+      if (a.box.stroke && a.box.strokeWidth > 0) { ctx.save(); ctx.strokeStyle = a.box.stroke; ctx.lineWidth = a.box.strokeWidth * s; ctx.stroke(); ctx.restore() }
+      ctx.save(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = a.color // measured on this baseline too
+      const text = lines.join(' '), m = ctx.measureText(text)
+      ctx.fillText(text, cx - (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2 + m.actualBoundingBoxLeft, cy + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2)
+      ctx.restore()
       return
     }
     if (a.box.fill) {

@@ -1,6 +1,6 @@
+import { PaletteColor } from './PaletteColor'
 import { useState } from 'react'
-import { LineColors } from './LineColors'
-import { DEFAULT_CHART, type ChartCorner, type ChartResult, type ChartScope } from '../../../shared/chart'
+import { DEFAULT_CHART, type ChartCorner, type ChartScope } from '../../../shared/chart'
 import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, type CourtFit, type GridStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -17,7 +17,6 @@ interface Props {
 }
 
 function ChartRow({ chart: c, skill, onChange }: { chart: NonNullable<GridStyle['chart']>; skill: 'A' | 'S'; onChange: (c: NonNullable<GridStyle['chart']>) => void }) {
-  const results: [ChartResult, string][] = [['kill', t('決定・エース')], ['error', t('ミス')], ['blocked', t('被ブロック・Overpass')], ['pos', t('Pos')], ['neg', t('Neg')]]
   return (
     <div className="ann-row">
       <span className="court-row-label">{t('チャート')}</span>
@@ -37,10 +36,6 @@ function ChartRow({ chart: c, skill, onChange }: { chart: NonNullable<GridStyle[
         <option value="tl">{t('左上')}</option><option value="tr">{t('右上')}</option><option value="bl">{t('左下')}</option><option value="br">{t('右下')}</option>
       </select>
       <label className="check">{t('大きさ')} <input type="range" min={0.5} max={1.5} step={0.05} value={c.scale} aria-label={t('チャートの大きさ')} onChange={e => onChange({ ...c, scale: +e.target.value })} /></label>
-      {c.lines && <LineColors look={c} skill={skill} onChange={lineColors => onChange({ ...c, lineColors })} />}
-      {results.map(([k, label]) => (
-        <label key={k} className="check" title={t('{0} の色', label)}>{label} <input type="color" value={c.colors[k]} aria-label={t('{0} の色', label)} onChange={e => onChange({ ...c, colors: { ...c.colors, [k]: e.target.value.toUpperCase() } })} /></label>
-      ))}
     </div>
   )
 }
@@ -91,7 +86,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         <button className="ov-gear" aria-label={t('グリッドの見た目')} aria-expanded={gear} onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
           <div className="ov-gear-pop" role="dialog" aria-label={t('グリッドの見た目')}>
-            <label className="check">{t('色')} <input type="color" value={s.color} onChange={e => onStyle({ ...s, color: e.target.value.toUpperCase() })} /></label>
+            <label className="check">{t('色')} <PaletteColor value={s.color} label={t('グリッドの色')} onChange={c => onStyle({ ...s, color: c })} /></label>
             <label className="check">{t('濃さ')}
               <input type="range" min={0.1} max={1} step={0.05} value={s.opacity} onChange={e => onStyle({ ...s, opacity: +e.target.value })} /> {Math.round(s.opacity * 100)}%</label>
             <label className="check">{t('線の太さ')}
@@ -136,7 +131,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           <input type="checkbox" checked={!!s.landings} onChange={e => onStyle({ ...s, landings: e.target.checked })} /> {t('落下点')}</label>
         <label className="check" title={t('アタックを選ぶと、その選手の同じアタックコードのアタックが、打った位置から相手コートのどの方向へ行ったかを 5 つのコーンと割合で出す。多いコーンほど濃い（全試合の分。書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.cones} onChange={e => onStyle({ ...s, cones: e.target.checked })} /> {t('コーン')}</label>
-        {s.cones && <input type="color" aria-label={t('コーンの色')} title={t('コーンの色')} value={s.coneColor ?? CONE_COLOR} onChange={e => onStyle({ ...s, coneColor: e.target.value.toUpperCase() })} />}
+        {s.cones && <PaletteColor label={t('コーンの色')} value={s.coneColor ?? CONE_COLOR} onChange={c => onStyle({ ...s, coneColor: c })} />}
         <label className="check" title={t('サーブかアタックを選ぶと、その選手のディレクションチャートを動画に重ねる。落ちた位置を結果ごとの色で出し、本数・決定率なども出す（書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.chart} onChange={e => { const { chart: _c, ...rest } = s; onStyle(e.target.checked ? { ...s, chart: DEFAULT_CHART } : rest) }} /> {t('チャート')}</label>
         {s.serveFlights && !(points && s.flight) && animate}

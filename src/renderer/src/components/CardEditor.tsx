@@ -1,3 +1,4 @@
+import { PaletteColor } from './PaletteColor'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
@@ -114,8 +115,8 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
         <textarea aria-label={t('カードの文字')} rows={Math.max(1, Math.min(3, (title || nameTitle).split('\n').length))} value={title} placeholder={nameTitle || t('（名前）')}
           onChange={e => onTitle(e.target.value)} /></label>
       <label className="check" title={t('すべてのタイトルカードと無地のスライドの背景色（この動画）')}>{t('背景')}
-        <input type="color" aria-label={t('カードの背景色')} value={cardBackground(settings.titleCard, settings.theme)}
-          onChange={e => onChange({ ...settings, titleCard: { ...settings.titleCard, background: e.target.value } })} /></label>
+        <PaletteColor label={t('カードの背景色')} value={cardBackground(settings.titleCard, settings.theme)}
+          onChange={c => onChange({ ...settings, titleCard: { ...settings.titleCard, background: c } })} /></label>
       {settings.titleCard.background && <button className="link" title={t('配色（テーマ）から決まる色に戻す')}
         onClick={() => { const { background: _bg, ...rest } = settings.titleCard; onChange({ ...settings, titleCard: rest }) }}>{t('配色に戻す')}</button>}
       <div className="segmented" role="radiogroup" aria-label={t('カードの編集')}>

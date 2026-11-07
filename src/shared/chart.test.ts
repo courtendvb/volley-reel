@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { DEFAULT_CHART, lineColor, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart } from './chart'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DEFAULT_CHART, cleanLineColors, cleanPointScale, lineColor, pointColor, setChartColors, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart } from './chart'
 import { DEFAULT_GRID_STYLE, playerMarks, type CourtFit, DEFAULT_CORNERS } from './court'
 import type { ParsedDVW, Play } from './types'
 
@@ -51,24 +51,33 @@ describe('cleanChart', () => {
 })
 
 describe('line colours by evaluation', () => {
-  const look = { colors: DEFAULT_CHART.colors, lineColors: { '-': '#123456' } }
-  it('uses the one set, else the point colour', () => {
-    expect(lineColor(look, '-')).toBe('#123456')
-    expect(lineColor(look, '!')).toBe(DEFAULT_CHART.colors.neg)
-  })
+  const plain = { colors: DEFAULT_CHART.colors }
+  afterEach(() => setChartColors(undefined))
   it('starts from the usual colours of each skill', () => {
-    const plain = { colors: DEFAULT_CHART.colors }
     const of = (skill: 'A' | 'S') => ['#', '+', '!', '-', '/', '='].map(e => lineColor(plain, e, skill))
-    const [BLACK, GREEN, RED, GREY, ORANGE] = ['#000000', '#22C55E', '#DC2626', DEFAULT_CHART.colors.neg, DEFAULT_CHART.colors.pos]
+    const [BLACK, GREEN, RED, GREY] = ['#000000', '#22C55E', '#DC2626', DEFAULT_CHART.colors.neg]
     expect(of('S')).toEqual([BLACK, GREEN, GREY, GREY, GREEN, DEFAULT_CHART.colors.error])
     expect(of('A')).toEqual([BLACK, GREEN, GREY, GREY, RED, RED])
-    expect(ORANGE).not.toBe(GREEN)
   })
-  it('lets a colour set by hand win', () => {
-    expect(lineColor({ colors: DEFAULT_CHART.colors, lineColors: { '#': '#FF00FF' } }, '#', 'S')).toBe('#FF00FF')
+  it('takes the project\'s colours, each skill its own', () => {
+    setChartColors({ lines: { S: { '#': '#FF00FF' } } })
+    expect(lineColor(plain, '#', 'S')).toBe('#FF00FF')
+    expect(lineColor(plain, '#', 'A')).toBe('#000000')
   })
-  it('keeps only real evaluations when read back', () => {
-    expect(cleanChart({ lineColors: { '#': '#111111', x: '#222222', '=': 3 } }).lineColors).toEqual({ '#': '#111111' })
+  it('takes the project\'s point colours by evaluation, else the result\'s', () => {
+    setChartColors({ points: { A: { '-': '#123456' } } })
+    expect(pointColor(plain, '-', 'neg', 'A')).toBe('#123456')
+    expect(pointColor(plain, '!', 'neg', 'A')).toBe(DEFAULT_CHART.colors.neg)
+    expect(pointColor(plain, '-', 'neg', 'S')).toBe(DEFAULT_CHART.colors.neg)
+    expect(pointColor(plain, undefined, 'kill', 'A')).toBe(DEFAULT_CHART.colors.kill)
+  })
+  it('keeps a point size in its narrow range', () => {
+    expect([cleanPointScale(0.8), cleanPointScale(1), cleanPointScale(5), cleanPointScale('1.2')]).toEqual([0.8, undefined, undefined, undefined])
+  })
+  it('keeps only real evaluations and colours when read back', () => {
+    expect(cleanLineColors({ S: { '#': '#111111', x: '#222222', '=': 3, '-': 'red' }, Q: { '#': '#333333' } })).toEqual({ S: { '#': '#111111' } })
+    expect(cleanLineColors({ A: {} })).toBeUndefined()
+    expect(cleanLineColors(null)).toBeUndefined()
   })
 })
 

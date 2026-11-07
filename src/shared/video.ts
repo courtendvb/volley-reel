@@ -97,7 +97,7 @@ function slideItem(s: Slide): PlanItem {
 }
 
 export function slideCard(s: Slide): Card {
-  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg, ...(s.flights ? { flights: s.flights } : {}), ...(s.heat ? { heat: s.heat } : {}), ...(s.landings ? { landings: s.landings } : {}), ...(s.cones ? { cones: s.cones } : {}), ...(s.zones ? { zones: s.zones } : {}) }, annotations: s.annotations }
+  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg, ...(s.flights ? { flights: s.flights } : {}), ...(s.heat ? { heat: s.heat } : {}), ...(s.landings ? { landings: s.landings } : {}), ...(s.cones ? { cones: s.cones } : {}), ...(s.chart ? { chart: s.chart } : {}), ...(s.zones ? { zones: s.zones } : {}) }, annotations: s.annotations }
 }
 
 // A whole video: each scene in turn, led by a scene card (the scene's name) when scene cards are on.

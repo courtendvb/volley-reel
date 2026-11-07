@@ -2,6 +2,7 @@
 // split 3 × 6 into zones 1–9 for each side (the DVW's zone layout), drawn with perspective. The
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
+import { chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play, Side } from './types'
 
 export interface Pt { x: number; y: number }
@@ -186,7 +187,7 @@ export interface PlayZones {
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
-interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones }
+interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
@@ -288,6 +289,19 @@ const clickOn = (near: boolean) => (c: ClickPoint | null | undefined): Pt | null
 // The tell of a shot that a heatmap keeps to: a serve's start zone, an attack's code (P1, X5...).
 const shotKind = (p: Pick<Play, 'skill' | 'startZone' | 'code'>) => (p.skill === 'S' ? p.startZone : p.code.slice(6, 8))
 
+// The chart of a play's attacker: seen with them at the top, as the camera sees the far team.
+function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code'>, style: ChartStyle, plays: () => Play[], source?: ChartSource): DirectionChart {
+  const from = style.scope === 'filter' && source?.filtered ? source.filtered() : plays()
+  const mine = from.filter(p => p.skill === 'A' && p.playerKey === play.playerKey && (style.scope !== 'code' || p.code.slice(6, 8) === play.code.slice(6, 8)))
+  const on = clickOn(false)
+  const dots = mine.flatMap((p, i): ChartDot[] => {
+    const c = playClicks(p), rough = c.startRough || c.endRough
+    const start = c.startRough ? scattered(c.start!, i) : c.start, end = c.endRough ? scattered(c.end!, i) : c.end
+    return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), ...(rough ? { rough } : {}) }] : []
+  })
+  return { name: source?.name ?? '', dots, stats: chartStats(mine), look: { lines: style.lines, stats: style.stats, colors: style.colors } }
+}
+
 // The i-th rough point moved a little around its zone's middle, the same way every time.
 const ROUGH_SCATTER_M = 1
 function scattered(c: ClickPoint, i: number): ClickPoint {
@@ -298,11 +312,13 @@ function scattered(c: ClickPoint, i: number): ClickPoint {
 // A serve's or attack's player, from `plays` (every match of the project), on the side of the court
 // this play is on: where their shots of the same kind landed (shotKind), all their serves' flights,
 // and the landings as points: all their serves, or their attacks of the same code.
-export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style: GridStyle, plays: () => Play[]): PlayerMarks | null {
+// source: for the direction chart, the plays of the search and the player's name.
+export interface ChartSource { filtered?: () => Play[]; name?: string }
+export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style: GridStyle, plays: () => Play[], source?: ChartSource): PlayerMarks | null {
   if (play.skill !== 'S' && play.skill !== 'A') return null
   const heatOn = !!style.heat, flightsOn = !!style.serveFlights && play.skill === 'S'
-  const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A'
-  if (!heatOn && !flightsOn && !landingsOn && !conesOn) return null
+  const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A', chartOn = !!style.chart && play.skill === 'A'
+  if (!heatOn && !flightsOn && !landingsOn && !conesOn && !chartOn) return null
   const on = clickOn(nearSide(fit, play) === play.side)
   const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && playClicks(p).end)
   const flying = shots.filter(p => playClicks(p).start), kind = shotKind(play)
@@ -323,6 +339,7 @@ export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & Z
     ...(heatOn ? { heat: marks(same, false) } : {}),
     ...(landingsOn ? { landings: marks(play.skill === 'S' ? shots : same, true) } : {}),
     ...(flightsOn ? { flights: { fit, paths: flying.map(path) } } : {}),
+    ...(chartOn ? { chart: directionChart(play, style.chart!, plays, source) } : {}),
     ...(conesOn ? coneMark(fit, style.coneColor, same.flatMap(p => { const c = playClicks(p), start = on(c.start), end = on(c.end); return start && end ? [{ start, end }] : [] })) : {}),
   }
 }
@@ -338,8 +355,8 @@ export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>):
 
 // What is drawn for a play: its zones, and its clicks for the 座標 detail.
 // plays and style: for the player's other shots (playerMarks), when the court tab shows them.
-export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[]): PlayZones {
-  const player = style && plays ? playerMarks(play, fit, style, plays) : null
+export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[], source?: ChartSource): PlayZones {
+  const player = style && plays ? playerMarks(play, fit, style, plays, source) : null
   return { ...playZones(play, fit, next), points: playPoints(play, fit), ...(player ? { player } : {}) }
 }
 
@@ -529,12 +546,13 @@ function drawLandings(ctx: Ctx, w: number, h: number, { fit, points, rough }: Sl
 
 // What a slide keeps of the court: the shots' marks and a play's zones, fixed when they were put on.
 export interface SlideZones { fit: CourtFit; zones: PlayZones; detail: GridStyle['detail'] }
-export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones }
+export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones; chart?: DirectionChart }
 export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, heatOpacity?: number): void {
   if (s.heat) drawHeat(ctx, w, h, s.heat, heatOpacity)
   if (s.cones) drawCones(ctx, w, h, s.cones)
   if (s.zones) drawCourt(ctx, w, h, s.zones.fit, { ...DEFAULT_GRID_STYLE, grid: false, playZones: true, detail: s.zones.detail }, s.zones.zones, 1)
   if (s.landings) drawLandings(ctx, w, h, s.landings)
+  if (s.chart) drawChart(ctx, s.chart, chartBox(w, h, 'center'))
 }
 
 // Many flights at once on a slide: they leave together after a moment and then stay. `progress` as
@@ -685,6 +703,7 @@ export interface GridStyle {
   landings?: boolean // on a serve or attack: where the player's shots landed, as points
   cones?: boolean // on an attack: the player's shots of that code as cones across the court
   coneColor?: string // their colour, unless the usual one
+  chart?: ChartStyle // on an attack: the player's direction chart over the picture; none: off
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
 }
 
@@ -761,6 +780,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
     if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
+  if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale))
 }
 
 // A small ring on the floor and a thin dashed line up to the point in the air.

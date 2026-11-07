@@ -38,6 +38,7 @@ import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
+import { DEFAULT_CHART, chartName, cleanChart } from '../../shared/chart'
 import { DEFAULT_GRID_STYLE, floorAt, homography, nearestShots, project as onPicture, serveSpeed, flightTiming, playMarks, playerMarks, zoneAt, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
@@ -115,7 +116,7 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, heatOpacity, noLift, serveFlights, landings, cones, coneColor } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, ...(typeof heatOpacity === 'number' ? { heatOpacity } : {}), noLift: !!noLift, serveFlights: !!serveFlights, cones: !!cones, ...(typeof coneColor === 'string' ? { coneColor } : {}), landings: !!landings, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, heatOpacity, noLift, serveFlights, landings, cones, coneColor, chart } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, ...(typeof heatOpacity === 'number' ? { heatOpacity } : {}), noLift: !!noLift, serveFlights: !!serveFlights, cones: !!cones, ...(chart ? { chart: cleanChart(chart) } : {}), ...(typeof coneColor === 'string' ? { coneColor } : {}), landings: !!landings, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
   // The right column's tab, kept on this computer.
@@ -153,9 +154,6 @@ export function App() {
   }
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
-  const courtZones = useMemo(() => (match?.court && selectedPlay
-    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays))
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, gridStyle.cones, gridStyle.coneColor, dvws])
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)
@@ -207,6 +205,9 @@ export function App() {
 
   const settings = project?.settings
   const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter)
+  const courtZones = useMemo(() => (match?.court && selectedPlay
+    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay) })
+    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, gridStyle.cones, gridStyle.coneColor, gridStyle.chart, gridStyle.chart?.scope === 'filter' ? results : null, dvws])
 
   // ---- reels --------------------------------------------------------------------------------
   // Undo puts back a scene or video (and shows it), or the project settings.
@@ -333,15 +334,16 @@ export function App() {
     const fit = match?.court
     if (!selectedPlay || !fit) return
     const all = () => Object.values(dvws).flatMap(d => d.plays)
-    const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true, cones: true, coneColor: gridStyle.coneColor }, all)
+    const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true, cones: true, coneColor: gridStyle.coneColor, chart: gridStyle.chart ?? DEFAULT_CHART }, all, { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[match!.id], selectedPlay) })
     const add: Partial<Slide> | null = mark === 'zones' ? { zones: { fit, zones: playMarks(selectedPlay, fit, nextPlay), detail: gridStyle.detail } }
       : mark === 'heat' && shots?.heat ? { heat: { fit, points: shots.heat.points, ...(shots.heat.rough ? { rough: shots.heat.rough } : {}) } }
       : mark === 'landings' && shots?.landings ? { landings: { fit, points: shots.landings.points, ...(shots.landings.rough ? { rough: shots.landings.rough } : {}) } }
       : mark === 'flights' && shots?.flights ? { flights: shots.flights }
       : mark === 'cones' && shots?.cones ? { cones: shots.cones }
+      : mark === 'chart' && shots?.chart ? { chart: shots.chart }
       : null
     if (add) updateReel(setSlide(r, { ...s, ...add }))
-    else setNotice(mark === 'flights' ? t('サーブ軌道はサーブを選ぶと載せられます') : mark === 'cones' ? t('コーンはアタックを選ぶと載せられます') : t('サーブかアタックを選ぶと載せられます'))
+    else setNotice(mark === 'flights' ? t('サーブ軌道はサーブを選ぶと載せられます') : mark === 'cones' || mark === 'chart' ? t('コーンとチャートはアタックを選ぶと載せられます') : t('サーブかアタックを選ぶと載せられます'))
   }
   // A shot on the court: the row it has in the list of its match.
   const goToShot = (p: Play) => {

@@ -1,5 +1,6 @@
 // Export (design §3.8): the job is built here (PNG layers drawn with the preview's functions) and
 // handed to the main process, which encodes in the background; the app stays usable meanwhile.
+import { chartName } from '../../../shared/chart'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Clip, Marker, Reel } from '../../../shared/reel'
 import type { OverlaySettings } from '../../../shared/overlay'
@@ -75,7 +76,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
           court: c => {
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
             const dvws = latest.current.dvwsRef ?? {}
-            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays)), flight: flightTiming(play, ms[c.matchId].offsetSec, c) } : null
+            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play) }), flight: flightTiming(play, ms[c.matchId].offsetSec, c) } : null
           },
           courtStyle: gridStyleRef.current }, outPath, ov.chapters.enabled ? whole?.chapters : undefined)
       await api.startExport(job)

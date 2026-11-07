@@ -24,7 +24,7 @@ import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, slideCard, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
-import { CardEditBar, CardEditor, SlideEditBar, type SlideMark } from './components/CardEditor'
+import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type SlideMark } from './components/CardEditor'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
 import { PlayerPhotos } from './components/PlayerPhotos'
@@ -38,13 +38,18 @@ import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
+import { boardSlide, keptByHand, type BoardPhoto } from '../../shared/board'
+import { pdfFromJpegs } from '../../shared/pdf'
+import { CARD_H, CARD_W, cardImages } from './exportRender'
+import { DEFAULT_CHART, chartName, cleanChart } from '../../shared/chart'
+import { BoardDialog, type BoardChoice } from './components/BoardDialog'
 import { DEFAULT_GRID_STYLE, floorAt, homography, nearestShots, project as onPicture, serveSpeed, flightTiming, playMarks, playerMarks, zoneAt, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
 import { keyName } from '../../shared/keys'
-import { captionPhoto } from '../../shared/pack'
+import { captionPhoto, findPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
@@ -66,6 +71,7 @@ const PREROLL_SEC = 2 // jump a little before the contact so the play is seen bu
 
 
 
+const BOARD_SEC = 10 // a slide comparing players stays up long enough to read
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
@@ -115,7 +121,7 @@ export function App() {
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, heatOpacity, noLift, serveFlights, landings, cones, coneColor } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, ...(typeof heatOpacity === 'number' ? { heatOpacity } : {}), noLift: !!noLift, serveFlights: !!serveFlights, cones: !!cones, ...(typeof coneColor === 'string' ? { coneColor } : {}), landings: !!landings, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { const { grid, color, opacity, lineWidth, playZones, detail, flight, flightStill, heat, heatOpacity, noLift, serveFlights, landings, cones, coneColor, chart } = { ...DEFAULT_GRID_STYLE, ...JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}') }; return { grid, color, opacity, lineWidth, playZones, flight: !!flight, flightStill: !!flightStill, heat: !!heat, ...(typeof heatOpacity === 'number' ? { heatOpacity } : {}), noLift: !!noLift, serveFlights: !!serveFlights, cones: !!cones, ...(chart ? { chart: cleanChart(chart) } : {}), ...(typeof coneColor === 'string' ? { coneColor } : {}), landings: !!landings, detail: detail === 'sub' || detail === 'point' ? detail : 'zone' } } catch { return DEFAULT_GRID_STYLE } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
   const [courtFitting, setCourtFitting] = useState(false)
   // The right column's tab, kept on this computer.
@@ -153,9 +159,6 @@ export function App() {
   }
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
-  const courtZones = useMemo(() => (match?.court && selectedPlay
-    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays))
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, gridStyle.cones, gridStyle.coneColor, dvws])
 
   useEffect(() => {
     void api.getLibrary().then(setLibrary)
@@ -207,6 +210,9 @@ export function App() {
 
   const settings = project?.settings
   const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter)
+  const courtZones = useMemo(() => (match?.court && selectedPlay
+    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay) })
+    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, gridStyle.cones, gridStyle.coneColor, gridStyle.chart, gridStyle.chart?.scope === 'filter' ? results : null, dvws])
 
   // ---- reels --------------------------------------------------------------------------------
   // Undo puts back a scene or video (and shows it), or the project settings.
@@ -333,12 +339,13 @@ export function App() {
     const fit = match?.court
     if (!selectedPlay || !fit) return
     const all = () => Object.values(dvws).flatMap(d => d.plays)
-    const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true, cones: true, coneColor: gridStyle.coneColor }, all)
+    const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true, cones: true, coneColor: gridStyle.coneColor, chart: gridStyle.chart ?? DEFAULT_CHART }, all, { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[match!.id], selectedPlay) })
     const add: Partial<Slide> | null = mark === 'zones' ? { zones: { fit, zones: playMarks(selectedPlay, fit, nextPlay), detail: gridStyle.detail } }
       : mark === 'heat' && shots?.heat ? { heat: { fit, points: shots.heat.points, ...(shots.heat.rough ? { rough: shots.heat.rough } : {}) } }
       : mark === 'landings' && shots?.landings ? { landings: { fit, points: shots.landings.points, ...(shots.landings.rough ? { rough: shots.landings.rough } : {}) } }
       : mark === 'flights' && shots?.flights ? { flights: shots.flights }
       : mark === 'cones' && shots?.cones ? { cones: shots.cones }
+      : mark === 'chart' && shots?.chart ? { chart: shots.chart }
       : null
     if (add) updateReel(setSlide(r, { ...s, ...add }))
     else setNotice(mark === 'flights' ? t('サーブ軌道はサーブを選ぶと載せられます') : mark === 'cones' ? t('コーンはアタックを選ぶと載せられます') : t('サーブかアタックを選ぶと載せられます'))
@@ -741,6 +748,75 @@ export function App() {
     const rows = groupRows(r, group, ids)
     return putSlide(spotAt(rows, group, rows.findIndex(x => x.kind === 'clip' && x.id === id) + 1), 'frame')
   }
+  // Slides comparing players: each lays out its players, with their photos copied into the project.
+  // They go at the end of the open scene's first marker, or into a new scene when none is open.
+  const [boardOpen, setBoardOpen] = useState(false)
+  const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
+  const makeBoard = async (c: BoardChoice) => {
+    const { display, skill, columns, split, notes, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
+    const old = boardEdit
+    setBoardOpen(false); setBoardEdit(null)
+    try {
+      const photos: Record<string, BoardPhoto> = {}
+      for (const p of withPhotos ? columns : []) {
+        const found = photos[p.key] ? null : findPhoto(packs, p.player, p.team)
+        if (found) photos[p.key] = await api.usePackPhoto(found.pack, found.player.photo)
+      }
+      const list: Slide[] = []
+      const kept = old ? keptByHand(old) : { hand: [], noteTexts: [] }
+      for (let i = 0; i < columns.length; i += perSlide) {
+        const s = newSlide({ kind: 'blank', color: background }, old?.durationSec ?? BOARD_SEC), part = columns.slice(i, i + perSlide)
+        const { annotations, charts, noteIds } = boardSlide(part, skill, { split, notes, background, display, ...(gridStyle.chart ? { style: gridStyle.chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
+        const config = { display, skill, team, split, notes, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null })) }
+        list.push({ ...s, annotations: i ? annotations : [...annotations, ...kept.hand], charts, board: { config, made: annotations.map(a => a.id), noteIds } })
+      }
+      if (old && cardEdit?.sceneId) {
+        // In place of the card; if it no longer fits on one, the rest right after it.
+        const sceneId = cardEdit.sceneId
+        updateScene(sceneId, r => {
+          const at = (r.slides ?? []).filter(x => x.group === old.group && x.after === old.after).findIndex(x => x.id === old.id)
+          const [first, ...rest] = list
+          return putSlides(setSlide(r, { ...first, id: old.id, group: old.group, after: old.after }), rest, { group: old.group, after: old.after, index: at + 1 })
+        })
+        return
+      }
+      let scene = latest.current.reel
+      if (!scene) {
+        scene = newReel(t('シーン {0}', latest.current.reels.length + 1))
+        const made = scene
+        latest.current = { ...latest.current, reels: [...latest.current.reels, made], reel: made }
+        setReels(rs => [...rs, made]); setReelId(made.id); setActiveClipId(null)
+        placeInVideo(made.id)
+      }
+      // At the head of the marker, where its title card would be.
+      const group = marker, sceneId = scene.id
+      updateScene(sceneId, r => putSlides(r, list, spotAt(groupRows(scene, group), group, 0)))
+      editCard(sceneId, null, list[0].id)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  // The open card as a picture, or all the scene's cards and slides, in order, as a PDF.
+  const saveCards = async (as: 'png' | 'pdf', slide: Slide) => {
+    try {
+      const scene = latest.current.reel
+      const name = scene?.name || t('データスライド')
+      if (as === 'png') {
+        const [png] = await cardImages([slideCard(slide)], overlay, gridStyle.heatOpacity, 'image/png')
+        const path = await api.saveCard(name, 'png', png)
+        if (path) setNotice(t('書き出しました: {0}', path))
+        return
+      }
+      const all = scene ? [...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
+      const pages = await cardImages(all.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
+      const path = await api.saveCard(name, 'pdf', pdfFromJpegs(pages.map(jpeg => ({ jpeg, width: CARD_W, height: CARD_H }))))
+      if (path) setNotice(t('書き出しました: {0}', path))
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   const putSlide = async (spot: SlideSpot, how: SlideHow, files?: SlideFile[]) => {
     const sceneId = latest.current.reel?.id
     if (!sceneId) return
@@ -927,6 +1003,7 @@ export function App() {
         {project && <button onClick={() => setPicker('edit')} title={t('倉庫から試合を足す・外す')}>{t('試合')} {project.matches.length}</button>}
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
+        {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
@@ -1020,11 +1097,17 @@ export function App() {
                 )
               }} />
             )}
-            {cardEditCard && editingSlide && (
+            {cardEditCard && editingSlide?.board && (
+              <BoardEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
+                onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
+                onBoard={() => setBoardEdit(editingSlide)} onSave={as => void saveCards(as, editingSlide)} />
+            )}
+            {cardEditCard && editingSlide && !editingSlide.board && (
               <SlideEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 target={slideTarget} onMark={(mark, on) => markSlide(editingSlide, mark, on)}
                 onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
-                onReload={editingSource ? () => void reloadSlideFiles([editingSource.path]) : null} />
+                onReload={editingSource ? () => void reloadSlideFiles([editingSource.path]) : null}
+                onSave={as => void saveCards(as, editingSlide)} />
             )}
             {cardEditCard && !editingSlide && (
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
@@ -1051,7 +1134,7 @@ export function App() {
             )}
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
-              <CourtBar match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
+              <CourtBar chartSkill={selectedPlay?.skill === 'S' ? 'S' : 'A'} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
               </div>
             )}
@@ -1179,6 +1262,12 @@ export function App() {
           initial={picker === 'create'
             ? { name: '', codes: ['HTH'].filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
+      )}
+      {(boardOpen || boardEdit) && (
+        <BoardDialog dvws={Object.values(dvws)} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}
+          {...(boardEdit?.board ? { initial: boardEdit.board.config } : {})}
+          onCreate={c => void makeBoard(c)} onClose={() => { setBoardOpen(false); setBoardEdit(null) }}
+          onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />
       )}
       {settingsOpen && settings && (
         <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)}

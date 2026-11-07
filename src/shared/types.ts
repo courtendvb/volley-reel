@@ -23,7 +23,10 @@ export interface Player {
   jersey: number
   lastName: string
   firstName: string
+  role?: PlayerRole // from the DVW's roster, when it says
 }
+
+export type PlayerRole = 'L' | 'OH' | 'OP' | 'MB' | 'S'
 
 // A place on the court seen by the play's team from behind its own end line: u across (0–1), v from
 // that end line (0) past the net (0.5) to the far one (1). Outside 0–1 is off the court.
@@ -241,6 +244,7 @@ export interface Api {
   importPack(): Promise<PackInfo[]> // asks for a .vrpack; the packs after
   removePack(id: string): Promise<PackInfo[]>
   packRoster(): Promise<RosterPlayer[]> // everyone in the library's matches
+  saveCard(name: string, ext: 'png' | 'pdf', data: Uint8Array): Promise<string | null> // asks where; the path
   savePack(manifest: PackManifest, photos: Record<string, Uint8Array>, install: boolean): Promise<{ saved: string | null; packs: PackInfo[] }>
   readPackPhoto(id: string, photo: string): Promise<Uint8Array>
   setPlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // asks for a picture; kept in the local pack

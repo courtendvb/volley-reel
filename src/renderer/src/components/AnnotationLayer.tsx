@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type 
 import { composing } from '../keys'
 import {
   applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
-  type Annotation, type AnnotationKind, type ImageAnnotation, type Rect, type StylePatch,
-} from '../../../shared/annotation'
+  type Annotation, type AnnotationKind, type ImageAnnotation, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
@@ -15,7 +14,7 @@ const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AE
 const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
 
 // A triangle is drawn like a box and stored as a polygon.
-export type Tool = 'select' | AnnotationKind | 'triangle'
+export type Tool = 'select' | AnnotationKind | 'triangle' | 'number'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
 export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string }
@@ -202,6 +201,11 @@ export function AnnotationLayer(p: Props) {
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
     const pt = at(e)
+    if (p.tool === 'number') {
+      e.preventDefault()
+      p.onChange([...p.annotations, numberCircle(uid(), pt[0], pt[1], nextNumber(p.annotations), p.style.color, Math.max(14, Math.round(p.style.size * 0.6)))])
+      return
+    }
     if (p.tool === 'text') {
       e.preventDefault()
       setTimeout(() => setTextEdit({ id: null, x: pt[0], y: pt[1], value: '' }), 0)
@@ -329,7 +333,9 @@ export function AnnotationLayer(p: Props) {
     if (!t) return
     const value = t.value.trim()
     if (t.id) {
-      p.onChange(value ? p.annotations.map(a => (a.id === t.id && a.kind === 'text' ? { ...a, text: value } : a)) : p.annotations.filter(a => a.id !== t.id))
+      // A box of a fixed width (a note line) stays when emptied: it is still there to write in.
+      const stays = p.annotations.some(a => a.id === t.id && a.kind === 'text' && a.box?.width)
+      p.onChange(value || stays ? p.annotations.map(a => (a.id === t.id && a.kind === 'text' ? { ...a, text: value } : a)) : p.annotations.filter(a => a.id !== t.id))
       return
     }
     if (!value) return

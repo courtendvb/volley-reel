@@ -1,6 +1,7 @@
 // Turns a video plan (scenes → marker groups → clips, with title cards) into an ExportJob, with
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
+import type { Card } from '../../shared/video'
 import type { CaptionData, OverlaySettings, ScoreboardData } from '../../shared/overlay'
 import { drawCaption, drawCard, drawScoreboard } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
@@ -37,6 +38,27 @@ function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: n
 }
 
 // chapters: where YouTube chapters start, as plan indexes (planVideoChapters); kept on the job as item indexes.
+// Cards as pictures, for a PNG or a PDF, at full HD.
+export const CARD_W = 1920, CARD_H = 1080
+export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOpacity: number | undefined, type: 'image/png' | 'image/jpeg'): Promise<Uint8Array[]> {
+  const ids = cards.flatMap(c => [...(c.slide?.bg.kind === 'image' ? [c.slide.bg.assetId] : []), ...(c.annotations ?? []).flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
+  const images = await preloadAssets(ids)
+  try {
+    const out: Uint8Array[] = []
+    for (const c of cards) {
+      const canvas = new OffscreenCanvas(CARD_W, CARD_H), ctx = canvas.getContext('2d')!
+      drawCard(ctx, CARD_W, CARD_H, c, overlay.titleCard, overlay.theme, logoImage(c.opp), images.lookup)
+      if (c.slide) drawSlideMarks(ctx, CARD_W, CARD_H, c.slide, heatOpacity)
+      if (c.slide?.flights) drawFlights(ctx, CARD_W, CARD_H, c.slide.flights, 1)
+      for (const a of c.annotations ?? []) drawAnnotation(ctx, a, CARD_W, CARD_H, images.lookup)
+      out.push(new Uint8Array(await (await canvas.convertToBlob({ type, quality: 0.92 })).arrayBuffer()))
+    }
+    return out
+  } finally {
+    images.release()
+  }
+}
+
 export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[]): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)

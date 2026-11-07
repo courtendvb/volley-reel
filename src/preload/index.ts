@@ -77,6 +77,7 @@ const api: Api = {
   importPack: () => ipcRenderer.invoke('pack:import'),
   removePack: id => ipcRenderer.invoke('pack:remove', id),
   packRoster: () => ipcRenderer.invoke('pack:roster'),
+  saveCard: (name, ext, data) => ipcRenderer.invoke('card:save', name, ext, data),
   savePack: (manifest, photos, install) => ipcRenderer.invoke('pack:save', manifest, photos, install),
   readPackPhoto: (id, photo) => ipcRenderer.invoke('pack:readPhoto', id, photo),
   setPlayerPhoto: target => ipcRenderer.invoke('pack:setPhoto', target),

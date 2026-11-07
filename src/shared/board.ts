@@ -57,6 +57,8 @@ export function boardColumn(p: BoardPlayer, code: string | null, names: Record<s
 
 const TYPE_NAMES: Record<string, string> = { Q: 'Jump', M: 'Float', H: 'Float' }
 export const serveTypeName = (type: string) => TYPE_NAMES[type] ?? type
+// A serve's label by its type, whichever is the main one: jump red, float blue, anything else green.
+export const serveTypeColor = (type: string) => { const name = TYPE_NAMES[type]; return name === 'Jump' ? '#DC2626' : name === 'Float' ? '#1D4ED8' : '#16A34A' }
 
 // A serve's types, the most used first.
 export function serveTypes(plays: Play[]): { type: string; plays: Play[] }[] {
@@ -191,6 +193,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const second = opts.split && fits && types[1]?.plays.length >= MIN_SECOND ? types[1] : null
     const main = second ? types[0].plays : p.plays
     const mainLabel = p.code ? `${p.code}${p.codeName ? ` ${p.codeName}` : ''}` : second ? serveTypeName(types[0].type) : null
+    const mainColor = !p.code && second ? serveTypeColor(types[0].type) : '#1D4ED8'
     const role = (p.player.role && ROLE_COLORS[p.player.role]) || NO_ROLE
     const name = p.player.lastName.toUpperCase()
     const fit = (size: number, room: number, text: string) => Math.min(size, Math.floor((room * 1280) / (text.length * 0.72)))
@@ -214,13 +217,13 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
       if (photo && first) annotations.push(...framed(left, TOP, photoW, rowH, photo.assetId, ink))
       const cardX = photoW ? left + photoW + 0.005 : left, cardW = left + width - cardX, cardH = 0.09
       const roleH = photo || (shared && mainLabel) ? 0.055 : 0
-      if (shared && mainLabel) annotations.push(tag(cardX + 0.004, TOP + 0.012, mainLabel, 14, '#1D4ED8'))
+      if (shared && mainLabel) annotations.push(tag(cardX + 0.004, TOP + 0.012, mainLabel, 14, mainColor))
       else if (photo && p.player.role) annotations.push(words(cardX + cardW / 2, TOP + 0.006, p.player.role, 22, role.fill === ROLE_COLORS.S.fill ? ink : role.fill, { align: 'center' }))
       const cardY = TOP + roleH
       annotations.push(...rateCard(p, skill, cardX, cardY, cardW, cardH, Math.min(20, Math.floor((cardW * 1280) / 5.2))))
       const y = TOP + Math.max(rowH, roleH + cardH) + 0.01, h = Math.min(bottom - y - 0.03, width / widthOf(1)), cx = left + (width - widthOf(h)) / 2
       charts.push({ chart: chartOf(main), x: cx, y, h })
-      if (mainLabel && !shared) annotations.push(tag(cx + 0.004, y + 0.006, mainLabel, 11, '#1D4ED8'))
+      if (mainLabel && !shared) annotations.push(tag(cx + 0.004, y + 0.006, mainLabel, 11, mainColor))
       annotations.push(words(left + width / 2, y + h + 0.006, `n: ${main.length}`, 13, ink, { align: 'center' }))
       return
     }
@@ -229,7 +232,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const room = width - strip - EDGE, chartX = left + strip + EDGE
     const h = Math.min(bottom - TOP - 0.035, room / widthOf(1))
     charts.push({ chart: chartOf(main), x: chartX, y: TOP, h })
-    if (mainLabel) annotations.push(tag(chartX + 0.006, TOP + 0.008, mainLabel, 15, '#1D4ED8'))
+    if (mainLabel) annotations.push(tag(chartX + 0.006, TOP + 0.008, mainLabel, 15, mainColor))
     annotations.push(words(chartX + widthOf(h) / 2, TOP + h + 0.008, `n: ${main.length}`, 16, ink, { align: 'center' }))
     let y = TOP
     if (photo) {
@@ -242,7 +245,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     if (second) {
       const small = Math.min(bottom - y - 0.03, strip / widthOf(1))
       charts.push({ chart: chartOf(second.plays), x: left, y, h: small })
-      annotations.push(tag(left + 0.004, y + 0.006, serveTypeName(second.type), 12, '#DC2626'))
+      annotations.push(tag(left + 0.004, y + 0.006, serveTypeName(second.type), 12, serveTypeColor(second.type)))
       annotations.push(words(left + widthOf(small) / 2, y + small + 0.006, `n: ${second.plays.length}`, 12, ink, { align: 'center' }))
     }
   })

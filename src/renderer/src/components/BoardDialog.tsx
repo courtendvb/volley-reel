@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MOST_PER_SLIDE, attackCodes, boardColumn, boardPlayers, type BoardConfig, type BoardPlayer, type BoardSkill } from '../../../shared/board'
-import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay } from '../../../shared/chart'
+import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook } from '../../../shared/chart'
+import { LineColors } from './LineColors'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
 // What a chart shows: points, lines and a heatmap, any of them together, and how strong the lines are.
-export function ChartShow({ value, onChange }: { value: ChartDisplay; onChange: (patch: ChartDisplay) => void }) {
+export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { colors?: ChartLook['colors'] }; skill?: BoardSkill; onChange: (patch: ChartDisplay) => void }) {
   return (
     <>
       <span className="field-label">{t('チャート')}</span>
@@ -14,6 +15,7 @@ export function ChartShow({ value, onChange }: { value: ChartDisplay; onChange: 
       <label className="check"><input type="checkbox" checked={!!value.lines} onChange={e => onChange({ lines: e.target.checked })} /> {t('線')}</label>
       <label className="check"><input type="checkbox" checked={!!value.heat} onChange={e => onChange({ heat: e.target.checked })} /> {t('ヒートマップ')}</label>
       {value.lines && <label className="check">{t('線の濃さ')} <input type="range" min={0.1} max={1} step={0.05} value={value.lineOpacity ?? LINE_OPACITY} aria-label={t('線の濃さ')} onChange={e => onChange({ lineOpacity: +e.target.value })} /></label>}
+      {value.lines && <LineColors look={{ colors: value.colors ?? DEFAULT_CHART.colors, ...(value.lineColors ? { lineColors: value.lineColors } : {}) }} {...(skill ? { skill } : {})} onChange={lineColors => onChange({ lineColors })} />}
     </>
   )
 }
@@ -113,7 +115,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
           })}
         </div>
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
-        <div className="filter-row"><ChartShow value={display} onChange={p => setDisplay({ ...display, ...p })} /></div>
+        <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
           <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>

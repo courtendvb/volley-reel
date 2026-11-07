@@ -18,9 +18,11 @@ export interface ChartLook {
   points?: boolean // the landings as points; missing: yes
   heat?: boolean // a heatmap of the landings under them
   lineOpacity?: number // 0..1; missing: LINE_OPACITY
+  lineColors?: Record<string, string> // the lines by evaluation (# + ! - / =); missing: the point's colour
 }
 export const LINE_OPACITY = 0.7
-export type ChartDisplay = Partial<Pick<ChartLook, 'points' | 'lines' | 'heat' | 'lineOpacity'>>
+export type ChartDisplay = Partial<Pick<ChartLook, 'points' | 'lines' | 'heat' | 'lineOpacity' | 'lineColors'>>
+export const CHART_EFFECTS = ['#', '+', '!', '-', '/', '=']
 export interface ChartStyle extends ChartLook { scope: ChartScope; corner: ChartCorner; scale: number }
 
 export const DEFAULT_CHART: ChartStyle = {
@@ -38,6 +40,7 @@ export function cleanChart(x: unknown): ChartStyle {
     lineOpacity: typeof o.lineOpacity === 'number' && o.lineOpacity >= 0.05 && o.lineOpacity <= 1 ? o.lineOpacity : LINE_OPACITY,
     scope: o.scope === 'player' || o.scope === 'zone' || o.scope === 'filter' ? o.scope : 'code',
     corner: o.corner === 'tl' || o.corner === 'bl' || o.corner === 'br' ? o.corner : 'tr',
+    ...(o.lineColors && typeof o.lineColors === 'object' ? { lineColors: Object.fromEntries(Object.entries(o.lineColors).filter(([k, v]) => CHART_EFFECTS.includes(k) && typeof v === 'string')) } : {}),
     scale: typeof o.scale === 'number' && o.scale >= 0.5 && o.scale <= 2 ? o.scale : 1,
   }
 }
@@ -45,6 +48,15 @@ export function cleanChart(x: unknown): ChartStyle {
 // A serve's ace counts as a kill and its overpass as blocked: they take those colours.
 export const chartResult = (effect: string): ChartResult =>
   effect === '#' ? 'kill' : effect === '=' ? 'error' : effect === '/' ? 'blocked' : effect === '+' ? 'pos' : 'neg'
+
+// The lines' usual colours, by skill; other evaluations take their point's.
+const LINE_BLACK = '#000000', LINE_GREEN = '#22C55E', LINE_RED = '#DC2626'
+const USUAL_LINES: Record<'A' | 'S', Record<string, string>> = {
+  S: { '#': LINE_BLACK, '+': LINE_GREEN, '/': LINE_GREEN },
+  A: { '#': LINE_BLACK, '=': LINE_RED, '/': LINE_RED, '+': LINE_GREEN },
+}
+export const lineColor = (look: Pick<ChartLook, 'colors' | 'lineColors'>, effect: string, skill: 'A' | 'S' = 'A') =>
+  look.lineColors?.[effect] ?? USUAL_LINES[skill][effect] ?? look.colors[chartResult(effect)]
 
 // Attempts, kills, errors, blocks (on a serve: aces, errors, overpasses); shares of positive and negative
 // ones (the ball stays in play: neg counts '-' and '!'), and the mix: hard, pushed and tipped attacks,
@@ -64,7 +76,7 @@ export function chartStats(plays: Pick<Play, 'effect' | 'code'>[], skill: 'A' | 
 }
 
 // x across, y from the attacker's end line (0) to the other one (1), as court units.
-export interface ChartDot { start: Pt | null; end: Pt | null; result: ChartResult; rough?: boolean }
+export interface ChartDot { start: Pt | null; end: Pt | null; result: ChartResult; effect?: string; rough?: boolean } // no effect: made before lines had their own colours
 export interface DirectionChart { name: string; skill?: 'A' | 'S'; dots: ChartDot[]; stats: ChartStats; look: ChartLook } // no skill: an attack
 
 export function chartName(dvw: ParsedDVW | undefined, play: Pick<Play, 'side' | 'jersey'>): string {
@@ -132,7 +144,7 @@ export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox
     for (const d of dots) {
       if (!inView(d.start) || !inView(d.end)) continue
       const a = at(d.start), b = at(d.end)
-      ctx.strokeStyle = look.colors[d.result]
+      ctx.strokeStyle = d.effect ? lineColor(look, d.effect, skill) : look.colors[d.result]
       ctx.globalAlpha = look.lineOpacity ?? LINE_OPACITY
       ctx.setLineDash(d.rough ? [cw / 40, cw / 50] : [])
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LineColors } from './LineColors'
 import { DEFAULT_CHART, type ChartCorner, type ChartResult, type ChartScope } from '../../../shared/chart'
 import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, type CourtFit, type GridStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
@@ -12,9 +13,10 @@ interface Props {
   onFitting: (on: boolean) => void
   onFit: (fit: CourtFit | null) => void
   onAuto: () => Promise<void>
+  chartSkill: 'A' | 'S' // the selected play's, for the line colours shown
 }
 
-function ChartRow({ chart: c, onChange }: { chart: NonNullable<GridStyle['chart']>; onChange: (c: NonNullable<GridStyle['chart']>) => void }) {
+function ChartRow({ chart: c, skill, onChange }: { chart: NonNullable<GridStyle['chart']>; skill: 'A' | 'S'; onChange: (c: NonNullable<GridStyle['chart']>) => void }) {
   const results: [ChartResult, string][] = [['kill', t('決定・エース')], ['error', t('ミス')], ['blocked', t('被ブロック・Overpass')], ['pos', t('Pos')], ['neg', t('Neg')]]
   return (
     <div className="ann-row">
@@ -35,6 +37,7 @@ function ChartRow({ chart: c, onChange }: { chart: NonNullable<GridStyle['chart'
         <option value="tl">{t('左上')}</option><option value="tr">{t('右上')}</option><option value="bl">{t('左下')}</option><option value="br">{t('右下')}</option>
       </select>
       <label className="check">{t('大きさ')} <input type="range" min={0.5} max={1.5} step={0.05} value={c.scale} aria-label={t('チャートの大きさ')} onChange={e => onChange({ ...c, scale: +e.target.value })} /></label>
+      {c.lines && <LineColors look={c} skill={skill} onChange={lineColors => onChange({ ...c, lineColors })} />}
       {results.map(([k, label]) => (
         <label key={k} className="check" title={t('{0} の色', label)}>{label} <input type="color" value={c.colors[k]} aria-label={t('{0} の色', label)} onChange={e => onChange({ ...c, colors: { ...c.colors, [k]: e.target.value.toUpperCase() } })} /></label>
       ))}
@@ -43,7 +46,7 @@ function ChartRow({ chart: c, onChange }: { chart: NonNullable<GridStyle['chart'
 }
 
 // The court grid for the match on screen: fit its corners, what to show, which team is near.
-export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto }: Props) {
+export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto, chartSkill }: Props) {
   const [gear, setGear] = useState(false)
   const [finding, setFinding] = useState(false)
   const auto = (
@@ -138,7 +141,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           <input type="checkbox" checked={!!s.chart} onChange={e => { const { chart: _c, ...rest } = s; onStyle(e.target.checked ? { ...s, chart: DEFAULT_CHART } : rest) }} /> {t('チャート')}</label>
         {s.serveFlights && !(points && s.flight) && animate}
       </div>
-      {s.chart && <ChartRow chart={s.chart} onChange={chart => onStyle({ ...s, chart })} />}
+      {s.chart && <ChartRow chart={s.chart} skill={chartSkill} onChange={chart => onStyle({ ...s, chart })} />}
     </div>
   )
 }

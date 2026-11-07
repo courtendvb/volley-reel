@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CHART, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart } from './chart'
+import { DEFAULT_CHART, lineColor, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart } from './chart'
 import { DEFAULT_GRID_STYLE, playerMarks, type CourtFit, DEFAULT_CORNERS } from './court'
 import type { ParsedDVW, Play } from './types'
 
@@ -47,6 +47,28 @@ describe('cleanChart', () => {
   it('keeps what was set', () => {
     expect(cleanChart({ lines: false, stats: true, name: true, scope: 'filter', corner: 'bl', scale: 1.5, colors: { kill: '#000000' } }))
       .toMatchObject({ lines: false, stats: true, name: true, scope: 'filter', corner: 'bl', scale: 1.5, colors: { kill: '#000000', error: DEFAULT_CHART.colors.error } })
+  })
+})
+
+describe('line colours by evaluation', () => {
+  const look = { colors: DEFAULT_CHART.colors, lineColors: { '-': '#123456' } }
+  it('uses the one set, else the point colour', () => {
+    expect(lineColor(look, '-')).toBe('#123456')
+    expect(lineColor(look, '!')).toBe(DEFAULT_CHART.colors.neg)
+  })
+  it('starts from the usual colours of each skill', () => {
+    const plain = { colors: DEFAULT_CHART.colors }
+    const of = (skill: 'A' | 'S') => ['#', '+', '!', '-', '/', '='].map(e => lineColor(plain, e, skill))
+    const [BLACK, GREEN, RED, GREY, ORANGE] = ['#000000', '#22C55E', '#DC2626', DEFAULT_CHART.colors.neg, DEFAULT_CHART.colors.pos]
+    expect(of('S')).toEqual([BLACK, GREEN, GREY, GREY, GREEN, DEFAULT_CHART.colors.error])
+    expect(of('A')).toEqual([BLACK, GREEN, GREY, GREY, RED, RED])
+    expect(ORANGE).not.toBe(GREEN)
+  })
+  it('lets a colour set by hand win', () => {
+    expect(lineColor({ colors: DEFAULT_CHART.colors, lineColors: { '#': '#FF00FF' } }, '#', 'S')).toBe('#FF00FF')
+  })
+  it('keeps only real evaluations when read back', () => {
+    expect(cleanChart({ lineColors: { '#': '#111111', x: '#222222', '=': 3 } }).lineColors).toEqual({ '#': '#111111' })
   })
 })
 

@@ -790,6 +790,7 @@ export const EN: Record<string, string> = {
   "このスライドを画像に書き出します": "Saves this slide as a picture",
   "スライドを書き出す": "Save the slide",
   "丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）": "Numbered circle (1, 2, 3… with each click; double-click to change the number)",
+
   "コーン": "Cones",
   "コーンの色": "Cone color",
   "コーンはアタックを選ぶと載せられます": "Pick an attack to put its cones on the slide",

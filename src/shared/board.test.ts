@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, serveTypeName, serveTypes } from './board'
+import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, serveTypeColor, serveTypeName, serveTypes } from './board'
 import { chartWidth } from './chart'
 import type { ParsedDVW, Play } from './types'
 
@@ -102,6 +102,18 @@ describe('serve types', () => {
     const t = serveTypes([play({ code: '*07SQ-' }), play({}), play({})])
     expect(t.map(x => [x.type, x.plays.length])).toEqual([['M', 2], ['Q', 1]])
     expect([serveTypeName('Q'), serveTypeName('M'), serveTypeName('X')]).toEqual(['Jump', 'Float', 'X'])
+  })
+})
+
+describe('the colour of a serve label', () => {
+  it('goes by the type, not whether it is the main one', () => {
+    expect([serveTypeColor('Q'), serveTypeColor('M'), serveTypeColor('H'), serveTypeColor('T')]).toEqual(['#DC2626', '#1D4ED8', '#1D4ED8', '#16A34A'])
+  })
+  it('colours each label on the slide that way', () => {
+    const jumpMost = [...Array.from({ length: 8 }, () => play({ code: '*07SQ-~~~16C' })), ...Array.from({ length: 4 }, () => play({ code: '*07SM-~~~16C' }))]
+    const { annotations } = boardSlide(boardPlayers([match(jumpMost)], 'S'), 'S', { split: true }, {})
+    const fill = (name: string) => (annotations.find(a => a.kind === 'text' && a.text === name) as unknown as { box: { fill: string } }).box.fill
+    expect([fill('Jump'), fill('Float')]).toEqual(['#DC2626', '#1D4ED8'])
   })
 })
 

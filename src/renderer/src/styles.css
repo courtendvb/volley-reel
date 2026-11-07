@@ -357,6 +357,8 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .save-state.error { color: var(--danger-text); font-weight: 600; }
 .banner.notice { background: var(--warn-bg); color: var(--warn-text); cursor: pointer; }
 .modal.shortcuts { width: min(860px, 94vw); }
+.line-colors { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.line-colors input[type="color"] { width: 24px; height: 20px; padding: 0; }
 .modal.board-dialog { width: min(880px, 96vw); }
 .board-slots { display: flex; gap: 6px; padding: 8px; background: var(--soft); border-radius: 6px; aspect-ratio: 16 / 5; }
 .board-slot { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px; }

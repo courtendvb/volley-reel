@@ -1,4 +1,8 @@
-import { useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { ChartPreview } from './ChartPreview'
+import { PaletteColor } from './PaletteColor'
+import { POINT_SCALE, cleanLineColors, cleanPointScale, type ChartLineColors } from '../../../shared/chart'
+import { LineColors } from './LineColors'
 import { HEADLINE_SIZE, type HeadlineStyle } from '../../../shared/annotation'
 import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
@@ -32,28 +36,15 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
   const [headline, setHeadline] = useState<HeadlineStyle>(settings.headline ?? {})
   const head = (patch: HeadlineStyle) => setHeadline({ ...headline, ...patch })
   const [saving, setSaving] = useState(false)
-  // The list on the left: a click jumps to the setting, and scrolling lights the one in view.
-  const pane = useRef<HTMLDivElement>(null)
-  const jumped = useRef(false) // the scroll a jump makes; the last settings can't reach the top
+  const [lines, setLines] = useState<ChartLineColors>(settings.lineColors ?? {})
+  const [points, setPoints] = useState<ChartLineColors>(settings.pointColors ?? {})
+  const [pointScale, setPointScale] = useState(settings.pointScale ?? 1)
+  const preview = useMemo(() => ({ lines, points, pointScale }), [lines, points, pointScale])
+  // The list on the left picks the one setting shown on the right.
   const [here, setHere] = useState('team')
-  const jump = (id: string) => {
-    const el = pane.current, to = el?.querySelector<HTMLElement>(`[data-section="${id}"]`)
-    if (!el || !to) return
-    jumped.current = true
-    el.scrollTop = to.offsetTop
-    setHere(id)
-  }
-  const onScroll = () => {
-    if (jumped.current) { jumped.current = false; return }
-    const el = pane.current
-    if (!el) return
-    const all = [...el.querySelectorAll<HTMLElement>('[data-section]')]
-    const bottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
-    const now = bottom ? all[all.length - 1] : all.filter(s => s.offsetTop <= el.scrollTop + 8).pop()
-    if (now) setHere(now.dataset.section!)
-  }
+  const page = (id: string) => ({ 'data-section': id, hidden: here !== id })
   const NAV: [string, [string, string][]][] = [
-    [t('このプロジェクト'), [['team', t('対象チーム')], ['theme', t('配色')], ['headline', t('見出し')]]],
+    [t('このプロジェクト'), [['team', t('対象チーム')], ['theme', t('配色')], ['headline', t('見出し')], ['lines', t('チャートの色と点')]]],
     [t('倉庫'), [['logos', t('チームのロゴ')], ['addons', t('アドオン')]]],
     [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['look', t('アプリの見た目')]]],
   ]
@@ -61,7 +52,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], theme, headline })
+      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], theme, headline, lineColors: cleanLineColors(lines), pointColors: cleanLineColors(points), pointScale: cleanPointScale(pointScale) })
       onClose()
     } finally {
       setSaving(false)
@@ -78,12 +69,12 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           {NAV.map(([group, items]) => (
             <div key={group} className="settings-nav-group">
               <span className="settings-nav-title">{group}</span>
-              {items.map(([id, label]) => <button key={id} className={here === id ? 'on' : ''} aria-current={here === id ? 'true' : undefined} onClick={() => jump(id)}>{label}</button>)}
+              {items.map(([id, label]) => <button key={id} className={here === id ? 'on' : ''} aria-current={here === id ? 'true' : undefined} onClick={() => setHere(id)}>{label}</button>)}
             </div>
           ))}
         </nav>
-        <div className="settings-pane" ref={pane} onScroll={onScroll}>
-        <section data-section="team">
+        <div className="settings-pane">
+        <section {...page('team')}>
           <label className="field-label wide" htmlFor="our-code">{t('対象チーム（自チーム）')}</label>
           <select id="our-code" value={code} onChange={e => setCode(e.target.value)}>
             {!teams.some(t => t.code === code) && <option value={code}>{code || t('（なし）')}</option>}
@@ -92,13 +83,13 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。')}</p>
         </section>
 
-        <section data-section="theme">
+        <section {...page('theme')}>
           <span className="field-label wide">{t('配色（プロジェクト全体）')}</span>
           <ThemePicker value={theme} onChange={setTheme} />
           <p className="hint">{t('スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。')}</p>
         </section>
 
-        <section data-section="headline">
+        <section {...page('headline')}>
           <span className="field-label wide">{t('見出し')}</span>
           <div className="filter-row">
             <label className="field-label" htmlFor="headline-font">{t('フォント')}</label>
@@ -112,29 +103,50 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           </div>
           <div className="filter-row">
             <label className="field-label" htmlFor="headline-color">{t('色')}</label>
-            <input id="headline-color" type="color" value={headline.color ?? '#FFFFFF'} onChange={e => head({ color: e.target.value.toUpperCase() })} />
+            <PaletteColor value={headline.color ?? '#FFFFFF'} label={t('色')} onChange={c => head({ color: c })} />
             <label className="check"><input type="checkbox" checked={headline.bold !== false} onChange={e => head({ bold: e.target.checked })} /> {t('太字')}</label>
             <label className="check"><input type="checkbox" checked={headline.outline !== false} onChange={e => head({ outline: e.target.checked })} /> {t('黒縁')}</label>
             <label className="check"><input type="checkbox" checked={!!headline.box} onChange={e => { const { box: _b, ...rest } = headline; setHeadline(e.target.checked ? { ...rest, box: '#0F172A' } : rest) }} /> {t('背景')}</label>
-            {headline.box && <input type="color" aria-label={t('背景の色')} value={headline.box} onChange={e => head({ box: e.target.value.toUpperCase() })} />}
+            {headline.box && <PaletteColor value={headline.box} label={t('背景の色')} onChange={c => head({ box: c })} />}
             <button className="link" onClick={() => setHeadline({})}>{t('標準に戻す')}</button>
           </div>
           <p className="hint">{t('これから入れる見出しの見た目。プロジェクトのすべての動画に使います。入れた見出しは変わりません（書式から個別に変えられます）。')}</p>
         </section>
 
-        <section data-section="logos">
+        <section {...page('lines')}>
+          <span className="field-label wide">{t('チャートの色と点')}</span>
+          {(['S', 'A'] as const).map(skill => (
+            <div key={skill} className="chart-colors">
+              <b>{skill === 'S' ? t('サーブ') : t('アタック')}</b>
+              <div className="filter-row"><span className="field-label">{t('線')}</span>
+                <LineColors value={lines[skill]} skill={skill} onChange={v => setLines({ ...lines, [skill]: v })} /></div>
+              <div className="filter-row"><span className="field-label">{t('点')}</span>
+                <LineColors value={points[skill]} skill={skill} of="point" onChange={v => setPoints({ ...points, [skill]: v })} /></div>
+            </div>
+          ))}
+          <div className="filter-row">
+            <label className="field-label" htmlFor="point-scale">{t('点の大きさ')}</label>
+            <input id="point-scale" type="range" min={POINT_SCALE.min} max={POINT_SCALE.max} step={POINT_SCALE.step} value={pointScale} onChange={e => setPointScale(+e.target.value)} />
+            <span className="muted">{`${Math.round(pointScale * 100)}%`}</span>
+          </div>
+          <div><button className="link" onClick={() => { setLines({}); setPoints({}); setPointScale(1) }}>{t('既定に戻す')}</button></div>
+          <ChartPreview colors={preview} />
+          <p className="hint">{t('ディレクションチャートの線と点の色を評価（# + ! - / =）ごとに、点の大きさとあわせて決めます。動画のチャートとデータスライドのすべてに使います（プロジェクトごと）。')}</p>
+        </section>
+
+        <section {...page('logos')}>
           <span className="field-label wide">{t('チームのロゴ（タイトルカード）')}</span>
           <TeamLogos teams={teams} />
           <p className="hint">{t('1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。')}</p>
         </section>
 
-        <section data-section="addons">
+        <section {...page('addons')}>
           <span className="field-label wide">{t('アドオン')}</span>
           <AddonPacks />
           <p className="hint">{t('リーグの選手写真などを別ファイル（.vrpack）で足します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。写真は右の「選手写真」から入れます。')}</p>
         </section>
 
-        <section data-section="lang">
+        <section {...page('lang')}>
           {/* Both names, so it can be found whichever language is showing. */}
           <label className="field-label wide" htmlFor="app-lang">Language / 言語</label>
           <select id="app-lang" value={getLang()} onChange={e => onLanguage(e.target.value as Lang)}>
@@ -143,7 +155,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('アプリの表示の言語。このパソコンのすべてのプロジェクトに使います（変えると画面を読み直します。編集中の内容は保存されます）。')}</p>
         </section>
 
-        <section data-section="keys">
+        <section {...page('keys')}>
           <span className="field-label wide">{t('キー操作')}</span>
           <div className="filter-row">
             <label className="field-label" htmlFor="arrow-sec">{t('← →')}</label>
@@ -156,7 +168,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
           <p className="hint">{t('動画が動く秒数。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。Shift + ← → は 1 フレームのままです。')}</p>
         </section>
 
-        <section data-section="look">
+        <section {...page('look')}>
           <span className="field-label wide">{t('アプリの見た目')}</span>
           <div className="filter-row">
             <span className="field-label">{t('画面')}</span>

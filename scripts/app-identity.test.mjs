@@ -12,6 +12,10 @@ describe('what installed copies depend on', () => {
     expect(yml).toMatch(/^ {2}executableName: volley-reel$/m)
   })
 
+  it('keeps the shortcut name: a new one takes the old shortcut away, and its taskbar pin with it', () => {
+    expect(yml).toMatch(/^ {2}shortcutName: SyncScout Video Editor$/m)
+  })
+
   it('keeps the place updates come from', () => {
     expect(yml).toMatch(/^ {2}provider: github\n {2}owner: courtendvb\n {2}repo: syncscout-video-editor-releases$/m)
   })

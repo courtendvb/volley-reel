@@ -41,7 +41,7 @@ import { CourtBar } from './components/CourtBar'
 import { boardSlide, keptByHand, type BoardPhoto } from '../../shared/board'
 import { pdfFromJpegs } from '../../shared/pdf'
 import { CARD_H, CARD_W, cardImages } from './exportRender'
-import { DEFAULT_CHART, chartName, cleanChart } from '../../shared/chart'
+import { DEFAULT_CHART, chartName, cleanChart, setChartColors } from '../../shared/chart'
 import { BoardDialog, type BoardChoice } from './components/BoardDialog'
 import { DEFAULT_GRID_STYLE, floorAt, homography, nearestShots, project as onPicture, serveSpeed, flightTiming, playMarks, playerMarks, zoneAt, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import { insertAsset, pdfPages, resetAssets } from './assets'
@@ -157,6 +157,9 @@ export function App() {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
   }
+  const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
+  setChartColors(chartColors) // before anything below draws a chart
+  const lineKey = JSON.stringify(chartColors) // charts already drawn are drawn again
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
 
@@ -212,7 +215,7 @@ export function App() {
   const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter)
   const courtZones = useMemo(() => (match?.court && selectedPlay
     ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay) })
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, gridStyle.cones, gridStyle.coneColor, gridStyle.chart, gridStyle.chart?.scope === 'filter' ? results : null, dvws])
+    : null), [match?.court, selectedPlay, nextPlay, gridStyle.heat, gridStyle.serveFlights, gridStyle.landings, gridStyle.cones, gridStyle.coneColor, gridStyle.chart, lineKey, gridStyle.chart?.scope === 'filter' ? results : null, dvws])
 
   // ---- reels --------------------------------------------------------------------------------
   // Undo puts back a scene or video (and shows it), or the project settings.
@@ -753,7 +756,7 @@ export function App() {
   const [boardOpen, setBoardOpen] = useState(false)
   const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
   const makeBoard = async (c: BoardChoice) => {
-    const { display, skill, columns, split, notes, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
+    const { display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
     const old = boardEdit
     setBoardOpen(false); setBoardEdit(null)
     try {
@@ -766,8 +769,8 @@ export function App() {
       const kept = old ? keptByHand(old) : { hand: [], noteTexts: [] }
       for (let i = 0; i < columns.length; i += perSlide) {
         const s = newSlide({ kind: 'blank', color: background }, old?.durationSec ?? BOARD_SEC), part = columns.slice(i, i + perSlide)
-        const { annotations, charts, noteIds } = boardSlide(part, skill, { split, notes, background, display, ...(gridStyle.chart ? { style: gridStyle.chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
-        const config = { display, skill, team, split, notes, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null })) }
+        const { annotations, charts, noteIds } = boardSlide(part, skill, { split, notes, noteSize, noteFills, background, display, ...(gridStyle.chart ? { style: gridStyle.chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
+        const config = { display, skill, team, split, notes, noteSize, noteFills, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null })) }
         list.push({ ...s, annotations: i ? annotations : [...annotations, ...kept.hand], charts, board: { config, made: annotations.map(a => a.id), noteIds } })
       }
       if (old && cardEdit?.sceneId) {
@@ -1061,7 +1064,7 @@ export function App() {
                 if (cardEditCard) {
                   return (
                     <>
-                      <CardEditor heatOpacity={gridStyle.heatOpacity} size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title'} />
+                      <CardEditor key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title'} />
                       <AnnotationLayer
                         size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always
                         editable={cardTool === 'objects'} tool={annTool} style={annStyle}
@@ -1071,14 +1074,14 @@ export function App() {
                   )
                 }
                 const court = match.court && (
-                  <CourtLayer size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
+                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
                     onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )
                 return (
                   <>
                     {!courtFitting && court}
-                    <OverlayLayer heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
+                    <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
                       caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
                     {here && active && (
                       <AnnotationLayer

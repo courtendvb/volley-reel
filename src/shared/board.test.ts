@@ -207,6 +207,15 @@ describe('boardSlide', () => {
     const after = restyleBoard({ charts: made.charts }, { lines: true })
     expect(after.charts!.every(c => c.chart.look.lines && c.chart.look.heat)).toBe(true)
   })
+  it('makes the notes taller or shorter, the charts making room, and colours them', () => {
+    const tall = boardSlide(players(3), 'S', { split: false, notes: true, noteSize: 1.5, noteFills: ['#000000', '#FFF200'] }, {})
+    const usual = boardSlide(players(3), 'S', { split: false, notes: true }, {})
+    const lines = (r: typeof tall) => texts(r.annotations, '') as unknown as { y: number; size: number; color: string; box: { fill: string } }[]
+    expect(lines(tall)[0].y).toBeLessThan(lines(usual)[0].y)
+    expect(lines(tall)[0].size).toBeGreaterThan(lines(usual)[0].size)
+    expect(Math.max(...tall.charts.map(c => c.y + c.h))).toBeLessThan(Math.max(...usual.charts.map(c => c.y + c.h)))
+    expect(lines(tall).slice(0, 2).map(l => [l.box.fill, l.color])).toEqual([['#000000', '#FFFFFF'], ['#FFF200', '#0F172A']])
+  })
   it('keeps the name and data off the charts: the card has them', () => {
     const c = boardSlide(players(1), 'A', { split: false }, {}).charts[0].chart
     expect([c.look.name, c.look.stats]).toEqual([false, false])

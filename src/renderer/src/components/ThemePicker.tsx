@@ -1,3 +1,4 @@
+import { PaletteColor } from './PaletteColor'
 import { THEME_PRESETS, type OverlayTheme } from '../../../shared/overlay'
 import { t } from '../../../shared/i18n'
 
@@ -15,8 +16,8 @@ export function ThemePicker({ value, onChange }: { value: OverlayTheme; onChange
         ))}
       </div>
       <div className="filter-row">
-        <label className="check">{t('ベース')} <input type="color" value={value.base} onChange={e => onChange({ ...value, base: e.target.value.toUpperCase() })} /></label>
-        <label className="check">{t('アクセント')} <input type="color" value={value.accent} onChange={e => onChange({ ...value, accent: e.target.value.toUpperCase() })} /></label>
+        <label className="check">{t('ベース')} <PaletteColor value={value.base} label={t('ベース')} onChange={c => onChange({ ...value, base: c })} /></label>
+        <label className="check">{t('アクセント')} <PaletteColor value={value.accent} label={t('アクセント')} onChange={c => onChange({ ...value, accent: c })} /></label>
       </div>
     </>
   )

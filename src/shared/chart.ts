@@ -18,10 +18,9 @@ export interface ChartLook {
   points?: boolean // the landings as points; missing: yes
   heat?: boolean // a heatmap of the landings under them
   lineOpacity?: number // 0..1; missing: LINE_OPACITY
-  lineColors?: Record<string, string> // the lines by evaluation (# + ! - / =); missing: the point's colour
 }
 export const LINE_OPACITY = 0.7
-export type ChartDisplay = Partial<Pick<ChartLook, 'points' | 'lines' | 'heat' | 'lineOpacity' | 'lineColors'>>
+export type ChartDisplay = Partial<Pick<ChartLook, 'points' | 'lines' | 'heat' | 'lineOpacity'>>
 export const CHART_EFFECTS = ['#', '+', '!', '-', '/', '=']
 export interface ChartStyle extends ChartLook { scope: ChartScope; corner: ChartCorner; scale: number }
 
@@ -40,7 +39,6 @@ export function cleanChart(x: unknown): ChartStyle {
     lineOpacity: typeof o.lineOpacity === 'number' && o.lineOpacity >= 0.05 && o.lineOpacity <= 1 ? o.lineOpacity : LINE_OPACITY,
     scope: o.scope === 'player' || o.scope === 'zone' || o.scope === 'filter' ? o.scope : 'code',
     corner: o.corner === 'tl' || o.corner === 'bl' || o.corner === 'br' ? o.corner : 'tr',
-    ...(o.lineColors && typeof o.lineColors === 'object' ? { lineColors: Object.fromEntries(Object.entries(o.lineColors).filter(([k, v]) => CHART_EFFECTS.includes(k) && typeof v === 'string')) } : {}),
     scale: typeof o.scale === 'number' && o.scale >= 0.5 && o.scale <= 2 ? o.scale : 1,
   }
 }
@@ -55,8 +53,34 @@ const USUAL_LINES: Record<'A' | 'S', Record<string, string>> = {
   S: { '#': LINE_BLACK, '+': LINE_GREEN, '/': LINE_GREEN },
   A: { '#': LINE_BLACK, '=': LINE_RED, '/': LINE_RED, '+': LINE_GREEN },
 }
-export const lineColor = (look: Pick<ChartLook, 'colors' | 'lineColors'>, effect: string, skill: 'A' | 'S' = 'A') =>
-  look.lineColors?.[effect] ?? USUAL_LINES[skill][effect] ?? look.colors[chartResult(effect)]
+export const usualLineColor = (effect: string, skill: 'A' | 'S', points = DEFAULT_CHART.colors) => USUAL_LINES[skill][effect] ?? points[chartResult(effect)]
+
+// The lines' colours are a project setting (ProjectSettings.lineColors), for every chart drawn from now
+// on, on the video, on slides and in exports alike; App hands them over as the project's settings change.
+export type ChartLineColors = Partial<Record<'A' | 'S', Record<string, string>>>
+// Points the same way: their colours by skill and evaluation, and their size (1 = the usual).
+export interface ChartColors { lines?: ChartLineColors; points?: ChartLineColors; pointScale?: number }
+let projectLines: ChartLineColors = {}, projectPoints: ChartLineColors = {}, projectScale = 1
+export const getChartColors = (): ChartColors => ({ lines: projectLines, points: projectPoints, pointScale: projectScale })
+export function setChartColors(c: ChartColors | undefined): void { projectLines = c?.lines ?? {}; projectPoints = c?.points ?? {}; projectScale = c?.pointScale ?? 1 }
+export const POINT_SCALE = { min: 0.5, max: 2, step: 0.05 }
+export const cleanPointScale = (x: unknown) => (typeof x === 'number' && x >= POINT_SCALE.min && x <= POINT_SCALE.max && x !== 1 ? Math.round(x * 100) / 100 : undefined)
+export const usualPointColor = (effect: string, points = DEFAULT_CHART.colors) => points[chartResult(effect)]
+export const pointColor = (look: Pick<ChartLook, 'colors'>, effect: string | undefined, result: ChartResult, skill: 'A' | 'S' = 'A') =>
+  (effect && projectPoints[skill]?.[effect]) || look.colors[result]
+export function cleanLineColors(x: unknown): ChartLineColors | undefined {
+  if (!x || typeof x !== 'object') return undefined
+  const out: ChartLineColors = {}
+  for (const skill of ['A', 'S'] as const) {
+    const v = (x as Record<string, unknown>)[skill]
+    if (!v || typeof v !== 'object') continue
+    const kept = Object.fromEntries(Object.entries(v).filter(([k, c]) => CHART_EFFECTS.includes(k) && typeof c === 'string' && /^#[0-9A-F]{6}$/i.test(c)))
+    if (Object.keys(kept).length) out[skill] = kept
+  }
+  return Object.keys(out).length ? out : undefined
+}
+export const lineColor = (look: Pick<ChartLook, 'colors'>, effect: string, skill: 'A' | 'S' = 'A') =>
+  projectLines[skill]?.[effect] ?? usualLineColor(effect, skill, look.colors)
 
 // Attempts, kills, errors, blocks (on a serve: aces, errors, overpasses); shares of positive and negative
 // ones (the ball stays in play: neg counts '-' and '!'), and the mix: hard, pushed and tipped attacks,
@@ -124,7 +148,7 @@ export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox
   const left = x + (pw - cw) / 2, top = y + head + cw * MARGIN_Y
   const at = (p: Pt): Pt => ({ x: left + p.x * cw, y: top + p.y * 2 * cw })
   const inView = (p: Pt | null): p is Pt => !!p && p.x > -OFF_COURT && p.x < 1 + OFF_COURT && p.y > -OFF_COURT / 2 && p.y < 1 + OFF_COURT / 2
-  const thin = Math.max(1, cw / 170), r = Math.max(1.8, cw / 47)
+  const thin = Math.max(1, cw / 170), r = Math.max(1.8, cw / 47) * projectScale
   ctx.save()
   ctx.beginPath(); ctx.rect(x, y, pw, h); ctx.clip()
   ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fillRect(x, y, pw, h)
@@ -154,7 +178,7 @@ export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox
   }
   if (look.points !== false) for (const d of dots) {
     if (!inView(d.end)) continue
-    const p = at(d.end), color = look.colors[d.result]
+    const p = at(d.end), color = pointColor(look, d.effect, d.result, skill)
     ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
     if (d.rough) { ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.55); ctx.stroke() } else { ctx.fillStyle = color; ctx.fill() }
   }

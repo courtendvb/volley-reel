@@ -6,6 +6,8 @@
 # people read is the new name; these stay, and scripts/app-identity.test.mjs checks that they do:
 # - appId: the installer finds the copy to replace by it (a new one would install a second app)
 # - executableName: shortcuts and the install folder carry over, taskbar pins keep working
+# - shortcutName (nsis): renaming it in 0.2.26 replaced the shortcuts, and Windows dropped the taskbar pin
+#   of the old one. It stays as it is now, or every user has to pin the app again
 # - publish: installed copies look for updates in that repository. It was renamed from
 #   volley-reel-releases, and copies up to 0.2.25 still ask for the old name: GitHub forwards them.
 #   A new repository with the old name would end that, so never create one.

@@ -1,3 +1,4 @@
+import { PaletteColor } from './PaletteColor'
 import { useEffect, useRef } from 'react'
 import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
 import { cardBackground, drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
@@ -96,7 +97,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {check(t('マーカー名'), s.titleCard.showMarkerName, v => set('titleCard', { showMarkerName: v }))}
                 {check(t('試合名'), s.titleCard.showMatch, v => set('titleCard', { showMatch: v }))}
                 <label className="check" title={t('すべてのタイトルカードと無地のスライドの背景色')}>{t('背景')}
-                  <input type="color" aria-label={t('カードの背景色')} value={cardBackground(s.titleCard, s.theme)} onChange={e => set('titleCard', { background: e.target.value })} /></label>
+                  <PaletteColor label={t('カードの背景色')} value={cardBackground(s.titleCard, s.theme)} onChange={c => set('titleCard', { background: c })} /></label>
                 {s.titleCard.background && <button className="link" onClick={() => { const { background: _bg, ...rest } = s.titleCard; onChange({ ...s, titleCard: rest }) }}>{t('配色に戻す')}</button>}
               </div>
             </section>

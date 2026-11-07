@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MOST_PER_SLIDE, attackCodes, boardColumn, boardPlayers, type BoardConfig, type BoardPlayer, type BoardSkill } from '../../../shared/board'
+import { PaletteColor } from './PaletteColor'
+import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type BoardConfig, type BoardPlayer, type BoardSkill } from '../../../shared/board'
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook } from '../../../shared/chart'
-import { LineColors } from './LineColors'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -15,12 +15,11 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
       <label className="check"><input type="checkbox" checked={!!value.lines} onChange={e => onChange({ lines: e.target.checked })} /> {t('線')}</label>
       <label className="check"><input type="checkbox" checked={!!value.heat} onChange={e => onChange({ heat: e.target.checked })} /> {t('ヒートマップ')}</label>
       {value.lines && <label className="check">{t('線の濃さ')} <input type="range" min={0.1} max={1} step={0.05} value={value.lineOpacity ?? LINE_OPACITY} aria-label={t('線の濃さ')} onChange={e => onChange({ lineOpacity: +e.target.value })} /></label>}
-      {value.lines && <LineColors look={{ colors: value.colors ?? DEFAULT_CHART.colors, ...(value.lineColors ? { lineColors: value.lineColors } : {}) }} {...(skill ? { skill } : {})} onChange={lineColors => onChange({ lineColors })} />}
     </>
   )
 }
 
-export interface BoardChoice { display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; photos: boolean; background: string; marker: Marker; team: string; searched: boolean }
+export interface BoardChoice { display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker; team: string; searched: boolean }
 
 interface Slot { key: string; code: string } // '': no one, or all their attacks
 
@@ -48,6 +47,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '' })))
   const [split, setSplit] = useState(initial?.split ?? true)
   const [notes, setNotes] = useState(initial?.notes ?? false)
+  const [noteSize, setNoteSize] = useState(initial?.noteSize ?? 1)
+  const [noteFills, setNoteFills] = useState<[string, string]>(initial?.noteFills ?? NOTE_FILLS)
   const [photos, setPhotos] = useState(initial?.photos ?? true)
   const [background, setBackground] = useState(initial?.background ?? '#FFFFFF')
   const [marker, setMarker] = useState<Marker>(scene?.groupOrder[0] ?? MARKERS[0])
@@ -119,8 +120,16 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
           <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>
+          {notes && <>
+            <label className="check" title={t('ノート欄の高さ。文字の大きさも一緒に変わります')}>{t('高さ')}
+              <input type="number" min={NOTE_SIZE.min * 100} max={NOTE_SIZE.max * 100} step={NOTE_SIZE.step * 100} value={Math.round(noteSize * 100)} style={{ width: 60 }} aria-label={t('ノート欄の高さ（%）')}
+                onChange={e => { const n = +e.target.value / 100; if (n >= NOTE_SIZE.min && n <= NOTE_SIZE.max) setNoteSize(n) }} />%</label>
+            <span className="check" title={t('ノート欄の行の色（交互）')}>{t('色')}
+              <PaletteColor value={noteFills[0]} label={t('ノート欄の 1・3 行目の色')} onChange={c => setNoteFills([c, noteFills[1]])} />
+              <PaletteColor value={noteFills[1]} label={t('ノート欄の 2・4 行目の色')} onChange={c => setNoteFills([noteFills[0], c])} /></span>
+          </>}
           {skill === 'S' && count < 4 && <label className="check" title={t('2 番目に多いサーブの種類を小さいチャートに分けます')}><input type="checkbox" checked={split} onChange={e => setSplit(e.target.checked)} /> {t('サーブの種類で分ける')}</label>}
-          <label className="check" title={t('スライドの背景色')}>{t('背景')} <input type="color" aria-label={t('スライドの背景色')} value={background} onChange={e => setBackground(e.target.value.toUpperCase())} /></label>
+          <label className="check" title={t('スライドの背景色')}>{t('背景')} <PaletteColor value={background} label={t('スライドの背景色')} onChange={setBackground} /></label>
         </div>
         {!initial && <div className="filter-row">
           <label className="field-label" htmlFor="board-marker">{t('入れる先')}</label>
@@ -134,7 +143,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!columns.length} onClick={() => onCreate({ display, skill, columns, split, notes, photos, background, marker, team: open, searched })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={!columns.length} onClick={() => onCreate({ display, skill, columns, split, notes, noteSize, noteFills, photos, background, marker, team: open, searched })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
@@ -108,6 +109,9 @@ export interface ProjectSettings {
   theme?: OverlayTheme // overlay colors for the whole project (scoreboard, captions, title cards); missing = each video's own
   filters?: SavedFilter[] // search conditions saved under a name, in the order they were saved
   headline?: HeadlineStyle // how new headlines look; missing = as they always were
+  lineColors?: ChartLineColors // the direction charts' lines by skill and evaluation; missing: the usual
+  pointColors?: ChartLineColors // their points the same way
+  pointScale?: number // their points' size, 1 = the usual
 }
 
 export interface ProjectInfo {

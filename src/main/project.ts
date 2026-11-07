@@ -1,6 +1,7 @@
 // Project folder (v3): project.json (name, our team codes, which library matches it
 // uses) and reels/. Matches live in the library and are referenced by id. A pre-v3 project (with
 // its own matches/) is migrated on open: its matches move into the library under the same ids.
+import { cleanLineColors, cleanPointScale, type ChartLineColors } from '../shared/chart'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -24,6 +25,9 @@ interface ProjectFile {
   theme?: OverlayTheme
   filters?: SavedFilter[]
   headline?: HeadlineStyle
+  lineColors?: ChartLineColors
+  pointColors?: ChartLineColors
+  pointScale?: number
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
@@ -60,6 +64,9 @@ export class Project {
       ...(validTheme(saved.theme) ? { theme: saved.theme } : {}),
       filters: cleanSavedFilters(saved.filters),
       headline: cleanHeadline(saved.headline),
+      lineColors: cleanLineColors(saved.lineColors),
+      pointColors: cleanLineColors(saved.pointColors),
+      pointScale: cleanPointScale(saved.pointScale),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
       scenesVersion: saved.scenesVersion,
     }
@@ -145,7 +152,7 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}) },
       missing: this.library.missing(matches),
     }
   }
@@ -169,6 +176,9 @@ export class Project {
     if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }
     if (s.filters) this.file.filters = cleanSavedFilters(s.filters)
     this.file.headline = cleanHeadline(s.headline)
+    this.file.lineColors = cleanLineColors(s.lineColors)
+    this.file.pointColors = cleanLineColors(s.pointColors)
+    this.file.pointScale = cleanPointScale(s.pointScale)
     await this.save()
   }
 

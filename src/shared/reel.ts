@@ -179,6 +179,20 @@ export function toggleMarker(reel: Reel, clipId: string, m: Marker | null, when?
 // Tags are a few characters at most; an empty one takes the tag off.
 export const TAG_MAX = 4
 
+// What was done to a clip by hand, for the marks on its row in the scene list: its headline, how many
+// other objects are drawn on it, slow / hold, and the auto overlays hidden or rewritten.
+export interface ClipEdits { headline: string | null; objects: number; timing: boolean; overlay: boolean }
+export function clipEdits(c: Clip): ClipEdits {
+  const quick = c.annotations.find(a => a.kind === 'text' && a.quick)
+  const o = c.overlayOverride
+  return {
+    headline: quick && quick.kind === 'text' ? quick.text : null,
+    objects: c.annotations.filter(a => a !== quick).length,
+    timing: hasTiming(c.timing),
+    overlay: !!(o?.scoreboard?.hidden || o?.playerCaption?.hidden || o?.playerCaption?.name || o?.playerCaption?.line),
+  }
+}
+
 export function setTag(reel: Reel, clipId: string, tag: string | null): Reel {
   const c = reel.clips[clipId]
   if (!c) return reel

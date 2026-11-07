@@ -17,6 +17,7 @@ import { RIGHT_TABS, RightTabs, type RightTab } from './components/RightTabs'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
+import { ObjectTimeline } from './components/ObjectTimeline'
 import { freshIds, pasteCopies, shiftTimes, withGroups, type Annotation } from '../../shared/annotation'
 import { changed, mergeScoped, moveToScope, scopeOf, splitScoped, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
 import { captionData, overlaySettings, scoreboardData, type CaptionData, type CardLayout, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
@@ -553,6 +554,11 @@ export function App() {
   // ---- trimming (design §3.5) -----------------------------------------------------------------
   const active = reel && activeClipId ? reel.clips[activeClipId] ?? null : null
   const activeInfo = active ? clipInfo(active) : null
+  // The clip's own objects on the timelines under 編集 and 図形.
+  const timelineObjects = active && activeInfo?.range ? active.annotations.map(a => ({
+    id: a.id, label: a.kind === 'text' ? `T ${a.text}` : KIND_LABEL[a.kind],
+    from: a.showFrom ?? activeInfo.range!.in, to: a.showTo ?? activeInfo.range!.out, set: a.showFrom !== undefined || a.showTo !== undefined,
+  })) : []
   const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out
   // The active clip loops while it's being trimmed; a through-play overrides the loop.
   useEffect(() => {
@@ -877,6 +883,22 @@ export function App() {
     const prev = scopedNow()
     if (prev) applyScoped(moveToScope(prev, annId, to))
   }, [applyScoped])
+  // When an object shows (video times; null = the clip's edge), from the timeline under 編集 or 図形.
+  const setObjectSpan = useCallback((id: string, span: { from?: number | null; to?: number | null }) => {
+    const now = scopedNow()
+    if (!now) return
+    setAnns(mergeScoped(now).map(a => {
+      if (a.id !== id) return a
+      let next: Annotation = a
+      for (const [edge, v] of Object.entries(span) as ['from' | 'to', number | null | undefined][]) {
+        if (v === undefined) continue
+        const key = edge === 'from' ? 'showFrom' : 'showTo'
+        const { [key]: _old, ...rest } = next
+        next = (v === null ? rest : { ...rest, [key]: v }) as Annotation
+      }
+      return next
+    }))
+  }, [setAnns])
 
   // Puts a picture (or page 1 of a PDF) in the middle of the frame, 30% of its width.
   // A picture (from get) in the middle of the open clip or card, selected to move or resize.
@@ -1085,7 +1107,7 @@ export function App() {
                       caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
                     {here && active && (
                       <AnnotationLayer
-                        size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here}
+                        size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here} floor={match.court?.corners ?? null}
                         editable={!seqPlaying} tool={annTool} style={annStyle}
                         selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={id => { selectAnn(id); if (id) showObjects() }} onChange={setAnns}
                       />
@@ -1133,7 +1155,12 @@ export function App() {
               </div>
             )}
             {!cardEdit && match && (
-              <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting} />
+              <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting}>
+                {active && activeInfo?.range && active.matchId === matchId && (stagePanel === 'edit' || stagePanel === 'objects') && (
+                  <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} headline={settings?.headline} disabled={seqPlaying} clipIn={activeInfo.range.in} compact
+                    onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
+                )}
+              </StageTabs>
             )}
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
@@ -1143,8 +1170,6 @@ export function App() {
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
               <div className="stage-panel" hidden={stagePanel !== 'edit'}>
-              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} headline={settings?.headline} disabled={seqPlaying} clipIn={activeInfo.range.in}
-                onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -1160,21 +1185,9 @@ export function App() {
                 skillTime={active.skillSec ?? null}
                 onSkillTime={sec => { const r = latest.current.reel; if (r) updateReel(setSkillTime(r, active.id, sec)) }}
                 timing={active.timing} onTiming={tm => { const r = latest.current.reel; if (r) updateReel(setTiming(r, active.id, tm)) }}
-                objects={active.annotations.map(a => ({
-                  id: a.id, label: a.kind === 'text' ? `T ${a.text}` : KIND_LABEL[a.kind],
-                  from: a.showFrom ?? activeInfo.range!.in, to: a.showTo ?? activeInfo.range!.out, set: a.showFrom !== undefined || a.showTo !== undefined,
-                }))}
+                objects={timelineObjects}
                 selectedObjectId={selectedAnn} onSelectObject={id => { setAnnTool('select'); setSelectedAnn(id) }}
-                onObjectSpan={(id, edge, t) => {
-                  const now = scopedNow()
-                  if (!now) return
-                  setAnns(mergeScoped(now).map(a => {
-                    if (a.id !== id) return a
-                    const key = edge === 'from' ? 'showFrom' : 'showTo'
-                    const { [key]: _old, ...rest } = a
-                    return (t === null ? rest : { ...rest, [key]: t }) as Annotation
-                  }))
-                }}
+                onObjectSpan={(id, edge, t) => setObjectSpan(id, { [edge]: t })}
               />
               </div>
             )}
@@ -1186,6 +1199,8 @@ export function App() {
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
                 court={matches[active.matchId]?.court?.corners ?? null}
               />
+              <ObjectTimeline range={activeInfo.range} objects={timelineObjects} selectedId={selectedAnn} disabled={seqPlaying}
+                onSelect={id => { setAnnTool('select'); setSelectedAnn(id) }} onSpan={setObjectSpan} />
               </div>
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (

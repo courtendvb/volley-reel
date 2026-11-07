@@ -207,6 +207,14 @@ describe('boardSlide', () => {
     const after = restyleBoard({ charts: made.charts }, { lines: true })
     expect(after.charts!.every(c => c.chart.look.lines && c.chart.look.heat)).toBe(true)
   })
+  it('makes the notes one object of fixed cells, one column each to write in', () => {
+    const r = boardSlide(players(3), 'S', { split: false, notes: true }, {})
+    const notes = r.annotations.filter(a => r.noteIds.includes(a.id)) as Extract<(typeof r.annotations)[number], { kind: 'text' }>[]
+    expect(notes).toHaveLength(12)
+    expect(new Set(notes.map(n => n.groupId)).size).toBe(1)
+    expect(notes[0].groupId).toBeTruthy()
+    expect(notes.every(n => (n.box?.height ?? 0) > 0 && (n.box?.width ?? 0) > 0)).toBe(true)
+  })
   it('makes the notes taller or shorter, the charts making room, and colours them', () => {
     const tall = boardSlide(players(3), 'S', { split: false, notes: true, noteSize: 1.5, noteFills: ['#000000', '#FFF200'] }, {})
     const usual = boardSlide(players(3), 'S', { split: false, notes: true }, {})

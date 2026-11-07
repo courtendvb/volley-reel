@@ -144,9 +144,9 @@ button:disabled { opacity: 0.6; cursor: default; }
 .trim-hold { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #F59E0B; pointer-events: none; }
 /* The tabs under the video (StageTabs) and their panels; a closed panel is kept, only hidden. */
 .stage-tabs { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); }
-.stage-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 7px 16px; color: var(--sub); }
-.stage-tabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
-.stage-tabs button:disabled { opacity: 0.45; }
+.stage-tabs > button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 7px 16px; color: var(--sub); }
+.stage-tabs > button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.stage-tabs > button:disabled { opacity: 0.45; }
 .stage-panel[hidden] { display: none; }
 .stage-panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: none; padding: 4px 2px; }
 .trim-timing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
@@ -270,6 +270,9 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .tag-input { flex: none; width: 44px; padding: 0 4px; font-size: 11px; border: 1px solid var(--primary); border-radius: 4px; }
 .tag-sort { flex: none; padding: 1px 6px; font-size: 11px; white-space: nowrap; }
 .clip-dur.trimmed { color: var(--primary); font-weight: 600; }
+.edit-marks { flex: none; display: inline-flex; gap: 3px; }
+.edit-mark { font-size: 10.5px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.edit-mark.head { background: var(--primary-light); color: var(--primary); }
 
 .reel-defaults { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px 0; font-size: 12px; color: var(--sub); }
 .reel-defaults input[type=number] { width: 46px; padding: 1px 4px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }
@@ -546,6 +549,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .headline-bar { flex: none; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; }
 .headline-bar input { flex: 1; min-width: 0; }
 .headline-bar.disabled { opacity: 0.55; }
+.stage-tabs .headline-bar { flex: 1; min-width: 0; margin: 0 0 3px 14px; padding: 3px 10px; }
 .grip { flex: none; width: 14px; color: var(--faint); cursor: grab; text-align: center; font-size: 13px; line-height: 1; user-select: none; }
 .grip:hover { color: var(--text); }
 .gear { padding: 0 5px; border: 0; background: transparent; color: var(--sub); font-size: 14px; line-height: 1; }
@@ -678,3 +682,18 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .banner.slides-stale button { padding: 2px 10px; }
 .card-title-field textarea { width: 200px; min-height: 26px; padding: 2px 6px; font: inherit; resize: vertical; }
 .card-edit-bar input[type="color"] { width: 32px; height: 24px; padding: 0 2px; }
+
+/* The objects' show times on the 図形 tab: a lane each over the clip, IN to OUT. */
+.otl { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; }
+.otl.disabled { opacity: 0.55; pointer-events: none; }
+.otl-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 6px; border-radius: 4px; cursor: pointer; }
+.otl-row.on { background: var(--warn-bg); }
+.otl-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); padding-left: 4px; }
+.otl > .otl-row { padding-right: 6px; }
+.otl-scale { position: relative; height: 16px; background: var(--line); border-radius: 4px; cursor: pointer; user-select: none; touch-action: none; }
+.otl-scale .tick { position: absolute; top: 1px; transform: translateX(-50%); font-size: 10px; color: var(--faint); pointer-events: none; }
+.otl-lanes { display: flex; flex-direction: column; gap: 2px; max-height: 132px; overflow-y: auto; overflow-x: hidden; padding-right: 6px; }
+.otl-lane { position: relative; height: 16px; background: var(--line); border-radius: 3px; user-select: none; touch-action: none; }
+.otl-bar { position: absolute; top: 4px; height: 8px; border-radius: 3px; background: #F59E0B; cursor: grab; box-shadow: 0 0 0 1px rgba(255,255,255,0.85); }
+.otl-bar.whole { background: #FCD34D; }
+.otl-row.on .otl-bar { box-shadow: 0 0 0 2px var(--amber); }

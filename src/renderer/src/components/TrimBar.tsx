@@ -30,7 +30,7 @@ interface Props {
   onFrameSlide: () => void // the picture on screen as a slide right after this clip
 }
 
-interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
+export interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
 
 const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default range
 
@@ -280,7 +280,7 @@ function Edge({ name, keyName, value, overridden, onSet, onType, onReset }: {
 
 // The parts that follow the video every frame are their own small components, so the bar (with
 // its lanes) doesn't re-render as the video plays.
-function Playhead({ lo, hi }: { lo: number; hi: number }) {
+export function Playhead({ lo, hi }: { lo: number; hi: number }) {
   const [now, setNow] = useState(playback.current.time)
   useEffect(() => playback.subscribe(st => setNow(st.time)), [])
   if (now < lo || now > hi) return null

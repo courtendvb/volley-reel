@@ -120,7 +120,7 @@ export function courtCamera(corners: readonly [Pt, Pt, Pt, Pt], w: number, h: nu
 }
 
 // The floor under a point of the picture (0..1), in court units; null above the horizon.
-export function floorAt(fit: CourtFit, p: Pt): Pt | null {
+export function floorAt(fit: CourtFit | Pick<CourtFit, 'corners'>, p: Pt): Pt | null {
   const H = homography(fit.corners)
   const G = H.d * H.h - H.e * H.g, J = H.b * H.g - H.a * H.h, K = H.a * H.e - H.b * H.d
   const q = G * p.x + J * p.y + K, mid = project(H, 0.5, 0.5)
@@ -129,6 +129,16 @@ export function floorAt(fit: CourtFit, p: Pt): Pt | null {
     x: ((H.e - H.f * H.h) * p.x + (H.c * H.h - H.b) * p.y + (H.b * H.f - H.c * H.e)) / q,
     y: ((H.f * H.g - H.d) * p.x + (H.a - H.c * H.g) * p.y + (H.c * H.d - H.a * H.f)) / q,
   }
+}
+
+// A rectangle lying on the floor, square to the court's lines, from one point of the picture to the
+// other (0..1): its four corners in the picture, so it shows in the court's perspective (a trapezoid,
+// usually). Null when a point is above the horizon.
+export function floorRect(corners: CourtFit['corners'], from: Pt, to: Pt): [number, number][] | null {
+  const a = floorAt({ corners }, from), b = floorAt({ corners }, to)
+  if (!a || !b) return null
+  const H = homography(corners)
+  return ([[a.x, a.y], [b.x, a.y], [b.x, b.y], [a.x, b.y]] as const).map(([u, v]) => { const p = project(H, u, v); return [p.x, p.y] as [number, number] })
 }
 
 // The zone a point of the floor is in; null off the court.

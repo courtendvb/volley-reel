@@ -149,16 +149,18 @@ function rateCard(p: BoardPlayer, skill: BoardSkill, x: number, y: number, w: nu
 }
 
 // Four text boxes to write in, centred, grey and white by turns; the first is the headline. The narrower
-// the column the smaller the type, but still large enough to give the point at a glance.
-function notesBox(x: number, w: number, notes: string[], columns: number, scale = 1, fills: [string, string] = NOTE_FILLS): Annotation[] {
+// the column the smaller the type, but still large enough to give the point at a glance. Each is a cell
+// of fixed size (what is written shrinks to fit), and all the slide's notes are one group: they move as
+// one, and no line or column comes out of line with the rest.
+function notesBox(x: number, w: number, notes: string[], columns: number, scale = 1, fills: [string, string] = NOTE_FILLS, groupId = uid()): Annotation[] {
   const big = Math.round((columns >= 6 ? 26 : columns >= 4 ? 30 : 34) * scale), small = Math.round((columns >= 6 ? 18 : columns >= 4 ? 19 : 22) * scale)
   const { lines, top: start } = noteLines(scale)
   let y = start
   return lines.map((h, i) => {
-    const size = i ? small : big, pad = Math.max(1, (h * 720 - size * 1.2) / 2), top = y, fill = fills[i % 2]
+    const size = i ? small : big, pad = Math.min(4, Math.max(1, (h * 720 - size * 1.2) / 2)), top = y, fill = fills[i % 2]
     y += h
     return words(x + w / 2, top + pad / 720, notes[i] ?? '', size, isLight(fill) ? '#0F172A' : '#FFFFFF', {
-      bold: i === 0, align: 'center', box: { fill, fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: pad, width: w },
+      bold: i === 0, align: 'center', groupId, box: { fill, fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: pad, width: w, height: h },
     })
   })
 }
@@ -180,7 +182,7 @@ function framed(x: number, y: number, w: number, h: number, assetId: string, col
 
 // One slide's columns, side by side.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[] } {
-  const annotations: Annotation[] = [], charts: PlacedChart[] = [], noteIds: string[] = []
+  const annotations: Annotation[] = [], charts: PlacedChart[] = [], noteIds: string[] = [], notesGroup = uid()
   const style = { ...(opts.style ?? DEFAULT_CHART), ...opts.display, scope: 'player' as const, name: false, stats: false }
   const col = 1 / Math.max(1, columns.length), ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
   const bottom = opts.notes ? noteLines(opts.noteSize).top - 0.015 : 0.95
@@ -213,7 +215,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
       annotations.push(...underline(left + numberW, left + headW, 0.028 + (nameSize * 1.25) / 720, role.fill === NO_ROLE.fill ? ink : role.fill, nameGroup))
     }
     if (opts.notes) {
-      const note = notesBox(left, width, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length, opts.noteSize, opts.noteFills)
+      const note = notesBox(left, width, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length, opts.noteSize, opts.noteFills, notesGroup)
       noteIds.push(...note.map(a => a.id))
       annotations.push(...note)
     }

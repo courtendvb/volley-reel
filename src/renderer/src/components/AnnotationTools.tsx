@@ -39,7 +39,7 @@ interface Props {
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')],
-  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
+  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
   ['number', '①', '', t('丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）')],
   ['polygon', '⬠', 'P', t('多角形（クリックで頂点）')], ['freehand', '✎', '', t('フリーハンド')], // no key: F and D step through the scene's clips
 ]
@@ -59,7 +59,7 @@ export function AnnotationTools(p: Props) {
 
   // What the controls show: the selection's values with the old-look defaults filled in.
   const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
@@ -83,7 +83,7 @@ export function AnnotationTools(p: Props) {
     <div className={`ann-tools${p.disabled ? ' disabled' : ''}`}>
       <div className="ann-row">
         <div className="segmented" role="radiogroup" aria-label={t('注釈ツール')}>
-          {TOOLS.map(([t, label, key, title]) => (
+          {TOOLS.filter(([t]) => t !== 'floorRect' || p.court).map(([t, label, key, title]) => (
             <button key={t} role="radio" aria-checked={p.tool === t} className={p.tool === t ? 'on' : ''} title={key ? `${title} (${key})` : title}
               onClick={() => p.onTool(t)} disabled={p.disabled}>{label}</button>
           ))}

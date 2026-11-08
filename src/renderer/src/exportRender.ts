@@ -124,7 +124,9 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const o = c.overlayOverride
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
-  const court = overlay.court.enabled && d.courtStyle ? d.court?.(c) ?? null : null
+  // The court as the player shows it (grid, zones, the player's marks and charts, as set on the 表示
+  // tab), on every clip of a match whose court is fitted.
+  const court = d.courtStyle ? d.court?.(c) ?? null : null
   // Windows in seconds into the clip as played: slow stretches stretch them, and an object shown at
   // a held moment stays up while it is held (shared/timing.ts).
   const ps = pieces(r.in, r.out, c.timing), played = playedSec(ps)

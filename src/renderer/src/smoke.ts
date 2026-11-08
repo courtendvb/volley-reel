@@ -1598,7 +1598,7 @@ export function installSmoke(h: SmokeHost): void {
     const mid = dragged.reduce((m, p) => [m[0] + p[0] / 4, m[1] + p[1] / 4], [0, 0])
     const b = heat()!
 
-    // With VR_SMOKE_EXPORT: the scene in a video, "コートとゾーンを入れる" ticked in the export panel, exported.
+    // With VR_SMOKE_EXPORT: the scene in a video, exported (the court goes in as the player shows it).
     let exported: unknown = null
     if (exportTo) {
       updateReel(toggleMarker(latest.current.reel!, ids[0], 1)) // the scene plays marked clips only
@@ -1607,9 +1607,6 @@ export function installSmoke(h: SmokeHost): void {
       setVideos(vs => [...vs, v]); setVideoId(v.id)
       await waitFor(() => latest.current.video?.id === v.id || null, 10000, 'court video')
       activateClip(latest.current.reel!.clips[ids[0]]); await sleep(400)
-      const box = await waitFor(() => [...document.querySelectorAll<HTMLLabelElement>('.export-body label')].find(l => l.textContent?.includes(t('コートとゾーンを入れる')))?.querySelector('input') ?? null, 10000, 'court export box')
-      if (!box.checked) box.click()
-      await waitFor(() => latest.current.overlay.court.enabled || null, 10000, 'court export on')
       const job = await startExport(exportTo)
       if (!job) throw new Error('court export did not start')
       await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'court export done')

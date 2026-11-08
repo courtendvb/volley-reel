@@ -7,6 +7,7 @@ import {
 } from '../../shared/reel'
 import type { ImportProgress, MissingPart, ParsedDVW, Play, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
 import { CheckPicker } from './components/CheckPicker'
+import { applySettingsChange, settingsChange } from '../../shared/settingsUndo'
 import { ShotPick, type ShotRow } from './components/ShotPick'
 import { FilterPanel } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
@@ -233,7 +234,7 @@ export function App() {
   const { record, undoRedo, clearHistory } = useUndo({
     now: e => (e.kind === 'settings' ? latest.current.settings : e.kind === 'scene' ? latest.current.reels.find(x => x.id === e.value.id) : latest.current.videos.find(x => x.id === e.value.id)),
     restore: e => {
-      if (e.kind === 'settings') void api.saveSettings(e.value).then(setProject).catch(err => setError(String(err)))
+      if (e.kind === 'settings') { const cur = latest.current.settings; if (cur) void api.saveSettings(applySettingsChange(cur, e.value)).then(setProject).catch(err => setError(String(err))) }
       else if (e.kind === 'scene') { putScene(e.value); setReelId(e.value.id) } else { putVideo(e.value); setVideoId(e.value.id) }
     },
   })
@@ -1048,7 +1049,8 @@ export function App() {
   }, [project, settings])
   const saveSettings = async (s: ProjectSettings, merge = true) => {
     const prev = latest.current.settings
-    if (prev) record({ kind: 'settings', value: prev }, merge)
+    const change = prev ? settingsChange(prev, s) : {}
+    if (Object.keys(change).length) record({ kind: 'settings', value: change }, merge)
     setProject(await api.saveSettings(s))
   }
 

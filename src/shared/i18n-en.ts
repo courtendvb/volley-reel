@@ -1189,7 +1189,7 @@ export const EN: Record<string, string> = {
   "ポジション（{0} 人）": "Positions ({0} players)",
   "ミドルブロッカーが分かりません。DVW の選手表にポジションがないときは、ここで選んでください。": "No middle blockers are known. If the DVW's roster has no positions, pick them here.",
   "ポジションが分かりません。DVW の選手表にポジションがないときは、ここで選んでください。": "No positions are known. If the DVW's roster has no positions, pick them here.",
-  "ここで選んだポジションはこのプロジェクトに保存され、DVW の選手表より優先されます。": "Positions picked here are saved in this project and win over the DVW's roster.",
+  "ここで選んだポジションはこのプロジェクトに保存され、DVW の選手表より優先されます（データスライドの背番号の色にも使います）。": "Positions picked here are saved in this project and win over the DVW's roster (the data slides' jersey colors use them too).",
   "DVW のまま（{0}）": "As in the DVW ({0})",
   "未設定": "Not set",
   "作り直す": "Remake",

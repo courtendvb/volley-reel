@@ -35,6 +35,7 @@ import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { PresetDialog, type PresetChoice } from './components/PresetDialog'
 import { cleanPreset, makePreset, presetLabels, type PresetLookups, type SceneSpec } from '../../shared/presets'
+import { withRoles } from '../../shared/roles'
 import { Home, MissingNote } from './components/Home'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
@@ -840,6 +841,8 @@ export function App() {
   // Slides comparing players: each lays out its players, with their photos copied into the project.
   // They go at the end of the open scene's first marker, or into a new scene when none is open.
   const [boardOpen, setBoardOpen] = useState(false)
+  // The data slides read positions from the players: the project's positions put on them.
+  const boardDvws = useMemo(() => Object.values(dvws).map(d => withRoles(d, settings?.roles)), [dvws, settings?.roles])
   const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
   const makeBoard = async (c: BoardChoice) => {
     const { setView, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
@@ -1368,7 +1371,7 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {(boardOpen || boardEdit) && (
-        <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={Object.values(dvws)} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}
+        <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={boardDvws} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}
           {...(boardEdit?.board ? { initial: boardEdit.board.config } : {})}
           onCreate={c => void makeBoard(c)} onClose={() => { setBoardOpen(false); setBoardEdit(null) }}
           onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />

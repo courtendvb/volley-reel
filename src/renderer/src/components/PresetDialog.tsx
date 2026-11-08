@@ -106,7 +106,7 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
           <details className="preset-roles" open={rolesOpen || noRoles} onToggle={e => setRolesOpen((e.target as HTMLDetailsElement).open)}>
             <summary>{t('ポジション（{0} 人）', people.length)}</summary>
             {noRoles && <p className="hint warning">{kind === 'block' ? t('ミドルブロッカーが分かりません。DVW の選手表にポジションがないときは、ここで選んでください。') : t('ポジションが分かりません。DVW の選手表にポジションがないときは、ここで選んでください。')}</p>}
-            <p className="hint">{t('ここで選んだポジションはこのプロジェクトに保存され、DVW の選手表より優先されます。')}</p>
+            <p className="hint">{t('ここで選んだポジションはこのプロジェクトに保存され、DVW の選手表より優先されます（データスライドの背番号の色にも使います）。')}</p>
             <div className="preset-role-list">
               {people.map(r => {
                 const roster = rosterRoleOf(r)

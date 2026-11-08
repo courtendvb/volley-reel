@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanHeadline, applyStyle, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
+import { cleanHeadline, applyStyle, styleMany, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
 
 // Enough of a 2D context for hit testing: text width = 0.5 * font px per character.
 const fake = { font: '', measureText: (t: string) => ({ width: t.length * 0.5 * parseFloat(/(\d+(\.\d+)?)px/.exec(fake.font)![1]) }) }
@@ -87,5 +87,28 @@ describe('cleanHeadline', () => {
     expect(cleanHeadline({ font: 'Yu Gothic UI', size: 60, color: '#ff0000', bold: false, outline: true, box: 'red' })).toEqual({ font: 'Yu Gothic UI', size: 60, color: '#ff0000', bold: false, outline: true })
     expect(cleanHeadline({ font: 'x"; color: red', size: 500 })).toBeUndefined()
     expect(cleanHeadline(undefined)).toBeUndefined()
+  })
+})
+
+describe('style on several objects', () => {
+  const list: Annotation[] = [
+    { id: 'r', kind: 'rect', color: '#FF0000', width: 4, x: 0, y: 0, w: 0.1, h: 0.1 },
+    { id: 'a', kind: 'arrow', color: '#FF0000', width: 4, x1: 0, y1: 0, x2: 0.1, y2: 0.1 },
+    { id: 't', kind: 'text', color: '#FFFFFF', x: 0, y: 0, text: 'x', size: 30 },
+    { id: 'o', kind: 'circle', color: '#FF0000', width: 4, x: 0, y: 0, w: 0.1, h: 0.1 },
+  ]
+  it('fills the fillable ones picked, and leaves the rest', () => {
+    const out = styleMany(list, ['r', 'a', 't'], { fill: '#00FF00', fillOpacity: 0.5 })
+    expect(out[0]).toMatchObject({ fill: '#00FF00', fillOpacity: 0.5 })
+    expect(out[1]).not.toHaveProperty('fill')
+    expect(out[2]).not.toHaveProperty('fill')
+    expect(out[3]).not.toHaveProperty('fill') // not picked
+  })
+  it('sets the line opacity on lines, and a line colour leaves text alone', () => {
+    const out = styleMany(list, ['r', 'a', 't'], { color: '#0000FF', lineOpacity: 0.4 }, a => a.kind !== 'text')
+    expect(out[0]).toMatchObject({ color: '#0000FF', lineOpacity: 0.4 })
+    expect(out[1]).toMatchObject({ color: '#0000FF', lineOpacity: 0.4 })
+    expect(out[2]).toMatchObject({ color: '#FFFFFF' })
+    expect(applyStyle(list[2], { lineOpacity: 0.4 })).not.toHaveProperty('lineOpacity')
   })
 })

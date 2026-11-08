@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PaletteColor } from './PaletteColor'
-import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type BoardConfig, type BoardPlayer, type BoardSkill } from '../../../shared/board'
-import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook } from '../../../shared/chart'
+import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type BoardConfig, type BoardPlayer, type BoardSkill, type SetView } from '../../../shared/board'
+import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
+import { BoardPreview } from './BoardPreview'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -19,17 +20,18 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker; team: string; searched: boolean }
+export interface BoardChoice { setView: SetView; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker; team: string; searched: boolean }
 
-interface Slot { key: string; code: string } // '': no one, or all their attacks
+interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks
 
 // Sets out a comparison card: how many players, then who goes in each place, from left to right.
-export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, onImport, onClose }: {
+export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle, onCreate, onImport, onClose }: {
   dvws: ParsedDVW[]
   results: Play[] // the search
   ourTeam: string
   scene: Reel | null // the open scene, whose marker it goes in
   initial?: BoardConfig // changing a card already made
+  chartStyle?: (skill: BoardSkill) => ChartStyle | undefined // the charts' look from the 表示 tab, for the preview
   onCreate: (c: BoardChoice) => void
   onImport: (marker: Marker) => void // a PDF or pictures as cards instead
   onClose: () => void
@@ -44,7 +46,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
   const inTeam = useMemo(() => everyone.filter(p => p.team === open), [everyone, open])
   const names = useMemo(() => Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>, [dvws])
   const [count, setCount] = useState(initial?.columns.length ?? 3)
-  const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '' })))
+  const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
   const [notes, setNotes] = useState(initial?.notes ?? false)
   const [noteSize, setNoteSize] = useState(initial?.noteSize ?? 1)
@@ -52,6 +54,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
   const [photos, setPhotos] = useState(initial?.photos ?? true)
   const [background, setBackground] = useState(initial?.background ?? '#FFFFFF')
   const [marker, setMarker] = useState<Marker>(scene?.groupOrder[0] ?? MARKERS[0])
+  const [setView, setSetView] = useState<SetView>(initial?.setView ?? 'both')
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
   // no place yet. A change of team or skill starts again.
@@ -68,7 +71,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
   const setSlot = (i: number, s: Slot) => setSlots(shown.map((x, k) => (k === i ? s : x)))
   const columns = shown.flatMap(s => {
     const p = inTeam.find(x => x.key === s.key), c = p ? boardColumn(p, s.code || null, names) : null
-    return c ? [c] : []
+    return c ? [s.attention ? { ...c, attention: true } : c] : []
   })
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -77,7 +80,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
         <div className="filter-row">
           <span className="field-label">{t('プレー')}</span>
           <div className="segmented" role="radiogroup">
-            {([['S', t('サーブ')], ['A', t('アタック')]] as [BoardSkill, string][]).map(([k, label]) => (
+            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')]] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}
           </div>
@@ -110,13 +113,25 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
                     {codes.map(c => <option key={c.code} value={c.code}>{`${c.code} (${c.count})${names[c.code] ? ` ${names[c.code]}` : ''}`}</option>)}
                   </select>
                 )}
-                <div className="board-slot-court" aria-hidden />
+                <label className="check board-attention" title={t('この選手に「Attention」の赤いマークを付けます（写真の上、写真がなければ名前の行の右）')}>
+                  <input type="checkbox" checked={!!s.attention} disabled={!p} onChange={e => setSlot(i, { ...s, attention: e.target.checked })} /> Attention</label>
               </div>
             )
           })}
         </div>
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
-        <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>
+        <BoardPreview columns={columns} skill={skill} photos={photos}
+          opts={{ setView, split, notes, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+        {skill === 'E' ? (
+          <div className="filter-row" title={t('セッターのトスのあと、同じチームのアタックがどのゾーンから打たれたかの割合')}>
+            <span className="field-label">{t('配分')}</span>
+            <div className="segmented" role="radiogroup" aria-label={t('配分の見せ方')}>
+              {([['zones', t('ゾーンを塗る')], ['arrows', t('矢印')], ['both', t('両方')]] as [SetView, string][]).map(([k, label]) => (
+                <button key={k} role="radio" aria-checked={setView === k} className={setView === k ? 'on' : ''} onClick={() => setSetView(k)}>{label}</button>
+              ))}
+            </div>
+          </div>
+        ) : <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
           <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>
@@ -143,7 +158,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, onCreate, 
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!columns.length} onClick={() => onCreate({ display, skill, columns, split, notes, noteSize, noteFills, photos, background, marker, team: open, searched })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={!columns.length} onClick={() => onCreate({ setView, display, skill, columns, split, notes, noteSize, noteFills, photos, background, marker, team: open, searched })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

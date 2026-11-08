@@ -1,8 +1,10 @@
 import { PaletteColor } from './PaletteColor'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DEFAULT_CHART, type ChartCorner, type ChartScope } from '../../../shared/chart'
-import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, type CourtFit, type GridStyle } from '../../../shared/court'
+import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
+import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilterCount, type SetChartView, type SetCourtLayer, type SetFilter, type SetPhase } from '../../../shared/setChart'
+import { effectName } from '../../../shared/labels'
 import { t } from '../../../shared/i18n'
 
 interface Props {
@@ -13,7 +15,8 @@ interface Props {
   onFitting: (on: boolean) => void
   onFit: (fit: CourtFit | null) => void
   onAuto: () => Promise<void>
-  chartSkill: 'A' | 'S' // the selected play's, for the line colours shown
+  playSkill: string | null // the selected play's skill: its tab of the player marks opens
+  setterCalls: { code: string; name?: string }[] // the setter calls in the matches, for the set filter
 }
 
 function ChartRow({ chart: c, skill, onChange }: { chart: NonNullable<GridStyle['chart']>; skill: 'A' | 'S'; onChange: (c: NonNullable<GridStyle['chart']>) => void }) {
@@ -40,8 +43,21 @@ function ChartRow({ chart: c, skill, onChange }: { chart: NonNullable<GridStyle[
   )
 }
 
-// The court grid for the match on screen: fit its corners, what to show, which team is near.
-export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto, chartSkill }: Props) {
+const MARK_TABS: [MarkSkill, string][] = [['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')]]
+const tabName = (k: MarkSkill) => MARK_TABS.find(([x]) => x === k)![1]
+
+// The court grid for the match on screen: fit its corners, what to show, which team is near. What
+// is laid over the selected play from the player's other plays is set for each kind of play on its
+// own tab (a serve, an attack, a set), with only what applies to it; the selected play's tab opens.
+export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto, playSkill, setterCalls }: Props) {
+  const selected = markSkill(playSkill)
+  const [tab, setTab] = useState<MarkSkill>(selected ?? 'A')
+  useEffect(() => { if (selected) setTab(selected) }, [selected])
+  const m: PlayerMarkStyle = s.bySkill?.[tab] ?? {}
+  const put = <K extends keyof PlayerMarkStyle>(key: K, value: PlayerMarkStyle[K] | undefined) => {
+    const { [key]: _old, ...rest } = m
+    onStyle({ ...s, bySkill: { ...s.bySkill, [tab]: value === undefined ? rest : { ...rest, [key]: value } } })
+  }
   const [gear, setGear] = useState(false)
   const [finding, setFinding] = useState(false)
   const auto = (
@@ -117,26 +133,147 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           </>
         )}
       </div>
+      <div className="ann-row mark-tabs-row">
+        <span className="court-row-label" title={t('選んだプレーの選手の、全試合の分を重ねる。サーブ・アタック・セットで別々に決める')}>{t('選手の全本数')}</span>
+        <div className="segmented" role="tablist" aria-label={t('プレーの種類')}>
+          {MARK_TABS.map(([k, label]) => {
+            const n = Object.values(s.bySkill?.[k] ?? {}).filter(Boolean).length
+            return (
+              <button key={k} role="tab" aria-selected={tab === k} className={`${tab === k ? 'on' : ''}${selected === k ? ' current' : ''}`} onClick={() => setTab(k)}
+                title={selected === k ? t('いま選んでいるプレー') : t('{0}を選んだときに出すもの', label)}>
+                {label}{n > 0 && <span className="mark-count">{n}</span>}
+              </button>
+            )
+          })}
+        </div>
+        {selected !== tab && <span className="muted small">{selected ? t('いま選んでいるのは{0}。この設定は{1}を選んだときに出ます', tabName(selected), tabName(tab)) : t('この設定は{0}を選んだときに出ます', tabName(tab))}</span>}
+      </div>
       <div className="ann-row">
-        <span className="court-row-label" title={t('サーブかアタックを選んだとき、その選手の全試合の分を重ねる')}>{t('選手の全本数')}</span>
-        <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点の多さをプロジェクトの全試合からコートに色で出す。サーブはスタートゾーンが同じもの、アタックはアタックコードが同じものだけ。コートをクリックすると近い 5 本を出す（書き出しも同じ）')}>
-          <input type="checkbox" checked={!!s.heat} onChange={e => onStyle({ ...s, heat: e.target.checked })} /> {t('ヒートマップ')}</label>
-        {s.heat && (
+        <span className="court-row-label" />
+        {tab !== 'E' && (
+          <label className="check" title={tab === 'S' ? t('その選手のサーブの落下点の多さを、同じスタートゾーンのものから色で出す。コートをクリックすると近い 5 本を出す（書き出しも同じ）') : t('その選手のアタックの落下点の多さを、同じアタックコードのものから色で出す。コートをクリックすると近い 5 本を出す（書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.heat} onChange={e => put('heat', e.target.checked || undefined)} /> {t('ヒートマップ')}</label>
+        )}
+        {tab !== 'E' && m.heat && (
           <label className="check" title={t('ヒートマップの濃さ。下げると透けて床や選手が見えます。スライドのヒートマップも同じ（書き出しも同じ）')}>{t('濃さ')}
             <input type="range" min={0.1} max={1} step={0.05} value={s.heatOpacity ?? HEAT_OPACITY} aria-label={t('ヒートマップの濃さ')} onChange={e => onStyle({ ...s, heatOpacity: +e.target.value })} /> {Math.round((s.heatOpacity ?? HEAT_OPACITY) * 100)}%</label>
         )}
-        <label className="check" title={t('サーブを選ぶと、その選手のサーブの軌道をプロジェクトの全試合からすべて、そのサーブと一緒に飛ばす（書き出しも同じ）')}>
-          <input type="checkbox" checked={!!s.serveFlights} onChange={e => onStyle({ ...s, serveFlights: e.target.checked })} /> {t('サーブ軌道')}</label>
-        <label className="check" title={t('サーブかアタックを選ぶと、その選手の落下点をプロジェクトの全試合から点で出す。軌道を出さず点だけ見るときは「サーブ軌道」を外す。アタックはアタックコードが同じものだけ。点をクリックするとそのプレーへ飛ぶ（書き出しも同じ）')}>
-          <input type="checkbox" checked={!!s.landings} onChange={e => onStyle({ ...s, landings: e.target.checked })} /> {t('落下点')}</label>
-        <label className="check" title={t('アタックを選ぶと、その選手の同じアタックコードのアタックが、打った位置から相手コートのどの方向へ行ったかを 5 つのコーンと割合で出す。多いコーンほど濃い（全試合の分。書き出しも同じ）')}>
-          <input type="checkbox" checked={!!s.cones} onChange={e => onStyle({ ...s, cones: e.target.checked })} /> {t('コーン')}</label>
-        {s.cones && <PaletteColor label={t('コーンの色')} value={s.coneColor ?? CONE_COLOR} onChange={c => onStyle({ ...s, coneColor: c })} />}
-        <label className="check" title={t('サーブかアタックを選ぶと、その選手のディレクションチャートを動画に重ねる。落ちた位置を結果ごとの色で出し、本数・決定率なども出す（書き出しも同じ）')}>
-          <input type="checkbox" checked={!!s.chart} onChange={e => { const { chart: _c, ...rest } = s; onStyle(e.target.checked ? { ...s, chart: DEFAULT_CHART } : rest) }} /> {t('チャート')}</label>
-        {s.serveFlights && !(points && s.flight) && animate}
+        {tab === 'S' && (
+          <label className="check" title={t('その選手のサーブの軌道をすべて、そのサーブと一緒に飛ばす（書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.serveFlights} onChange={e => put('serveFlights', e.target.checked || undefined)} /> {t('サーブ軌道')}</label>
+        )}
+        {tab === 'S' && m.serveFlights && !(points && s.flight) && animate}
+        {tab !== 'E' && (
+          <label className="check" title={tab === 'S' ? t('その選手のサーブの落下点を点で出す。点をクリックするとそのプレーへ飛ぶ（書き出しも同じ）') : t('その選手の同じアタックコードのアタックの落下点を点で出す。点をクリックするとそのプレーへ飛ぶ（書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.landings} onChange={e => put('landings', e.target.checked || undefined)} /> {t('落下点')}</label>
+        )}
+        {tab === 'A' && (
+          <label className="check" title={t('その選手の同じアタックコードのアタックが、打った位置から相手コートのどの方向へ行ったかを 5 つのコーンと割合で出す。多いコーンほど濃い（書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.cones} onChange={e => put('cones', e.target.checked || undefined)} /> {t('コーン')}</label>
+        )}
+        {tab === 'A' && m.cones && <PaletteColor label={t('コーンの色')} value={s.coneColor ?? CONE_COLOR} onChange={c => onStyle({ ...s, coneColor: c })} />}
+        {tab !== 'E' && (
+          <label className="check" title={t('その選手のディレクションチャートを動画に重ねる。落ちた位置を結果ごとの色で出し、本数・決定率なども出す（書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.chart} onChange={e => put('chart', e.target.checked ? DEFAULT_CHART : undefined)} /> {t('チャート')}</label>
+        )}
+        {tab !== 'S' && (
+          <label className="check" title={tab === 'E' ? t('そのセッターのそのローテーションのトスを、動画の隅にチャートで出す。点はトスを上げた位置、色は上げた先（Zone4 青・Zone3 緑・Zone2 赤・Zone1 濃い赤・Pipe 紫・SD 黄）、塗りは決定、白抜きは決まらず、×は失点。コートの上に配分（いちばん多い先は赤枠、少ない先は青枠）（全試合の分。書き出しも同じ）') : t('アタックの前にトスを上げたセッターの、そのローテーションのトスのチャートを出す（書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.setChart} onChange={e => put('setChart', e.target.checked ? DEFAULT_SET_CHART : undefined)} /> {tab === 'E' ? t('チャート') : t('トスのチャート')}</label>
+        )}
+        {tab === 'E' && (
+          <label className="check" title={t('そのセッターのそのローテーションのトス配分を、動画のコートにそのまま重ねる。「配分」は上げた先のエリアを割合の濃さで塗り、いちばん多い先を赤枠、少ない先を青枠で囲む。「トスの位置」はトスを上げた位置を点で出す（DVW にセットの座標が要る。書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.setCourt} onChange={e => put('setCourt', e.target.checked ? DEFAULT_SET_COURT : undefined)} /> {t('トス配分')}</label>
+        )}
+        {tab === 'E' && m.setCourt && (
+          <select value={m.setCourt.layer} aria-label={t('コートに重ねるもの')} onChange={e => put('setCourt', { layer: e.target.value as SetCourtLayer })}>
+            <option value="shares">{t('配分')}</option><option value="spots">{t('トスの位置')}</option>
+          </select>
+        )}
+        {tab !== 'S' && (m.setChart || m.setCourt) && (
+          <SetFilterButton value={m.setFilter ?? {}} calls={setterCalls} onChange={f => put('setFilter', setFilterCount(f) ? f : undefined)} />
+        )}
       </div>
-      {s.chart && <ChartRow chart={s.chart} skill={chartSkill} onChange={chart => onStyle({ ...s, chart })} />}
+      {tab !== 'E' && m.chart && <ChartRow chart={m.chart} skill={tab} onChange={chart => put('chart', chart)} />}
+      {tab !== 'S' && m.setChart && (
+        <div className="ann-row">
+          <span className="court-row-label">{tab === 'E' ? t('チャート') : t('トスのチャート')}</span>
+          <select value={m.setChart.view ?? 'auto'} aria-label={t('トス配分の見せ方')} title={t('点はトスを上げた位置（DVW にセットの座標が要る）。ゾーンはアタックのゾーンだけで、行き先ごとの割合を塗る。自動は、座標のあるセットが半分以上なら点')}
+            onChange={e => { const { view: _v, ...rest } = m.setChart!; const v = e.target.value as SetChartView; put('setChart', v === 'auto' ? rest : { ...rest, view: v }) }}>
+            <option value="auto">{t('自動')}</option><option value="points">{t('トスの位置（点）')}</option><option value="zones">{t('ゾーンだけ（簡略）')}</option>
+          </select>
+          <label className="check" title={t('オン: ネットを上にして、セッターの側から見る。オフ: ネットを下にして、相手の側から見る')}><input type="checkbox" checked={!!m.setChart.flip} onChange={e => { const { flip: _f, ...rest } = m.setChart!; put('setChart', e.target.checked ? { ...rest, flip: true } : rest) }} /> {t('上下反転')}</label>
+          <select value={m.setChart.corner} aria-label={t('トス配分の位置')} onChange={e => put('setChart', { ...m.setChart!, corner: e.target.value as ChartCorner })}>
+            <option value="tl">{t('左上')}</option><option value="tr">{t('右上')}</option><option value="bl">{t('左下')}</option><option value="br">{t('右下')}</option>
+          </select>
+          <label className="check">{t('大きさ')} <input type="range" min={0.5} max={1.5} step={0.05} value={m.setChart.scale} aria-label={t('トス配分の大きさ')} onChange={e => put('setChart', { ...m.setChart!, scale: +e.target.value })} /></label>
+        </div>
+      )}
     </div>
+  )
+}
+
+// What the setter's sets are kept to, in a dialog so the row stays short and every choice has room:
+// their rotation (the selected play's, all, or some), the other team's rotation, the phase, the
+// reception the set came from, the score, and setter calls. The button shows how many are set.
+function SetFilterButton({ value: f, calls, onChange }: { value: SetFilter; calls: { code: string; name?: string }[]; onChange: (f: SetFilter) => void }) {
+  const [open, setOpen] = useState(false)
+  const n = setFilterCount(f)
+  const set = (patch: Partial<SetFilter>) => {
+    const next = { ...f, ...patch } as SetFilter
+    for (const k of Object.keys(next) as (keyof SetFilter)[]) { const v = next[k]; if (v === undefined || (Array.isArray(v) && !v.length)) delete next[k] }
+    onChange(next)
+  }
+  const flip = <T,>(list: T[] | undefined, v: T): T[] => { const l = list ?? []; return l.includes(v) ? l.filter(x => x !== v) : [...l, v] }
+  const rots = Array.isArray(f.rot) ? f.rot : []
+  const ROTS = [1, 2, 3, 4, 5, 6]
+  const chip = (key: string, on: boolean, label: string, toggle: () => void, title?: string) => (
+    <label key={key} className={`filter-chip${on ? ' on' : ''}`} title={title}><input type="checkbox" checked={on} onChange={toggle} /> {label}</label>
+  )
+  return (
+    <>
+      <button className={n ? 'on' : ''} aria-expanded={open} onClick={() => setOpen(true)} title={t('トスを、ローテ・相手ローテ・フェイズ・レセプション・得点域・セッターコールで絞る')}>{t('絞り込み')}{n ? ` (${n})` : ''}</button>
+      {open && (
+        <div className="modal-backdrop" onClick={() => setOpen(false)}>
+          <div className="modal set-filter-dialog" role="dialog" aria-label={t('トスの絞り込み')} onClick={e => e.stopPropagation()}>
+            <h2>{t('トスの絞り込み')}</h2>
+            <div className="set-filter-grid">
+              <span className="field-label">{t('ローテ')}</span>
+              <div className="set-filter-chips">
+                <div className="segmented" role="radiogroup">
+                  <button role="radio" aria-checked={!f.rot} className={!f.rot ? 'on' : ''} onClick={() => set({ rot: undefined })}>{t('選んだプレーと同じ')}</button>
+                  <button role="radio" aria-checked={f.rot === 'all'} className={f.rot === 'all' ? 'on' : ''} onClick={() => set({ rot: 'all' })}>{t('すべて')}</button>
+                </div>
+                {ROTS.map(r => chip(`s${r}`, rots.includes(r), `S${r}`, () => set({ rot: flip(rots, r).sort() })))}
+              </div>
+              <span className="field-label">{t('相手ローテ')}</span>
+              <div className="set-filter-chips">{ROTS.map(r => chip(`r${r}`, !!f.oppRots?.includes(r), `R${r}`, () => set({ oppRots: flip(f.oppRots, r).sort() })))}</div>
+              <span className="field-label">{t('フェイズ')}</span>
+              <div className="set-filter-chips">
+                {chip('pr', !!f.phases?.includes('r'), t('レセプション'), () => set({ phases: flip(f.phases, 'r' as SetPhase) }), t('自チームのレセプションからの攻撃'))}
+                {chip('pt', !!f.phases?.includes('t'), t('トランジション'), () => set({ phases: flip(f.phases, 't' as SetPhase) }), t('ディグなどからの攻撃'))}
+              </div>
+              <span className="field-label">{t('レセプション')}</span>
+              <div className="set-filter-chips">
+                {REC_EFFECTS.map(e => chip(`q${e}`, !!f.recs?.includes(e), `${e} ${effectName('R', e)}`, () => set({ recs: REC_EFFECTS.filter(x => x === e ? !f.recs?.includes(e) : f.recs?.includes(x)) })))}
+              </div>
+              <span className="field-label">{t('得点域')}</span>
+              <div className="set-filter-chips">
+                {SCORE_BANDS.map(b => chip(b.band, !!f.scores?.includes(b.band), t('{0} 点', b.label), () => set({ scores: SCORE_BANDS.map(x => x.band).filter(x => (x === b.band ? !f.scores?.includes(x) : f.scores?.includes(x))) }), t('セッターのチームのラリー前の得点')))}
+              </div>
+              <span className="field-label">{t('セッターコール')}</span>
+              <div className="set-filter-chips">
+                {calls.length ? calls.map(c => chip(c.code, !!f.calls?.includes(c.code), `${c.code}${c.name ? ` ${c.name}` : ''}`, () => set({ calls: flip(f.calls, c.code) }))) : <span className="muted small">{t('DVW にセッターコールがありません')}</span>}
+              </div>
+            </div>
+            <p className="hint">{t('どの段も、何も選ばなければすべて。レセプションで絞るとレセプションからの攻撃だけ、セッターコールで絞るとコールのないツー（SD）は入りません')}</p>
+            <div className="modal-actions">
+              {n > 0 && <button className="link" onClick={() => onChange({})}>{t('絞り込みを外す')}</button>}
+              <span className="spacer" />
+              <button className="primary" onClick={() => setOpen(false)}>{t('閉じる')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

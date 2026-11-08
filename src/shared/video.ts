@@ -5,7 +5,7 @@ import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { SlideFlights, SlideMarks } from './court'
 import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
-import { groupRows, markerCardOn, type Clip, type Group, type Reel, type Slide, type SlideBg } from './reel'
+import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
 
@@ -166,6 +166,38 @@ export function chapterText(chapters: { startSec: number; title: string }[], tot
   const list = chapters.map((c, i) => `${fmt(starts[i])} ${c.title}`).join('\n')
   const links = chapters.map((c, i) => `${c.title}\nhttps://youtu.be/${VIDEO_ID_MARK}?t=${Math.floor(starts[i])}`).join('\n')
   return { text: `${list}\n\n${links}\n`, short }
+}
+
+// Chapters for part of a video (a scene, a marker group): one where the marker group (or the scene)
+// changes. A title card goes with what follows it, a slide with what came before. None for one part
+// alone. Named by the marker, with the scene's name too when there is more than one scene.
+export function planChapters(plan: PlanItem[], scenes: Record<string, Reel>): Chapter[] {
+  const keyOf = (p: PlanItem) => (p.kind === 'clip' ? `${p.sceneId}|${p.group}` : null)
+  const keys: (string | null)[] = plan.map(keyOf)
+  for (let i = plan.length - 1; i >= 0; i--) { const p = plan[i]; if (!keys[i] && p.kind === 'card' && !p.card.slide) keys[i] = keys[i + 1] ?? null }
+  for (let i = 0; i < plan.length; i++) if (!keys[i]) keys[i] = keys[i - 1] ?? keys.find(Boolean) ?? null
+  const sceneIds = new Set(keys.filter(Boolean).map(k => k!.split('|')[0]))
+  const out: Chapter[] = []
+  keys.forEach((k, i) => {
+    if (!k || (i > 0 && keys[i - 1] === k)) return
+    const [sceneId, g] = k.split('|'), s = scenes[sceneId]
+    const marker = g === 'none' ? t('その他') : s?.markerNames[Number(g) as Marker] || t('マーカー {0}', g)
+    out.push({ at: out.length ? i : 0, title: sceneIds.size > 1 ? `${s?.name ?? ''} - ${marker}` : marker })
+  })
+  return out.length > 1 ? out : []
+}
+
+// The same chapters for the MP4 itself (ffmpeg's metadata file), so players such as VLC list them and
+// jump to them. Written while the segments are joined with stream copy: the picture is not touched.
+// Every chapter keeps its place, however short (the 10 s rule is YouTube's alone); times in ms.
+export function chapterMetadata(chapters: { startSec: number; title: string }[], totalSec: number): string {
+  // A title on one line, with the signs the format reserves escaped by a backslash.
+  const esc = (v: string) => v.replace(/[\r\n]+/g, ' ').replace(/[\\=;#]/g, c => `\\${c}`)
+  const ms = (sec: number) => Math.max(0, Math.round(sec * 1000))
+  const starts = chapters.map((c, i) => (i === 0 ? 0 : c.startSec))
+  const lines = [';FFMETADATA1']
+  chapters.forEach((c, i) => lines.push('[CHAPTER]', 'TIMEBASE=1/1000', `START=${ms(starts[i])}`, `END=${ms(starts[i + 1] ?? totalSec)}`, `title=${esc(c.title)}`))
+  return lines.join('\n') + '\n'
 }
 
 // File names for one MP4 per scene: the scene's name with characters Windows won't take replaced,

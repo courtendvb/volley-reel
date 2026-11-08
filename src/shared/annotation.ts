@@ -11,7 +11,8 @@
 // assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 // With a quad its four corners are placed one by one, so the picture (a heatmap from analysis
 // software, say) lies on the court with the camera's perspective; x, y, w, h are then its bounds.
-import { homography, project, type Ctx } from './court'
+import { homography, project, type Ctx, type ZoneCell } from './court'
+import type { DiscPart } from './disc'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
@@ -24,6 +25,7 @@ interface Base {
   showTo?: number
   dash?: Dash // default solid
   opacity?: number // whole object, 0..1; default 1
+  lineOpacity?: number // the line (an outline, an arrow with its heads), 0..1; default 1. Fills keep their own
   groupId?: string // objects with the same group id are selected and moved together
   fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
@@ -64,7 +66,7 @@ export type Annotation = Base & (
   | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
-  | ({ kind: 'polygon'; points: [number, number][]; width: number } & Fillable)
+  | ({ kind: 'polygon'; points: [number, number][]; width: number; cell?: ZoneCell; disc?: DiscPart } & Fillable) // cell: a court zone painted from the zone panel; disc: part of a disc on the court
   // crop: the part of the picture shown (fractions of its width / height); missing = all of it.
   | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop; quad?: Quad }
 )
@@ -195,6 +197,7 @@ export interface StylePatch {
   size?: number
   dash?: Dash
   opacity?: number
+  lineOpacity?: number
   fill?: string | null
   fillOpacity?: number
   heads?: Heads
@@ -211,12 +214,21 @@ export function applyStyle(a: Annotation, s: StylePatch): Annotation {
     return { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
       ...(s.outline !== undefined ? { outline: s.outline } : {}), ...(s.box !== undefined ? { box: s.box } : {}) }
   }
-  const lined = { ...common, width: s.width ?? common.width, ...(s.dash !== undefined ? { dash: s.dash } : {}) }
+  const lined = { ...common, width: s.width ?? common.width, ...(s.dash !== undefined ? { dash: s.dash } : {}),
+    ...(s.lineOpacity !== undefined ? { lineOpacity: s.lineOpacity } : {}) }
   if (lined.kind === 'arrow') return s.heads !== undefined ? { ...lined, heads: s.heads } : lined
   if (lined.kind === 'rect' || lined.kind === 'circle' || lined.kind === 'polygon') {
     return { ...lined, ...(s.fill !== undefined ? { fill: s.fill } : {}), ...(s.fillOpacity !== undefined ? { fillOpacity: s.fillOpacity } : {}) }
   }
   return lined
+}
+
+// A style set on several objects at once (the selected one and those Shift+clicked, with their
+// groups): each takes the parts that suit its kind. `on` limits it to some of them (a line colour
+// does not recolour text, nor a text colour lines).
+export function styleMany(list: Annotation[], ids: string[], s: StylePatch, on: (a: Annotation) => boolean = () => true): Annotation[] {
+  const set = new Set(ids)
+  return list.map(a => (set.has(a.id) && on(a) ? applyStyle(a, s) : a))
 }
 
 export const hasFill = (a: Annotation): boolean => a.kind === 'rect' || a.kind === 'circle' || a.kind === 'polygon'
@@ -300,6 +312,7 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       const pull = head * 0.8
       const sx = heads === 'both' ? x1 + Math.cos(ang) * pull : x1, sy = heads === 'both' ? y1 + Math.sin(ang) * pull : y1
       const ex = heads === 'none' ? x2 : x2 - Math.cos(ang) * pull, ey = heads === 'none' ? y2 : y2 - Math.sin(ang) * pull
+      ctx.globalAlpha *= a.lineOpacity ?? 1
       ctx.lineWidth = lw
       setDash(ctx, a.dash, lw)
       ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke()
@@ -321,7 +334,7 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       ctx.moveTo(a.points[0][0] * W, a.points[0][1] * H)
       for (const [x, y] of a.points.slice(1)) ctx.lineTo(x * W, y * H)
       if (a.kind === 'polygon') { ctx.closePath(); fillAndStroke(ctx, a, a.width * s) }
-      else { ctx.lineWidth = a.width * s; setDash(ctx, a.dash, a.width * s); ctx.stroke() }
+      else { ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = a.width * s; setDash(ctx, a.dash, a.width * s); ctx.stroke() }
     }
   }
   ctx.restore()
@@ -444,11 +457,11 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
   lines.forEach((l, i) => ctx.fillText(l, lineX(i), ty + i * lh))
 }
 
-function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash }, lw: number): void {
+function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash; lineOpacity?: number }, lw: number): void {
   if (a.fill) {
     ctx.save(); ctx.globalAlpha *= a.fillOpacity ?? 1; ctx.fillStyle = a.fill; ctx.fill(); ctx.restore()
   }
-  if (lw > 0) { ctx.lineWidth = lw; setDash(ctx, a.dash, lw); ctx.stroke(); ctx.setLineDash([]) }
+  if (lw > 0) { ctx.save(); ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = lw; setDash(ctx, a.dash, lw); ctx.stroke(); ctx.restore() }
 }
 
 function arrowHead(ctx: Ctx, x: number, y: number, ang: number, head: number): void {

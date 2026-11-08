@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, serveTypeColor, serveTypeName, serveTypes } from './board'
+import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, setDistribution, serveTypeColor, serveTypeName, serveTypes } from './board'
 import { chartWidth } from './chart'
 import type { ParsedDVW, Play } from './types'
 
@@ -227,5 +227,63 @@ describe('boardSlide', () => {
   it('keeps the name and data off the charts: the card has them', () => {
     const c = boardSlide(players(1), 'A', { split: false }, {}).charts[0].chart
     expect([c.look.name, c.look.stats]).toEqual([false, false])
+  })
+})
+
+describe('a setter\'s sets', () => {
+  // Setter #9 (C) sets; the same team's attack right after each comes from a zone.
+  const set = (rallyId: number) => play({ skill: 'E', jersey: 9, playerKey: 'C', rallyId, effect: '+', startZone: 3 })
+  const hit = (rallyId: number, startZone: number, effect = '-') => play({ skill: 'A', rallyId, startZone, effect })
+  const d = match([
+    set(0), hit(0, 4, '#'),
+    set(1), hit(1, 4),
+    set(2), play({ side: 'a', jersey: 9, playerKey: 'B', skill: 'D', rallyId: 2 }), // a set the other team touched next: no attack
+    set(3), hit(3, 3, '#'),
+    set(4), hit(4, 8, '='),
+  ])
+  it('finds the attack after each set, and where it came from', () => {
+    const [s] = boardPlayers([d], 'E')
+    expect(s.key).toBe('C')
+    expect(s.follow?.map(a => a?.startZone ?? null)).toEqual([4, 4, null, 3, 8])
+    const dist = setDistribution(s)
+    expect(dist.total).toBe(4)
+    expect(dist.zones).toEqual([{ zone: 4, n: 2, share: 0.5, kills: 1 }, { zone: 3, n: 1, share: 0.25, kills: 1 }, { zone: 8, n: 1, share: 0.25, kills: 0 }])
+  })
+  it('rates the attacks after the sets', () => {
+    expect(boardRates(boardPlayers([d], 'E')[0], 'E').map(r => [r.label, r.value])).toEqual([['K%', '50%'], ['EFF%', '25%']])
+  })
+  it('draws the distribution as zones, arrows or both, no charts', () => {
+    const cols = boardPlayers([d], 'E')
+    const kinds = (view: 'zones' | 'arrows' | 'both') => {
+      const s = boardSlide(cols, 'E', { split: false, setView: view }, {})
+      expect(s.charts).toHaveLength(0)
+      return s.annotations
+    }
+    const zones = kinds('zones'), arrows = kinds('arrows'), both = kinds('both')
+    expect(zones.filter(a => a.kind === 'arrow')).toHaveLength(0)
+    expect(arrows.filter(a => a.kind === 'arrow')).toHaveLength(3)
+    expect(both.filter(a => a.kind === 'arrow')).toHaveLength(3)
+    expect(zones.some(a => a.kind === 'text' && a.text === '50%')).toBe(true)
+    // painted zones: the most used the strongest
+    const painted = zones.filter(a => a.kind === 'rect' && a.fill && a.fill !== '#F3D9B1' && a.fill !== '#FFFFFF')
+    expect(painted).toHaveLength(3)
+  })
+})
+
+describe('attention', () => {
+  const d = match([play({}), play({ rallyId: 1 })])
+  it('puts a red Attention tag in yellow right of the name, in the name\'s group', () => {
+    const [p] = boardPlayers([d], 'S')
+    const s = boardSlide([{ ...p, attention: true }], 'S', { split: false }, { A: { assetId: 'x', width: 300, height: 400 } })
+    const tag = s.annotations.find(a => a.kind === 'text' && a.text === 'Attention')!
+    const name = s.annotations.find(a => a.kind === 'text' && a.text === 'TANAKA')!
+    expect(tag.groupId).toBe(name.groupId)
+    expect(tag.kind === 'text' && [tag.color, tag.box?.fill]).toEqual(['#FACC15', '#DC2626'])
+    expect(tag.kind === 'text' && name.kind === 'text' && tag.x).toBeGreaterThan(name.kind === 'text' ? name.x : 1)
+  })
+  it('puts it there without a photo too, and none for a player not marked', () => {
+    const [p] = boardPlayers([d], 'S')
+    expect(boardSlide([{ ...p, attention: true }], 'S', { split: false }, {}).annotations.some(a => a.kind === 'text' && a.text === 'Attention')).toBe(true)
+    expect(boardSlide([p], 'S', { split: false }, {}).annotations.some(a => a.kind === 'text' && a.text === 'Attention')).toBe(false)
   })
 })

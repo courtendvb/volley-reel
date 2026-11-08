@@ -3,7 +3,8 @@
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
 import type { PlacedChart } from './board'
-import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
+import { cleanSetChart, cleanSetCourt, cleanSetFilter, setFilterCount, type SetFilter, DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_NAMES, SET_TARGETS, drawSetChart, setChart, setChartBox, setExtremes, type SetChart, type SetChartStyle, type SetCourtLayer, type SetCourtStyle } from './setChart'
+import { cleanChart, LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play, Side } from './types'
 
 export interface Pt { x: number; y: number }
@@ -134,6 +135,22 @@ export function floorAt(fit: CourtFit | Pick<CourtFit, 'corners'>, p: Pt): Pt | 
 // A rectangle lying on the floor, square to the court's lines, from one point of the picture to the
 // other (0..1): its four corners in the picture, so it shows in the court's perspective (a trapezoid,
 // usually). Null when a point is above the horizon.
+// Painting zones: the court cut into the 9 zones of each half (div 3: 3 across, 6 down) or each zone
+// into 9 again (div 9: 9 across, 18 down). Row 0 is the far end line, col 0 the camera's left, as in
+// ZONE_NUMBERS. A cell's corners in the picture (0..1), for a polygon laid on the fitted court.
+export type ZoneDiv = 3 | 9
+export interface ZoneCell { row: number; col: number; div: ZoneDiv }
+export function zoneCellQuad(corners: CourtFit['corners'], c: ZoneCell): [number, number][] {
+  const H = homography(corners), rows = c.div * 2
+  return ([[c.col, c.row], [c.col + 1, c.row], [c.col + 1, c.row + 1], [c.col, c.row + 1]] as const)
+    .map(([u, v]) => { const p = project(H, u / c.div, v / rows); return [p.x, p.y] as [number, number] })
+}
+// The zone number (1–9) a cell lies in.
+export const zoneOfCell = (c: ZoneCell): number => {
+  const k = c.div / COLS
+  return ZONE_NUMBERS[Math.floor(c.row / k)][Math.floor(c.col / k)]
+}
+
 export function floorRect(corners: CourtFit['corners'], from: Pt, to: Pt): [number, number][] | null {
   const a = floorAt({ corners }, from), b = floorAt({ corners }, to)
   if (!a || !b) return null
@@ -196,9 +213,12 @@ export interface PlayZones {
   end: Spot | null
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
+  skill?: string // the play's, for the style of its player marks (markStyle)
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
-interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart }
+interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
+// The setter's distribution on the court in the picture, on their team's half (near: by the camera).
+interface SetCourt { chart: SetChart; near: boolean; layer: SetCourtLayer }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
@@ -325,12 +345,20 @@ function scattered(c: ClickPoint, i: number): ClickPoint {
 // this play is on: where their shots of the same kind landed (shotKind), all their serves' flights,
 // and the landings as points: all their serves, or their attacks of the same code.
 // source: for the direction chart, the plays of the search and the player's name.
-export interface ChartSource { filtered?: () => Play[]; name?: string }
-export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style: GridStyle, plays: () => Play[], source?: ChartSource): PlayerMarks | null {
-  if (play.skill !== 'S' && play.skill !== 'A') return null
+export interface ChartSource { filtered?: () => Play[]; name?: string; setterName?: (set: Play) => string } // setterName: the set chart's title
+export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, plays: () => Play[], source?: ChartSource): PlayerMarks | null {
+  const style = markStyle(style0, play.skill)
+  // A set, or an attack after one: the setter's distribution in that rotation.
+  const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
+  const setMarks: PlayerMarks = setsAll ? {
+    ...(style.setChart ? { setChart: setsAll } : {}),
+    ...(style.setCourt ? { setCourt: { chart: setsAll, near: nearSide(fit, play) === play.side, layer: style.setCourt.layer } } : {}),
+  } : {}
+  const sets = Object.keys(setMarks).length ? setMarks : null
+  if (play.skill !== 'S' && play.skill !== 'A') return sets
   const heatOn = !!style.heat, flightsOn = !!style.serveFlights && play.skill === 'S'
   const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A', chartOn = !!style.chart && (play.skill === 'A' || play.skill === 'S')
-  if (!heatOn && !flightsOn && !landingsOn && !conesOn && !chartOn) return null
+  if (!heatOn && !flightsOn && !landingsOn && !conesOn && !chartOn) return sets
   const on = clickOn(nearSide(fit, play) === play.side)
   const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && playClicks(p).end)
   const flying = shots.filter(p => playClicks(p).start), kind = shotKind(play)
@@ -352,6 +380,7 @@ export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & Z
     ...(landingsOn ? { landings: marks(play.skill === 'S' ? shots : same, true) } : {}),
     ...(flightsOn ? { flights: { fit, paths: flying.map(path) } } : {}),
     ...(chartOn ? { chart: directionChart(play, style.chart!, plays, source) } : {}),
+    ...(sets ?? {}),
     ...(conesOn ? coneMark(fit, style.coneColor, same.flatMap(p => { const c = playClicks(p), start = on(c.start), end = on(c.end); return start && end ? [{ start, end }] : [] })) : {}),
   }
 }
@@ -369,7 +398,7 @@ export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>):
 // plays and style: for the player's other shots (playerMarks), when the court tab shows them.
 export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[], source?: ChartSource): PlayZones {
   const player = style && plays ? playerMarks(play, fit, style, plays, source) : null
-  return { ...playZones(play, fit, next), points: playPoints(play, fit), ...(player ? { player } : {}) }
+  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, ...(player ? { player } : {}) }
 }
 
 // An attacker's cones: from where they hit, five equal angles over the other half, each with its share
@@ -717,7 +746,54 @@ export interface GridStyle {
   cones?: boolean // on an attack: the player's shots of that code as cones across the court
   coneColor?: string // their colour, unless the usual one
   chart?: ChartStyle // on an attack: the player's direction chart over the picture; none: off
+  setChart?: SetChartStyle // on a set or the attack after one: the setter's distribution in that rotation, as a chart in a corner; none: off
+  setFilter?: SetFilter // what the setter's sets above are kept to: rotations, setter calls, the other team's rotations
+  setCourt?: SetCourtStyle // the same laid on the court in the picture: where the sets were given, or each place's share; none: off
+  // The marks of the player's other plays above, kept apart for each kind of play selected: a serve, an
+  // attack or a set shows its own. When there, these win over the fields above (markStyle).
+  bySkill?: Partial<Record<MarkSkill, PlayerMarkStyle>>
   detail: 'zone' | 'sub' | 'point' // the play's zones as whole zones, their sub-zones, or the scout's clicks as points; each falls back to the zone where the DVW lacks it
+}
+
+export type MarkSkill = 'S' | 'A' | 'E'
+const MARK_KEYS = ['heat', 'serveFlights', 'landings', 'cones', 'chart', 'setChart', 'setCourt', 'setFilter'] as const
+export type PlayerMarkStyle = Pick<GridStyle, typeof MARK_KEYS[number]>
+export const markSkill = (skill: string | null | undefined): MarkSkill | null => (skill === 'S' || skill === 'A' || skill === 'E' ? skill : null)
+// The style for a play of this skill: its own marks, none for other skills. A style without bySkill
+// (made in code, or saved before) is taken as it is.
+export function markStyle(style: GridStyle, skill: string | null | undefined): GridStyle {
+  if (!style.bySkill) return style
+  const k = markSkill(skill), rest: GridStyle = { ...style }
+  for (const key of MARK_KEYS) delete rest[key]
+  return { ...rest, ...(k ? style.bySkill[k] ?? {} : {}) }
+}
+// A style saved before the marks were kept per skill: each skill takes what applied to it.
+export function marksBySkill(style: GridStyle): GridStyle {
+  if (style.bySkill) return style
+  const pick = (keys: readonly (typeof MARK_KEYS[number])[]): PlayerMarkStyle => Object.fromEntries(keys.filter(k => style[k]).map(k => [k, style[k]]))
+  const rest: GridStyle = { ...style }
+  for (const key of MARK_KEYS) delete rest[key]
+  return { ...rest, bySkill: { S: pick(['heat', 'serveFlights', 'landings', 'chart']), A: pick(['heat', 'landings', 'cones', 'chart', 'setChart']), E: pick(['setChart']) } }
+}
+
+// A style as read back from storage: anything missing or of the wrong kind takes the usual value;
+// one saved before the marks were per skill is split up (marksBySkill).
+export function cleanGridStyle(x: unknown): GridStyle {
+  const o = { ...DEFAULT_GRID_STYLE, ...(x && typeof x === 'object' ? x : {}) } as GridStyle & Record<string, unknown>
+  const marks = (m: Record<string, unknown> | undefined): PlayerMarkStyle => ({
+    ...(m?.heat ? { heat: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
+    ...(m?.chart ? { chart: cleanChart(m.chart) } : {}), ...(m?.setChart ? { setChart: cleanSetChart(m.setChart) } : {}), ...(m?.setCourt ? { setCourt: cleanSetCourt(m.setCourt) } : {}), ...(m?.setFilter && setFilterCount(cleanSetFilter(m.setFilter)) ? { setFilter: cleanSetFilter(m.setFilter) } : {}),
+  })
+  const base: GridStyle = {
+    grid: o.grid !== false, color: typeof o.color === 'string' ? o.color : DEFAULT_GRID_STYLE.color, opacity: typeof o.opacity === 'number' ? o.opacity : DEFAULT_GRID_STYLE.opacity,
+    lineWidth: typeof o.lineWidth === 'number' ? o.lineWidth : DEFAULT_GRID_STYLE.lineWidth, playZones: o.playZones !== false,
+    flight: !!o.flight, flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
+    ...(typeof o.heatOpacity === 'number' ? { heatOpacity: o.heatOpacity } : {}), ...(typeof o.coneColor === 'string' ? { coneColor: o.coneColor } : {}),
+  }
+  const by = o.bySkill as Record<string, Record<string, unknown>> | undefined
+  return by && typeof by === 'object'
+    ? { ...base, bySkill: { S: marks(by.S), A: marks(by.A), E: marks(by.E) } }
+    : marksBySkill({ ...base, ...marks(o) })
 }
 
 export const DEFAULT_GRID_STYLE: GridStyle = {
@@ -731,7 +807,8 @@ const END_COLOR = '#EF4444'
 export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
-export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: GridStyle, zones: PlayZones | null, flight: number | null = 1): void {
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1): void {
+  const style = markStyle(style0, zones?.skill)
   const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
   const area = (s: Spot) => spotArea(s, style.detail === 'sub')
@@ -747,6 +824,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
 
   if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
+  if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
@@ -793,6 +871,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style: 
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
     if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
+  if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
 
@@ -849,5 +928,50 @@ function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {
   ctx.lineTo(base.x + uy * head * 0.6, base.y - ux * head * 0.6)
   ctx.closePath()
   ctx.fill()
+  ctx.restore()
+}
+
+// The setter's distribution on the court in the picture, on their team's half: where each set was
+// given (coloured by where it went: filled a kill, open in play, a cross a point lost), or each place
+// painted by its share with its name and share, the most set to framed red and the least blue.
+function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt): void {
+  const H = homography(inPixels(fit, w, h))
+  // The team's view (u from its left, v from its end line) as court units, then the picture.
+  const on = (u: number, v: number) => (s.near ? project(H, u, 1 - v) : project(H, 1 - u, v))
+  const c = s.chart
+  ctx.save()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  if (s.layer === 'spots') {
+    const r = Math.max(3, w / 170)
+    for (const d of c.dots) {
+      if (!d.click) continue
+      const p = on(d.click.u, d.click.v), color = SET_COLORS[d.target]
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = Math.max(1.5, r * 0.45)
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+      if (d.result === 'kill') ctx.fill(); else { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill(); ctx.stroke() }
+      if (d.result === 'lost') {
+        const k = r * 0.7
+        ctx.beginPath(); ctx.moveTo(p.x - k, p.y - k); ctx.lineTo(p.x + k, p.y + k); ctx.moveTo(p.x + k, p.y - k); ctx.lineTo(p.x - k, p.y + k); ctx.stroke()
+      }
+    }
+    ctx.restore()
+    return
+  }
+  const top = Math.max(...SET_TARGETS.map(k => c.by[k].n), 1), { most, least } = setExtremes(c)
+  for (const k of SET_TARGETS) {
+    const a = SET_AREAS[k], n = c.by[k].n
+    if (!a || !n) continue
+    const ring = [on(a.u[0], a.v[0]), on(a.u[1], a.v[0]), on(a.u[1], a.v[1]), on(a.u[0], a.v[1])]
+    ctx.beginPath(); ring.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath()
+    ctx.globalAlpha = 0.2 + 0.45 * (n / top); ctx.fillStyle = SET_COLORS[k]; ctx.fill(); ctx.globalAlpha = 1
+    if (k === most || k === least) { ctx.strokeStyle = k === most ? '#DC2626' : '#2563EB'; ctx.lineWidth = Math.max(3.5, w / 220); ctx.stroke() }
+    const mid = on((a.u[0] + a.u[1]) / 2, (a.v[0] + a.v[1]) / 2), fs = Math.max(11, w / 55)
+    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2.5, fs * 0.18); ctx.strokeStyle = '#000000'; ctx.fillStyle = '#FFFFFF'
+    ctx.font = `bold ${fs * 0.8}px sans-serif`
+    ctx.strokeText(SET_NAMES[k], mid.x, mid.y - fs * 0.55); ctx.fillText(SET_NAMES[k], mid.x, mid.y - fs * 0.55)
+    ctx.font = `bold ${fs}px sans-serif`
+    const share = `${Math.round((n / c.total) * 100)}%`
+    ctx.strokeText(share, mid.x, mid.y + fs * 0.45); ctx.fillText(share, mid.x, mid.y + fs * 0.45)
+  }
   ctx.restore()
 }

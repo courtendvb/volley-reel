@@ -1,7 +1,9 @@
 import { PaletteColor } from './PaletteColor'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { ZonePainter } from './ZonePainter'
+import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
-  COLORS, DEFAULT_TEXT_BOX, applyStyle, boxQuad, hasFill, isPoints, withGroups, withQuad,
+  COLORS, DEFAULT_TEXT_BOX, styleMany, boxQuad, hasFill, isPoints, withGroups, withQuad,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
@@ -39,7 +41,7 @@ interface Props {
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')],
-  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
+  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['floorDisc', '⬭', '', t('コート上の円柱（中心から外へドラッグ。コートの遠近と厚みで立体に見える。厚みと半径は後から変えられる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
   ['number', '①', '', t('丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）')],
   ['polygon', '⬠', 'P', t('多角形（クリックで頂点）')], ['freehand', '✎', '', t('フリーハンド')], // no key: F and D step through the scene's clips
 ]
@@ -50,21 +52,35 @@ export const KIND_LABEL: Record<Annotation['kind'], string> = {
 // Format panel in the spirit of Office's shape format pane: line, fill and text for the selected
 // object — or, with nothing selected, for the next one drawn — plus show/hide timing.
 export function AnnotationTools(p: Props) {
+  const [zonesOpen, setZonesOpen] = useState(false) // the zone painter under the tools
+  const [zoneColor, setZoneColor] = useState('#EF4444')
   const sel = p.annotations.find(a => a.id === p.selectedId) ?? null
   const update = (a: Annotation) => p.onChange(p.annotations.map(x => (x.id === a.id ? a : x)))
-  const set = (patch: StylePatch) => {
-    if (sel) update(applyStyle(sel, patch))
+  // Several picked (Shift+click): the format applies to all of them and their groups, each taking
+  // what suits its kind. The controls show the selected one's values.
+  const many = sel && p.extraIds?.length ? withGroups(p.annotations, [sel.id, ...p.extraIds]) : sel ? [sel.id] : []
+  const picked = p.annotations.filter(a => many.includes(a.id))
+  // A disc's look is its top's: a picked side stands for its top, and the sides follow.
+  const discTop = (id: string) => {
+    const a = p.annotations.find(x => x.id === id)
+    return a?.kind === 'polygon' && a.disc?.part === 'side' ? p.annotations.find(x => x.groupId === a.groupId && x.kind === 'polygon' && x.disc?.part === 'top')?.id ?? id : id
+  }
+  const set = (patch: StylePatch, on?: (a: Annotation) => boolean) => {
+    if (sel) p.onChange(syncDiscSides(styleMany(p.annotations, many.map(discTop), patch, on)))
     else p.onStyle({ ...p.style, ...patch } as AnnStyle)
   }
+  const notText = (a: Annotation) => a.kind !== 'text', isText = (a: Annotation) => a.kind === 'text'
+  const disc = sel?.kind === 'polygon' ? sel.disc ?? null : null // part of a disc on the court
 
   // What the controls show: the selection's values with the old-look defaults filled in.
   const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
     size: sel?.kind === 'text' ? sel.size : p.style.size,
     dash: (sel ? sel.dash : p.style.dash) ?? 'solid',
+    lineOpacity: (sel ? sel.lineOpacity : p.style.lineOpacity) ?? 1,
     fill: sel && hasFill(sel) ? (sel as { fill?: string | null }).fill ?? null : p.style.fill ?? null,
     fillOpacity: sel && hasFill(sel) ? (sel as { fillOpacity?: number }).fillOpacity ?? 1 : p.style.fillOpacity ?? 1,
     heads: (sel?.kind === 'arrow' ? sel.heads : p.style.heads) ?? 'end',
@@ -72,10 +88,11 @@ export function AnnotationTools(p: Props) {
     outline: (sel?.kind === 'text' ? sel.outline : p.style.outline) ?? true,
     box: (sel?.kind === 'text' ? sel.box : p.style.box) ?? null,
   }
-  const lineKinds = kind === null || (kind !== 'text' && kind !== 'image')
-  const fillKinds = kind === null || kind === 'rect' || kind === 'circle' || kind === 'polygon'
-  const textKinds = kind === null || kind === 'text'
-  const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } })
+  const kinds = picked.length > 1 ? picked.map(a => a.kind) : [kind]
+  const lineKinds = kinds.some(k => k === null || (k !== 'text' && k !== 'image'))
+  const fillKinds = kinds.some(k => k === null || k === 'rect' || k === 'circle' || k === 'polygon')
+  const textKinds = kinds.some(k => k === null || k === 'text')
+  const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } }, isText)
   const deleteButton = sel && <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
   const rel = (at: number | undefined, fallback: string) => (at === undefined ? fallback : t('{0}秒', (at - p.clip.in).toFixed(1)))
 
@@ -83,12 +100,16 @@ export function AnnotationTools(p: Props) {
     <div className={`ann-tools${p.disabled ? ' disabled' : ''}`}>
       <div className="ann-row">
         <div className="segmented" role="radiogroup" aria-label={t('注釈ツール')}>
-          {TOOLS.filter(([t]) => t !== 'floorRect' || p.court).map(([t, label, key, title]) => (
+          {TOOLS.filter(([t]) => (t !== 'floorRect' && t !== 'floorDisc') || p.court).map(([t, label, key, title]) => (
             <button key={t} role="radio" aria-checked={p.tool === t} className={p.tool === t ? 'on' : ''} title={key ? `${title} (${key})` : title}
               onClick={() => p.onTool(t)} disabled={p.disabled}>{label}</button>
           ))}
         </div>
         <button onClick={p.onInsertImage} disabled={p.disabled} title={t('画像ファイルか PDF（1ページ目）を動画の上に置く')}>{t('画像・PDF…')}</button>
+        {p.court && (
+          <button className={zonesOpen ? 'on' : ''} aria-pressed={zonesOpen} disabled={p.disabled} onClick={() => setZonesOpen(o => !o)}
+            title={t('コートのゾーン（9 分割・81 分割）を、略式のコートで選んで塗る')}>{t('ゾーンを塗る')}</button>
+        )}
         {sel && sel.kind !== 'text' && sel.kind !== 'arrow' && sel.kind !== 'image' && (
           <button className={p.editPoints ? 'on' : ''} aria-pressed={p.editPoints} disabled={p.disabled}
             title={t('頂点をドラッグして形を変える。辺の中点を引くと頂点が増え、頂点をダブルクリックで消せます。四角・円は多角形になります。')}
@@ -150,14 +171,20 @@ export function AnnotationTools(p: Props) {
               onChange={x => update(x > 0 ? { ...sel, opacity: Math.round((1 - x) * 100) / 100 } : (({ opacity: _o, ...rest }) => rest)(sel))} />
           </>
         )}
-        <span className="muted small">{sel ? t('{0}{1} を編集中', KIND_LABEL[sel.kind], sel.kind === 'text' ? t('「{0}」', sel.text) : '') : t('次に描く図形の書式')}</span>
+        <span className="muted small">{picked.length > 1 ? t('{0} 個をまとめて編集中', picked.length) : sel ? t('{0}{1} を編集中', KIND_LABEL[sel.kind], sel.kind === 'text' ? t('「{0}」', sel.text) : '') : t('次に描く図形の書式')}</span>
       </div>
+
+      {p.court && zonesOpen && (
+        <ZonePainter annotations={p.annotations} onChange={p.onChange} court={p.court} color={zoneColor} disabled={p.disabled} onClose={() => setZonesOpen(false)}
+          picker={<ColorPick label={t('ゾーンの色')} value={zoneColor} onChange={setZoneColor} disabled={p.disabled} />} />
+      )}
 
       <div className="fmt-grid">
         {lineKinds && (
           <Group title={kind === 'rect' || kind === 'circle' || kind === 'polygon' ? t('枠線') : t('線')}>
-            <ColorPick label={t('線の色')} value={v.color} onChange={color => set({ color })} disabled={p.disabled} />
+            <ColorPick label={t('線の色')} value={v.color} onChange={color => set({ color }, notText)} disabled={p.disabled} />
             <Num label={t('太さ')} value={v.width} min={0} max={30} step={1} onChange={width => set({ width })} disabled={p.disabled} />
+            <Pct label={t('線の透明度')} value={1 - v.lineOpacity} onChange={x => set({ lineOpacity: Math.round((1 - x) * 100) / 100 })} disabled={p.disabled} />
             <select aria-label={t('線の種類')} value={v.dash} onChange={e => set({ dash: e.target.value as Dash })} disabled={p.disabled}>
               <option value="solid">{t('実線')}</option><option value="dash">{t('破線')}</option><option value="dot">{t('点線')}</option>
             </select>
@@ -173,18 +200,28 @@ export function AnnotationTools(p: Props) {
             )}
           </Group>
         )}
+        {p.court && (disc || p.tool === 'floorDisc') && (
+          <Group title={t('円柱')}>
+            <Num label={t('厚み（m）')} value={disc ? disc.z : p.style.discHeight ?? 0.2} min={0} max={5} step={0.1} disabled={p.disabled}
+              onChange={z => (disc && sel?.groupId ? p.onChange(reshapeDisc(p.annotations, sel.groupId, p.court!, { z })) : p.onStyle({ ...p.style, discHeight: z }))} />
+            {disc && sel?.groupId && (
+              <Num label={t('半径（m）')} value={disc.r} min={0.1} max={9} step={0.1} disabled={p.disabled}
+                onChange={r => p.onChange(reshapeDisc(p.annotations, sel.groupId!, p.court!, { r }))} />
+            )}
+          </Group>
+        )}
         {fillKinds && (
           <Group title={t('塗り')}>
             <label className="check"><input type="checkbox" checked={!!v.fill} aria-label={t('塗りつぶす')} disabled={p.disabled}
               onChange={e => set({ fill: e.target.checked ? v.fill ?? '#EF4444' : null })} /> {t('塗る')}</label>
             {v.fill && <ColorPick label={t('塗りの色')} value={v.fill} onChange={fill => set({ fill })} disabled={p.disabled} />}
-            {v.fill && <Pct label={t('塗りの透明度')} value={1 - v.fillOpacity} onChange={t => set({ fillOpacity: 1 - t })} disabled={p.disabled} />}
+            {v.fill && <Pct label={t('塗りの透明度')} value={1 - v.fillOpacity} onChange={t => set({ fillOpacity: Math.round((1 - t) * 100) / 100 })} disabled={p.disabled} />}
           </Group>
         )}
         {textKinds && (
           <Group title={t('テキスト')}>
             <ColorPick label={t('文字の色')} value={sel ? v.color : textStyle(p.style).color} disabled={p.disabled}
-              onChange={color => (sel ? set({ color }) : p.onStyle({ ...p.style, textColor: color }))} />
+              onChange={color => (sel ? set({ color }, isText) : p.onStyle({ ...p.style, textColor: color }))} />
             <Num label={t('サイズ')} value={v.size} min={10} max={160} step={2} onChange={size => set({ size })} disabled={p.disabled} />
             <label className="check"><input type="checkbox" checked={v.bold} onChange={e => set({ bold: e.target.checked })} disabled={p.disabled} /> {t('太字')}</label>
             <label className="check"><input type="checkbox" checked={v.outline} onChange={e => set({ outline: e.target.checked })} disabled={p.disabled} /> {t('縁取り')}</label>
@@ -197,7 +234,7 @@ export function AnnotationTools(p: Props) {
             <label className="check"><input type="checkbox" checked={!!v.box.fill} aria-label={t('枠を塗る')} disabled={p.disabled}
               onChange={e => setBox({ fill: e.target.checked ? '#0F172A' : null })} /> {t('塗る')}</label>
             {v.box.fill && <ColorPick label={t('枠の塗り')} value={v.box.fill} onChange={fill => setBox({ fill })} disabled={p.disabled} />}
-            {v.box.fill && <Pct label={t('枠の透明度')} value={1 - v.box.fillOpacity} onChange={t => setBox({ fillOpacity: 1 - t })} disabled={p.disabled} />}
+            {v.box.fill && <Pct label={t('枠の透明度')} value={1 - v.box.fillOpacity} onChange={t => setBox({ fillOpacity: Math.round((1 - t) * 100) / 100 })} disabled={p.disabled} />}
             <label className="check"><input type="checkbox" checked={!!v.box.stroke} aria-label={t('枠線')} disabled={p.disabled}
               onChange={e => setBox({ stroke: e.target.checked ? '#FFFFFF' : null })} /> {t('枠線')}</label>
             {v.box.stroke && <ColorPick label={t('枠線の色')} value={v.box.stroke} onChange={stroke => setBox({ stroke })} disabled={p.disabled} />}

@@ -724,6 +724,7 @@ export const EN: Record<string, string> = {
   "チャートに入れるプレー。同じコード: アタックは同じアタックコード、サーブは同じ開始ゾーン": "The plays in the chart. Same code: an attack's code, or a serve's start zone",
   "全本": "All",
   "同じコード・開始ゾーン": "Same code or start zone",
+  "同じアタックコード": "Same attack code",
   "絞り込みの結果": "The search results",
   "データ": "Data",
   "チャートの位置": "Chart position",

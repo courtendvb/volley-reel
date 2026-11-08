@@ -754,3 +754,12 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 /* A floating panel folded to its header. */
 .floating-panel.folded { min-height: 0; resize: none; }
 .floating-fold { font-size: 13px; padding: 0 4px; text-decoration: none; }
+
+/* The match report: its A4 page as it will print, scrolled in the dialog. */
+.modal.report-dialog { width: min(1280px, 96vw); height: 94vh; max-height: 94vh; gap: 8px; }
+.report-zoom { display: inline-flex; align-items: center; gap: 4px; }
+.report-zoom span { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.report-zoom button { min-width: 30px; font-size: 15px; padding: 2px 8px; }
+.report-bar { display: flex; align-items: center; gap: 10px; }
+.report-bar h2 { margin: 0; }
+.report-page { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--border); border-radius: 4px; background: #FFFFFF; }

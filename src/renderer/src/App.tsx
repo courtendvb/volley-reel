@@ -823,11 +823,11 @@ export function App() {
     const rows = groupRows(r, group, ids)
     return putSlide(spotAt(rows, group, rows.findIndex(x => x.kind === 'clip' && x.id === id) + 1), 'frame')
   }
+  // The data slides read positions from the players: the project's positions put on them.
+  const boardDvws = useMemo(() => Object.values(dvws).map(d => withRoles(d, settings?.roles)), [dvws, settings?.roles])
   // Slides comparing players: each lays out its players, with their photos copied into the project.
   // They go at the end of the open scene's first marker, or into a new scene when none is open.
   const [boardOpen, setBoardOpen] = useState(false)
-  // The data slides read positions from the players: the project's positions put on them.
-  const boardDvws = useMemo(() => Object.values(dvws).map(d => withRoles(d, settings?.roles)), [dvws, settings?.roles])
   const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
   const makeBoard = async (c: BoardChoice) => {
     const { setView, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length

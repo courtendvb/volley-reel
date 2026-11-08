@@ -59,7 +59,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
   }
 }
 
-export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[]): Promise<ExportJob> {
+export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[], chaptersText = false): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
   const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
@@ -69,7 +69,7 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
   const slides = plan.flatMap(p => (p.kind === 'card' && p.card.slide?.bg.kind === 'image' ? [p.card.slide.bg.assetId] : []))
   const images = await preloadAssets([...slides, ...all.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
   try {
-    return await buildItems(plan, overlay, d, outPath, W, H, fpsStr, images.lookup, chapters)
+    return { ...await buildItems(plan, overlay, d, outPath, W, H, fpsStr, images.lookup, chapters), ...(chaptersText ? { chaptersText: true } : {}) }
   } finally {
     images.release()
   }

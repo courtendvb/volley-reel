@@ -5,9 +5,10 @@
 import type { Annotation } from './annotation'
 import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type DirectionChart } from './chart'
 import { directionChart } from './court'
+import { mix } from './overlayDraw'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
-export type BoardSkill = 'S' | 'A'
+export type BoardSkill = 'S' | 'A' | 'E' // E: a setter's sets, shown by where the attack after each came from
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -19,24 +20,33 @@ export interface BoardPlayer {
   won: number // of a server's serves, those whose rally their team won
   code?: string // a column of one attack code: the code, and its name in the DVW
   codeName?: string
+  follow?: (Play | null)[] // a setter's sets: the same team's attack right after each, if there was one
+  attention?: boolean // marked "Attention" on the card: the one to watch
 }
 
 // Everyone who served or attacked, most plays first. keep: only these plays (the search).
 export function boardPlayers(dvws: ParsedDVW[], skill: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
-    for (const p of d.plays) {
+    for (const [i, p] of d.plays.entries()) {
       if (p.skill !== skill || (keep && !keep(p))) continue
       const player = d.players[`${p.side}${p.jersey}`]
       if (!player) continue
       const t = d.teams[p.side === '*' ? 0 : 1], key = p.playerKey
       const had = out.get(key) ?? { key, team: t.code.toUpperCase(), teamName: t.name, player, plays: [], won: 0 }
       had.plays.push(p)
+      if (skill === 'E') (had.follow ??= []).push(attackAfter(d.plays, i))
       if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) had.won++
       out.set(key, had)
     }
   }
   return [...out.values()].sort((a, b) => b.plays.length - a.plays.length)
+}
+
+// The team's next contact after a set, when it is an attack in the same rally.
+function attackAfter(plays: Play[], i: number): Play | null {
+  const set = plays[i], next = plays.slice(i + 1).find(q => q.rallyId === set.rallyId && q.side === set.side && q.skill !== 'E')
+  return next && next.rallyId !== null && next.skill === 'A' ? next : null
 }
 
 const codeOf = (p: Play) => p.code.slice(6, 8)
@@ -73,11 +83,73 @@ const count = (p: BoardPlayer, e: string) => p.plays.filter(x => x.effect === e)
 // The rates on a card: break points and errors of serves; of attacks, kills and efficiency: (kills -
 // errors - blocked) over attempts.
 export function boardRates(p: BoardPlayer, skill: BoardSkill): { label: string; value: string; color: string }[] {
+  if (skill === 'E') return boardRates({ ...p, plays: attacksOf(p) }, 'A') // the attacks after the sets
   const n = p.plays.length, k = count(p, '#'), e = count(p, '='), b = count(p, '/')
   const share = (v: number) => (n ? (v / n) * 100 : 0)
   return skill === 'S'
     ? [{ label: 'BP%', value: pct(p.won, n), color: breakColor(share(p.won)) }, { label: 'ERR%', value: pct(e, n), color: share(e) >= ERR_HIGH ? BAD : PLAIN }]
     : [{ label: 'K%', value: pct(k, n), color: PLAIN }, { label: 'EFF%', value: pct(k - e - b, n), color: PLAIN }]
+}
+
+const attacksOf = (p: BoardPlayer): Play[] => (p.follow ?? []).filter((a): a is Play => !!a)
+
+// Where a setter's sets went: the attacks after them by the zone they were hit from, each with its
+// share of all of them and its kills.
+export interface SetZone { zone: number; n: number; share: number; kills: number }
+export function setDistribution(p: BoardPlayer): { total: number; zones: SetZone[] } {
+  const attacks = attacksOf(p).filter(a => a.startZone !== null), total = attacks.length
+  const zones = [...new Set(attacks.map(a => a.startZone!))].map(zone => {
+    const at = attacks.filter(a => a.startZone === zone)
+    return { zone, n: at.length, share: total ? at.length / total : 0, kills: at.filter(a => a.effect === '#').length }
+  }).sort((a, b) => b.n - a.n)
+  return { total, zones }
+}
+export type SetView = 'zones' | 'arrows' | 'both'
+
+// The attacking team's half seen from above, the net at the top: the zones' rows from the net back,
+// left to right as the team faces the net.
+const HALF_ZONES = [[4, 3, 2], [7, 8, 9], [5, 6, 1]]
+const SETTER_AT = { u: 0.64, v: 0.06 } // where sets are given from: by the net, between zones 3 and 2
+
+// The set distribution as objects on the slide, in a box (0..1 of the picture) w by h: a half court,
+// its zones painted the stronger the more sets went there, and / or arrows from the setter, as thick as
+// the share. Each zone used shows its share, and its count and kill rate. One group, to move as one.
+function setDiagram(p: BoardPlayer, x: number, y: number, h: number, view: SetView, _ink: string): Annotation[] {
+  const { zones } = setDistribution(p), groupId = uid(), w = h / ASPECT, top = Math.max(0, ...zones.map(z => z.share))
+  const at = (u: number, v: number): [number, number] => [x + u * w, y + v * h]
+  const cell = (zone: number) => { const r = HALF_ZONES.findIndex(row => row.includes(zone)), c = HALF_ZONES[r]?.indexOf(zone) ?? -1; return r < 0 ? null : { r, c } }
+  const out: Annotation[] = [{ id: uid(), kind: 'rect', color: '#FFFFFF', x, y, w, h, width: 2, fill: '#F3D9B1', fillOpacity: 1, groupId }]
+  const size = (k: number) => Math.max(11, Math.round(h * 720 * k))
+  for (const z of zones) {
+    const c = cell(z.zone)
+    if (!c || view === 'arrows') continue
+    out.push({ id: uid(), kind: 'rect', color: '#FFFFFF', x: x + (c.c * w) / 3, y: y + (c.r * h) / 3, w: w / 3, h: h / 3, width: 0,
+      fill: mix('#FEE2E2', '#B91C1C', top ? z.share / top : 0), fillOpacity: 0.95, groupId })
+  }
+  for (const i of [1, 2]) {
+    out.push({ id: uid(), kind: 'polyline', color: '#FFFFFF', width: 1.5, points: [at(i / 3, 0), at(i / 3, 1)], groupId })
+    out.push({ id: uid(), kind: 'polyline', color: '#FFFFFF', width: i === 1 ? 2.5 : 1.5, points: [at(0, i / 3), at(1, i / 3)], groupId }) // the attack line thicker
+  }
+  out.push({ id: uid(), kind: 'polyline', color: '#0F172A', width: 5, points: [at(-0.03, 0), at(1.03, 0)], groupId }) // the net
+  if (view !== 'zones') {
+    for (const z of zones) {
+      const c = cell(z.zone)
+      if (!c) continue
+      const [x1, y1] = at(SETTER_AT.u, SETTER_AT.v), [x2, y2] = at((c.c + 0.5) / 3, (c.r + 0.5) / 3 - 0.1) // the tip above the zone's numbers
+      out.push({ id: uid(), kind: 'arrow', color: '#1D4ED8', width: Math.round(2 + 16 * z.share), x1, y1, x2, y2, opacity: 0.85, groupId })
+    }
+    out.push({ id: uid(), kind: 'circle', color: '#FFFFFF', x: x + SETTER_AT.u * w - 0.009, y: y + SETTER_AT.v * h - 0.016, w: 0.018, h: 0.032, width: 2, fill: '#FACC15', fillOpacity: 1, groupId })
+  }
+  for (const z of zones) {
+    const c = cell(z.zone)
+    if (!c) continue
+    const [cx, cy] = at((c.c + 0.5) / 3, (c.r + 0.5) / 3)
+    const strong = view !== 'arrows' && top > 0 && z.share / top > 0.55
+    const color = strong ? '#FFFFFF' : '#0F172A'
+    out.push(words(cx, cy - h * 0.05, pct(z.n, zones.reduce((s, q) => s + q.n, 0)), size(0.1), color, { align: 'center', groupId, ...(view === 'arrows' ? { box: { fill: '#FFFFFF', fillOpacity: 0.85, stroke: null, strokeWidth: 0, padding: 3, radius: 4 } } : {}) }))
+    out.push(words(cx, cy + h * 0.065, `${z.n} · K ${pct(z.kills, z.n)}`, size(0.05), color, { align: 'center', groupId, bold: false }))
+  }
+  return out
 }
 
 // What the numbers say at a glance: many errors in red; many break points in blue, few in red.
@@ -96,10 +168,11 @@ export interface BoardPhoto { assetId: string; width: number; height: number }
 // What a card was made from, so it can be made again with other choices; what it made, so what was
 // added by hand stays. columns: the players and codes on this card, in their places.
 export interface BoardConfig {
-  skill: BoardSkill; team: string; columns: { key: string; code: string | null }[]
+  skill: BoardSkill; team: string; columns: { key: string; code: string | null; attention?: boolean }[]
   split: boolean; notes: boolean; photos: boolean; background: string; searched: boolean
   noteSize?: number; noteFills?: [string, string]
   display?: ChartDisplay // what the charts show
+  setView?: SetView // sets: zones painted, arrows, or both; missing: both
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -112,6 +185,7 @@ export interface BoardOptions {
   noteSize?: number // the notes' height, 1 = the usual (NOTE_SIZE)
   noteFills?: [string, string] // the notes' lines by turns
   display?: ChartDisplay
+  setView?: SetView
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -180,15 +254,26 @@ function framed(x: number, y: number, w: number, h: number, assetId: string, col
   ]
 }
 
+// "Attention": a red tag in yellow letters right of the name (with it in its group), for the player to watch.
+const ATTENTION = '#DC2626', ATTENTION_TEXT = '#FACC15'
+const attentionWidth = (size: number) => (size * 0.66 * 9 + 8) / 1280
+const attentionTag = (cx: number, y: number, size: number, groupId: string): Annotation =>
+  words(cx, y, 'Attention', size, ATTENTION_TEXT, { align: 'center', groupId, box: { fill: ATTENTION, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 3 } })
+
 // One slide's columns, side by side.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[] } {
   const annotations: Annotation[] = [], charts: PlacedChart[] = [], noteIds: string[] = [], notesGroup = uid()
   const style = { ...(opts.style ?? DEFAULT_CHART), ...opts.display, scope: 'player' as const, name: false, stats: false }
   const col = 1 / Math.max(1, columns.length), ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
   const bottom = opts.notes ? noteLines(opts.noteSize).top - 0.015 : 0.95
-  const widthOf = (h: number) => chartWidth(h) / ASPECT
+  const widthOf = (h: number) => (skill === 'E' ? h : chartWidth(h)) / ASPECT // a set diagram is a square half court
+  // The chart of these plays, or for a setter the set diagram, in its box.
+  const place = (p: BoardPlayer, plays: Play[], x: number, y: number, h: number) => {
+    if (skill === 'E') annotations.push(...setDiagram(p, x, y, h, opts.setView ?? 'both', ink))
+    else charts.push({ chart: directionChart(plays[0], style, () => plays), x, y, h })
+  }
+  const countOf = (p: BoardPlayer, plays: Play[]) => (skill === 'E' ? setDistribution(p).total : plays.length)
   columns.forEach((p, i) => {
-    const chartOf = (plays: Play[]) => directionChart(plays[0], style, () => plays)
     const left = i * col + EDGE, width = col - EDGE * 2
     const types = skill === 'S' ? serveTypes(p.plays) : []
     // The same player side by side (their attack codes, say) shares one heading and one photo.
@@ -209,10 +294,16 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const fit = (size: number, room: number, text: string) => Math.min(size, Math.floor((room * 1280) / (text.length * 0.72)))
     const numberW = narrow ? 0.035 : 0.045
     if (first) {
-      const headW = col * span - EDGE * 2, nameGroup = uid(), nameSize = fit(narrow ? 20 : 28, headW - numberW, name)
+      // With "Attention", the name makes room for the tag after it.
+      const tagSize = narrow ? 12 : 15, tagW = p.attention ? attentionWidth(tagSize) + 0.006 : 0
+      const headW = col * span - EDGE * 2, nameGroup = uid(), nameSize = fit(narrow ? 20 : 28, headW - numberW - tagW, name)
       annotations.push({ ...words(left + 0.004, 0.028, String(p.player.jersey), narrow ? 20 : 26, role.text, { box: { fill: role.fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 5, radius: 7 } }) })
       annotations.push(words(left + numberW, 0.028, name, nameSize, ink, { groupId: nameGroup }))
       annotations.push(...underline(left + numberW, left + headW, 0.028 + (nameSize * 1.25) / 720, role.fill === NO_ROLE.fill ? ink : role.fill, nameGroup))
+      if (p.attention) {
+        const after = left + numberW + (name.length * nameSize * 0.72) / 1280 + 0.006, half = attentionWidth(tagSize) / 2
+        annotations.push(attentionTag(Math.min(after + half, left + headW - half), 0.028 + ((nameSize - tagSize) * 0.6) / 720 - 3 / 720, tagSize, nameGroup))
+      }
     }
     if (opts.notes) {
       const note = notesBox(left, width, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length, opts.noteSize, opts.noteFills, notesGroup)
@@ -232,18 +323,18 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
       const cardY = TOP + roleH
       annotations.push(...rateCard(p, skill, cardX, cardY, cardW, cardH, Math.min(20, Math.floor((cardW * 1280) / 5.2))))
       const y = TOP + Math.max(rowH, roleH + cardH) + 0.01, h = Math.min(bottom - y - 0.03, width / widthOf(1)), cx = left + (width - widthOf(h)) / 2
-      charts.push({ chart: chartOf(main), x: cx, y, h })
+      place(p, main, cx, y, h)
       if (mainLabel && !shared) annotations.push(tag(cx + 0.004, y + 0.006, mainLabel, 11, mainColor))
-      annotations.push(words(left + width / 2, y + h + 0.006, `n: ${main.length}`, 13, ink, { align: 'center' }))
+      annotations.push(words(left + width / 2, y + h + 0.006, `n: ${countOf(p, main)}`, 13, ink, { align: 'center' }))
       return
     }
 
     // The card left of the chart.
     const room = width - strip - EDGE, chartX = left + strip + EDGE
     const h = Math.min(bottom - TOP - 0.035, room / widthOf(1))
-    charts.push({ chart: chartOf(main), x: chartX, y: TOP, h })
+    place(p, main, chartX, TOP, h)
     if (mainLabel) annotations.push(tag(chartX + 0.006, TOP + 0.008, mainLabel, 15, mainColor))
-    annotations.push(words(chartX + widthOf(h) / 2, TOP + h + 0.008, `n: ${main.length}`, 16, ink, { align: 'center' }))
+    annotations.push(words(chartX + widthOf(h) / 2, TOP + h + 0.008, `n: ${countOf(p, main)}`, 16, ink, { align: 'center' }))
     let y = TOP
     if (photo) {
       annotations.push(...framed(left, y, photoW, tall, photo.assetId, ink))
@@ -254,7 +345,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     y += cardH + 0.018
     if (second) {
       const small = Math.min(bottom - y - 0.03, strip / widthOf(1))
-      charts.push({ chart: chartOf(second.plays), x: left, y, h: small })
+      place(p, second.plays, left, y, small)
       annotations.push(tag(left + 0.004, y + 0.006, serveTypeName(second.type), 12, serveTypeColor(second.type)))
       annotations.push(words(left + widthOf(small) / 2, y + small + 0.006, `n: ${second.plays.length}`, 12, ink, { align: 'center' }))
     }

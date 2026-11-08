@@ -303,7 +303,8 @@ export interface ExportJob {
   fpsStr: string // e.g. '30000/1001'
   items: ExportItem[]
   fadeSec?: number // fade in and out of black on every item (clips and cards)
-  chapters?: { item: number; title: string }[] // YouTube chapters starting at these items: a .txt next to the MP4
+  chapters?: { item: number; title: string }[] // chapters starting at these items, written into the MP4 (VLC lists them)
+  chaptersText?: boolean // and as YouTube's list, a .txt next to the MP4
 }
 
 type CourtCorners = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]

@@ -3,7 +3,7 @@
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
 import type { Ctx } from './court'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardKind, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
 
@@ -124,16 +124,27 @@ const titleLines = (name: string, fallback: string): string[] => {
 // logo: the opponent's logo, drawn beside the marker title or above the scene title.
 // Returns the title's box in pixels (for the card editor to grab). Position and size come from
 // s.markerLayout / s.sceneLayout, which the editor changes.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo?: CanvasImageSource | null): Box {
+// The logo can instead have its own place and size (s.logos, per kind of card) or be left out; the
+// returned box then carries the logo's own box too, for the editor.
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo0?: CanvasImageSource | null): TitleBox {
   const k = H / 720
+  const place = logo0 ? s.logos?.[cardKind(d)] : undefined
+  const logo = place === undefined ? logo0 ?? null : null // drawn with the title
   ctx.save()
   fillRect(ctx, cardBackground(s, theme), 0, 0, W, H)
+  const own = (): Box | undefined => {
+    if (!logo0 || !place || place === 'hidden') return undefined
+    const h = place.h * H, w = h * logoRatio(logo0), b = { x: place.x * W - w / 2, y: place.y * H - h / 2, w, h }
+    ctx.drawImage(logo0, b.x, b.y, b.w, b.h)
+    return b
+  }
   if (d.marker === null) {
     // The video's opening card is drawn like a scene card, larger by default, with its own layout.
     const L = d.layout ?? (d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT)
-    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo ?? null, L)
+    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo, L)
+    const ownBox = own()
     ctx.restore()
-    return box
+    return ownBox ? { ...box, logo: ownBox } : box
   }
   // Marker cards: 3× the base size times the layout's scale, the title's top-left at the layout's
   // point (10% / 30% by default); shrunk to stay inside the frame when the name is long.
@@ -170,16 +181,19 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
     text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
   }
   names.forEach((n, i) => text(ctx, n, px + slant + 14 * q, y + h / 2 + (i - more / 2) * 34 * q, nameFont, TEXT, 0.08 * 28 * q))
-  if (logo) ctx.drawImage(logo, x + total - logoH * lr, top, logoH * lr, logoH) // as tall as the whole title
+  const logoBox = logo ? { x: x + total - logoH * lr, y: top, w: logoH * lr, h: logoH } : own()
+  if (logo) ctx.drawImage(logo, logoBox!.x, logoBox!.y, logoBox!.w, logoBox!.h) // as tall as the whole title
   ctx.restore()
-  return { x, y: top, w: total, h: logoH }
+  return { x, y: top, w: total, h: logoH, ...(logoBox ? { logo: logoBox } : {}) }
 }
 
 export interface Box { x: number; y: number; w: number; h: number }
+export type TitleBox = Box & { logo?: Box } // the logo's box, beside the title or on its own
+export const cardKind = (d: { marker: number | null; video?: boolean }): CardKind => (d.video ? 'video' : d.marker === null ? 'scene' : 'marker')
 
 // A card or a slide (a card with `slide`). Returns the title's box, or null for a slide.
 export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof drawTitleCard>[3] & { slide?: { bg: SlideBg } }, s: OverlaySettings['titleCard'],
-  theme: OverlayTheme, logo: CanvasImageSource | null, image: ImageLookup): Box | null {
+  theme: OverlayTheme, logo: CanvasImageSource | null, image: ImageLookup): TitleBox | null {
   if (!card.slide) return drawTitleCard(ctx, W, H, card, s, theme, logo)
   drawSlide(ctx, W, H, card.slide.bg, cardBackground(s, theme), image)
   return null
@@ -207,7 +221,7 @@ function logoRatio(img: CanvasImageSource): number {
 }
 
 // The scene title (with its match line and the logo above), centered on the layout's point.
-function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null, L: CardLayout): Box {
+function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null, L: CardLayout): TitleBox {
   const k = k0 * L.scale
   const nameFont = font(36 * k), matchFont = font(12 * k, 400)
   const labels = titleLines(name, 'SCENE')
@@ -227,14 +241,15 @@ function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string,
     ctx.textBaseline = 'middle'
     text(ctx, match, cx - mw / 2, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
   }
-  if (logo) ctx.drawImage(logo, cx - lw / 2, y - (match ? 44 : 20) * k - lh, lw, lh)
+  const logoBox = logo ? { x: cx - lw / 2, y: y - (match ? 44 : 20) * k - lh, w: lw, h: lh } : null
+  if (logoBox) ctx.drawImage(logo!, logoBox.x, logoBox.y, logoBox.w, logoBox.h)
   const px = x + blockW - 6 * k
   fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])
   fillPoly(ctx, theme.accent, [[x, y], [x + blockW, y], [x + blockW - slant, y + h], [x, y + h]])
   ctx.textBaseline = 'middle'
   labels.forEach((l, i) => text(ctx, l, px + slant + 18 * k, y + h / 2 + (i - more / 2) * 44 * k, nameFont, TEXT, 0.08 * 36 * k))
   const w = Math.max(total, mw, lw)
-  return { x: cx - w / 2, y: y - above, w, h: above + h }
+  return { x: cx - w / 2, y: y - above, w, h: above + h, ...(logoBox ? { logo: logoBox } : {}) }
 }
 
 // Top / bottom × left / center / right, with a margin of 2.5% of the height.

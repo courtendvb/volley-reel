@@ -7,7 +7,8 @@ import { t } from '../../../shared/i18n'
 
 // The video sits in a box with its exact aspect ratio, so an overlay (annotations) laid over the
 // box lines up with the picture — normalized 0..1 coordinates map straight onto it.
-export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: { w: number; h: number }) => ReactNode }) {
+// editMode: the edit mode's pencil, left of the maximize button: the stage alone, the side columns put away.
+export function VideoPane({ match, overlay, editMode }: { match: Match; overlay?: (size: { w: number; h: number }) => ReactNode; editMode?: { on: boolean; onToggle: () => void } }) {
   const ref = useRef<HTMLVideoElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
@@ -39,14 +40,14 @@ export function VideoPane({ match, overlay }: { match: Match; overlay?: (size: {
           {overlay && box.w > 0 && overlay(box)}
         </div>
       </div>
-      <Transport />
+      <Transport editMode={editMode} />
     </div>
   )
 }
 
 // Play / step buttons, the seek bar and the time. The only part that changes every frame, so it
 // subscribes on its own: the video box and the layers over it don't re-render as the video plays.
-function Transport() {
+function Transport({ editMode }: { editMode?: { on: boolean; onToggle: () => void } }) {
   const [s, setS] = useState<PlaybackState>(playback.current)
   useEffect(() => playback.subscribe(setS), [])
   const max = useMaximized()
@@ -62,6 +63,8 @@ function Transport() {
         />
         <span className="time">{formatTime(s.time, true)} / {formatTime(s.duration)}</span>
         {max && s.seq && <button onClick={() => playback.stopSequence()} title={t('通し再生を止める')}>■</button>}
+        {editMode && <button className={`focus-edit-btn${editMode.on ? ' on' : ''}`} aria-pressed={editMode.on} onClick={editMode.onToggle}
+          title={editMode.on ? t('編集モードを終えて、左右の欄を戻す') : t('編集モード: 左右の欄をしまって、動画（スライド）と編集の欄だけを大きく出す')}>✎</button>}
         <button className="maximize" aria-pressed={max} onClick={() => void toggleMaximized()} title={max ? t('元の大きさに戻す (M / Esc)') : t('動画を最大化 (M)')}>{max ? '🗗' : '⛶'}</button>
       </div>
   )

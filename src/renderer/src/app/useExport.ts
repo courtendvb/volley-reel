@@ -6,7 +6,7 @@ import type { Clip, Marker, Reel } from '../../../shared/reel'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { flightTiming, playMarks, type GridStyle } from '../../../shared/court'
 import type { ExportEvent, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
-import { planScene, planSceneWithCard, planVideoChapters, sceneFileNames, type PlanItem, type Video } from '../../../shared/video'
+import { planChapters, planScene, planSceneWithCard, planVideoChapters, sceneFileNames, type PlanItem, type Video } from '../../../shared/video'
 import type { ClipInfo } from '../components/ReelPanel'
 import type { ExportTarget } from '../components/ExportPanel'
 import { EXPORT_HEIGHT, buildExportJob } from '../exportRender'
@@ -49,7 +49,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
       // YouTube only shows chapters when there are 3 or more and each is 10 seconds or longer.
       const short = ev.shortChapters ?? [], few = (ev.chapterCount ?? 0) < 3
       const why = [few ? t('チャプターが {0} つだけ', ev.chapterCount) : '', short.length ? t('10 秒未満: {0}', short.join(t('、'))) : ''].filter(Boolean).join(t('・'))
-      const chapters = !ev.chaptersPath ? '' : t('。YouTube のチャプターを「{0}」に書き出しました{1}', ev.chaptersPath.split(/[\\/]/).pop(), why ? t('（{0}。YouTube では 3 つ以上・各 10 秒以上でないとチャプターになりません）', why) : '')
+      const chapters = !ev.chaptersPath ? (ev.chapterCount ? t('。チャプター {0} 個を動画に入れました（VLC の「再生 → チャプター」で飛べます）', ev.chapterCount) : '') : t('。YouTube のチャプターを「{0}」に書き出しました{1}', ev.chaptersPath.split(/[\\/]/).pop(), why ? t('（{0}。YouTube では 3 つ以上・各 10 秒以上でないとチャプターになりません）', why) : '')
       setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: t('書き出しました（{0} 秒分を {1} 秒、{2} MB）{3}', Math.round(ev.footageSec), Math.round(ev.elapsedSec), (ev.sizeBytes / 1e6).toFixed(1), chapters) })
     }
     else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: t('{0}書き出しに失敗しました: {1}{2}', at, ev.message, run ? t('（残りのシーンは書き出していません）') : '') })
@@ -76,9 +76,12 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
           court: c => {
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
             const dvws = latest.current.dvwsRef ?? {}
-            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play) }), flight: flightTiming(play, ms[c.matchId].offsetSec, c) } : null
+            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play), setterName: set => chartName(dvws[c.matchId], set) }), flight: flightTiming(play, ms[c.matchId].offsetSec, c) } : null
           },
-          courtStyle: gridStyleRef.current }, outPath, ov.chapters.enabled ? whole?.chapters : undefined)
+          courtStyle: gridStyleRef.current }, outPath,
+        // Chapters always go into the MP4 (the whole video's scenes and markers, or a scene's markers);
+        // YouTube's list beside it only for the whole video, when it is on.
+        whole?.chapters ?? planChapters(plan, byId), !!whole && ov.chapters.enabled)
       await api.startExport(job)
       return job
     } catch (e) {

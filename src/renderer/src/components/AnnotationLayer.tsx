@@ -9,7 +9,8 @@ import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { t } from '../../../shared/i18n'
-import { floorRect, type CourtFit } from '../../../shared/court'
+import { floorAt, floorRect, type CourtFit } from '../../../shared/court'
+import { discOutline, discShapes, type FloorDisc } from '../../../shared/disc'
 
 const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AED', scene: '#D97706', video: '#059669' }
 const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
@@ -24,10 +25,10 @@ function editColors(color: string): { color: string; background: string; caretCo
   return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
 }
 
-export type Tool = 'select' | AnnotationKind | 'triangle' | 'number' | 'floorRect'
+export type Tool = 'select' | AnnotationKind | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
-export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string }
+export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string; discHeight?: number } // discHeight: metres, for new discs on the court
 export const textStyle = (s: AnnStyle): AnnStyle => ({ ...s, color: s.textColor ?? '#FFFFFF' })
 
 interface Props {
@@ -42,6 +43,7 @@ interface Props {
   onToggleExtra?: (id: string) => void
   scopeOf?: (id: string) => AnnScope | null // where each object lives (frame color and tag)
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
+  onMade?: () => void // an object was just made: the tools go back to 選択
   cropping: boolean // the selected picture is being cropped: handles move the frame, dragging moves the picture
   always?: boolean // a title card's objects: shown whatever the video is doing
   floor?: CourtFit['corners'] | null // the court fitted to the video: shapes can be laid on its floor
@@ -60,6 +62,7 @@ type Drag =
 
 
 const uid = () => crypto.randomUUID()
+const DISC_HEIGHT = 0.2 // metres, a new disc's thickness unless set
 const plainBox = (a: [number, number], b: [number, number]): [number, number][] => [a, [b[0], a[1]], b, [a[0], b[1]]]
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const HANDLE_PX = 7 // grab radius around a handle
@@ -208,16 +211,27 @@ export function AnnotationLayer(p: Props) {
     const a = applyStyle({ id: uid(), kind: q.kind, color: p.style.color, width: p.style.width, points: q.points } as Annotation, p.style)
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
+    p.onMade?.()
   }
 
   const onFloor = (a: [number, number], b: [number, number]): [number, number][] =>
     (p.floor && floorRect(p.floor, { x: a[0], y: a[1] }, { x: b[0], y: b[1] })) || plainBox(a, b)
+  // A disc on the court: dragged from its centre out to its edge; its thickness from the style.
+  const discAt = (from: [number, number], to: [number, number]): FloorDisc | null => {
+    const c = p.floor && floorAt({ corners: p.floor }, { x: from[0], y: from[1] }), e = p.floor && floorAt({ corners: p.floor }, { x: to[0], y: to[1] })
+    if (!c || !e) return null
+    return { u: c.x, v: c.y, r: Math.max(0.1, Math.round(Math.hypot((e.x - c.x) * 9, (e.y - c.y) * 18) * 10) / 10), z: p.style.discHeight ?? DISC_HEIGHT }
+  }
+  const discFill = () => p.style.fill ?? p.style.color
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
     const pt = at(e)
     if (p.tool === 'number') {
       e.preventDefault()
-      p.onChange([...p.annotations, numberCircle(uid(), pt[0], pt[1], nextNumber(p.annotations), p.style.color, Math.max(14, Math.round(p.style.size * 0.6)))])
+      const n = numberCircle(uid(), pt[0], pt[1], nextNumber(p.annotations), p.style.color, Math.max(14, Math.round(p.style.size * 0.6)))
+      p.onChange([...p.annotations, n])
+      p.onSelect(n.id)
+      p.onMade?.()
       return
     }
     if (p.tool === 'text') {
@@ -263,6 +277,7 @@ export function AnnotationLayer(p: Props) {
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
       : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
       : p.tool === 'floorRect' ? { ...base, kind: 'polygon', points: onFloor(pt, pt), width: p.style.width }
+      : p.tool === 'floorDisc' ? { ...base, kind: 'polygon', points: [pt, pt, pt], width: p.style.width, fill: discFill(), fillOpacity: p.style.fillOpacity ?? 1 }
       : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
     setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
   }
@@ -304,6 +319,7 @@ export function AnnotationLayer(p: Props) {
     const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
+      : d.kind === 'polygon' && p.tool === 'floorDisc' ? (() => { const dc = discAt(drag.from, [x, y]); return dc && p.floor ? { ...d, points: discOutline(p.floor, dc).side, disc: { ...dc, part: 'top' as const } } : d })()
       : d.kind === 'polygon' ? { ...d, points: p.tool === 'floorRect' ? onFloor(drag.from, [x, y]) : trianglePoints(drag.from, [x, y]) }
       : d
     setDrag({ ...drag, draft: next })
@@ -318,10 +334,18 @@ export function AnnotationLayer(p: Props) {
         : d.kind === 'rect' || d.kind === 'circle' ? Math.abs(d.w) > 0.005 && Math.abs(d.h) > 0.005
         : d.kind === 'polygon' ? pointsBox(d.points).w > 0.005 && pointsBox(d.points).h > 0.005
         : true
-      if (big) {
+      if (big && d.kind === 'polygon' && d.disc && p.floor) {
+        // The disc: its side and top in one group, the top selected.
+        const { part: _p, ...dc } = d.disc
+        const shapes = discShapes(p.floor, dc, { color: d.color, fill: d.fill ?? discFill(), fillOpacity: d.fillOpacity ?? 1, width: d.width, ...(d.dash ? { dash: d.dash } : {}) }, { side: uid(), top: d.id, group: uid() })
+        p.onChange([...annsRef.current, ...shapes])
+        p.onSelect(d.id)
+        p.onMade?.()
+      } else if (big) {
         const done = d.kind === 'circle' || d.kind === 'rect' ? normalizeBox(d) : d
         p.onChange([...annsRef.current, done])
         p.onSelect(done.id)
+        p.onMade?.()
       }
     }
     setDrag(null)
@@ -358,6 +382,7 @@ export function AnnotationLayer(p: Props) {
     const a = applyStyle({ id: uid(), kind: 'text', color: ts.color, x: t.x, y: t.y, text: value, size: ts.size }, ts)
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
+    p.onMade?.()
   }
   // Enter finishes; Alt+Enter or Shift+Enter starts a new line; Escape cancels.
   const onTextKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {

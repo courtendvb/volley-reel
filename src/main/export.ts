@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
-import { chapterText } from '../shared/video'
+import { chapterMetadata, chapterText } from '../shared/video'
 import { clipPlayedSec, pieces } from '../shared/timing'
 import { ffmpegBin } from './ffmpegPath'
 import { probe } from './media'
@@ -62,12 +62,17 @@ export class Exporter {
       }
       const list = join(workDir, 'concat.txt')
       await writeFile(list, segments.map(f => `file '${f.replace(/\\/g, '/')}'`).join('\n'))
-      await this.ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', job.outPath], () => {})
+      // With chapters, they go into the MP4 too (VLC and the like list them); still a stream copy.
+      const chapterList = job.chapters?.length ? job.chapters.map(c => ({ startSec: segStart[c.item], title: c.title })) : null
+      const meta = join(workDir, 'chapters.ffmeta')
+      if (chapterList) await writeFile(meta, chapterMetadata(chapterList, segStart[segments.length]), 'utf8')
+      await this.ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, ...(chapterList ? ['-i', meta, '-map', '0', '-map_metadata', '1', '-map_chapters', '1'] : []),
+        '-c', 'copy', '-movflags', '+faststart', job.outPath], () => {})
       const sizeBytes = (await stat(job.outPath)).size
-      result = { type: 'done', outPath: job.outPath, elapsedSec: elapsed(), footageSec: total, sizeBytes }
-      if (job.chapters?.length) {
+      result = { type: 'done', outPath: job.outPath, elapsedSec: elapsed(), footageSec: total, sizeBytes, ...(chapterList ? { chapterCount: chapterList.length } : {}) }
+      if (job.chapters?.length && job.chaptersText) {
         // "<video> チャプター.txt" beside the MP4, ready to paste into a YouTube description.
-        const ch = chapterText(job.chapters.map(c => ({ startSec: segStart[c.item], title: c.title })), segStart[segments.length])
+        const ch = chapterText(chapterList!, segStart[segments.length])
         const chaptersPath = job.outPath.replace(/\.mp4$/i, '') + t(' チャプター.txt')
         await writeFile(chaptersPath, ch.text, 'utf8')
         result = { ...result, chaptersPath, chapterCount: job.chapters.length, shortChapters: ch.short }

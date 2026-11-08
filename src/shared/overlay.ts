@@ -24,6 +24,7 @@ export interface OverlaySettings {
     showMarkerNumber?: boolean // the marker's number on its cards; missing = shown
     markerLayout?: CardLayout; sceneLayout?: CardLayout
     videoCard?: boolean; videoLayout?: CardLayout // videoCard: an opening card with the video's name
+    logos?: Partial<Record<CardKind, LogoPlace>> // the opponent's logo apart from the title, per kind of card; missing = beside / above the title
     background?: string } // the cards' (and blank slides') background; missing = a darker shade of the theme's base
   // Fade from and to black at the start and end of every clip and card.
   transition: { fade: boolean; durationSec: number }
@@ -36,6 +37,9 @@ export interface OverlaySettings {
 
 // x / y: the marker title's top-left, or the scene title's center (0..1 of the frame); scale: 1 = default size.
 export interface CardLayout { x: number; y: number; scale: number }
+export type CardKind = 'marker' | 'scene' | 'video'
+// The logo on its own: its centre (0..1 of the frame) and height (share of the frame's), or not shown.
+export type LogoPlace = { x: number; y: number; h: number } | 'hidden'
 export const DEFAULT_MARKER_LAYOUT: CardLayout = { x: 0.1, y: 0.3, scale: 1 }
 export const DEFAULT_SCENE_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1 }
 export const DEFAULT_VIDEO_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1.4 }

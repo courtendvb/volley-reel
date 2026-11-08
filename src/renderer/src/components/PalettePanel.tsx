@@ -22,11 +22,13 @@ export function PalettePanel(p: {
   onUse: (anns: Annotation[]) => void
   disabled: boolean
   clipIn: number | null // the active clip's IN (null: a title card is being edited)
+  float?: { onDock: () => void } // always floating (the edit mode, with the side columns away); docking leaves it
 }) {
   const palette = usePalette()
   const [floating, setFloating] = useState(() => load('vr.paletteFloating') === '1')
   useEffect(() => keep('vr.paletteFloating', floating ? '1' : '0'), [floating])
   const badge = palette.items.length ? t('{0} 個', palette.items.length) : undefined
+  if (p.float) return <FloatingPanel title={t('パレット')} onDock={p.float.onDock} dockTitle={t('編集モードを終えて、右の列に戻す')}><PaletteBody {...p} wide onFloat={null} /></FloatingPanel>
   if (!floating) {
     return <Accordion id="palette" icon="◧" title={t('パレット')} badge={badge}><PaletteBody {...p} wide={false} onFloat={() => setFloating(true)} /></Accordion>
   }
@@ -155,19 +157,24 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
 }
 
 // A panel floating over the app: dragged by its header, sized from its corner (both remembered),
-// kept inside the window.
-function FloatingPanel({ title, onDock, children }: { title: string; onDock: () => void; children: ReactNode }) {
+// kept inside the window. ▾ folds it to its header (remembered too), out of the way of the picture.
+function FloatingPanel({ title, onDock, dockTitle, children }: { title: string; onDock: () => void; dockTitle?: string; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null)
   const [rect, setRect] = useState(() => {
     const saved = (() => { try { return JSON.parse(load('vr.paletteRect') ?? 'null') as { x: number; y: number; w: number; h: number } | null } catch { return null } })()
     return fit(saved ?? { x: window.innerWidth - 760, y: 120, w: 640, h: 420 })
   })
   useEffect(() => keep('vr.paletteRect', JSON.stringify(rect)), [rect])
+  const [folded, setFolded] = useState(() => load('vr.paletteFolded') === '1')
+  useEffect(() => keep('vr.paletteFolded', folded ? '1' : '0'), [folded])
+  const foldedRef = useRef(folded)
+  foldedRef.current = folded
   // The corner handle is the browser's own (CSS resize); its size is read back when it changes.
   useEffect(() => {
     const el = box.current
     if (!el) return
-    const ro = new ResizeObserver(() => setRect(r => (r.w === el.offsetWidth && r.h === el.offsetHeight ? r : { ...r, w: el.offsetWidth, h: el.offsetHeight })))
+    // Folded, its height is the header's alone: the size it unfolds to stays as it was.
+    const ro = new ResizeObserver(() => { if (!foldedRef.current) setRect(r => (r.w === el.offsetWidth && r.h === el.offsetHeight ? r : { ...r, w: el.offsetWidth, h: el.offsetHeight })) })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -180,13 +187,15 @@ function FloatingPanel({ title, onDock, children }: { title: string; onDock: () 
   }
   const move = (e: PointerEvent<HTMLDivElement>) => { const d = drag.current; if (d) setRect(r => fit({ ...r, x: e.clientX - d.dx, y: e.clientY - d.dy })) }
   return (
-    <div ref={box} className="floating-panel" role="dialog" aria-label={title} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
-      <div className="floating-head" onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null }} title={t('ドラッグで動かす（右下の角で大きさを変える）')}>
+    <div ref={box} className={`floating-panel${folded ? ' folded' : ''}`} role="dialog" aria-label={title} style={{ left: rect.x, top: rect.y, width: rect.w, ...(folded ? {} : { height: rect.h }) }}>
+      <div className="floating-head" onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null }} onDoubleClick={() => setFolded(f => !f)}
+        title={t('ドラッグで動かす（右下の角で大きさを変える。ダブルクリックでたたむ）')}>
+        <button className="link floating-fold" aria-expanded={!folded} onClick={() => setFolded(f => !f)} title={folded ? t('開く') : t('たたむ')}>{folded ? '▸' : '▾'}</button>
         <span className="accordion-icon" aria-hidden>◧</span><b>{title}</b>
         <span className="spacer" />
-        <button className="link" onClick={onDock} title={t('右の列に戻す')}>{t('⧉ 戻す')}</button>
+        <button className="link" onClick={onDock} title={dockTitle ?? t('右の列に戻す')}>{t('⧉ 戻す')}</button>
       </div>
-      <div className="floating-body">{children}</div>
+      {!folded && <div className="floating-body">{children}</div>}
     </div>
   )
 }

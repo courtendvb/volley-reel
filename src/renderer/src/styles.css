@@ -376,11 +376,14 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .palette-pop button.on { outline: 2px solid var(--primary); outline-offset: 1px; }
 .line-colors { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .line-colors input[type="color"] { width: 24px; height: 20px; padding: 0; }
-.modal.board-dialog { width: min(880px, 96vw); }
-.board-slots { display: flex; gap: 6px; padding: 8px; background: var(--soft); border-radius: 6px; aspect-ratio: 16 / 5; }
+.modal.board-dialog { width: min(880px, 96vw); overflow-y: auto; }
+.board-slots { display: flex; gap: 6px; padding: 8px; background: var(--soft); border-radius: 6px; }
 .board-slot { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px; }
 .board-slot-no { font-size: 11px; color: var(--sub); }
 .board-slot select { width: 100%; min-width: 0; }
+.board-preview { display: flex; justify-content: center; }
+.board-preview canvas { border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 1px 4px rgba(15,23,42,0.12); }
+.board-attention { font-size: 12px; color: #DC2626; font-weight: 600; }
 .board-slot-court { flex: 1; min-height: 10px; border: 1px solid var(--border); background: linear-gradient(to bottom, transparent calc(50% - 1px), var(--sub) calc(50% - 1px), var(--sub) calc(50% + 1px), transparent calc(50% + 1px)); }
 .board-codes { display: flex; flex-wrap: wrap; gap: 4px; max-height: 18vh; overflow-y: auto; flex: 1; }
 .board-row { display: flex; align-items: center; gap: 4px; }
@@ -697,3 +700,42 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .otl-bar { position: absolute; top: 4px; height: 8px; border-radius: 3px; background: #F59E0B; cursor: grab; box-shadow: 0 0 0 1px rgba(255,255,255,0.85); }
 .otl-bar.whole { background: #FCD34D; }
 .otl-row.on .otl-bar { box-shadow: 0 0 0 2px var(--amber); }
+
+/* Painting court zones: a small court, far side at the top, with the cells to click. */
+.zone-backdrop { background: rgba(15, 23, 42, 0.12); justify-content: flex-start; padding-left: 16px; }
+.modal.zone-dialog { width: auto; max-width: 92vw; gap: 10px; }
+.zone-painter { display: flex; gap: 16px; align-items: stretch; }
+.zone-court { flex: none; touch-action: none; user-select: none; }
+.zc-floor { fill: #E8A86B; }
+.zc-fine { stroke: rgba(255,255,255,0.45); stroke-width: 0.6; }
+.zc-zone { stroke: rgba(255,255,255,0.9); stroke-width: 1.2; }
+.zc-net { stroke: #111827; stroke-width: 2.5; }
+.zc-line { fill: none; stroke: #FFFFFF; stroke-width: 2; }
+.zc-num { fill: rgba(17,24,39,0.45); font-size: 20px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.zc-hit { fill: transparent; cursor: pointer; }
+.zc-hit:hover { fill: rgba(255,255,255,0.35); }
+.zone-side { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; width: 250px; }
+.zone-court-wrap { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+/* The player marks' tabs on the 表示 tab: the selected play's kind is marked, and how many marks each has on. */
+.mark-tabs-row .segmented button.current { box-shadow: inset 0 -2px 0 var(--primary); }
+.mark-count { display: inline-block; margin-left: 5px; min-width: 15px; padding: 0 4px; border-radius: 8px; background: var(--primary-light); color: var(--primary); font-size: 10.5px; font-weight: 700; line-height: 15px; }
+
+/* The edit mode: only the stage, as wide as the window. */
+.workspace.focus-edit { grid-template-columns: minmax(0, 1fr); }
+.workspace.focus-edit > .sidebar, .workspace.focus-edit > .right-col { display: none; }
+.focus-edit-btn { font-size: 15px; }
+.focus-edit-btn.on { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
+
+/* The set filter's dialog: a label column and rows of chips that wrap, never squeezed. */
+.modal.set-filter-dialog { width: min(780px, 94vw); overflow-y: auto; }
+.set-filter-grid { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px 14px; align-items: start; }
+.set-filter-grid .field-label { width: auto; padding-top: 6px; }
+.set-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filter-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12.5px; white-space: nowrap; cursor: pointer; background: var(--surface); }
+.filter-chip.on { border-color: var(--primary); background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.filter-chip input { margin: 0; }
+
+/* A floating panel folded to its header. */
+.floating-panel.folded { min-height: 0; resize: none; }
+.floating-fold { font-size: 13px; padding: 0 4px; text-decoration: none; }

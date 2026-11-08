@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -504,5 +504,44 @@ describe('handleAt', () => {
   it('stays on a corner inside the picture and comes to the edge for one outside', () => {
     expect(handleAt({ x: 0.5, y: 0.4 }, 1000, 500, 10)).toEqual({ x: 0.5, y: 0.4 })
     expect(handleAt({ x: -0.2, y: 1.3 }, 1000, 500, 10)).toEqual({ x: 0.01, y: 0.98 })
+  })
+})
+
+describe('painting zones', () => {
+  const corners: CourtFit['corners'] = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }] // the court fills the picture
+  it('cuts the court into the 9 zones of each half', () => {
+    expect(zoneCellQuad(corners, { row: 5, col: 2, div: 3 }).map(p => p.map(v => +v.toFixed(4)))).toEqual([[0.6667, 0.8333], [1, 0.8333], [1, 1], [0.6667, 1]])
+    expect(zoneOfCell({ row: 5, col: 2, div: 3 })).toBe(1) // near side, camera's right
+    expect(zoneOfCell({ row: 0, col: 0, div: 3 })).toBe(1) // far side, camera's left
+  })
+  it('and each zone into 9 again', () => {
+    expect(zoneCellQuad(corners, { row: 17, col: 8, div: 9 }).map(p => p.map(v => +v.toFixed(4)))).toEqual([[0.8889, 0.9444], [1, 0.9444], [1, 1], [0.8889, 1]])
+    expect(zoneOfCell({ row: 9, col: 4, div: 9 })).toBe(3) // just past the net, middle: zone 3 of the near side
+    expect(zoneOfCell({ row: 14, col: 0, div: 9 })).toBe(7)
+  })
+})
+
+describe('the player marks, per kind of play', () => {
+  it('splits a style saved before into each kind, keeping only what applied to it', () => {
+    const old = cleanGridStyle({ heat: true, serveFlights: true, cones: true, chart: { corner: 'bl' } })
+    expect(old.bySkill?.S).toMatchObject({ heat: true, serveFlights: true, chart: { corner: 'bl' } })
+    expect(old.bySkill?.S?.cones).toBeUndefined()
+    expect(old.bySkill?.A).toMatchObject({ heat: true, cones: true })
+    expect(old.bySkill?.A?.serveFlights).toBeUndefined()
+    expect(old.bySkill?.E).toEqual({})
+    expect(old.heat).toBeUndefined() // only per kind now
+  })
+  it('gives a play only its own kind\'s marks', () => {
+    const s = cleanGridStyle({ bySkill: { S: { serveFlights: true }, A: { chart: {} }, E: { setChart: { corner: 'br' } } } })
+    expect(markStyle(s, 'S').serveFlights).toBe(true)
+    expect(markStyle(s, 'S').chart).toBeUndefined()
+    expect(markStyle(s, 'A').chart).toBeDefined()
+    expect(markStyle(s, 'E').setChart?.corner).toBe('br')
+    expect(markStyle(s, 'R').serveFlights).toBeUndefined()
+  })
+  it('takes a style made in code as it is', () => {
+    const s = { ...DEFAULT_GRID_STYLE, heat: true }
+    expect(markStyle(s, 'A')).toBe(s)
+    expect(marksBySkill(marksBySkill(s))).toEqual(marksBySkill(s))
   })
 })

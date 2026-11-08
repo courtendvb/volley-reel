@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import { DEFAULT_OVERLAY, type OverlaySettings } from './overlay'
-import { addClips, newReel, newSlide, playOrder, putSlides, toggleMarker, type Reel } from './reel'
+import { addClips, newReel, newSlide, playOrder, putSlides, toggleMarker, type Clip, type Reel } from './reel'
 import type { Match } from './types'
-import { addScene, chapterText, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames } from './video'
+import { addScene, chapterMetadata, chapterText, planChapters, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames, type PlanItem } from './video'
 
 const D = parseDVW(`[3TEAMS]
 HTH;HOME;;;;
@@ -140,3 +140,36 @@ describe('one file per scene', () => {
       ['サーブ', 'A_B_ 速攻_', 'サーブ (2)', 'Serve', 'serve (2)', 'シーン', 'end', 'a_b'])
   })
 })
+
+describe('chapters in the MP4', () => {
+  it('writes them as ffmpeg metadata: from the start to the end, in ms, every one kept', () => {
+    const m = chapterMetadata([{ startSec: 2, title: 'A' }, { startSec: 65.9, title: 'B' }, { startSec: 70, title: 'C' }], 130)
+    expect(m.split('\n')).toEqual([
+      ';FFMETADATA1',
+      '[CHAPTER]', 'TIMEBASE=1/1000', 'START=0', 'END=65900', 'title=A',
+      '[CHAPTER]', 'TIMEBASE=1/1000', 'START=65900', 'END=70000', 'title=B',
+      '[CHAPTER]', 'TIMEBASE=1/1000', 'START=70000', 'END=130000', 'title=C',
+      '',
+    ])
+  })
+  it('keeps a title to one line and escapes the signs the format reserves', () => {
+    expect(chapterMetadata([{ startSec: 0, title: 'S1 #1\nA=B;C\\D' }], 5)).toContain(String.raw`title=S1 \#1 A\=B\;C\\D` + '\n')
+  })
+})
+
+describe('chapters for a scene or a marker', () => {
+  const scene = { id: 's1', name: 'Serve', markerNames: { 1: 'Jump', 2: 'Float', 3: '', 4: '', 5: '' } } as unknown as Reel
+  const other = { id: 's2', name: 'Attack', markerNames: { 1: 'Left', 2: '', 3: '', 4: '', 5: '' } } as unknown as Reel
+  const clip = (sceneId: string, group: number | 'none') => ({ kind: 'clip', clip: {} as Clip, sceneId, group }) as PlanItem
+  const card = (marker: number | null) => ({ kind: 'card', card: { marker, name: '', match: null }, durationSec: 2 }) as PlanItem
+  const slide = { kind: 'card', card: { marker: null, name: '', match: null, slide: {} }, durationSec: 5 } as unknown as PlanItem
+  it('starts one at each marker group, a card going with what follows and a slide with what came before', () => {
+    const plan = [card(1), clip('s1', 1), clip('s1', 1), slide, card(2), clip('s1', 2)]
+    expect(planChapters(plan, { s1: scene })).toEqual([{ at: 0, title: 'Jump' }, { at: 4, title: 'Float' }])
+  })
+  it('names the scene too across scenes, and gives none for a single part', () => {
+    expect(planChapters([clip('s1', 1), clip('s2', 1)], { s1: scene, s2: other }).map(c => c.title)).toEqual(['Serve - Jump', 'Attack - Left'])
+    expect(planChapters([card(1), clip('s1', 1), clip('s1', 1)], { s1: scene })).toEqual([])
+  })
+})
+

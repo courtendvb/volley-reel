@@ -8,6 +8,7 @@ import type { ParsedDVW, PlayerRole } from '../../../shared/types'
 import { newVideo, type Video } from '../../../shared/video'
 import type { PresetChoice } from '../components/PresetDialog'
 import type { AppLatest } from './appState'
+import type { Snapshot } from './useUndo'
 import { t } from '../../../shared/i18n'
 
 interface Host {
@@ -19,11 +20,14 @@ interface Host {
   results: PlayRef[]
   addScenes: (rs: Reel[]) => void
   addVideo: (v: Video) => void
-  putVideo: (v: Video) => void // not recorded for undo
+  putVideo: (v: Video) => void // not recorded: the caller's undo step covers it
   scenesOnlyIn: (v: Video) => string[]
-  dropScenes: (ids: string[]) => Promise<void>
+  removeScenes: (ids: string[]) => void
   showScene: (id: string) => void
   setNotice: (n: string) => void
+  record: (s: Snapshot[], merge: boolean) => void // one undo step
+  sceneSnap: (id: string) => Snapshot
+  videoSnap: (id: string) => Snapshot
 }
 
 export function usePresetVideos(h: Host) {
@@ -33,16 +37,18 @@ export function usePresetVideos(h: Host) {
   const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
     const scenes = presetReels(specs, prefix, preset.mode)
     if (!scenes.length) return
+    const v: Video = { ...newVideo(name, scenes.map(r => r.id)), preset }
+    h.record([{ kind: 'video', id: v.id, value: null }, ...scenes.map(r => ({ kind: 'scene', id: r.id, value: null }) as Snapshot)], false)
     h.addScenes(scenes)
-    h.addVideo({ ...newVideo(name, scenes.map(r => r.id)), preset })
+    h.addVideo(v)
     h.showScene(scenes[0].id)
     setPresetOpen(false)
     h.setNotice(t('動画「{0}」を作りました（{1} シーン）', name, scenes.length))
   }
 
   // Made again from the matches searched now: its own scenes are replaced (and deleted), scenes it
-  // shares with other videos only leave it. Its name and settings stay.
-  const remakePresetVideo = async (id: string) => {
+  // shares with other videos only leave it. Its name and settings stay. One undo step puts it back.
+  const remakePresetVideo = (id: string) => {
     const v = h.latest.current.videos.find(x => x.id === id)
     const preset = cleanPreset(v?.preset)
     if (!v || !preset) return
@@ -50,9 +56,10 @@ export function usePresetVideos(h: Host) {
     const scenes = presetReels(makePreset(preset, h.scopeRefs, h.results, presetLook).scenes, prefix, preset.mode)
     if (!scenes.length) { h.setNotice(t('当てはまるプレーがないため、作り直しませんでした')); return }
     const own = h.scenesOnlyIn(v)
+    h.record([h.videoSnap(v.id), ...scenes.map(r => ({ kind: 'scene', id: r.id, value: null }) as Snapshot), ...own.map(h.sceneSnap)], false)
     h.addScenes(scenes)
     h.putVideo({ ...v, sceneIds: scenes.map(r => r.id), updatedAt: new Date().toISOString() })
-    await h.dropScenes(own)
+    h.removeScenes(own)
     h.showScene(scenes[0].id)
     h.setNotice(t('動画「{0}」を作り直しました（{1} シーン）', v.name, scenes.length))
   }

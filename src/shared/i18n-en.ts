@@ -1195,7 +1195,7 @@ export const EN: Record<string, string> = {
   "未設定": "Not set",
   "作り直す": "Remake",
   "この動画を作ったプリセットで、今の試合から作り直す": "Make this video again from the matches now, with the preset it was made from",
-  "動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わり（reels/deleted/ に移動します）、そこで加えた図形やトリムは消えます。": "Make the video \"{0}\" again from its preset?\nThe plays are gathered again from the matches chosen in \"Matches to search\". The scenes only this video uses are replaced with new ones (moved to reels/deleted/), and objects or trims added there are lost.",
+  "動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わります（そこで加えた図形やトリムも消えます。Ctrl+Z で元に戻せます）。": "Make the video \"{0}\" again from its preset?\nThe plays are gathered again from the matches chosen in \"Matches to search\". The scenes only this video uses are replaced with new ones (objects or trims added there go too; Ctrl+Z puts it back).",
   "動画「{0}」を削除しますか？（videos/deleted/ に移動します）": "Delete the video \"{0}\"? (It moves to videos/deleted/)",
   "この動画だけで使っているシーン {0} 個も削除しますか？\n（OK で削除して reels/deleted/ に移動します。キャンセルするとシーンは残ります）": "Also delete the {0} scenes only this video uses?\n(OK deletes them, moving them to reels/deleted/. Cancel keeps them)",
   "当てはまるプレーがないため、作り直しませんでした": "No plays match, so the video wasn't made again",

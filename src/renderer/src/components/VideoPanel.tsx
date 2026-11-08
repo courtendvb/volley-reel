@@ -84,7 +84,7 @@ export function VideoPanel(p: Props) {
           onClick={() => p.onVideoCard(!p.videoCardOn)}>{t('カード')}</button>
         <button className="gear" aria-label={t('動画のタイトルカード')} title={t('動画の頭のタイトルカード（動画名）を動画の画面で編集')} onClick={p.onEditVideoCard}>⚙</button>
         {v.preset && (
-          <button onClick={() => { if (confirm(t('動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わり（reels/deleted/ に移動します）、そこで加えた図形やトリムは消えます。', v.name))) p.onRemake(v.id) }}
+          <button onClick={() => { if (confirm(t('動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わります（そこで加えた図形やトリムも消えます。Ctrl+Z で元に戻せます）。', v.name))) p.onRemake(v.id) }}
             title={t('この動画を作ったプリセットで、今の試合から作り直す')}>{t('作り直す')}</button>
         )}
         <button onClick={() => {

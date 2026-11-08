@@ -2,11 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, MARKERS, addClips, chronological, clipRange, defaultRange, findClip, findOverlaps, groupRows, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, chronological, clipRange, defaultRange, findClip, findOverlaps, groupRows, markerCardOn, markersOf, newReel, newSlide, playOrder, putSlides, rangeDefaults, relink, setAnnotations, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide, type SlideSpot,
 } from '../../shared/reel'
-import type { ImportProgress, MissingPart, ParsedDVW, Play, Player, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
-import { displayName } from '../../shared/dvw'
+import type { ImportProgress, MissingPart, ParsedDVW, Play, ProjectInfo, ProjectSettings, SlideFile } from '../../shared/types'
 import { CheckPicker } from './components/CheckPicker'
 import { ShotPick, type ShotRow } from './components/ShotPick'
 import { FilterPanel } from './components/FilterPanel'
@@ -33,8 +32,8 @@ import { PlayerPhotos } from './components/PlayerPhotos'
 import { ExportPanel } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
-import { PresetDialog, type PresetChoice } from './components/PresetDialog'
-import { cleanPreset, makePreset, presetLabels, type PresetLookups, type SceneSpec } from '../../shared/presets'
+import { PresetDialog } from './components/PresetDialog'
+import { usePresetVideos } from './app/usePresetVideos'
 import { withRoles } from '../../shared/roles'
 import { Home, MissingNote } from './components/Home'
 import { ScanDialog } from './components/ScanDialog'
@@ -122,7 +121,6 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [presetOpen, setPresetOpen] = useState(false)
   const [library, setLibrary] = useState<LibraryInfo | null>(null)
   const [recent, setRecent] = useState<RecentProject[]>([])
   const [scan, setScan] = useState<ScanResult | null>(null)
@@ -246,7 +244,17 @@ export function App() {
   const putVideo = (v: Video) => {
     latest.current = { ...latest.current, videos: latest.current.videos.map(x => (x.id === v.id ? v : x)), video: latest.current.video?.id === v.id ? v : latest.current.video }
     setVideos(vs => vs.map(x => (x.id === v.id ? v : x)))
+  }  // New scenes and a new video: in the state, and in latest at once for steps that follow in the same tick.
+  const addScenes = (rs: Reel[]) => {
+    latest.current = { ...latest.current, reels: [...latest.current.reels, ...rs] }
+    setReels(x => [...x, ...rs])
   }
+  const addVideo = (v: Video) => {
+    latest.current = { ...latest.current, videos: [...latest.current.videos, v], video: v }
+    setVideos(x => [...x, v]); setVideoId(v.id)
+  }
+  const showScene = (id: string) => { setReelId(id); setActiveClipId(null) }
+
   const updateReel = useCallback((r: Reel) => {
     const prev = latest.current.reels.find(x => x.id === r.id)
     if (prev && prev !== r) record({ kind: 'scene', value: prev })
@@ -338,9 +346,7 @@ export function App() {
   const placeInVideo = (sceneId: string) => {
     const v = latest.current.video
     if (v) { updateVideo(addScene(v, sceneId)); return }
-    const nv = newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId])
-    latest.current = { ...latest.current, videos: [...latest.current.videos, nv], video: nv }
-    setVideos(vs => [...vs, nv]); setVideoId(nv.id)
+    addVideo(newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId]))
   }
 
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
@@ -411,8 +417,7 @@ export function App() {
 
   const createReel = () => {
     const r = newReel(t('シーン {0}', reels.length + 1))
-    latest.current = { ...latest.current, reels: [...latest.current.reels, r] }
-    setReels(rs => [...rs, r]); setReelId(r.id); setActiveClipId(null)
+    addScenes([r]); showScene(r.id)
     placeInVideo(r.id)
   }
   // Deleting a scene takes it out of every video that used it.
@@ -425,43 +430,8 @@ export function App() {
   }
   // A new video starts empty; its scenes are added (or made) for it. Switching videos shows one of its scenes.
   const createVideo = () => {
-    const v = newVideo(t('動画 {0}', videos.length + 1), [])
-    latest.current = { ...latest.current, videos: [...latest.current.videos, v], video: v }
-    setVideos(vs => [...vs, v]); setVideoId(v.id); setReelId(null); setActiveClipId(null)
-  }
-  // A video from a preset: a scene with a title card for each of its parts, all in a new video.
-  const roles = settings?.roles
-  const presetLook = useMemo<PresetLookups>(() => {
-    const role = (p: Player | undefined) => (p ? roles?.[p.key] ?? p.role : undefined)
-    return {
-      wonBy: r => (r.play.rallyId === null ? null : dvws[r.matchId]?.rallies[r.play.rallyId]?.wonBy ?? null),
-      roleOf: r => roles?.[r.personKey] ?? dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role,
-      middlesFacing: r => {
-        const d = dvws[r.matchId], front = r.play.front
-        if (!d || !front) return []
-        return Object.values(d.players).filter(p => p.side !== r.play.side && front.includes(p.key) && role(p) === 'MB')
-          .map(p => ({ key: p.key, label: `#${p.jersey} ${displayName(d.players, p.side, p.jersey)}` }))
-      },
-    }
-  }, [dvws, roles])
-  // The scene list tells videos' scenes apart by the prefix; the title card keeps the short title.
-  const presetScenes = (specs: SceneSpec[], prefix: string, mode: ClipMode): Reel[] => specs.map(g => {
-    let r: Reel = { ...newReel(prefix ? `${prefix} ${g.title}` : g.title), scope: 'all', sceneCard: true, ...(prefix ? { cardTitle: g.title } : {}) }
-    r = { ...r, markerNames: { ...r.markerNames, ...g.names } }
-    for (const m of [...MARKERS, null]) {
-      const items = g.items.filter(i => i.marker === m).map(i => ({ matchId: i.ref.matchId, play: i.ref.play }))
-      if (items.length) r = addClips(r, items, m ?? 'none', mode).reel
-    }
-    return r
-  })
-  const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
-    const scenes = presetScenes(specs, prefix, preset.mode)
-    if (!scenes.length) return
-    const v: Video = { ...newVideo(name, scenes.map(r => r.id)), preset }
-    latest.current = { ...latest.current, reels: [...latest.current.reels, ...scenes], videos: [...latest.current.videos, v], video: v, reel: scenes[0] }
-    setReels(rs => [...rs, ...scenes]); setVideos(vs => [...vs, v]); setVideoId(v.id); setReelId(scenes[0].id); setActiveClipId(null)
-    setPresetOpen(false)
-    setNotice(t('動画「{0}」を作りました（{1} シーン）', name, scenes.length))
+    addVideo(newVideo(t('動画 {0}', videos.length + 1), []))
+    setReelId(null); setActiveClipId(null)
   }
   // The scenes no other video uses.
   const scenesOnlyIn = (v: Video) => [...new Set(v.sceneIds)].filter(id => !latest.current.videos.some(o => o.id !== v.id && o.sceneIds.includes(id)))
@@ -472,25 +442,6 @@ export function App() {
     latest.current = { ...latest.current, reels: latest.current.reels.filter(r => !gone.has(r.id)) }
     setReels(rs => rs.filter(r => !gone.has(r.id)))
     if (latest.current.reelId && gone.has(latest.current.reelId)) { setReelId(null); setActiveClipId(null) }
-  }
-  // A preset video made again from the matches searched now: its own scenes are replaced (and
-  // deleted), scenes it shares with other videos only leave it. Name and settings stay.
-  const remakePresetVideo = async (id: string) => {
-    const v = latest.current.videos.find(x => x.id === id)
-    const preset = cleanPreset(v?.preset)
-    if (!v || !preset) return
-    const { prefix } = presetLabels(preset, settings?.ourTeamCodes[0] ?? '')
-    const scenes = presetScenes(makePreset(preset, scopeRefs, results, presetLook).scenes, prefix, preset.mode)
-    if (!scenes.length) { setNotice(t('当てはまるプレーがないため、作り直しませんでした')); return }
-    const own = scenesOnlyIn(v)
-    const next: Video = { ...v, sceneIds: scenes.map(r => r.id), updatedAt: new Date().toISOString() }
-    latest.current = { ...latest.current, reels: [...latest.current.reels, ...scenes] }
-    setReels(rs => [...rs, ...scenes])
-    putVideo(next) // not undoable: the old scenes are gone
-    forget(`video:${v.id}`)
-    await dropScenes(own)
-    setReelId(scenes[0].id); setActiveClipId(null)
-    setNotice(t('動画「{0}」を作り直しました（{1} シーン）', v.name, scenes.length))
   }
   const selectVideo = (id: string) => {
     setVideoId(id)
@@ -516,6 +467,10 @@ export function App() {
   const latest = useRef<AppLatest>({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null })
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, library, activeGroup }
   const { saveState, flushAll, markSaved, forget } = useAutosave(reels, videos, latest, setError)
+  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
+    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', scopeRefs, results,
+    addScenes, addVideo, putVideo, scenesOnlyIn, dropScenes, showScene, setNotice,
+  })
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
     () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
@@ -875,10 +830,8 @@ export function App() {
       let scene = latest.current.reel
       if (!scene) {
         scene = newReel(t('シーン {0}', latest.current.reels.length + 1))
-        const made = scene
-        latest.current = { ...latest.current, reels: [...latest.current.reels, made], reel: made }
-        setReels(rs => [...rs, made]); setReelId(made.id); setActiveClipId(null)
-        placeInVideo(made.id)
+        addScenes([scene]); latest.current = { ...latest.current, reel: scene }; showScene(scene.id)
+        placeInVideo(scene.id)
       }
       // At the head of the marker, where its title card would be.
       const group = marker, sceneId = scene.id

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOW, buildPreset, cleanPreset, makePreset, phaseMarker, presetLabels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
+import { DEFAULT_HOW, buildPreset, cleanPreset, makePreset, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
 import type { PlayRef } from './filter'
-import type { Play, PlayerRole } from './types'
+import type { ParsedDVW, Play, PlayerRole } from './types'
 
 let n = 0
 interface O { skill?: string; effect?: string; jersey: number; rot?: number; team?: 'our' | 'opp'; phase?: Play['phase']; recEffect?: string; combo?: string; dir?: 'up' | 'down' }
@@ -117,5 +117,26 @@ describe('presets', () => {
     expect(cleanPreset({ kind: 'attack', how: { attack: 'nope' } })).toEqual({ kind: 'attack', how: DEFAULT_HOW, source: 'our', dir: 'all', mode: 'keyplay' })
     expect(cleanPreset({ kind: 'dance' })).toBe(null)
     expect(cleanPreset(undefined)).toBe(null)
+  })
+})
+
+describe('preset scenes and lookups', () => {
+  it('makes scenes with the prefix, short title cards, named markers and every clip played', () => {
+    const a = ref({ jersey: 2, skill: 'A' }), b = ref({ jersey: 3, skill: 'A' })
+    const [r] = presetReels([{ title: '#5 N5', items: [{ ref: a, marker: 1 }, { ref: b, marker: null }], names: { 1: 'X' }, counts: { 1: 1 }, rest: 1 }], 'HTH ブロック', 'keyplay')
+    expect([r.name, r.cardTitle, r.sceneCard, r.scope, r.markerNames[1]]).toEqual(['HTH ブロック #5 N5', '#5 N5', true, 'all', 'X'])
+    expect([r.groups[1].length, r.groups.none.length]).toEqual([1, 1])
+    expect(presetReels([{ title: 'T', items: [], names: {}, counts: {}, rest: 0 }], '', 'keyplay')[0].cardTitle).toBeUndefined()
+  })
+
+  it('finds the other team’s middles in the front row, by the project’s positions first', () => {
+    const d = {
+      players: { a3: { key: 'K3', side: 'a', jersey: 3, lastName: 'MID', firstName: '', role: 'MB' }, a7: { key: 'K7', side: 'a', jersey: 7, lastName: 'OUT', firstName: '', role: 'OH' }, '*9': { key: 'K9', side: '*', jersey: 9, lastName: 'US', firstName: '', role: 'MB' } },
+      rallies: [], plays: [],
+    } as unknown as ParsedDVW
+    const attack = { ...ref({ jersey: 9, skill: 'A' }), matchId: 'm' }
+    attack.play = { ...attack.play, side: '*', front: ['K3', 'K7', 'K9'] }
+    expect(presetLookups({ m: d }, undefined).middlesFacing(attack)).toEqual([{ key: 'K3', label: '#3 MID' }])
+    expect(presetLookups({ m: d }, { K7: 'MB', K3: 'OH' }).middlesFacing(attack)).toEqual([{ key: 'K7', label: '#7 OUT' }])
   })
 })

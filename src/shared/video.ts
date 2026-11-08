@@ -246,3 +246,14 @@ export function opponentLabel(m: Match, codes: string[]): string {
   const side = ourSide(m.teams, codes)
   return side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
 }
+
+// The words every name starts with ("HTH ブロック " in "HTH ブロック #15 …", "HTH ブロック #4 …"),
+// so a list of a preset video's scenes can show what tells them apart. Empty unless there are two
+// names or more and each has something left after it.
+export function sharedPrefix(names: string[]): string {
+  if (names.length < 2) return ''
+  const words = names.map(n => n.split(' '))
+  let k = 0
+  while (words.every(w => k < w.length - 1 && w[k] === words[0][k])) k++
+  return k ? words[0].slice(0, k).join(' ') + ' ' : ''
+}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Reel } from '../../../shared/reel'
-import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
+import { addScene, moveSceneAt, removeSceneAt, sharedPrefix, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
 import { NameSelect } from './NameSelect'
 import { t } from '../../../shared/i18n'
@@ -48,6 +48,7 @@ export function VideoPanel(p: Props) {
   useEffect(() => { listRef.current?.querySelector('.video-scene.current')?.scrollIntoView({ block: 'nearest' }) }, [p.currentSceneId, v?.id])
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
+  const presetPrefix = v?.preset ? sharedPrefix(v.sceneIds.map(id => byId[id]?.name).filter((n): n is string => !!n)) : ''
   const total = v ? v.sceneIds.reduce((acc, id) => { const s = byId[id]; if (!s) return acc; const st = p.sceneStats(s); return { clips: acc.clips + st.clips, sec: acc.sec + st.sec } }, { clips: 0, sec: 0 }) : { clips: 0, sec: 0 }
 
   if (p.part === 'head') {
@@ -102,6 +103,7 @@ export function VideoPanel(p: Props) {
       </div>
 
       <ol ref={listRef} className="video-scenes" role="list">
+        {/* A preset video's scenes all start "HTH ブロック …": the list shows the rest, which tells them apart. */}
         {v.sceneIds.map((id, i) => {
           const s = byId[id]
           const st = s ? p.sceneStats(s) : { clips: 0, sec: 0 }
@@ -125,7 +127,7 @@ export function VideoPanel(p: Props) {
               }}>
               <span className="grip" aria-hidden title={t('ドラッグで順番を変える')}>⠿</span>
               <span className="scene-no">{i + 1}</span>
-              {s ? <InlineTitle className="scene-name" value={s.name} placeholder={t('（名前なし）')} label={t('シーンの名前')} onChange={name => p.onRenameScene(id, name)} />
+              {s ? <InlineTitle className="scene-name" value={s.name} shown={presetPrefix && s.name.startsWith(presetPrefix) ? s.name.slice(presetPrefix.length) : undefined} placeholder={t('（名前なし）')} label={t('シーンの名前')} onChange={name => p.onRenameScene(id, name)} />
                 : <span className="scene-name">{t('（削除されたシーン）')}</span>}
               {s && usedIn(id) > 1 && <span className="shared" title={t('{0} 本の動画で使っています。直すとすべてに反映されます', usedIn(id))}>{t('共有')} {usedIn(id)}</span>}
               <span className="muted">{st.clips} {t('本・')}{formatLength(st.sec)}</span>

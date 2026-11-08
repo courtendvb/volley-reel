@@ -7,9 +7,10 @@ import {
   ROTATION_ORDER, byCount, marked, personOf, playerLabel, playerMarkers, rankedMarkers, rotationOf, sideOutFilter, splitByRotation,
   type Marked, type RotationSplitBy, type WonBy,
 } from './rotationSplit'
-import type { ClipMode, Marker } from './reel'
+import { MARKERS, addClips, newReel, type ClipMode, type Marker, type Reel } from './reel'
+import { displayName } from './dvw'
 import { roleName } from './roles'
-import type { Play, PlayerRole } from './types'
+import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 import { t } from './i18n'
 
 export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
@@ -183,3 +184,32 @@ export function cleanPreset(v: unknown): VideoPreset | null {
     mode: o.mode === 'toEnd' ? 'toEnd' : 'keyplay',
   }
 }
+
+// What the presets look up in the matches: who won a play's rally, a player's position (the
+// project's, else the DVW roster's) and the other team's middle blockers in the front row.
+export function presetLookups(dvws: Record<string, ParsedDVW>, roles: Record<string, PlayerRole> | undefined): PresetLookups {
+  const role = (p: Player) => roles?.[p.key] ?? p.role
+  return {
+    wonBy: r => (r.play.rallyId === null ? null : dvws[r.matchId]?.rallies[r.play.rallyId]?.wonBy ?? null),
+    roleOf: r => roles?.[r.personKey] ?? dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role,
+    middlesFacing: r => {
+      const d = dvws[r.matchId], front = r.play.front
+      if (!d || !front) return []
+      return Object.values(d.players).filter(p => p.side !== r.play.side && front.includes(p.key) && role(p) === 'MB')
+        .map(p => ({ key: p.key, label: `#${p.jersey} ${displayName(d.players, p.side, p.jersey)}` }))
+    },
+  }
+}
+
+// The scenes a preset makes: each with its title card, its markers named, its clips in them, every
+// clip played (scope 'all'). The name has the prefix so the scene list tells videos' scenes apart;
+// the title card keeps the short title.
+export const presetReels = (specs: SceneSpec[], prefix: string, mode: ClipMode): Reel[] => specs.map(g => {
+  let r: Reel = { ...newReel(prefix ? `${prefix} ${g.title}` : g.title), scope: 'all', sceneCard: true, ...(prefix ? { cardTitle: g.title } : {}) }
+  r = { ...r, markerNames: { ...r.markerNames, ...g.names } }
+  for (const m of [...MARKERS, null]) {
+    const items = g.items.filter(i => i.marker === m).map(i => ({ matchId: i.ref.matchId, play: i.ref.play }))
+    if (items.length) r = addClips(r, items, m ?? 'none', mode).reel
+  }
+  return r
+})

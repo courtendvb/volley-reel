@@ -15,7 +15,8 @@ interface Props {
   currentSceneId: string | null
   onSelectVideo: (id: string) => void
   onNewVideo: () => void
-  onDeleteVideo: (id: string) => void
+  onDeleteVideo: (id: string, withScenes: boolean) => void // withScenes: also the scenes no other video uses
+  onRemake: (id: string) => void // a preset video made again from the matches searched now
   onChange: (v: Video) => void
   onSelectScene: (id: string) => void
   onRenameScene: (id: string, name: string) => void
@@ -81,7 +82,15 @@ export function VideoPanel(p: Props) {
           title={p.videoCardOn ? t('動画の頭に動画名のカードを出す（クリックで出さない）') : t('動画の頭に動画名のカードを出さない（クリックで出す）')}
           onClick={() => p.onVideoCard(!p.videoCardOn)}>{t('カード')}</button>
         <button className="gear" aria-label={t('動画のタイトルカード')} title={t('動画の頭のタイトルカード（動画名）を動画の画面で編集')} onClick={p.onEditVideoCard}>⚙</button>
-        <button onClick={() => { if (confirm(t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) p.onDeleteVideo(v.id) }} title={t('動画を削除')}>{t('削除')}</button>
+        {v.preset && (
+          <button onClick={() => { if (confirm(t('動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わり（reels/deleted/ に移動します）、そこで加えた図形やトリムは消えます。', v.name))) p.onRemake(v.id) }}
+            title={t('この動画を作ったプリセットで、今の試合から作り直す')}>{t('作り直す')}</button>
+        )}
+        <button onClick={() => {
+          const own = [...new Set(v.sceneIds)].filter(id => byId[id] && usedIn(id) === 1).length
+          if (!confirm(own ? t('動画「{0}」を削除しますか？（videos/deleted/ に移動します）', v.name) : t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) return
+          p.onDeleteVideo(v.id, own > 0 && confirm(t('この動画だけで使っているシーン {0} 個も削除しますか？\n（OK で削除して reels/deleted/ に移動します。キャンセルするとシーンは残ります）', own)))
+        }} title={t('動画を削除')}>{t('削除')}</button>
       </div>
 
       <div className="video-add">

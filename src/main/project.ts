@@ -10,7 +10,8 @@ import { cleanHeadline, type HeadlineStyle } from '../shared/annotation'
 import type { OverlayTheme } from '../shared/overlay'
 import type { Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
-import type { Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
+import type { Match, ParsedDVW, PlayerRole, ProjectInfo, ProjectSettings } from '../shared/types'
+import { cleanRoles } from '../shared/roles'
 import type { Library } from './library'
 import { readJSON, safeId, writeJSON } from './store'
 import { t } from '../shared/i18n'
@@ -28,6 +29,7 @@ interface ProjectFile {
   lineColors?: ChartLineColors
   pointColors?: ChartLineColors
   pointScale?: number
+  roles?: Record<string, PlayerRole>
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
@@ -67,6 +69,7 @@ export class Project {
       lineColors: cleanLineColors(saved.lineColors),
       pointColors: cleanLineColors(saved.pointColors),
       pointScale: cleanPointScale(saved.pointScale),
+      roles: cleanRoles(saved.roles),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
       scenesVersion: saved.scenesVersion,
     }
@@ -152,7 +155,7 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.roles ? { roles: this.file.roles } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}) },
       missing: this.library.missing(matches),
     }
   }
@@ -179,6 +182,7 @@ export class Project {
     this.file.lineColors = cleanLineColors(s.lineColors)
     this.file.pointColors = cleanLineColors(s.pointColors)
     this.file.pointScale = cleanPointScale(s.pointScale)
+    this.file.roles = cleanRoles(s.roles)
     await this.save()
   }
 

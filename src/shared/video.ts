@@ -8,6 +8,7 @@ import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
+import type { VideoPreset } from './presets'
 
 export interface Video {
   id: string
@@ -19,6 +20,7 @@ export interface Video {
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
   cardLayout?: CardLayout // the opening card's own title place and size
   captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
+  preset?: VideoPreset // made from a preset (shared/presets.ts): kept so it can be made again
   updatedAt: string
 }
 

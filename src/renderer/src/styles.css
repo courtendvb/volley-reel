@@ -212,6 +212,21 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .accent-swatch.on { box-shadow: 0 0 0 2px var(--text); }
 .check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--sub); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* The preset dialog (PresetDialog.tsx): its options, the scenes it will make, the positions. */
+.preset-dialog { width: min(640px, 92vw); }
+.preset-dialog .filter-row .field-label { width: 80px; }
+.preset-preview { display: flex; flex-direction: column; gap: 6px; font-size: 13px; overflow-y: auto; min-height: 0; }
+.preset-row { display: flex; align-items: baseline; gap: 10px; }
+.preset-row > b { width: 150px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-total { width: 48px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.preset-markers { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.preset-marker { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.preset-marker i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.preset-dialog .filter-row { flex-wrap: wrap; }
+.preset-roles summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.preset-role-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; max-height: 180px; overflow-y: auto; margin-top: 6px; }
+.preset-role { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.preset-role span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .play-row .marks { display: flex; gap: 2px; justify-content: flex-end; }
 .play-row .mark { padding: 0; width: 16px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 1; color: var(--sub); }

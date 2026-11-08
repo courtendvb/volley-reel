@@ -1334,7 +1334,7 @@ export function App() {
               onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
             </div>
             <div className="right-pane" hidden={rightTab !== 'export'}>
-            <ExportPanel targets={exportTargets} info={exportInfo} court={overlay.court.enabled} onCourt={on => setOverlay({ ...overlay, court: { enabled: on } })} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} state={exportState} onExport={exportTarget}
+            <ExportPanel targets={exportTargets} info={exportInfo} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
             </div>
           </div>

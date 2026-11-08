@@ -48,6 +48,7 @@ export interface SmokeOpts {
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
+  presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
@@ -145,6 +146,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.photos) return smokePhotos(res, opts.photos)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
+    if (opts.presets) return smokePresets()
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.cardOwn) return smokeCardOwn(res)
@@ -1500,6 +1502,99 @@ export function installSmoke(h: SmokeHost): void {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
     const undone = await until(async () => { const l = await savedNow(); return l.length === 1 && l[0].id === first.id ? l : null }, 'removal undone')
     return { savedFilters: { lit, shown, replacedId: replaced[0].id === first.id, undone: undone[0].name } }
+  }
+
+  // Presets through the dialog's real buttons: a block video by middle made and checked against
+  // its preview (scenes, names, title cards, markers, clips, on disk); made again from its 作り直す;
+  // a position set by hand (saved, moving a player's attacks) and undone; then the video deleted
+  // with its scenes.
+  const smokePresets = async () => {
+    const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
+      for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
+    }
+    const button = (root: ParentNode, label: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === label && !b.disabled) ?? null
+    const dialog = () => document.querySelector<HTMLElement>('.preset-dialog')
+    const open = async () => {
+      (await waitFor(() => button(document, t('プリセットから作る')), 10000, 'preset button')).click()
+      return waitFor(dialog, 5000, 'preset dialog')
+    }
+    // A segmented choice in the dialog, by its row's label and the option's text.
+    const pick = async (label: string, option: string) => {
+      const row = await waitFor(() => [...dialog()!.querySelectorAll('.filter-row')].find(r => r.querySelector('.field-label')?.textContent === label) ?? null, 5000, `${label} row`)
+      ;(await waitFor(() => button(row, option), 5000, `${label}: ${option}`)).click()
+      await sleep(150)
+    }
+    // The preview: each scene's title, total and markers ("name n").
+    const preview = () => [...dialog()!.querySelectorAll('.preset-row')].map(r => ({
+      title: r.querySelector('b')!.textContent!, total: parseInt(r.querySelector('.preset-total')!.textContent!),
+      markers: [...r.querySelectorAll('.preset-marker:not(.muted)')].map(m => { const s = m.textContent!; const i = s.lastIndexOf(' '); return { name: s.slice(0, i), n: Number(s.slice(i + 1)) } }),
+    }))
+    const realConfirm = window.confirm
+    window.confirm = () => true // 作り直す and 削除 ask first
+    try {
+      const code = latest.current.settings?.ourTeamCodes[0] ?? ''
+      // 1. A block video by middle, for the target team.
+      await open()
+      await pick(t('ビデオ'), t('ブロック'))
+      await pick(t('作り方'), t('ミドル別'))
+      const rows = await waitFor(() => { const p = preview(); return p.length ? p : null }, 5000, 'preview rows')
+      const before = new Set(latest.current.videos.map(v => v.id))
+      button(dialog()!, t('作る'))!.click()
+      const video = await waitFor(() => latest.current.videos.find(v => !before.has(v.id)) ?? null, 5000, 'new video')
+      if (video.preset?.kind !== 'block' || video.preset.how.block !== 'middle') throw new Error(`preset not kept: ${JSON.stringify(video.preset)}`)
+      const scenes = video.sceneIds.map(id => latest.current.reels.find(r => r.id === id)!)
+      if (scenes.length !== rows.length) throw new Error(`${scenes.length} scenes, preview had ${rows.length}`)
+      scenes.forEach((s, i) => {
+        const row = rows[i]
+        if (s.name !== `${code} ${t('ブロック')} ${row.title}` || s.cardTitle !== row.title || !s.sceneCard) throw new Error(`scene ${i}: ${s.name} / ${s.cardTitle}`)
+        if (Object.keys(s.clips).length !== row.total) throw new Error(`scene ${s.name}: ${Object.keys(s.clips).length} clips, preview ${row.total}`)
+        for (const m of row.markers) {
+          const marker = Object.entries(s.markerNames).find(([, n]) => n === m.name)?.[0]
+          const got = marker ? s.groups[Number(marker) as Marker].length : null
+          if (got !== m.n) throw new Error(`scene ${s.name}: marker ${m.name} has ${got ?? 'no group'}, preview ${m.n}`)
+        }
+      })
+      await until(async () => ((await api.listVideos()).find(v => v.id === video.id)?.preset ? true : null), 'video saved with its preset', SAVE_DELAY_MS + 10000)
+      await api.smokeShot!('presets-made.png')
+
+      // 2. Made again from 作り直す in 動画の構成: new scenes, the old ones gone (also from disk).
+      ;(await waitFor(() => button(document.querySelector('.right-tabs')!, t('動画の構成')), 5000, 'video tab')).click()
+      ;(await waitFor(() => button(document.querySelector('.video-panel') ?? document, t('作り直す')), 5000, 'remake button')).click()
+      const remade = await waitFor(() => { const v = latest.current.videos.find(x => x.id === video.id); return v && v.sceneIds.every(id => !video.sceneIds.includes(id)) ? v : null }, 10000, 'remade')
+      if (remade.sceneIds.length !== video.sceneIds.length) throw new Error(`remade with ${remade.sceneIds.length} scenes, had ${video.sceneIds.length}`)
+      await waitFor(() => (video.sceneIds.every(id => !latest.current.reels.some(r => r.id === id)) ? true : null), 10000, 'old scenes gone')
+      await until(async () => { const ids = (await api.listReels()).map(r => r.id); return video.sceneIds.every(id => !ids.includes(id)) && remade.sceneIds.every(id => ids.includes(id)) ? true : null }, 'remade scenes on disk', SAVE_DELAY_MS + 10000)
+
+      // 3. A position set by hand: attack by position, an outside hitter made a middle, then undone.
+      await open()
+      await pick(t('ビデオ'), t('アタック'))
+      await pick(t('作り方'), t('ポジション別'))
+      const mbTotal = () => preview().find(r => r.title === t('ミドルブロッカー'))?.total ?? 0
+      const mbBefore = mbTotal()
+      const details = await waitFor(() => dialog()!.querySelector<HTMLDetailsElement>('.preset-roles'), 5000, 'positions')
+      details.open = true
+      await sleep(150)
+      // One who attacked: a marker of the outside hitters' scene.
+      const hitters = new Set(preview().find(r => r.title === t('アウトサイドヒッター'))?.markers.map(m => m.name) ?? [])
+      const sel = await waitFor(() => [...details.querySelectorAll<HTMLSelectElement>('.preset-role select')].find(s => s.options[0].textContent?.includes(t('アウトサイドヒッター')) && hitters.has(s.closest('label')!.querySelector('span')!.textContent!)) ?? null, 5000, 'an outside hitter who attacked')
+      const who = sel.closest('label')!.querySelector('span')!.textContent!
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'MB')
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+      const saved = await until(async () => { const r = (await api.getProject())?.settings.roles; return r && Object.values(r).includes('MB') ? r : null }, 'position saved')
+      const mbAfter = await waitFor(() => (mbTotal() > mbBefore ? mbTotal() : null), 5000, 'the player counted as a middle')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+      await until(async () => (!(await api.getProject())?.settings.roles ? true : null), 'position undone')
+      await waitFor(() => (mbTotal() === mbBefore ? true : null), 5000, 'preview back')
+      button(dialog()!, t('キャンセル'))!.click()
+
+      // 4. Deleted with the scenes only it uses.
+      const panel = await waitFor(() => document.querySelector('.video-panel'), 5000, 'video panel')
+      ;(await waitFor(() => button(panel, t('削除')), 5000, 'delete button')).click()
+      await until(async () => { const vs = await api.listVideos(), ids = (await api.listReels()).map(r => r.id); return !vs.some(v => v.id === video.id) && remade.sceneIds.every(id => !ids.includes(id)) ? true : null }, 'video and scenes deleted', SAVE_DELAY_MS + 10000)
+      return { presets: { scenes: rows.map(r => `${r.title} ${r.total} (${r.markers.map(m => `${m.name} ${m.n}`).join(', ')})`), remade: remade.sceneIds.length, position: { who, saved: Object.keys(saved).length, middles: [mbBefore, mbAfter] }, deleted: true } }
+    } finally {
+      window.confirm = realConfirm
+    }
   }
 
   // Court grid: fitted from its bar, one corner dragged on the canvas, saved with the match; the

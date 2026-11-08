@@ -39,6 +39,7 @@ import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
+import { MatchReportDialog } from './components/MatchReportDialog'
 import { boardSlide, keptByHand, type BoardPhoto } from '../../shared/board'
 import { pdfFromJpegs } from '../../shared/pdf'
 import { CARD_H, CARD_W, cardImages } from './exportRender'
@@ -769,6 +770,7 @@ export function App() {
   // Slides comparing players: each lays out its players, with their photos copied into the project.
   // They go at the end of the open scene's first marker, or into a new scene when none is open.
   const [boardOpen, setBoardOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false) // the match report
   const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
   const makeBoard = async (c: BoardChoice) => {
     const { setView, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
@@ -1038,6 +1040,7 @@ export function App() {
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
+        {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
@@ -1294,6 +1297,9 @@ export function App() {
           initial={picker === 'create'
             ? { name: '', codes: ['HTH'].filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
+      )}
+      {reportOpen && project && (
+        <MatchReportDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} initial={match?.id ?? null} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setReportOpen(false)} />
       )}
       {(boardOpen || boardEdit) && (
         <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={Object.values(dvws)} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}

@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import type { PlayDir } from '../../../shared/court'
 import { MARKERS, MARKER_COLORS, type ClipMode } from '../../../shared/reel'
-import { DEFAULT_HOW, HOW_OPTIONS, PRESET_KINDS, buildPreset, presetLabels, presetName, presetRefs, usesRoles, type PresetHow, type PresetKind, type PresetLookups, type PresetSource, type SceneSpec, type VideoPreset } from '../../../shared/presets'
+import { HOW_OPTIONS, PRESET_KINDS, cleanDialogState, lineupsMissing, buildPreset, presetLabels, presetName, presetRefs, usesRoles, type PresetHow, type PresetKind, type PresetLookups, type PresetSource, type SceneSpec, type VideoPreset } from '../../../shared/presets'
 import { ROLES, roleName } from '../../../shared/roles'
 import { personOf, playerLabel } from '../../../shared/rotationSplit'
 import type { PlayerRole } from '../../../shared/types'
@@ -24,6 +24,7 @@ interface Props {
 }
 
 // Side-out runs to the rally's end (the reception to the result); the rest show the play itself.
+const STORE_KEY = 'vr.presetDialog'
 const DEFAULT_MODE: Record<PresetKind, ClipMode> = { sideout: 'toEnd', serve: 'keyplay', block: 'keyplay', attack: 'keyplay' }
 
 const HINTS = (): Record<string, string> => ({
@@ -46,11 +47,14 @@ const HINTS = (): Record<string, string> => ({
 // Videos made from a preset in one go: one kind of play for a team, laid out as scenes with marker
 // groups named for what they hold, put together in a new video.
 export function PresetDialog({ results, scope, targetCode, look, roles, rosterRoleOf, onRoles, onMake, onClose }: Props) {
-  const [kind, setKind] = useState<PresetKind>('sideout')
-  const [how, setHow] = useState<PresetHow>(DEFAULT_HOW)
-  const [source, setSource] = useState<PresetSource>('our')
-  const [modes, setModes] = useState(DEFAULT_MODE)
-  const [dir, setDir] = useState<'all' | PlayDir>('all')
+  // The last choices come back when the dialog opens again (this computer only).
+  const [start] = useState(() => { try { return cleanDialogState(JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null'), DEFAULT_MODE) } catch { return cleanDialogState(null, DEFAULT_MODE) } })
+  const [kind, setKind] = useState<PresetKind>(start.kind)
+  const [how, setHow] = useState<PresetHow>(start.how)
+  const [source, setSource] = useState<PresetSource>(start.source)
+  const [modes, setModes] = useState(start.modes)
+  const [dir, setDir] = useState<'all' | PlayDir>(start.dir)
+  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ kind, how, source, dir, modes })) } catch { /* not kept */ } }, [kind, how, source, dir, modes])
   const refs = useMemo(() => presetRefs(kind, how, source, scope, results, dir), [kind, how, source, scope, results, dir])
   // With a way picked: the plays left out because their match has no fitted court.
   const unknownDir = useMemo(() => (dir === 'all' ? 0 : presetRefs(kind, how, source, scope, results).filter(r => r.dir === null).length), [kind, how, source, scope, results, dir])
@@ -67,6 +71,7 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
     return [...seen.values()].sort((a, b) => (a.teamRole === b.teamRole ? a.play.jersey - b.play.jersey : a.teamRole === 'opp' ? 1 : -1))
   }, [scope, source])
   const needRoles = usesRoles(kind, how)
+  const noLineups = useMemo(() => lineupsMissing(kind, how, refs), [kind, how, refs])
   // Nothing to go by: no middle blocker (block video), or no position at all (attack video).
   const noRoles = needRoles && people.length > 0 && !people.some(r => (kind === 'block' ? look.roleOf(r) === 'MB' : !!look.roleOf(r)))
   const [rolesOpen, setRolesOpen] = useState(false)
@@ -137,6 +142,7 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
             </div>
           )) : <span className="muted">{t('当てはまるプレーがありません')}</span>}
           {made.skipped > 0 && <span className="muted">{t('ローテーションが分からない {0} 本は入りません', made.skipped)}</span>}
+          {noLineups > 0 && <span className="muted">{t('前衛の記録がない DVW のアタック {0} 本は入りません（ミドル別は、DVW に記録された各プレーの前衛の選手を使います）', noLineups)}</span>}
         </div>
         <p className="hint">{t('{0} シーン・{1} 本で、新しい動画「{2}」を作ります。シーンにはタイトルカードが付きます。', made.scenes.length, plays, name)}</p>
         <div className="modal-actions">

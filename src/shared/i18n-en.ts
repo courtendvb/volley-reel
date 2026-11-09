@@ -1211,4 +1211,5 @@ export const EN: Record<string, string> = {
   "この動画だけで使っているシーン {0} 個も削除しますか？\n（OK で削除して reels/deleted/ に移動します。キャンセルするとシーンは残ります）": "Also delete the {0} scenes only this video uses?\n(OK deletes them, moving them to reels/deleted/. Cancel keeps them)",
   "当てはまるプレーがないため、作り直しませんでした": "No plays match, so the video wasn't made again",
   "動画「{0}」を作り直しました（{1} シーン）": "Made the video \"{0}\" again ({1} scenes)",
+  "前衛の記録がない DVW のアタック {0} 本は入りません（ミドル別は、DVW に記録された各プレーの前衛の選手を使います）": "{0} attacks from DVWs without lineups are left out (by middle uses the front row the DVW records at each play)",
 }

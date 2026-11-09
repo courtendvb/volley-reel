@@ -48,6 +48,7 @@ export interface SmokeOpts {
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
+  picker?: boolean // the player picker opened, a player ticked, closed by its button, Esc and a click outside
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
@@ -147,6 +148,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.presets) return smokePresets()
+    if (opts.picker) return smokePicker()
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.cardOwn) return smokeCardOwn(res)
@@ -1505,6 +1507,36 @@ export function installSmoke(h: SmokeHost): void {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
     const undone = await until(async () => { const l = await savedNow(); return l.length === 1 && l[0].id === first.id ? l : null }, 'removal undone')
     return { savedFilters: { lit, shown, replacedId: replaced[0].id === first.id, undone: undone[0].name } }
+  }
+
+  // The player picker in the left column, through its real buttons: its list inside the window,
+  // a player ticked (which adds the saved-filter row above and moves the column: the list must
+  // follow and leave the field uncovered), then closed by 閉じる, by Esc and by a click outside it.
+  const smokePicker = async () => {
+    const trigger = await waitFor(() => document.querySelector<HTMLButtonElement>(`button.check-picker[aria-label="${t('選手')}"]`), 10000, 'player picker')
+    const list = () => document.querySelector<HTMLElement>(`.check-picker-list[aria-label="${t('選手')}"]`)
+    const openIt = async () => { trigger.click(); return waitFor(list, 3000, 'list open') }
+    const closed = (how: string) => waitFor(() => (!list() && trigger.getAttribute('aria-expanded') === 'false' ? true : null), 3000, `closed by ${how}`)
+    const el = await openIt()
+    const box = el.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[1]
+    const fieldBefore = trigger.getBoundingClientRect().top
+    box.click(); await sleep(200)
+    await api.smokeShot!('picker-open.png')
+    const ticked = latest.current.filter.persons.length
+    const field = trigger.getBoundingClientRect(), after = el.getBoundingClientRect()
+    const fieldMoved = Math.round(field.top - fieldBefore)
+    const covers = after.top < field.bottom && after.bottom > field.top
+    const inside = after.top >= 0 && after.bottom <= window.innerHeight && after.left >= 0
+    const closeButton = [...el.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('閉じる'))
+    if (!closeButton) throw new Error('no 閉じる button')
+    const footVisible = closeButton.getBoundingClientRect().bottom <= after.bottom + 1
+    closeButton.click(); await closed('閉じる')
+    await openIt()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await closed('Esc')
+    await openIt()
+    document.querySelector<HTMLElement>('.menu-backdrop')!.click(); await closed('a click outside')
+    if (!inside || !footVisible || ticked !== 1 || covers) throw new Error(`picker: inside ${inside}, foot visible ${footVisible}, ticked ${ticked}, covers the field ${covers} (moved ${fieldMoved}px)`)
+    return { picker: { inside, footVisible, ticked, fieldMoved, covers, rows: el.querySelectorAll('label').length, closedBy: ['閉じる', 'Esc', 'outside'] } }
   }
 
   // Presets through the dialog's real buttons: a block video by middle made and checked against

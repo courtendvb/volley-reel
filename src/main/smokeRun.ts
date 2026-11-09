@@ -163,6 +163,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       court: !!process.env.VR_SMOKE_COURT,
       savedFilters: !!process.env.VR_SMOKE_SAVEDFILTERS,
       presets: !!process.env.VR_SMOKE_PRESETS,
+      picker: !!process.env.VR_SMOKE_PICKER,
       captionPhoto: !!process.env.VR_SMOKE_CAPTIONPHOTO,
       captionNames: !!process.env.VR_SMOKE_CAPTIONNAMES,
       courtPoints: process.env.VR_SMOKE_COURTPOINTS,

@@ -126,6 +126,7 @@ export interface ProjectSettings {
   lineColors?: ChartLineColors // the direction charts' lines by skill and evaluation; missing: the usual
   pointColors?: ChartLineColors // their points the same way
   pointScale?: number // their points' size, 1 = the usual
+  roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
 }
 
 export interface ProjectInfo {

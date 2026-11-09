@@ -33,6 +33,9 @@ import { PlayerPhotos } from './components/PlayerPhotos'
 import { ExportPanel } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
+import { PresetDialog } from './components/PresetDialog'
+import { usePresetVideos } from './app/usePresetVideos'
+import { withRoles } from '../../shared/roles'
 import { Home, MissingNote } from './components/Home'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
@@ -243,7 +246,17 @@ export function App() {
   const putVideo = (v: Video) => {
     latest.current = { ...latest.current, videos: latest.current.videos.map(x => (x.id === v.id ? v : x)), video: latest.current.video?.id === v.id ? v : latest.current.video }
     setVideos(vs => vs.map(x => (x.id === v.id ? v : x)))
+  }  // New scenes and a new video: in the state, and in latest at once for steps that follow in the same tick.
+  const addScenes = (rs: Reel[]) => {
+    latest.current = { ...latest.current, reels: [...latest.current.reels, ...rs] }
+    setReels(x => [...x, ...rs])
   }
+  const addVideo = (v: Video) => {
+    latest.current = { ...latest.current, videos: [...latest.current.videos, v], video: v }
+    setVideos(x => [...x, v]); setVideoId(v.id)
+  }
+  const showScene = (id: string) => { setReelId(id); setActiveClipId(null) }
+
   const updateReel = useCallback((r: Reel) => {
     const prev = latest.current.reels.find(x => x.id === r.id)
     if (prev && prev !== r) record({ kind: 'scene', value: prev })
@@ -335,9 +348,7 @@ export function App() {
   const placeInVideo = (sceneId: string) => {
     const v = latest.current.video
     if (v) { updateVideo(addScene(v, sceneId)); return }
-    const nv = newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId])
-    latest.current = { ...latest.current, videos: [...latest.current.videos, nv], video: nv }
-    setVideos(vs => [...vs, nv]); setVideoId(nv.id)
+    addVideo(newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId]))
   }
 
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
@@ -408,8 +419,7 @@ export function App() {
 
   const createReel = () => {
     const r = newReel(t('シーン {0}', reels.length + 1))
-    latest.current = { ...latest.current, reels: [...latest.current.reels, r] }
-    setReels(rs => [...rs, r]); setReelId(r.id); setActiveClipId(null)
+    addScenes([r]); showScene(r.id)
     placeInVideo(r.id)
   }
   // Deleting a scene takes it out of every video that used it.
@@ -422,20 +432,33 @@ export function App() {
   }
   // A new video starts empty; its scenes are added (or made) for it. Switching videos shows one of its scenes.
   const createVideo = () => {
-    const v = newVideo(t('動画 {0}', videos.length + 1), [])
-    latest.current = { ...latest.current, videos: [...latest.current.videos, v], video: v }
-    setVideos(vs => [...vs, v]); setVideoId(v.id); setReelId(null); setActiveClipId(null)
+    addVideo(newVideo(t('動画 {0}', videos.length + 1), []))
+    setReelId(null); setActiveClipId(null)
+  }
+  // The scenes no other video uses.
+  const scenesOnlyIn = (v: Video) => [...new Set(v.sceneIds)].filter(id => !latest.current.videos.some(o => o.id !== v.id && o.sceneIds.includes(id)))
+  // Scenes deleted together (moved to reels/deleted/, like deleting one by hand).
+  const dropScenes = async (ids: string[]) => {
+    for (const id of ids) { await api.deleteReel(id); forget(`scene:${id}`) }
+    const gone = new Set(ids)
+    latest.current = { ...latest.current, reels: latest.current.reels.filter(r => !gone.has(r.id)) }
+    setReels(rs => rs.filter(r => !gone.has(r.id)))
+    if (latest.current.reelId && gone.has(latest.current.reelId)) { setReelId(null); setActiveClipId(null) }
   }
   const selectVideo = (id: string) => {
     setVideoId(id)
     const v = videos.find(x => x.id === id)
     if (v && !(reelId && v.sceneIds.includes(reelId))) { setReelId(v.sceneIds.find(s => reels.some(r => r.id === s)) ?? null); setActiveClipId(null) }
   }
-  const deleteVideo = async (id: string) => {
+  const deleteVideo = async (id: string, withScenes = false) => {
+    const v = latest.current.videos.find(x => x.id === id)
+    const own = v && withScenes ? scenesOnlyIn(v) : []
     await api.deleteVideo(id)
     forget(`video:${id}`)
-    const rest = videos.filter(v => v.id !== id)
+    const rest = latest.current.videos.filter(v => v.id !== id)
+    latest.current = { ...latest.current, videos: rest }
     setVideos(rest); setVideoId(rest[0]?.id ?? null)
+    if (own.length) await dropScenes(own)
   }
 
   // The project's colors win over the video's (videos made before project colors keep their own).
@@ -446,6 +469,10 @@ export function App() {
   const latest = useRef<AppLatest>({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null })
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, library, activeGroup }
   const { saveState, flushAll, markSaved, forget } = useAutosave(reels, videos, latest, setError)
+  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
+    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', scopeRefs, results,
+    addScenes, addVideo, putVideo, scenesOnlyIn, dropScenes, showScene, setNotice,
+  })
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
     () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
@@ -768,6 +795,8 @@ export function App() {
     const rows = groupRows(r, group, ids)
     return putSlide(spotAt(rows, group, rows.findIndex(x => x.kind === 'clip' && x.id === id) + 1), 'frame')
   }
+  // The data slides read positions from the players: the project's positions put on them.
+  const boardDvws = useMemo(() => Object.values(dvws).map(d => withRoles(d, settings?.roles)), [dvws, settings?.roles])
   // Slides comparing players: each lays out its players, with their photos copied into the project.
   // They go at the end of the open scene's first marker, or into a new scene when none is open.
   const [boardOpen, setBoardOpen] = useState(false)
@@ -804,10 +833,8 @@ export function App() {
       let scene = latest.current.reel
       if (!scene) {
         scene = newReel(t('シーン {0}', latest.current.reels.length + 1))
-        const made = scene
-        latest.current = { ...latest.current, reels: [...latest.current.reels, made], reel: made }
-        setReels(rs => [...rs, made]); setReelId(made.id); setActiveClipId(null)
-        placeInVideo(made.id)
+        addScenes([scene]); latest.current = { ...latest.current, reel: scene }; showScene(scene.id)
+        placeInVideo(scene.id)
       }
       // At the head of the marker, where its title card would be.
       const group = marker, sceneId = scene.id
@@ -1085,7 +1112,7 @@ export function App() {
               filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
-              onAddAll={() => addPlays(results)}
+              onAddAll={() => addPlays(results)} onPreset={() => setPresetOpen(true)}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
@@ -1245,7 +1272,7 @@ export function App() {
             {(['head', 'list'] as const).map(part => {
               const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
-              onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
+              onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={(id, withScenes) => void deleteVideo(id, withScenes)} onRemake={id => void remakePresetVideo(id)} onChange={updateVideo}
               onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={() => { createReel(); setRightTab('scene') }}
               onEditCard={id => editCard(id, null)} onEditVideoCard={() => editCard(null, null)}
               videoCardOn={!!overlay.titleCard.videoCard} onVideoCard={on => setOverlay({ ...overlay, titleCard: { ...overlay.titleCard, videoCard: on } })}
@@ -1293,6 +1320,7 @@ export function App() {
           sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+      {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)}
@@ -1304,7 +1332,7 @@ export function App() {
         <MatchReportDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} initial={match?.id ?? null} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setReportOpen(false)} />
       )}
       {(boardOpen || boardEdit) && (
-        <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={Object.values(dvws)} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}
+        <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={boardDvws} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}
           {...(boardEdit?.board ? { initial: boardEdit.board.config } : {})}
           onCreate={c => void makeBoard(c)} onClose={() => { setBoardOpen(false); setBoardEdit(null) }}
           onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />

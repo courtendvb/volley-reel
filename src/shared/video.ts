@@ -8,6 +8,7 @@ import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
+import type { VideoPreset } from './presets'
 
 export interface Video {
   id: string
@@ -19,6 +20,7 @@ export interface Video {
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
   cardLayout?: CardLayout // the opening card's own title place and size
   captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
+  preset?: VideoPreset // made from a preset (shared/presets.ts): kept so it can be made again
   updatedAt: string
 }
 
@@ -243,4 +245,15 @@ function cardMatchLabel(m: Match, codes: string[]): string {
 export function opponentLabel(m: Match, codes: string[]): string {
   const side = ourSide(m.teams, codes)
   return side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
+}
+
+// The words every name starts with ("HTH ブロック " in "HTH ブロック #15 …", "HTH ブロック #4 …"),
+// so a list of a preset video's scenes can show what tells them apart. Empty unless there are two
+// names or more and each has something left after it.
+export function sharedPrefix(names: string[]): string {
+  if (names.length < 2) return ''
+  const words = names.map(n => n.split(' '))
+  let k = 0
+  while (words.every(w => k < w.length - 1 && w[k] === words[0][k])) k++
+  return k ? words[0].slice(0, k).join(' ') + ' ' : ''
 }

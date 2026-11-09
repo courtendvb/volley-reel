@@ -3,8 +3,9 @@ import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
 
 // A title shown as text; clicking it turns it into a field to edit in place (Enter / Escape / leaving it ends).
-export function InlineTitle({ value, placeholder, label, onChange, className = '' }: {
-  value: string; placeholder: string; label: string; onChange: (v: string) => void; className?: string
+// shown: what the text shows when it differs from the value (the value is still what is edited, and the tooltip).
+export function InlineTitle({ value, shown, placeholder, label, onChange, className = '' }: {
+  value: string; shown?: string; placeholder: string; label: string; onChange: (v: string) => void; className?: string
 }) {
   const [editing, setEditing] = useState(false)
   if (editing) {
@@ -16,7 +17,8 @@ export function InlineTitle({ value, placeholder, label, onChange, className = '
     )
   }
   return (
-    <span className={`inline-title-text ${className}${value ? '' : ' muted'}`} title={t('クリックで名前を編集')}
-      onClick={e => { e.stopPropagation(); setEditing(true) }}>{value || placeholder}</span>
+    <span className={`inline-title-text ${className}${value ? '' : ' muted'}`} title={shown && shown !== value ? `${value}
+${t('クリックで名前を編集')}` : t('クリックで名前を編集')}
+      onClick={e => { e.stopPropagation(); setEditing(true) }}>{(shown || value) || placeholder}</span>
   )
 }

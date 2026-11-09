@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Reel } from '../../../shared/reel'
-import { addScene, moveSceneAt, removeSceneAt, type Video } from '../../../shared/video'
+import { addScene, moveSceneAt, removeSceneAt, sharedPrefix, type Video } from '../../../shared/video'
 import { InlineTitle } from './InlineTitle'
 import { NameSelect } from './NameSelect'
 import { t } from '../../../shared/i18n'
@@ -15,7 +15,8 @@ interface Props {
   currentSceneId: string | null
   onSelectVideo: (id: string) => void
   onNewVideo: () => void
-  onDeleteVideo: (id: string) => void
+  onDeleteVideo: (id: string, withScenes: boolean) => void // withScenes: also the scenes no other video uses
+  onRemake: (id: string) => void // a preset video made again from the matches searched now
   onChange: (v: Video) => void
   onSelectScene: (id: string) => void
   onRenameScene: (id: string, name: string) => void
@@ -47,6 +48,7 @@ export function VideoPanel(p: Props) {
   useEffect(() => { listRef.current?.querySelector('.video-scene.current')?.scrollIntoView({ block: 'nearest' }) }, [p.currentSceneId, v?.id])
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
+  const presetPrefix = v?.preset ? sharedPrefix(v.sceneIds.map(id => byId[id]?.name).filter((n): n is string => !!n)) : ''
   const total = v ? v.sceneIds.reduce((acc, id) => { const s = byId[id]; if (!s) return acc; const st = p.sceneStats(s); return { clips: acc.clips + st.clips, sec: acc.sec + st.sec } }, { clips: 0, sec: 0 }) : { clips: 0, sec: 0 }
 
   if (p.part === 'head') {
@@ -81,7 +83,15 @@ export function VideoPanel(p: Props) {
           title={p.videoCardOn ? t('動画の頭に動画名のカードを出す（クリックで出さない）') : t('動画の頭に動画名のカードを出さない（クリックで出す）')}
           onClick={() => p.onVideoCard(!p.videoCardOn)}>{t('カード')}</button>
         <button className="gear" aria-label={t('動画のタイトルカード')} title={t('動画の頭のタイトルカード（動画名）を動画の画面で編集')} onClick={p.onEditVideoCard}>⚙</button>
-        <button onClick={() => { if (confirm(t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) p.onDeleteVideo(v.id) }} title={t('動画を削除')}>{t('削除')}</button>
+        {v.preset && (
+          <button onClick={() => { if (confirm(t('動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わり（reels/deleted/ に移動します）、そこで加えた図形やトリムは消えます。', v.name))) p.onRemake(v.id) }}
+            title={t('この動画を作ったプリセットで、今の試合から作り直す')}>{t('作り直す')}</button>
+        )}
+        <button onClick={() => {
+          const own = [...new Set(v.sceneIds)].filter(id => byId[id] && usedIn(id) === 1).length
+          if (!confirm(own ? t('動画「{0}」を削除しますか？（videos/deleted/ に移動します）', v.name) : t('動画「{0}」を削除しますか？（シーンは残ります。videos/deleted/ に移動します）', v.name))) return
+          p.onDeleteVideo(v.id, own > 0 && confirm(t('この動画だけで使っているシーン {0} 個も削除しますか？\n（OK で削除して reels/deleted/ に移動します。キャンセルするとシーンは残ります）', own)))
+        }} title={t('動画を削除')}>{t('削除')}</button>
       </div>
 
       <div className="video-add">
@@ -93,6 +103,7 @@ export function VideoPanel(p: Props) {
       </div>
 
       <ol ref={listRef} className="video-scenes" role="list">
+        {/* A preset video's scenes all start "HTH ブロック …": the list shows the rest, which tells them apart. */}
         {v.sceneIds.map((id, i) => {
           const s = byId[id]
           const st = s ? p.sceneStats(s) : { clips: 0, sec: 0 }
@@ -116,7 +127,7 @@ export function VideoPanel(p: Props) {
               }}>
               <span className="grip" aria-hidden title={t('ドラッグで順番を変える')}>⠿</span>
               <span className="scene-no">{i + 1}</span>
-              {s ? <InlineTitle className="scene-name" value={s.name} placeholder={t('（名前なし）')} label={t('シーンの名前')} onChange={name => p.onRenameScene(id, name)} />
+              {s ? <InlineTitle className="scene-name" value={s.name} shown={presetPrefix && s.name.startsWith(presetPrefix) ? s.name.slice(presetPrefix.length) : undefined} placeholder={t('（名前なし）')} label={t('シーンの名前')} onChange={name => p.onRenameScene(id, name)} />
                 : <span className="scene-name">{t('（削除されたシーン）')}</span>}
               {s && usedIn(id) > 1 && <span className="shared" title={t('{0} 本の動画で使っています。直すとすべてに反映されます', usedIn(id))}>{t('共有')} {usedIn(id)}</span>}
               <span className="muted">{st.clips} {t('本・')}{formatLength(st.sec)}</span>

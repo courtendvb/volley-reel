@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import { DEFAULT_OVERLAY, type OverlaySettings } from './overlay'
 import { addClips, newReel, newSlide, playOrder, putSlides, toggleMarker, type Clip, type Reel } from './reel'
 import type { Match } from './types'
-import { addScene, chapterMetadata, chapterText, planChapters, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames, type PlanItem } from './video'
+import { addScene, chapterMetadata, chapterText, planChapters, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames, sharedPrefix, type PlanItem } from './video'
 
 const D = parseDVW(`[3TEAMS]
 HTH;HOME;;;;
@@ -173,3 +173,15 @@ describe('chapters for a scene or a marker', () => {
   })
 })
 
+
+describe('shared prefix of scene names', () => {
+  it('finds the words every name starts with', () => {
+    expect(sharedPrefix(['HTH ブロック #15 NISHIMOTO', 'HTH ブロック #4 MIWA'])).toBe('HTH ブロック ')
+    expect(sharedPrefix(['相手 サイドアウト ローテ 1', '相手 サイドアウト ローテ 6'])).toBe('相手 サイドアウト ローテ ')
+  })
+  it('leaves something of every name, and nothing for one name', () => {
+    expect(sharedPrefix(['HTH ブロック', 'HTH ブロック #4'])).toBe('HTH ')
+    expect(sharedPrefix(['HTH ブロック #15'])).toBe('')
+    expect(sharedPrefix(['A x', 'B x'])).toBe('')
+  })
+})

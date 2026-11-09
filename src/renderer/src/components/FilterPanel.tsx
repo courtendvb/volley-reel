@@ -22,6 +22,7 @@ interface Props {
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
   dirUnknown: number // plays in scope whose way on screen isn't known (no fitted court); sets aren't counted
   onAddAll: () => void
+  onPreset: () => void // make a video from a preset (PresetDialog)
   saved: SavedFilter[] // the project's saved conditions
   onSaved: (list: SavedFilter[]) => void
 }
@@ -29,7 +30,7 @@ interface Props {
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, onPreset, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length + f.startZones.length + f.endZones.length
@@ -147,6 +148,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         <button className="link" onClick={() => onChange(EMPTY_FILTER)} disabled={f === EMPTY_FILTER}>{t('条件をクリア')}</button>
         <button onClick={onAddAll} disabled={!shown || shown === total}
           title={shown === total ? t('条件で絞り込んでから追加してください') : undefined}>{t('結果をシーンに追加')}</button>
+        <button onClick={onPreset} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>
       </div>
     </div>
   )

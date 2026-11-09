@@ -252,7 +252,7 @@ class Playback {
 
   private rawSeek(t: number, play: boolean): void {
     const v = this.video
-    if (!v) return
+    if (!v || !Number.isFinite(t)) return // no time to go to (the video would throw)
     this.endHold()
     this.held.clear() // a new pass: its holds play again
     v.currentTime = this.clamp(t)

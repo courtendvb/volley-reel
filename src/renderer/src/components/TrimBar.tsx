@@ -49,9 +49,12 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
   const lo = Math.max(0, Math.min(range.in, def.in) - CONTEXT_SEC)
   const hi = Math.min(durationSec || Infinity, Math.max(range.out, def.out) + CONTEXT_SEC)
   const pct = (t: number) => `${((t - lo) / (hi - lo)) * 100}%`
+  // The time under clientX on a bar `width` wide; NaN when the bar has no width (not laid out,
+  // e.g. its panel hidden mid-drag), which the drags below ignore rather than write.
+  const timeOn = (clientX: number, left: number, width: number) => (width > 0 ? lo + Math.max(0, Math.min(1, (clientX - left) / width)) * (hi - lo) : NaN)
   const timeAt = (clientX: number) => {
     const r = track.current!.getBoundingClientRect()
-    return lo + Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * (hi - lo)
+    return timeOn(clientX, r.left, r.width)
   }
 
   const startDrag = (edge: 'in' | 'out' | 'skill') => (e: PointerEvent) => {
@@ -63,7 +66,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
   const onMove = (e: PointerEvent) => {
     const od = objDrag.current
     if (od) {
-      const raw = lo + Math.max(0, Math.min(1, (e.clientX - od.rect.left) / od.rect.width)) * (hi - lo)
+      const raw = timeOn(e.clientX, od.rect.left, od.rect.width)
+      if (!Number.isFinite(raw)) return
       // Sticks to the other objects' times, IN / OUT and the key play within 6 px (Alt: free).
       const targets = [range.in, range.out, keyTime, ...objects.filter(o => o.id !== od.id).flatMap(o => [o.from, o.to])]
       const sn = e.altKey ? { t: raw, snapped: null } : snapTime(raw, targets, (6 / od.rect.width) * (hi - lo))
@@ -76,6 +80,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     }
     if (!drag) return
     const t = timeAt(e.clientX)
+    if (!Number.isFinite(t)) return
     if (drag === 'skill') {
       // Back on the DVW's time within 6 px (Alt: free), so it can be put back by hand.
       const sn = e.altKey ? { t, snapped: null } : snapTime(t, [keyTime], (6 / track.current!.getBoundingClientRect().width) * (hi - lo))

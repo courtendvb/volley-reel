@@ -1,6 +1,6 @@
 // DVW parser. Pure: no file or DOM access.
 // Ported from HTH_videoviewer/dvw-parser.js and m0/lib/dvw.mjs (docs/design.md §7).
-import type { ClickPoint, ParsedDVW, Play, Player, Rally, Side, Team, PlayerRole } from './types'
+import type { ClickPoint, MatchInfo, ParsedDVW, Play, Player, Rally, Side, Team, PlayerRole } from './types'
 
 const ROLES: Record<string, PlayerRole> = { 1: 'L', 2: 'OH', 3: 'OP', 4: 'MB', 5: 'S' } // the player's position, as DataVolley numbers them
 
@@ -10,6 +10,8 @@ export function parseDVW(text: string): ParsedDVW {
   const plays: Play[] = []
   const rallies: Rally[] = []
   let date: string | null = null
+  const info: MatchInfo = { time: null, sets: [], staff: [{ coach: '', assistant: '' }, { coach: '', assistant: '' }], setsWon: [0, 0], more: { referees: '', spectators: '', receipts: '', city: '', hall: '' } }
+  let teamRow = 0, moreRow = 0
   let section = ''
   let score = { home: 0, away: 0 }
   const sets = { home: 0, away: 0 }
@@ -32,11 +34,25 @@ export function parseDVW(text: string): ParsedDVW {
     const c = l.split(';')
 
     if (section === '[3MATCH]') {
-      if (date === null) date = parseDate(c[0])
+      if (date === null) { date = parseDate(c[0]); info.time = (c[1] || '').trim().replace(/\./g, ':').slice(0, 5) || null }
       continue
     }
     if (section === '[3TEAMS]') {
       if (teams.length < 2) teams.push({ code: c[0].trim(), name: (c[1] || '').trim() })
+      if (teamRow < 2) { info.setsWon[teamRow] = parseInt(c[2]) || 0; info.staff[teamRow] = { coach: (c[3] || '').trim(), assistant: (c[4] || '').trim() }; teamRow++ }
+      continue
+    }
+    // The sets: their partial scores at 8, 16 and 21 points, the final score and the minutes played.
+    if (section === '[3SET]') {
+      if (c[0]?.trim().toLowerCase() !== 'true') continue
+      const sc = (v?: string) => (v || '').replace(/\s/g, '')
+      const final = sc(c[4])
+      if (final) info.sets.push({ partials: [sc(c[1]), sc(c[2]), sc(c[3])].filter(Boolean), score: final, minutes: parseInt(c[5]) || 0 })
+      continue
+    }
+    // Referees, spectators, receipts, city and hall (the first line).
+    if (section === '[3MORE]') {
+      if (moreRow++ === 0) info.more = { referees: (c[0] || '').trim(), spectators: (c[1] || '').trim(), receipts: (c[2] || '').trim(), city: (c[3] || '').trim(), hall: (c[4] || '').trim() }
       continue
     }
     if (section === '[3PLAYERS-H]' || section === '[3PLAYERS-V]') {
@@ -46,7 +62,10 @@ export function parseDVW(text: string): ParsedDVW {
       const lastName = (c[9] || '').trim()
       const firstName = (c[10] || '').trim()
       const role = ROLES[c[13]?.trim()]
-      players[`${side}${jersey}`] = { key: playerKey(c[8], lastName, firstName, jersey), side, jersey, lastName, firstName, ...(role ? { role } : {}) }
+      // Each set: the zone they started in, '*' when they came on, null when they did not play.
+      const played = [3, 4, 5, 6, 7].map(i => { const v = (c[i] || '').trim(); return v === '*' ? '*' as const : /^[1-6]$/.test(v) ? Number(v) : null })
+      players[`${side}${jersey}`] = { key: playerKey(c[8], lastName, firstName, jersey), side, jersey, lastName, firstName, ...(role ? { role } : {}),
+        ...(c[12]?.trim() === 'L' ? { libero: true } : {}), ...(played.some(v => v !== null) ? { sets: played } : {}) }
       continue
     }
     if (section === '[3ATTACKCOMBINATION]' || section === '[3SETTERCALL]') {
@@ -95,7 +114,10 @@ export function parseDVW(text: string): ParsedDVW {
 
     const setNum = setsEnded + 1
     if (skill === 'S') {
-      rally = { id: rallies.length, setNum, serveTime: time, lastActionTime: time, pointTime: null, wonBy: null }
+      // Who is on court for the rally: both lineups on the serve's line (jerseys, P1 to P6; liberos are not in them).
+      const six = (cols: string[]) => cols.map(x => parseInt(x)).filter(n => !isNaN(n))
+      const court = { home: six(c.slice(14, 20)), away: six(c.slice(20, 26)) }
+      rally = { id: rallies.length, setNum, serveTime: time, lastActionTime: time, pointTime: null, wonBy: null, ...(court.home.length || court.away.length ? { court } : {}) }
       rallies.push(rally); contacts = []
     }
     if (rally) rally.lastActionTime = Math.max(rally.lastActionTime, time)
@@ -162,7 +184,7 @@ export function parseDVW(text: string): ParsedDVW {
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })
   const allHome = plays.length > 0 && plays.every(p => p.side === '*')
-  return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames }
+  return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames, info }
 }
 
 // A possibility: the serving team got an attack of its own out of the rally. Its serve, its blocks

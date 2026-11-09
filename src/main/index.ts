@@ -339,6 +339,18 @@ function registerIpc(): void {
     await writeFile(r.filePath, data)
     return r.filePath
   })
+  // The match report as an A4 PDF: its page drawn in a hidden window, printed, saved where the user says.
+  ipcMain.handle('report:pdf', async (_e, html: string, name: string) => {
+    const r = await dialog.showSaveDialog(win!, { title: t('マッチレポートを PDF に書き出す'), defaultPath: `${name.replace(/[\\/:*?"<>|]/g, '_')}.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+    if (r.canceled || !r.filePath) return null
+    const w = new BrowserWindow({ show: false, webPreferences: { javascript: false } })
+    try {
+      await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+      const pdf = await w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } })
+      await writeFile(r.filePath, pdf)
+    } finally { w.destroy() }
+    return r.filePath
+  })
   ipcMain.handle('pack:roster', () => lib().roster())
   // A pack made in the app: to a file the user names, or straight into the library. The file name, or
   // null when the save was called off.

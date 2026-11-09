@@ -48,7 +48,7 @@ export interface SmokeOpts {
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
-  presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes
+  presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
   videoExportTo?: string
@@ -1506,8 +1506,8 @@ export function installSmoke(h: SmokeHost): void {
 
   // Presets through the dialog's real buttons: a block video by middle made and checked against
   // its preview (scenes, names, title cards, markers, clips, on disk); made again from its 作り直す;
-  // a position set by hand (saved, moving a player's attacks) and undone; then the video deleted
-  // with its scenes.
+  // a position set by hand (saved, moving a player's attacks) and undone; the video deleted
+  // with its scenes, then the deletion undone (back on disk) and redone.
   const smokePresets = async () => {
     const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
       for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
@@ -1590,8 +1590,17 @@ export function installSmoke(h: SmokeHost): void {
       // 4. Deleted with the scenes only it uses.
       const panel = await waitFor(() => document.querySelector('.video-panel'), 5000, 'video panel')
       ;(await waitFor(() => button(panel, t('削除')), 5000, 'delete button')).click()
-      await until(async () => { const vs = await api.listVideos(), ids = (await api.listReels()).map(r => r.id); return !vs.some(v => v.id === video.id) && remade.sceneIds.every(id => !ids.includes(id)) ? true : null }, 'video and scenes deleted', SAVE_DELAY_MS + 10000)
-      return { presets: { scenes: rows.map(r => `${r.title} ${r.total} (${r.markers.map(m => `${m.name} ${m.n}`).join(', ')})`), remade: remade.sceneIds.length, position: { who, saved: Object.keys(saved).length, middles: [mbBefore, mbAfter] }, deleted: true } }
+      const onDisk = async () => { const vs = await api.listVideos(), ids = (await api.listReels()).map(r => r.id); return { video: vs.some(v => v.id === video.id), scenes: remade.sceneIds.filter(id => ids.includes(id)).length } }
+      await until(async () => { const d = await onDisk(); return !d.video && !d.scenes ? true : null }, 'video and scenes deleted', SAVE_DELAY_MS + 10000)
+
+      // 5. Ctrl+Z puts the video and its scenes back (saved anew), Ctrl+Y deletes them again.
+      const key = (k: string) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true }))
+      key('z')
+      await until(async () => { const d = await onDisk(); return d.video && d.scenes === remade.sceneIds.length ? true : null }, 'deletion undone on disk', SAVE_DELAY_MS + 10000)
+      if (!latest.current.videos.some(v => v.id === video.id && v.sceneIds.join() === remade.sceneIds.join())) throw new Error('undone video lacks its scenes')
+      key('y')
+      await until(async () => { const d = await onDisk(); return !d.video && !d.scenes ? true : null }, 'deletion redone', SAVE_DELAY_MS + 10000)
+      return { presets: { scenes: rows.map(r => `${r.title} ${r.total} (${r.markers.map(m => `${m.name} ${m.n}`).join(', ')})`), remade: remade.sceneIds.length, position: { who, saved: Object.keys(saved).length, middles: [mbBefore, mbAfter] }, deleted: true, undoRedo: true } }
     } finally {
       window.confirm = realConfirm
     }

@@ -63,7 +63,7 @@ import { clipPlayedSec } from '../../shared/timing'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
 import { SAVE_DELAY_MS, useAutosave } from './app/useAutosave'
 import { useUpdates } from './app/useUpdates'
-import { useUndo } from './app/useUndo'
+import { useUndo, type Snapshot } from './app/useUndo'
 import { usePlaySearch } from './app/usePlaySearch'
 import { useSlideFiles } from './app/useSlideFiles'
 import { useExport } from './app/useExport'
@@ -233,10 +233,22 @@ export function App() {
   // ---- reels --------------------------------------------------------------------------------
   // Undo puts back a scene or video (and shows it), or the project settings.
   const { record, undoRedo, clearHistory } = useUndo({
-    now: e => (e.kind === 'settings' ? latest.current.settings : e.kind === 'scene' ? latest.current.reels.find(x => x.id === e.value.id) : latest.current.videos.find(x => x.id === e.value.id)),
-    restore: e => {
-      if (e.kind === 'settings') { const cur = latest.current.settings; if (cur) void api.saveSettings(applySettingsChange(cur, e.value)).then(setProject).catch(err => setError(String(err))) }
-      else if (e.kind === 'scene') { putScene(e.value); setReelId(e.value.id) } else { putVideo(e.value); setVideoId(e.value.id) }
+    now: e => (e.kind === 'settings' ? latest.current.settings ?? null : e.kind === 'scene' ? latest.current.reels.find(x => x.id === e.id) ?? null : latest.current.videos.find(x => x.id === e.id) ?? null),
+    // Each scene or video back as it was: changed back, made again (saved anew), or taken out again.
+    restore: list => {
+      let scene: string | null = null, video: string | null = null
+      for (const e of list) {
+        if (e.kind === 'settings') { const cur = latest.current.settings; if (cur) void api.saveSettings(applySettingsChange(cur, e.value)).then(setProject).catch(err => setError(String(err))) }
+        else if (e.kind === 'scene') {
+          const has = latest.current.reels.some(x => x.id === e.id)
+          if (!e.value) { if (has) removeScenes([e.id]) } else { if (has) putScene(e.value); else addScenes([e.value]); scene = e.id }
+        } else {
+          const has = latest.current.videos.some(x => x.id === e.id)
+          if (!e.value) { if (has) removeVideo(e.id) } else { if (has) putVideo(e.value); else addVideo(e.value); video = e.id }
+        }
+      }
+      if (video) setVideoId(video)
+      if (scene) showScene(scene)
     },
   })
   const putScene = (r: Reel) => {
@@ -246,7 +258,8 @@ export function App() {
   const putVideo = (v: Video) => {
     latest.current = { ...latest.current, videos: latest.current.videos.map(x => (x.id === v.id ? v : x)), video: latest.current.video?.id === v.id ? v : latest.current.video }
     setVideos(vs => vs.map(x => (x.id === v.id ? v : x)))
-  }  // New scenes and a new video: in the state, and in latest at once for steps that follow in the same tick.
+  }
+  // New scenes and a new video: in the state, and in latest at once for steps that follow in the same tick.
   const addScenes = (rs: Reel[]) => {
     latest.current = { ...latest.current, reels: [...latest.current.reels, ...rs] }
     setReels(x => [...x, ...rs])
@@ -256,15 +269,33 @@ export function App() {
     setVideos(x => [...x, v]); setVideoId(v.id)
   }
   const showScene = (id: string) => { setReelId(id); setActiveClipId(null) }
+  // Scenes and a video taken out, their files moved to deleted/ (undo puts them back and saves them anew).
+  const removeScenes = (ids: string[]) => {
+    if (!ids.length) return
+    const gone = new Set(ids)
+    latest.current = { ...latest.current, reels: latest.current.reels.filter(r => !gone.has(r.id)) }
+    setReels(rs => rs.filter(r => !gone.has(r.id)))
+    if (latest.current.reelId && gone.has(latest.current.reelId)) { setReelId(null); setActiveClipId(null) }
+    for (const id of ids) { forget(`scene:${id}`); void api.deleteReel(id) }
+  }
+  const removeVideo = (id: string) => {
+    const rest = latest.current.videos.filter(v => v.id !== id)
+    latest.current = { ...latest.current, videos: rest, video: latest.current.video?.id === id ? rest[0] ?? null : latest.current.video }
+    setVideos(rest); setVideoId(cur => (cur === id ? rest[0]?.id ?? null : cur))
+    forget(`video:${id}`); void api.deleteVideo(id)
+  }
+  // A scene or video as it is now, for undo (null: not there).
+  const sceneSnap = (id: string): Snapshot => ({ kind: 'scene', id, value: latest.current.reels.find(x => x.id === id) ?? null })
+  const videoSnap = (id: string): Snapshot => ({ kind: 'video', id, value: latest.current.videos.find(x => x.id === id) ?? null })
 
   const updateReel = useCallback((r: Reel) => {
     const prev = latest.current.reels.find(x => x.id === r.id)
-    if (prev && prev !== r) record({ kind: 'scene', value: prev })
+    if (prev && prev !== r) record({ kind: 'scene', id: prev.id, value: prev })
     putScene(r)
   }, [record])
   const updateVideo = useCallback((v: Video) => {
     const prev = latest.current.videos.find(x => x.id === v.id)
-    if (prev && prev !== v) record({ kind: 'video', value: prev })
+    if (prev && prev !== v) record({ kind: 'video', id: prev.id, value: prev })
     putVideo(v)
   }, [record])
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
@@ -336,20 +367,24 @@ export function App() {
     const rs = latest.current.reels
     const cur = rs.find(r => r.id === latest.current.reelId)
     const next = fn(cur ?? newReel(t('シーン {0}', rs.length + 1)))
-    if (cur) record({ kind: 'scene', value: cur })
+    if (cur) record({ kind: 'scene', id: cur.id, value: cur })
     const all = cur ? rs.map(r => (r.id === cur.id ? next : r)) : [...rs, next]
     latest.current = { ...latest.current, reels: all, reelId: next.id, reel: next }
     setReels(all)
     setReelId(next.id)
-    if (!cur) placeInVideo(next.id)
+    if (!cur) record([{ kind: 'scene', id: next.id, value: null }, placeInVideo(next.id)], false)
     return next
   }, [record])
   // A new scene goes into the current video; with no video yet, the first one is made for it.
-  const placeInVideo = (sceneId: string) => {
+  // Returns the video as it was, for the caller's undo step.
+  const placeInVideo = (sceneId: string): Snapshot => {
     const v = latest.current.video
-    if (v) { updateVideo(addScene(v, sceneId)); return }
-    addVideo(newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId]))
+    if (v) { const was = videoSnap(v.id); putVideo(addScene(v, sceneId)); return was }
+    const nv = newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId])
+    addVideo(nv)
+    return { kind: 'video', id: nv.id, value: null }
   }
+
 
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group, extractRef.current).reel)
@@ -420,46 +455,40 @@ export function App() {
   const createReel = () => {
     const r = newReel(t('シーン {0}', reels.length + 1))
     addScenes([r]); showScene(r.id)
-    placeInVideo(r.id)
+    record([{ kind: 'scene', id: r.id, value: null }, placeInVideo(r.id)], false)
   }
-  // Deleting a scene takes it out of every video that used it.
-  const deleteReel = async (id: string) => {
-    await api.deleteReel(id)
-    forget(`scene:${id}`)
-    const rest = reels.filter(r => r.id !== id)
-    setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
-    for (const v of latest.current.videos) if (v.sceneIds.includes(id)) updateVideo(dropScene(v, id))
+  // Deleting a scene takes it out of every video that used it (one undo step for all of it).
+  const deleteReel = (id: string) => {
+    const users = latest.current.videos.filter(v => v.sceneIds.includes(id))
+    record([sceneSnap(id), ...users.map(v => videoSnap(v.id))], false)
+    for (const v of users) putVideo(dropScene(v, id))
+    removeScenes([id])
+    const first = latest.current.reels[0]?.id ?? null
+    setReelId(first); setActiveClipId(null)
   }
   // A new video starts empty; its scenes are added (or made) for it. Switching videos shows one of its scenes.
   const createVideo = () => {
-    addVideo(newVideo(t('動画 {0}', videos.length + 1), []))
+    const v = newVideo(t('動画 {0}', videos.length + 1), [])
+    addVideo(v); record({ kind: 'video', id: v.id, value: null }, false)
     setReelId(null); setActiveClipId(null)
   }
   // The scenes no other video uses.
   const scenesOnlyIn = (v: Video) => [...new Set(v.sceneIds)].filter(id => !latest.current.videos.some(o => o.id !== v.id && o.sceneIds.includes(id)))
-  // Scenes deleted together (moved to reels/deleted/, like deleting one by hand).
-  const dropScenes = async (ids: string[]) => {
-    for (const id of ids) { await api.deleteReel(id); forget(`scene:${id}`) }
-    const gone = new Set(ids)
-    latest.current = { ...latest.current, reels: latest.current.reels.filter(r => !gone.has(r.id)) }
-    setReels(rs => rs.filter(r => !gone.has(r.id)))
-    if (latest.current.reelId && gone.has(latest.current.reelId)) { setReelId(null); setActiveClipId(null) }
-  }
   const selectVideo = (id: string) => {
     setVideoId(id)
     const v = videos.find(x => x.id === id)
     if (v && !(reelId && v.sceneIds.includes(reelId))) { setReelId(v.sceneIds.find(s => reels.some(r => r.id === s)) ?? null); setActiveClipId(null) }
   }
-  const deleteVideo = async (id: string, withScenes = false) => {
+  // withScenes: also the scenes no other video uses. One undo step puts it all back.
+  const deleteVideo = (id: string, withScenes = false) => {
     const v = latest.current.videos.find(x => x.id === id)
-    const own = v && withScenes ? scenesOnlyIn(v) : []
-    await api.deleteVideo(id)
-    forget(`video:${id}`)
-    const rest = latest.current.videos.filter(v => v.id !== id)
-    latest.current = { ...latest.current, videos: rest }
-    setVideos(rest); setVideoId(rest[0]?.id ?? null)
-    if (own.length) await dropScenes(own)
+    if (!v) return
+    const own = withScenes ? scenesOnlyIn(v) : []
+    record([videoSnap(id), ...own.map(sceneSnap)], false)
+    removeVideo(id)
+    removeScenes(own)
   }
+
 
   // The project's colors win over the video's (videos made before project colors keep their own).
   const overlay = useMemo(() => {
@@ -471,7 +500,7 @@ export function App() {
   const { saveState, flushAll, markSaved, forget } = useAutosave(reels, videos, latest, setError)
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
     latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', scopeRefs, results,
-    addScenes, addVideo, putVideo, scenesOnlyIn, dropScenes, showScene, setNotice,
+    addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
   })
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
     () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
@@ -834,7 +863,7 @@ export function App() {
       if (!scene) {
         scene = newReel(t('シーン {0}', latest.current.reels.length + 1))
         addScenes([scene]); latest.current = { ...latest.current, reel: scene }; showScene(scene.id)
-        placeInVideo(scene.id)
+        record([{ kind: 'scene', id: scene.id, value: null }, placeInVideo(scene.id)], false)
       }
       // At the head of the marker, where its title card would be.
       const group = marker, sceneId = scene.id
@@ -1272,7 +1301,7 @@ export function App() {
             {(['head', 'list'] as const).map(part => {
               const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
-              onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={(id, withScenes) => void deleteVideo(id, withScenes)} onRemake={id => void remakePresetVideo(id)} onChange={updateVideo}
+              onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={deleteVideo} onRemake={id => void remakePresetVideo(id)} onChange={updateVideo}
               onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={() => { createReel(); setRightTab('scene') }}
               onEditCard={id => editCard(id, null)} onEditVideoCard={() => editCard(null, null)}
               videoCardOn={!!overlay.titleCard.videoCard} onVideoCard={on => setOverlay({ ...overlay, titleCard: { ...overlay.titleCard, videoCard: on } })}
@@ -1291,7 +1320,7 @@ export function App() {
             <div className="right-pane" hidden={rightTab !== 'scene'}>
             <ReelPanel
               reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
-              onNewReel={createReel} onDeleteReel={id => void deleteReel(id)} onChange={updateReel}
+              onNewReel={createReel} onDeleteReel={deleteReel} onChange={updateReel}
               info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
               onActivate={(c, g) => { if (cardEditRef.current?.slideId) { setCardEdit(null); setSelectedAnn(null) } activateClip(c, g) }} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onPlayMax={() => void playMaximized(() => playThrough('scene', 0))} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}

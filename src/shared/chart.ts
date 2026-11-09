@@ -1,7 +1,7 @@
 // A direction chart: a player's attacks or serves on a small court seen from above, coloured by how
 // each ended, with their numbers. Drawn on the video from the court tab, or on a slide. Pure: the draw function
 // takes a canvas context, no DOM access.
-import { heatColor, heatGrid } from './court'
+import { heatColor, heatGrid } from './courtHeat'
 import type { ParsedDVW, Play } from './types'
 
 interface Pt { x: number; y: number }

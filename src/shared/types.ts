@@ -25,6 +25,8 @@ export interface Player {
   lastName: string
   firstName: string
   role?: PlayerRole // from the DVW's roster, when it says
+  libero?: boolean // marked L in the roster
+  sets?: (number | '*' | null)[] // sets 1–5: the zone they started in, '*' came on, null did not play
 }
 
 export type PlayerRole = 'L' | 'OH' | 'OP' | 'MB' | 'S'
@@ -72,6 +74,7 @@ export interface Rally {
   lastActionTime: number // the point line is logged ~10s after this, so clips end here
   pointTime: number | null
   wonBy: Side | null
+  court?: { home: number[]; away: number[] } // the jerseys on court (the lineups at the serve; no liberos)
 }
 
 export interface ParsedDVW {
@@ -82,6 +85,17 @@ export interface ParsedDVW {
   rallies: Rally[]
   allHome: boolean // every play coded as '*': side can't tell the teams apart
   codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
+  info?: MatchInfo // for the match report; missing on matches read before it was kept
+}
+
+// The match as the DVW's header tells it: start time, each set's partial scores (at 8, 16, 21), final
+// score and minutes, the teams' sets won and staff, and what [3MORE] holds (often empty).
+export interface MatchInfo {
+  time: string | null
+  sets: { partials: string[]; score: string; minutes: number }[]
+  staff: [{ coach: string; assistant: string }, { coach: string; assistant: string }]
+  setsWon: [number, number]
+  more: { referees: string; spectators: string; receipts: string; city: string; hall: string }
 }
 
 export interface Match {
@@ -249,6 +263,7 @@ export interface Api {
   removePack(id: string): Promise<PackInfo[]>
   packRoster(): Promise<RosterPlayer[]> // everyone in the library's matches
   saveCard(name: string, ext: 'png' | 'pdf', data: Uint8Array): Promise<string | null> // asks where; the path
+  saveReportPdf(html: string, name: string): Promise<string | null> // the match report as an A4 PDF; asks where; the path
   savePack(manifest: PackManifest, photos: Record<string, Uint8Array>, install: boolean): Promise<{ saved: string | null; packs: PackInfo[] }>
   readPackPhoto(id: string, photo: string): Promise<Uint8Array>
   setPlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // asks for a picture; kept in the local pack

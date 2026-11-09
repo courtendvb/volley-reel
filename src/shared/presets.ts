@@ -213,3 +213,18 @@ export const presetReels = (specs: SceneSpec[], prefix: string, mode: ClipMode):
   }
   return r
 })
+
+// A block video by middle goes by who is in the front row at each attack: the attacks from a DVW
+// that doesn't record the lineups can't go in (counted, to say so).
+export const lineupsMissing = (kind: PresetKind, how: PresetHow, refs: PlayRef[]): number =>
+  kind === 'block' && how.block === 'middle' ? refs.filter(r => !r.play.front).length : 0
+
+// The dialog's last choices, kept on this computer and read back with care (anything unknown: the default).
+export interface PresetDialogState { kind: PresetKind; how: PresetHow; source: PresetSource; dir: 'all' | PlayDir; modes: Record<PresetKind, ClipMode> }
+export function cleanDialogState(v: unknown, modes: Record<PresetKind, ClipMode>): PresetDialogState {
+  const o = (v && typeof v === 'object' ? v : {}) as Partial<PresetDialogState>
+  const p = cleanPreset({ ...o, mode: 'keyplay' }) ?? { kind: 'sideout' as const, how: DEFAULT_HOW, source: 'our' as const, dir: 'all' as const }
+  const m = { ...modes }
+  for (const k of PRESET_KINDS) { const x = (o.modes as Record<string, unknown> | undefined)?.[k]; if (x === 'toEnd' || x === 'keyplay') m[k] = x }
+  return { kind: p.kind, how: p.how, source: p.source, dir: p.dir, modes: m }
+}

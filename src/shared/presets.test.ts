@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOW, buildPreset, cleanPreset, makePreset, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
+import { DEFAULT_HOW, buildPreset, cleanDialogState, cleanPreset, lineupsMissing, makePreset, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
 import type { PlayRef } from './filter'
 import type { ParsedDVW, Play, PlayerRole } from './types'
 
@@ -138,5 +138,23 @@ describe('preset scenes and lookups', () => {
     attack.play = { ...attack.play, side: '*', front: ['K3', 'K7', 'K9'] }
     expect(presetLookups({ m: d }, undefined).middlesFacing(attack)).toEqual([{ key: 'K3', label: '#3 MID' }])
     expect(presetLookups({ m: d }, { K7: 'MB', K3: 'OH' }).middlesFacing(attack)).toEqual([{ key: 'K7', label: '#7 OUT' }])
+  })
+})
+
+describe('preset dialog', () => {
+  it('counts the attacks a block video by middle cannot use (no lineups in the DVW)', () => {
+    const a = ref({ skill: 'A', jersey: 2 }), b = ref({ skill: 'A', jersey: 3 })
+    b.play = { ...b.play, front: ['K1'] }
+    expect(lineupsMissing('block', DEFAULT_HOW, [a, b])).toBe(1)
+    expect(lineupsMissing('block', { ...DEFAULT_HOW, block: 'rotation' }, [a, b])).toBe(0)
+    expect(lineupsMissing('attack', DEFAULT_HOW, [a, b])).toBe(0)
+  })
+
+  it('reads the last choices back, unknown parts as the default', () => {
+    const modes = { sideout: 'toEnd', serve: 'keyplay', block: 'keyplay', attack: 'keyplay' } as const
+    const kept = { kind: 'attack', how: { ...DEFAULT_HOW, attack: 'combo' }, source: 'opp', dir: 'up', modes: { ...modes, attack: 'toEnd' } }
+    expect(cleanDialogState(JSON.parse(JSON.stringify(kept)), modes)).toEqual(kept)
+    expect(cleanDialogState({ kind: 'dance', modes: { serve: 'x' } }, modes)).toEqual({ kind: 'sideout', how: DEFAULT_HOW, source: 'our', dir: 'all', modes })
+    expect(cleanDialogState(null, modes).kind).toBe('sideout')
   })
 })

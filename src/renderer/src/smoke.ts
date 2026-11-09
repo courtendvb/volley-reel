@@ -321,9 +321,12 @@ export function installSmoke(h: SmokeHost): void {
     const ta = document.querySelector<HTMLTextAreaElement>('[aria-label="カードの文字"]')!
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, '7番のアタック\nセット 1')
     ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200)
-    const color = document.querySelector<HTMLInputElement>('[aria-label="カードの背景色"]')!
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(color, '#1e3a8a')
-    color.dispatchEvent(new Event('input', { bubbles: true })); await sleep(400)
+    // The background from the card bar's palette: its swatch opens the 20 colours, one is clicked.
+    const swatch = await waitFor(() => document.querySelector<HTMLButtonElement>(`button.palette-swatch[aria-label="${t('カードの背景色')}"]`), 5000, 'card background swatch')
+    swatch.click()
+    const navy = await waitFor(() => document.querySelector<HTMLButtonElement>('.palette-pop [role=option][title="#3F48CC"]'), 5000, 'palette colour')
+    navy.click(); await sleep(400)
+    if (latest.current.overlay.titleCard.background?.toUpperCase() !== '#3F48CC') throw new Error(`card background not set: ${latest.current.overlay.titleCard.background}`)
     log.card = { title: scene().markerCardTitles?.[1], background: latest.current.overlay.titleCard.background,
       planName: currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1)?.kind === 'card' ? (currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1) as { card: { name: string } }).card.name : null }
     return { ...log, videoExport: opts.videoExportTo ?? null, exported }
@@ -1818,9 +1821,10 @@ export function installSmoke(h: SmokeHost): void {
     await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready ? true : null, 20000, 'video')
     const range = latest.current.clipInfo(built.clips[ids[0]]).range!
     await playback.seekAndWait(range.in + 2)
+    await openPanel('objects') // the object tools (freehand, show times) are in the panel under the video
     const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 20000, 'canvas')
-    const box = canvas.getBoundingClientRect()
-    const pt = (x: number, y: number) => ({ clientX: box.left + x * box.width, clientY: box.top + y * box.height, bubbles: true, pointerId: 1 })
+    // Measured on every event: the panels under the video change size as objects are drawn and picked.
+    const pt = (x: number, y: number) => { const box = canvas.getBoundingClientRect(); return { clientX: box.left + x * box.width, clientY: box.top + y * box.height, bubbles: true, pointerId: 1 } }
     const key = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); await sleep(80) }
     const stroke = async (path: [number, number][]) => {
       canvas.dispatchEvent(new PointerEvent('pointerdown', pt(...path[0]))); await sleep(30)
@@ -1840,12 +1844,15 @@ export function installSmoke(h: SmokeHost): void {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(150)
     const drawn = anns().map(a => a.kind)
 
+    ;(document.activeElement as HTMLElement | null)?.blur() // out of the text box, as a click elsewhere would: keys go to the tools again
     await key('v'); await stroke([[0.7, 0.21], [0.72, 0.23], [0.75, 0.26]]) // drag the rect by its top edge
     const rect = anns().find(a => a.kind === 'rect')
 
     await stroke([[0.4, 0.4]]) // select the arrow
+    const selAfterClick = latest.current.selectedAnn
     await playback.seekAndWait(range.in + 3)
-    const btn = [...document.querySelectorAll('button')].find(b => b.textContent === 'ここから表示')!
+    // The object tools' button (the headline bar has one of the same name: told apart by its tooltip).
+    const btn = await waitFor(() => document.querySelector<HTMLButtonElement>(`button[title="${t('今の再生位置から表示する')}"]`), 5000, () => `ここから表示 (selected: ${latest.current.selectedAnn}, objects: ${anns().map(x => `${x.kind}:${x.id.slice(0, 4)}`).join(' ')}, panel tabs: ${[...document.querySelectorAll('.stage-tabs button[aria-selected=true]')].map(b => b.textContent).join('/')}, drawn: ${drawn.join(',')}, after click: ${selAfterClick}, rect: ${JSON.stringify(rect && { x: (rect as { x?: number }).x, y: (rect as { y?: number }).y })})`)
     btn.click(); await sleep(150)
     const arrow = anns().find(a => a.kind === 'arrow')!
 

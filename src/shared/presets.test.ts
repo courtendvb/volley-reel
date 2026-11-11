@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOW, buildPreset, cleanDialogState, cleanPreset, lineupsMissing, makePreset, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
+import { DEFAULT_HOW, buildPreset, cleanDialogState, cleanPreset, serveZoneMarker, lineupsMissing, makePreset, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
 import type { PlayRef } from './filter'
 import type { ParsedDVW, Play, PlayerRole } from './types'
 
@@ -53,6 +53,28 @@ describe('presets', () => {
     const s = buildPreset('serve', DEFAULT_HOW, [ref({ jersey: 9, effect: '#' }), ref({ jersey: 9, effect: '=' }), ref({ jersey: 9, effect: '-' })], look).scenes[0]
     expect(s.counts).toEqual({ 1: 1, 3: 1, 4: 1 })
     expect(s.names[1]).toBe('サービスエース')
+    expect(s.names[2]).toBe('CDパス')
+  })
+
+  it('marks a serve by where it landed: Zone1, Zone6, Zone5, or short', () => {
+    const at = (endZone: number | null, endSub: string | null, effect = '+') => serveZoneMarker({ endZone, endSub, effect } as Play)
+    expect([at(1, null), at(6, 'A'), at(5, null)]).toEqual([1, 2, 3])
+    expect([at(2, null), at(3, 'A'), at(4, 'D'), at(7, 'C'), at(7, 'B'), at(9, 'c'), at(9, 'B'), at(8, 'B'), at(8, 'C')]).toEqual([4, 4, 4, 4, 4, 4, 4, 4, 4])
+    expect([at(9, 'A'), at(8, 'D'), at(7, null)]).toEqual([1, 2, 3]) // the deep half goes with the zone behind it
+    expect([at(1, null, '='), at(null, null)]).toEqual([null, null])
+  })
+
+  it("marks each server's serves by zone, or all in one marker as they came; the order of servers is apart", () => {
+    const serves = [ref({ jersey: 9 }), ref({ jersey: 9 }), ref({ jersey: 3 })]
+    ;(serves[0].play as { endZone: number }).endZone = 1
+    ;(serves[1].play as { endZone: number }).endZone = 3
+    const byZone = buildPreset('serve', { ...DEFAULT_HOW, serve: 'count', serveMarks: 'zone' }, serves, look).scenes
+    expect(byZone.map(x => [x.title, x.counts])).toEqual([['#9 N9', { 1: 1, 4: 1 }], ['#3 N3', {}]])
+    expect(byZone[0].names).toEqual({ 1: 'Zone1', 2: 'Zone6', 3: 'Zone5', 4: 'ショート' })
+    const byTime = buildPreset('serve', { ...DEFAULT_HOW, serve: 'jersey', serveMarks: 'time' }, serves, look).scenes
+    expect(byTime.map(x => [x.title, x.counts])).toEqual([['#3 N3', { 1: 1 }], ['#9 N9', { 1: 2 }]])
+    expect(byTime[0].items.map(i => i.ref.play.id)).toEqual([serves[2].play.id])
+    expect(byTime[1].items.map(i => i.ref.play.id)).toEqual([serves[0].play.id, serves[1].play.id])
   })
 
   it('makes block scenes per rotation, in the order a team rotates', () => {
@@ -103,6 +125,8 @@ describe('presets', () => {
     expect(presetLabels(p, 'HTH')).toEqual({ name: 'HTH ブロック ミドル別 ↑', prefix: 'HTH ブロック' })
     expect(presetLabels({ ...p, kind: 'sideout', source: 'opp', dir: 'all' }, 'HTH')).toEqual({ name: '相手 サイドアウト ローテーション別', prefix: '相手 サイドアウト' })
     expect(presetLabels({ ...p, kind: 'serve', source: 'results', dir: 'all' }, 'HTH').prefix).toBe('サーブ')
+    expect(presetLabels({ ...p, kind: 'serve', how: { ...DEFAULT_HOW, serveMarks: 'zone' }, dir: 'all' }, 'HTH').name).toBe('HTH サーブ ローテ順 ゾーン別')
+    expect(cleanPreset({ kind: 'serve', how: { serve: 'count' } })?.how.serveMarks).toBe('reception') // made before the choice: by reception
   })
 
   it('makes a video again from its saved preset', () => {

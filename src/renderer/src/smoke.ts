@@ -223,12 +223,12 @@ export function installSmoke(h: SmokeHost): void {
       const b = el.getBoundingClientRect()
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 40, clientY: b.top + b.height / 2 })); await sleep(150)
     }
-    await rightClick(document.querySelector('.reel-groups .group:first-child .group-head')!)
+    await rightClick(document.querySelector('.reel-groups .group:not(.head) .group-head')!)
     log.headMenu = document.querySelector('.slide-menu-title')?.textContent
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100)
     log.headMenuClosed = !document.querySelector('.slide-menu')
     log.gapButtons = document.querySelectorAll('.slide-gap').length // the hover ＋ between rows is gone
-    await rightClick(document.querySelector('.reel-groups .group:first-child .clip-row')!)
+    await rightClick(document.querySelector('.reel-groups .group:not(.head) .clip-row')!)
     log.rowMenu = document.querySelector('.slide-menu-title')?.textContent
     const items = [...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].map(b => `${b.textContent}${b.disabled ? '(off)' : ''}`)
     log.menu = items
@@ -261,7 +261,7 @@ export function installSmoke(h: SmokeHost): void {
 
     // Drag the blank slide onto the top half of the first row: it goes to the head.
     const blankRow = [...document.querySelectorAll<HTMLElement>('.slide-row')].find(r => r.textContent?.includes('無地'))!
-    const firstRow = document.querySelector<HTMLElement>('.reel-groups .group:first-child .clip-row')!
+    const firstRow = document.querySelector<HTMLElement>('.reel-groups .group:not(.head) .clip-row')!
     const dt = new DataTransfer()
     blankRow.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
     const fb = firstRow.getBoundingClientRect()
@@ -270,6 +270,13 @@ export function installSmoke(h: SmokeHost): void {
     firstRow.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
     await sleep(300)
     log.afterDrag = rows()
+
+    // The scene's head: right-click its header, a blank slide there; it plays before marker 1.
+    await rightClick(document.querySelector('.reel-groups .group.head .group-head')!)
+    log.sceneHeadMenu = document.querySelector('.slide-menu-title')?.textContent
+    ;[...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].find(b => b.textContent === '無地のスライド')!.click()
+    await waitFor(() => (scene().slides ?? []).some(x => x.group === 'head') || null, 5000, 'head slide')
+    log.sceneHeadRows = document.querySelectorAll('.reel-groups .group.head .slide-row').length
 
     // The plan, and a through-play: each item as it starts.
     const describe = (p: PlanItem[]) => p.map(it => it.kind === 'card' ? (it.card.slide ? `slide ${it.durationSec}s` : `[card ${it.card.marker}]`) : `clip${ids.indexOf(it.clip.id)}`)
@@ -329,6 +336,8 @@ export function installSmoke(h: SmokeHost): void {
     if (latest.current.overlay.titleCard.background?.toUpperCase() !== '#3F48CC') throw new Error(`card background not set: ${latest.current.overlay.titleCard.background}`)
     log.card = { title: scene().markerCardTitles?.[1], background: latest.current.overlay.titleCard.background,
       planName: currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1)?.kind === 'card' ? (currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1) as { card: { name: string } }).card.name : null }
+    // The scene's rows for the screenshot (the head section on top).
+    ;[...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === t('シーン'))?.click(); await sleep(300)
     return { ...log, videoExport: opts.videoExportTo ?? null, exported }
   }
 
@@ -1850,6 +1859,18 @@ export function installSmoke(h: SmokeHost): void {
 
     await stroke([[0.4, 0.4]]) // select the arrow
     const selAfterClick = latest.current.selectedAnn
+    // The arrow keys nudge it: three presses right, one Shift+Down (five times as far), and back.
+    const arrowAt = () => { const a = anns().find(x => x.kind === 'arrow') as { x1: number; y1: number } | undefined; return a ? [a.x1, a.y1] : [NaN, NaN] }
+    const press = async (k: string, shift = false) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey: shift, bubbles: true })); await sleep(80) }
+    const [nx0, ny0] = arrowAt()
+    for (let i = 0; i < 3; i++) await press('ArrowRight')
+    await press('ArrowDown', true)
+    const [nx1, ny1] = arrowAt()
+    const nudged = { dx: Math.round((nx1 - nx0) * 1920), dy: Math.round((ny1 - ny0) * 1080), playerTime: playback.current.time }
+    for (let i = 0; i < 3; i++) await press('ArrowLeft')
+    await press('ArrowUp', true)
+    const [nx2, ny2] = arrowAt()
+    if (nudged.dx !== 6 || nudged.dy !== 10 || Math.abs(nx2 - nx0) > 1e-6 || Math.abs(ny2 - ny0) > 1e-6) throw new Error(`arrow-key nudge: ${JSON.stringify({ nudged, back: [nx2 - nx0, ny2 - ny0] })}`)
     await playback.seekAndWait(range.in + 3)
     // The object tools' button (the headline bar has one of the same name: told apart by its tooltip).
     const btn = await waitFor(() => document.querySelector<HTMLButtonElement>(`button[title="${t('今の再生位置から表示する')}"]`), 5000, () => `ここから表示 (selected: ${latest.current.selectedAnn}, objects: ${anns().map(x => `${x.kind}:${x.id.slice(0, 4)}`).join(' ')}, panel tabs: ${[...document.querySelectorAll('.stage-tabs button[aria-selected=true]')].map(b => b.textContent).join('/')}, drawn: ${drawn.join(',')}, after click: ${selAfterClick}, rect: ${JSON.stringify(rect && { x: (rect as { x?: number }).x, y: (rect as { y?: number }).y })})`)
@@ -1872,7 +1893,7 @@ export function installSmoke(h: SmokeHost): void {
     const saved = (await api.listReels()).find(x => x.id === built.id)
     return {
       drawn, rect, arrowShowFromRel: arrow.showFrom !== undefined ? +(arrow.showFrom - range.in).toFixed(2) : null,
-      alphaBefore, alphaAfter, savedAnnotations: saved?.clips[ids[0]].annotations.length ?? 0,
+      alphaBefore, alphaAfter, savedAnnotations: saved?.clips[ids[0]].annotations.length ?? 0, nudged,
       text: anns().find(a => a.kind === 'text'),
     }
   }

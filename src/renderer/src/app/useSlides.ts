@@ -148,7 +148,7 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
         if (path) setNotice(t('書き出しました: {0}', path))
         return
       }
-      const all = scene ? [...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
+      const all = scene ? ['head' as const, ...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
       const pages = await cardImages(all.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
       const path = await api.saveCard(name, 'pdf', pdfFromJpegs(pages.map(jpeg => ({ jpeg, width: CARD_W, height: CARD_H }))))
       if (path) setNotice(t('書き出しました: {0}', path))

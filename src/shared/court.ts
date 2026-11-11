@@ -445,12 +445,14 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
 // along the court. Coloured like a thermal camera, blue through to red as the count rises; the
 // thinnest parts fade out so the floor shows.
 // rough: for points that only know their zone, how wide the heatmap spreads them, in metres; 0 for a click.
+// A serve or attack goes away from the player's side; every other play (a reception, dig, block,
+// freeball, and a set, which doesn't cross the net) is counted coming to it: down the screen on the
+// near court, up it on the far one.
 export type PlayDir = 'up' | 'down'
 export function playDirection(play: ZonePlay, fit: CourtFit): PlayDir | null {
   const ownNear = nearSide(fit, play) === play.side
   if (play.skill === 'S' || play.skill === 'A') return ownNear ? 'up' : 'down'
-  if ('RDBF'.includes(play.skill)) return ownNear ? 'down' : 'up'
-  return null
+  return ownNear ? 'down' : 'up'
 }
 
 // ---- drawing ---------------------------------------------------------------------------------

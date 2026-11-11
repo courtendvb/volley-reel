@@ -20,7 +20,7 @@ interface Props {
   total: number
   targetCode: string // the project's target team, shown on the team button
   teamFilterLimited: boolean // some plays in scope have no known team (all-home input)
-  dirUnknown: number // plays in scope whose way on screen isn't known (no fitted court); sets aren't counted
+  dirUnknown: number // plays in scope whose way on screen isn't known (no fitted court)
   onAddAll: () => void
   onPreset: () => void // make a video from a preset (PresetDialog)
   saved: SavedFilter[] // the project's saved conditions
@@ -68,7 +68,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           ? <span>{t('〜 +')}<SecInput v={d.keyAfter} label={t('キープレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, keyAfter: n })} />{t('秒')}</span>
           : <span>{t('〜 ラリー終わり +')}<SecInput v={d.rallyTail} label={t('最後のプレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, rallyTail: n })} />{t('秒')}</span>}
       </div>
-      <div className="filter-row" title={t('ボールが画面の上へ向かうか下へ向かうか。サーブ・アタックは打った側から、レセプション・ディグ・ブロックは相手側から。セットは向きで絞ると出ません。コートのグリッドを合わせた試合だけ分かります')}>
+      <div className="filter-row" title={t('ボールが画面の上へ向かうか下へ向かうか。サーブ・アタックは打った側から、レセプション・ディグ・ブロックは相手側から。セットなどネットを越えないプレーは、手前のコートなら上から下、奥のコートなら下から上。コートのグリッドを合わせた試合だけ分かります')}>
         <label className="field-label">{t('プレーの向き')}</label>
         <Segmented value={f.dir ?? 'all'} onChange={dir => set({ dir })} options={[['all', t('すべて')], ['up', t('↑ 下から上')], ['down', t('↓ 上から下')]]} />
       </div>

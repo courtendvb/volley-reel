@@ -48,3 +48,21 @@ describe('the logo on a title card', () => {
     expect(b.logo).toBeUndefined()
   })
 })
+
+describe('scene title place', () => {
+  const draw = (name: string, layout?: { x: number; y: number; scale: number; origin?: 'tl' }) =>
+    drawTitleCard(fakeCtx().ctx, 1280, 720, { marker: null, name, match: 'VS OKB', ...(layout ? { layout } : {}) }, DEFAULT_OVERLAY.titleCard, DEFAULT_OVERLAY.theme, null)
+  it('keeps its top-left whatever the title, a long one growing right and shrunk inside the frame', () => {
+    const short = draw('Serve'), long = draw('A very long scene name that would not fit across the frame at all')
+    expect([short.x, short.y]).toEqual([128, 288])
+    expect([long.x, long.y]).toEqual([128, 288])
+    expect(long.w).toBeGreaterThan(short.w)
+    expect(long.x + long.w).toBeLessThanOrEqual(1280 * 0.98 + 0.5)
+  })
+  it('reads a layout saved as a centre as a top-left, the same for every title', () => {
+    const a = draw('Serve', { x: 0.5, y: 0.5, scale: 1 }), b = draw('Block of the middle', { x: 0.5, y: 0.5, scale: 1 })
+    expect([a.x, a.y]).toEqual([b.x, b.y])
+    expect(a.x).toBeCloseTo((0.5 - 0.105) * 1280)
+    expect(draw('Serve', { x: 0.3, y: 0.2, scale: 1, origin: 'tl' }).x).toBeCloseTo(0.3 * 1280)
+  })
+})

@@ -6,7 +6,8 @@ import type { Clip, Marker, Reel } from '../../../shared/reel'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { flightTiming, playMarks, type GridStyle } from '../../../shared/court'
 import type { ExportEvent, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
-import { planChapters, planScene, planSceneWithCard, planVideoChapters, sceneFileNames, type PlanItem, type Video } from '../../../shared/video'
+import { planChapters, planScene, planSceneWithCard, planVideoChapters, sceneFileNames, type Card, type PlanItem, type Video } from '../../../shared/video'
+import { fillPlanFrames } from '../../../shared/cardPeople'
 import type { ClipInfo } from '../components/ReelPanel'
 import type { ExportTarget } from '../components/ExportPanel'
 import { EXPORT_HEIGHT, buildExportJob } from '../exportRender'
@@ -16,7 +17,8 @@ import { t } from '../../../shared/i18n'
 import { formatLength } from '../format'
 
 const api = window.api
-const onlyMarker = (sc: Reel, m: Marker) => ({ ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] })
+// One marker group alone: its clips and slides (the scene's head slides belong to no marker, so stay out).
+const onlyMarker = (sc: Reel, m: Marker) => ({ ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m], slides: sc.slides?.filter(s => s.group !== 'head') })
 
 export type ExportState = { status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string }
 
@@ -27,7 +29,8 @@ interface Now {
   infoFor: (c: Clip, scene: Reel | null) => ClipInfo; orderOf: (s: Reel) => Clip[]
 }
 
-export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (target: 'video' | 'scene') => PlanItem[], gridStyleRef: RefObject<GridStyle>) {
+// framePhoto: a title card's photo frame filled (App's cardFramePhoto), for every plan exported.
+export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (target: 'video' | 'scene') => PlanItem[], gridStyleRef: RefObject<GridStyle>, framePhoto: (card: Card) => string | null) {
   const { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf } = now
   const [exportState, setExportState] = useState<ExportState | null>(null)
   // Scene by scene: one MP4 after another (see exportScenes).
@@ -61,7 +64,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
   const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
     const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf, orderOf: of, settings: st } = latest.current
     const whole = !part && v ? planVideoChapters(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, st?.ourTeamCodes ?? []) : null
-    const plan = part?.plan ?? whole?.plan ?? []
+    const plan = fillPlanFrames(part?.plan ?? whole?.plan ?? [], framePhoto)
     if (!v || !plan.some(p => p.kind === 'clip' || p.card.slide)) return null
     const outPath = outPathArg ?? await api.chooseExportPath(part?.name ?? v.name)
     if (!outPath) return null

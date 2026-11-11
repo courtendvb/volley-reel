@@ -23,8 +23,11 @@ import { captionData, overlaySettings, scoreboardData, type CaptionData, type Ov
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
-import { addScene, planScene, planVideo, type PlanItem } from '../../shared/video'
-import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type SlideMark } from './components/CardEditor'
+import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
+import { assetImage, packAssetId } from './assets'
+import type { ImageLookup } from '../../shared/annotation'
+import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type CardInserts, type SlideMark } from './components/CardEditor'
+import { cardPlayers, cardTeams, fillPlanFrames, topPhoto } from '../../shared/cardPeople'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
 import { PlayerPhotos } from './components/PlayerPhotos'
@@ -47,7 +50,7 @@ import { DEFAULT_GRID_STYLE, cleanGridStyle, markStyle, marksBySkill, floorAt, h
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
-import { captionPhoto } from '../../shared/pack'
+import { captionPhoto, findPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
@@ -89,6 +92,8 @@ export function App() {
   useEffect(() => { try { localStorage.setItem('vr.matchOrder', matchOrder) } catch { /* not kept */ } }, [matchOrder])
   const [filter, setFilter] = useState<PlayFilter>(EMPTY_FILTER)
   const packs = usePacks() // player photos, for the caption's photo
+  const packsRef = useRef(packs)
+  packsRef.current = packs
   const [selected, setSelected] = useState<PlayKey | null>(null)
   const [activeClipId, setActiveClipId] = useState<string | null>(null)
   // The marker group the open clip was opened from (a clip can be in several); null = its first.
@@ -380,12 +385,20 @@ export function App() {
 
   // The plan both the through-play and the export follow: a whole video (scenes with their cards),
   // or one scene on its own for previewing it.
+  // A title card's photo frame: the photo of the player with the most clips of its marker (a marker
+  // card), its scene (a scene card) or the video (the video's card), from the packs; null without one.
+  const cardFramePhoto = useCallback((card: Card): string | null => {
+    const { reels: rs, video: v, dvwsRef: ds } = latest.current
+    const scenes = card.scene ? rs.filter(r => r.id === card.scene) : (v?.sceneIds ?? []).flatMap(id => rs.filter(r => r.id === id))
+    const clips = scenes.flatMap(r => (card.marker !== null && card.scene ? r.groups[card.marker as Marker] ?? [] : Object.keys(r.clips)).map(id => r.clips[id]).filter(Boolean))
+    return topPhoto(clips, ds ?? {}, cp => { const ph = findPhoto(packsRef.current, cp.player, cp.team); return ph ? packAssetId(ph.pack, ph.player.photo) : null })
+  }, [])
   const currentPlan = useCallback((target: 'video' | 'scene'): PlanItem[] => {
     const { video: v, reel: r, reels: rs, overlay: ov, matches: ms, settings: st, orderOf: of } = latest.current
     const codes = st?.ourTeamCodes ?? []
-    if (target === 'scene') return r ? planScene(of(r), r, ov, ms, codes) : []
-    return v ? planVideo(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, codes) : []
-  }, [])
+    const plan = target === 'scene' ? (r ? planScene(of(r), r, ov, ms, codes) : []) : v ? planVideo(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, codes) : []
+    return fillPlanFrames(plan, cardFramePhoto)
+  }, [cardFramePhoto])
 
   // startAt and the reported index count clips, not cards. The scene editor follows the scene of
   // the clip on screen, so number keys tag the clip that is playing.
@@ -470,12 +483,12 @@ export function App() {
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
   const { exportState, setExportState, startExport, exportScenes, exportMarker, exportTargets, exportInfo, exportTarget } = useExport(
-    { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef)
+    { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef, cardFramePhoto)
   latest.current.exportState = exportState
   const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
   const {
     cardEdit, setCardEdit, focusEdit, setFocusEdit, cardTool, setCardTool, cardToolsOpen, setCardToolsOpen,
-    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown,
+    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown,
     editCard, editingSlide, editingSource,
   } = useCardEdit({ latest, settings, video, reels, matches, overlay, setOverlay: o => setOverlay(o), selectedAnn, setSelectedAnn, updateReel, updateVideo })
   const {
@@ -490,6 +503,41 @@ export function App() {
     latest, dvws, settings, packs, gridStyle, overlay, activeGroup, whenIn, cardEdit, editCard, updateScene, makeScene, setProgress, setNotice, setError,
   })
   const [reportOpen, setReportOpen] = useState(false) // the match report
+
+  // A title card's pictures to put on it: the photos of its clips' players (then the rest of those
+  // matches'), and the logos the library has for the teams (those matches' first). Its clips: a
+  // marker card's group, a scene card's scene, the video card's scenes.
+  const [logoCodes, setLogoCodes] = useState<string[]>([])
+  const editingTitleCard = !!cardEditCard && !cardEdit?.slideId
+  // While a card is edited its photo frame shows the photo it will have.
+  const cardImages = useMemo((): ImageLookup => {
+    const photo = editingTitleCard && cardEditCard ? cardFramePhoto(cardEditCard) : null
+    return id => (id.startsWith('frame:') ? (photo ? assetImage(photo) : null) : assetImage(id))
+  }, [editingTitleCard, cardEditCard, cardFramePhoto, reels, dvws, packs]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (editingTitleCard) void api.listLogos().then(l => setLogoCodes(Object.keys(l))) }, [editingTitleCard])
+  const cardInserts = useMemo((): CardInserts | undefined => {
+    if (!editingTitleCard || !cardEdit) return undefined
+    const scenes = cardEdit.sceneId ? [reels.find(r => r.id === cardEdit.sceneId)].filter(Boolean) : (video?.sceneIds ?? []).map(id => reels.find(r => r.id === id)).filter(Boolean)
+    const clips = (scenes as Reel[]).flatMap(r => (cardEdit.marker !== null ? r.groups[cardEdit.marker] : Object.keys(r.clips)).map(id => r.clips[id]).filter(Boolean))
+    const photos = cardPlayers(clips, dvws).flatMap(cp => {
+      const ph = findPhoto(packs, cp.player, cp.team)
+      return ph ? [{ key: `${cp.team}|${cp.player.key}|${cp.player.jersey}`, label: `${cp.team} #${cp.player.jersey} ${ph.player.label ?? cp.player.lastName}`, own: cp.clips > 0, pack: ph.pack, photo: ph.player.photo }] : []
+    })
+    const teams = cardTeams(clips, dvws), have = new Set(logoCodes)
+    const logos = [...teams.filter(tm => have.has(tm.code)).map(tm => ({ code: tm.code, label: `${tm.code} ${tm.name}` })),
+      ...logoCodes.filter(c => !teams.some(tm => tm.code === c)).sort().map(c => ({ code: c, label: c }))]
+    return {
+      photos, logos,
+      onPhoto: (pack, photo) => void placeImage(() => api.usePackPhoto(pack, photo), true, { w: 0.15, cx: 0.12, cy: 0.72 }), // lower left, clear of the title
+      onLogo: code => void placeImage(() => api.useLogo(code), true, { w: 0.1, cx: 0.9, cy: 0.14, shared: true }), // top right, on every card of the kind
+      // A portrait frame (3:4) lower left, clear of the title.
+      onFrame: () => {
+        const w = 0.14, h = (w * 4 / 3) * (16 / 9), id = crypto.randomUUID()
+        setCardAnns([...(cardEditCard?.annotations ?? []), { id, kind: 'image', color: '#FFFFFF', x: 0.12 - w / 2, y: Math.min(1 - h, 0.78 - h / 2), w, h, assetId: 'frame:top', frame: 'top', fit: 'cover' }], { all: [id] }) // on every card of the kind
+        setAnnTool('select'); setSelectedAnn(id)
+      },
+    }
+  }, [editingTitleCard, cardEdit, cardEditCard, reels, video, dvws, packs, logoCodes, placeImage, setCardAnns, setAnnTool])
 
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
@@ -596,7 +644,7 @@ export function App() {
                     <>
                       <CardEditor key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title' || cardTool === 'logo'} target={cardTool === 'logo' ? 'logo' : 'title'} />
                       <AnnotationLayer onMade={() => setAnnTool('select')}
-                        size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always
+                        size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always images={cardImages}
                         editable={cardTool === 'objects'} tool={annTool} style={annStyle}
                         selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={selectAnn} onChange={setCardAnns}
                       />
@@ -645,7 +693,8 @@ export function App() {
             {cardEditCard && !editingSlide && (
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
-                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} />
+                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} inserts={cardInserts}
+                hiddenCount={cardHiddenIds.length} onShowHidden={() => hideOnCard(cardHiddenIds, false)} />
             )}
             {cardEditCard && cardTool === 'objects' && (
               <div className="filter-row">
@@ -657,6 +706,8 @@ export function App() {
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle} cardMode
                 annotations={cardEditCard.annotations ?? []} scopeOf={() => 'clip'} onScope={() => {}} canVideo={false} selectedId={selectedAnn}
+                {...(editingTitleCard ? { cardScope: { of: cardScopeOf, set: setCardScope, hide: (id: string) => { hideOnCard([id], true); setSelectedAnn(null) },
+                  kindName: cardEditCard.video ? t('動画の') : cardEditCard.marker === null ? t('シーンの') : t('マーカーの') } } : {})}
                 editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setCardAnns} onInsertImage={() => void insertImage()} clip={{ in: 0, out: 0 }} disabled={false}
               />

@@ -2,7 +2,7 @@ import { PaletteColor } from './PaletteColor'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, cardKind, drawCard, type Box, type TitleBox } from '../../../shared/overlayDraw'
 import { drawFlights, drawSlideMarks } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
@@ -35,7 +35,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
   const [tick, setTick] = useState(0)
   useEffect(() => subscribeAssets(() => setTick(n => n + 1)), [])
   const kind = layoutKey(card)
-  const layout = card.layout ?? settings.titleCard[kind] ?? defaultLayout(card)
+  const layout = asTopLeft(card, card.layout ?? settings.titleCard[kind] ?? defaultLayout(card))
 
   useEffect(() => {
     const c = canvas.current
@@ -91,9 +91,8 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
       set({ ...d.start, x: clamp(d.start.x + (x - d.from[0]) / size.w, 0, 1), y: clamp(d.start.y + (y - d.from[1]) / size.h, 0, 1) })
       return
     }
-    // Resize by the corner: marker titles grow from their top-left, scene titles from their center.
-    const w0 = card.marker === null ? d.box.w / 2 : d.box.w
-    const w1 = card.marker === null ? x - (d.box.x + d.box.w / 2) : x - d.box.x
+    // Resize by the corner: the title grows from its top-left.
+    const w0 = d.box.w, w1 = x - d.box.x
     if (w0 > 0) set({ ...d.start, scale: clamp(d.start.scale * (w1 / w0), 0.3, 3) })
   }
   const onUp = () => { drag.current = null }
@@ -105,20 +104,31 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
 }
 
 const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' => (card.video ? 'videoLayout' : card.marker === null ? 'sceneLayout' : 'markerLayout')
+// A scene or video card's layout as a top-left (one saved as a centre is read as one), so what the
+// editor saves is a top-left.
+const asTopLeft = (card: Card, l: CardLayout) => (card.marker === null ? sceneTopLeft(l) : l)
 const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
 const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('マーカー'))
 
 // Below the video while a card is being edited: whether it is shown, its text (the name unless set;
 // a line break makes a second line), the background of every card, what the pointer edits (the
 // objects on this card, or the title's place and size for every card of this kind), reset and done.
-export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle }: {
+// What can be put on a card as a picture: players' photos from the packs (the card's own players
+// first) and the logos the library has for teams.
+export interface CardPhotoChoice { key: string; label: string; own: boolean; pack: string; photo: string }
+export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void
+  onFrame: () => void } // a photo frame: filled with the card's player with the most clips when it plays
+
+export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
   tool: 'objects' | 'title' | 'logo'; onTool: (t: 'objects' | 'title' | 'logo') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
+  inserts?: CardInserts
+  hiddenCount?: number; onShowHidden?: () => void // objects of every card of this kind left off this one
 }) {
   const kind = layoutKey(card), def = defaultLayout(card)
-  const shared = settings.titleCard[kind] ?? def, own = !!card.layout
-  const layout = card.layout ?? shared
+  const shared = asTopLeft(card, settings.titleCard[kind] ?? def), own = !!card.layout
+  const layout = card.layout ? asTopLeft(card, card.layout) : shared
   const set = (l: CardLayout) => (own ? onOwn(l) : onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } }))
   const what = cardKindName(card)
   // The opponent's logo apart from the title: for every card of this kind, like the title's place.
@@ -149,6 +159,29 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
             title={t('相手チームのロゴの位置と大きさを、タイトルとは別に決める（この動画のすべての{0}のカード）', what)}>{t('ロゴ')}</button>
         )}
       </div>
+      {tool === 'objects' && inserts && (
+        <>
+          <button onClick={inserts.onFrame} title={t('写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ')}>{t('＋ 写真枠')}</button>
+          {inserts.photos.length > 0 && (
+            <select value="" aria-label={t('選手の写真を入れる')} title={t('パックの選手の顔写真を、このカードに画像として入れる（あとで動かせる）')}
+              onChange={e => { const c = inserts.photos.find(x => x.key === e.target.value); if (c) inserts.onPhoto(c.pack, c.photo) }}>
+              <option value="">{t('＋ 選手の写真')}</option>
+              {[true, false].map(own => {
+                const list = inserts.photos.filter(x => x.own === own)
+                return list.length ? <optgroup key={String(own)} label={own ? t('このカードのクリップの選手') : t('試合のほかの選手')}>
+                  {list.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}</optgroup> : null
+              })}
+            </select>
+          )}
+          {inserts.logos.length > 0 && (
+            <select value="" aria-label={t('ロゴを入れる')} title={t('チームのロゴを、このカードに画像として入れる（あとで動かせる。ロゴは「設定」で登録）')}
+              onChange={e => { if (e.target.value) inserts.onLogo(e.target.value) }}>
+              <option value="">{t('＋ ロゴ')}</option>
+              {inserts.logos.map(x => <option key={x.code} value={x.code}>{x.label}</option>)}
+            </select>
+          )}
+        </>
+      )}
       {tool === 'logo' && (
         <>
           <label className="check"><input type="checkbox" checked={logoAt !== 'hidden'} onChange={e => setLogo(e.target.checked ? undefined : 'hidden')} /> {t('ロゴを出す')}</label>
@@ -176,6 +209,10 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
           {!own && <button onClick={() => set(def)}>{t('元に戻す')}</button>}
         </>
       )}
+      {tool === 'objects' && hiddenCount > 0 && onShowHidden && (
+        <span className="muted">{t('すべての{0}のカードの図形 {1} 個を、このカードでは出していません', what, hiddenCount)}
+          {' '}<button className="link" onClick={onShowHidden}>{t('出す')}</button></span>
+      )}
       <span className="spacer" />
       <button className="primary" onClick={onDone}>{t('完了')}</button>
     </div>
@@ -198,7 +235,7 @@ export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
-        {look && <ChartShow value={look} {...(slide.board ? { skill: slide.board.config.skill } : {})} onChange={p => onChange(restyleBoard(slide, p))} />}
+        {look && <ChartShow value={look} skill={slide.board?.config.skill ?? slide.charts?.[0]?.chart.skill ?? 'A'} onChange={p => onChange(restyleBoard(slide, p))} />}
         <span className="spacer" />
         <label className="check muted" title={t('動画の中で流すときの秒数')}>{t('動画では')}
           <input type="number" aria-label={t('動画で出す秒数')} min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 56 }}

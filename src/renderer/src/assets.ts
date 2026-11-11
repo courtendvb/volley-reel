@@ -38,10 +38,19 @@ function keep(id: string, bmp: ImageBitmap): void {
   }
 }
 
+// A pack's photo drawn straight from the library (a filled photo frame), by an id of its own.
+export const packAssetId = (pack: string, photo: string) => `pack:${encodeURIComponent(pack)}/${encodeURIComponent(photo)}`
+function readImage(id: string): Promise<Uint8Array> {
+  const m = /^pack:([^/]+)\/(.+)$/.exec(id)
+  if (m) return api.readPackPhoto(decodeURIComponent(m[1]), decodeURIComponent(m[2]))
+  if (id.startsWith('frame:')) return Promise.reject(new Error('an empty photo frame'))
+  return api.readAsset(id)
+}
+
 function load(id: string): Promise<ImageBitmap | null> {
   let p = loading.get(id)
   if (!p) {
-    p = api.readAsset(id)
+    p = readImage(id)
       .then(data => decodeImage(data, MAX_SIDE))
       .then(bmp => { keep(id, bmp); listeners.forEach(f => f()); return bmp })
       .catch(() => null) // missing or unreadable: drawn as a placeholder

@@ -3,7 +3,8 @@ import { parseDVW } from './dvw'
 import { DEFAULT_OVERLAY, type OverlaySettings } from './overlay'
 import { addClips, newReel, newSlide, playOrder, putSlides, toggleMarker, type Clip, type Reel } from './reel'
 import type { Match } from './types'
-import { addScene, chapterMetadata, chapterText, planChapters, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames, sharedPrefix, type PlanItem } from './video'
+import type { Annotation } from './annotation'
+import { addScene, cardObjects, chapterMetadata, chapterText, planChapters, dropScene, moveSceneAt, newVideo, planVideo, planVideoChapters, removeSceneAt, sceneFileNames, sharedPrefix, type PlanItem } from './video'
 
 const D = parseDVW(`[3TEAMS]
 HTH;HOME;;;;
@@ -108,7 +109,7 @@ describe('card text', () => {
 })
 
 describe('slides in the plan', () => {
-  const withSlide = (r: Reel, after: string | null, g: 1 | 'none' = 1) => putSlides(r, [{ ...newSlide({ kind: 'blank' }), durationSec: 4 }], { group: g, after, index: 0 })
+  const withSlide = (r: Reel, after: string | null, g: 1 | 'none' | 'head' = 1) => putSlides(r, [{ ...newSlide({ kind: 'blank' }), durationSec: 4 }], { group: g, after, index: 0 })
   const kinds = (items: ReturnType<typeof planVideo>) => items.map(it => (it.kind === 'card' ? (it.card.slide ? 'slide' : `[${it.card.marker ?? 'scene'}]`) : D.plays[it.clip.playId].code.slice(0, 6)))
 
   it('plays a slide right after its clip, as a card with its own length', () => {
@@ -131,6 +132,16 @@ describe('slides in the plan', () => {
     const plan = (x: Reel) => kinds(planVideo(newVideo('v', [x.id]), { [x.id]: x }, order, cards({ sceneCards: false, enabled: false }), matches, ['HTH']))
     expect(plan(r)).toEqual(['*07AQ#'])
     expect(plan({ ...r, scope: 'all' })).toEqual(['*07AQ#', '*07AQ+', 'slide'])
+  })
+
+  it("plays the scene's head slides after its card and before every marker, whatever is switched off", () => {
+    const s = withSlide(scene('s', [0, 1], [1, 2]), null, 'head')
+    const plan = (x: Reel) => kinds(planVideo(newVideo('v', [x.id]), { [x.id]: x }, order, cards({ sceneCards: true, enabled: true }), matches, ['HTH']))
+    expect(plan(s)).toEqual(['[scene]', 'slide', '[1]', '*07AQ#', '[2]', '*07AQ+'])
+    expect(plan({ ...s, markerOff: { 1: true } })).toEqual(['[scene]', 'slide', '[2]', '*07AQ+'])
+    expect(plan({ ...s, markerOff: { 1: true, 2: true } })).toEqual(['[scene]', 'slide'])
+    const ch = planVideoChapters(newVideo('v', [s.id]), { [s.id]: s }, order, cards({ sceneCards: true, enabled: true }), matches, ['HTH']).chapters
+    expect(ch.map(c => c.at)).toEqual([0, 4]) // the head goes with the first marker's chapter
   })
 })
 
@@ -183,5 +194,21 @@ describe('shared prefix of scene names', () => {
     expect(sharedPrefix(['HTH ブロック', 'HTH ブロック #4'])).toBe('HTH ')
     expect(sharedPrefix(['HTH ブロック #15'])).toBe('')
     expect(sharedPrefix(['A x', 'B x'])).toBe('')
+  })
+})
+
+describe('objects on every card of a kind', () => {
+  const box = (id: string) => ({ id, kind: 'rect', color: '#FFFFFF', x: 0, y: 0, w: 0.1, h: 0.1, width: 2 }) as Annotation
+  it("go under each card's own, less those a card leaves off", () => {
+    const ov = cards({ enabled: true, sceneCards: true, objects: { marker: [box('m1'), box('m2')], scene: [box('s1')] } } as never)
+    expect(cardObjects([box('own')], 'marker', ov, undefined).map(a => a.id)).toEqual(['m1', 'm2', 'own'])
+    expect(cardObjects(undefined, 'marker', ov, ['m1']).map(a => a.id)).toEqual(['m2'])
+    expect(cardObjects([box('own')], 'video', ov, undefined).map(a => a.id)).toEqual(['own'])
+  })
+  it('show on every marker card and scene card of the plan', () => {
+    const s = { ...scene('s', [0, 1], [1, 2]), markerCardHidden: { 2: ['m1'] } }
+    const ov = cards({ enabled: true, sceneCards: true, objects: { marker: [box('m1')], scene: [box('s1')] } } as never)
+    const plan = planVideo(newVideo('v', [s.id]), { [s.id]: s }, order, ov, matches, ['HTH'])
+    expect(plan.flatMap(it => (it.kind === 'card' ? [`${it.card.marker ?? 'scene'}:${(it.card.annotations ?? []).map(a => a.id).join(',')}`] : []))).toEqual(['scene:s1', '1:m1', '2:'])
   })
 })

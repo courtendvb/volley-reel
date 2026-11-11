@@ -36,7 +36,9 @@ const HINTS = (): Record<string, string> => ({
   'serve:rotation': t('サーブした選手ごとのシーンを、いちばん多くサーブしたローテーションの回る順（1→6→5→4→3→2）に並べます。'),
   'serve:count': t('サーブした選手ごとのシーンを、本数の多い順に並べます。'),
   'serve:jersey': t('サーブした選手ごとのシーンを、背番号順に並べます。'),
-  serve: t('中はマーカー 1 にサービスエース（#）、2 に崩した（+ /）、3 に返された（! -）、4 にサーブミス（=）を入れます。'),
+  'serveMarks:reception': t('中はマーカー 1 にサービスエース（#）、2 に CD パス（+ /）、3 に AB パス（! -）、4 にサーブミス（=）を入れます。'),
+  'serveMarks:zone': t('中は落ちたゾーンで、マーカー 1 に Zone1、2 に Zone6、3 に Zone5（その前の 9・8・7 の奥半分を含む）、4 にショート（ゾーン 2・3・4 と 7B・7C・8B・8C・9B・9C）を入れます。サーブミスとゾーンのないものはマーカーなしで最後に入ります。'),
+  'serveMarks:time': t('中はマーカー 1 に、すべてのサーブを試合の順に入れます。'),
   'block:middle': t('ミドルブロッカーごとに、そのミドルが前衛にいたときの相手のアタックを全部（ブロックに触ったかどうかに関係なく）シーンに入れ、本数の多い順に並べます。中は相手の攻撃で、マーカー 1 に良いレセプション（# +）から、2 に悪いレセプション（- ! /）から、3 にトランジションからのものを入れます。'),
   'block:rotation': t('ローテーションごとのシーンで、ブロックした選手に本数の多い順でマーカー 1〜5 を付けます。'),
   'attack:count': t('アタックした選手ごとのシーンを、本数の多い順に並べます。'),
@@ -96,7 +98,8 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
         <section>
           {seg(t('ビデオ'), kind, setKind, PRESET_KINDS.map(k => [k, presetName(k)]))}
           {seg(t('チーム'), source, setSource, [['our', team], ['opp', t('相手')], ['results', t('今の検索結果から')]])}
-          {seg(kind === 'sideout' ? t('中の分け方') : t('作り方'), how[kind] as string, v => setHow({ ...how, [kind]: v }), HOW_OPTIONS()[kind] as [string, string][])}
+          {seg(kind === 'sideout' ? t('中の分け方') : kind === 'serve' ? t('選手の並べ方') : t('作り方'), how[kind] as string, v => setHow({ ...how, [kind]: v }), HOW_OPTIONS()[kind] as [string, string][])}
+          {kind === 'serve' && seg(t('マーカーの分け方'), how.serveMarks, v => setHow({ ...how, serveMarks: v }), HOW_OPTIONS().serveMarks)}
           {seg(t('コートの向き'), dir, setDir, [['all', t('すべて')], ['up', t('↑ 下から上')], ['down', t('↓ 上から下')]])}
           {seg(t('切り出し'), modes[kind], m => setModes({ ...modes, [kind]: m }), [['keyplay', t('プレー前後')], ['toEnd', t('ラリー終わりまで')]])}
         </section>
@@ -106,7 +109,7 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
           {dir !== 'all' && t('向きは、サーブ・アタックは打った側から、ブロックは相手側から見ます。')}
           {unknownDir > 0 && t('コートのグリッドを合わせていない試合のプレー {0} 件は、向きが分からないため除いています', unknownDir)}
         </p>
-        {kind === 'serve' && <p className="hint">{HINTS().serve}</p>}
+        {kind === 'serve' && <p className="hint">{HINTS()[`serveMarks:${how.serveMarks}`]}</p>}
         {needRoles && (
           <details className="preset-roles" open={rolesOpen || noRoles} onToggle={e => setRolesOpen((e.target as HTMLDetailsElement).open)}>
             <summary>{t('ポジション（{0} 人）', people.length)}</summary>

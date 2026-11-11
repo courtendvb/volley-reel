@@ -133,9 +133,9 @@ export function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code' |
   const dots = mine.flatMap((p, i): ChartDot[] => {
     const c = playClicks(p), rough = c.startRough || c.endRough
     const start = c.startRough ? scattered(c.start!, i) : c.start, end = c.endRough ? scattered(c.end!, i) : c.end
-    return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect, ...(rough ? { rough } : {}) }] : []
+    return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect, ...(rough ? { rough } : {}), ...(c.startRough ? { startRough: true } : {}) }] : []
   })
-  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
+  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, ...(style.starts ? { starts: true } : {}), lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
 }
 
 // The i-th rough point moved a little around its zone's middle, the same way every time.
@@ -390,7 +390,9 @@ function drawLandings(ctx: Ctx, w: number, h: number, { fit, points, rough }: Sl
 
 // What a slide keeps of the court: the shots' marks and a play's zones, fixed when they were put on.
 export interface SlideZones { fit: CourtFit; zones: PlayZones; detail: GridStyle['detail'] }
-export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones; chart?: DirectionChart; charts?: PlacedChart[] }
+// setCharts: a setter's set charts placed on the slide (a rotation slide), x / y / h as 0..1 of the picture.
+export interface PlacedSetChart { chart: SetChart; x: number; y: number; h: number }
+export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones; chart?: DirectionChart; charts?: PlacedChart[]; setCharts?: PlacedSetChart[] }
 export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, heatOpacity?: number): void {
   if (s.heat) drawHeat(ctx, w, h, s.heat, heatOpacity)
   if (s.cones) drawCones(ctx, w, h, s.cones)
@@ -398,6 +400,7 @@ export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, he
   if (s.landings) drawLandings(ctx, w, h, s.landings)
   if (s.chart) drawChart(ctx, s.chart, chartBox(w, h, 'center', 1, s.chart.look.name))
   for (const c of s.charts ?? []) drawChart(ctx, c.chart, { x: c.x * w, y: c.y * h, h: c.h * h })
+  for (const c of s.setCharts ?? []) drawSetChart(ctx, c.chart, { x: c.x * w, y: c.y * h, h: c.h * h })
 }
 
 // Many flights at once on a slide: they leave together after a moment and then stay. `progress` as
@@ -445,12 +448,14 @@ export function drawFlights(ctx: Ctx, w: number, h: number, { fit, paths }: Slid
 // along the court. Coloured like a thermal camera, blue through to red as the count rises; the
 // thinnest parts fade out so the floor shows.
 // rough: for points that only know their zone, how wide the heatmap spreads them, in metres; 0 for a click.
+// A serve or attack goes away from the player's side; every other play (a reception, dig, block,
+// freeball, and a set, which doesn't cross the net) is counted coming to it: down the screen on the
+// near court, up it on the far one.
 export type PlayDir = 'up' | 'down'
 export function playDirection(play: ZonePlay, fit: CourtFit): PlayDir | null {
   const ownNear = nearSide(fit, play) === play.side
   if (play.skill === 'S' || play.skill === 'A') return ownNear ? 'up' : 'down'
-  if ('RDBF'.includes(play.skill)) return ownNear ? 'down' : 'up'
-  return null
+  return ownNear ? 'down' : 'up'
 }
 
 // ---- drawing ---------------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
 import type { BoardMade, PlacedChart } from './board'
 import type { DirectionChart } from './chart'
-import type { SlideCones, SlideFlights, SlideHeat, SlideZones } from './court'
+import type { PlacedSetChart, SlideCones, SlideFlights, SlideHeat, SlideZones } from './court'
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
@@ -49,6 +49,8 @@ export interface Reel {
   markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
+  cardHidden?: string[] // objects of every scene card (titleCard.objects) not shown on this scene's
+  markerCardHidden?: Partial<Record<Marker, string[]>> // the same for each marker's card
   cardTitle?: string // the scene card's text when it differs from the name (may have line breaks: one line each)
   markerCardTitles?: Partial<Record<Marker, string>> // the same for each marker's card
   cardLayout?: CardLayout // the scene card's own title place and size; missing = the video's for scene cards
@@ -61,10 +63,12 @@ export interface Reel {
 // A slide: a still page shown between clips (blank, a picture, a PDF page or a frame of a match),
 // with objects on it like a title card. It sits in one group right after a clip (`after`; null =
 // the group's head) and follows that clip when the clip moves. Slides after the same clip play in
-// their order in Reel.slides.
+// their order in Reel.slides. A slide of group 'head' belongs to no marker: it leads the scene,
+// right after the scene's card and before every marker group, and always plays (after: null).
+export type SlideGroup = Group | 'head'
 export interface Slide {
   id: string
-  group: Group
+  group: SlideGroup
   after: string | null
   durationSec: number
   bg: SlideBg
@@ -75,6 +79,7 @@ export interface Slide {
   cones?: SlideCones // where a player's attacks went, as cones
   chart?: DirectionChart // a player's direction chart, fixed when it was put on
   charts?: PlacedChart[] // the charts of a slide comparing players (shared/board.ts)
+  setCharts?: PlacedSetChart[] // a rotation slide's set chart (shared/rotationBoard.ts)
   board?: BoardMade // how that slide was made
   zones?: SlideZones // a play's zones or clicks
 }
@@ -233,15 +238,15 @@ export function removeClip(reel: Reel, clipId: string): Reel {
 // ---- slides ---------------------------------------------------------------------------------
 export type Row = { kind: 'clip'; id: string } | { kind: 'slide'; slide: Slide }
 // Where slides go: after a clip of the group (null = its head), at this index among the slides there.
-export interface SlideSpot { group: Group; after: string | null; index: number }
+export interface SlideSpot { group: SlideGroup; after: string | null; index: number }
 
 export function newSlide(bg: SlideBg, durationSec = DEFAULT_SLIDE_SEC): Slide {
   return { id: uid(), group: 'none', after: null, durationSec, bg, annotations: [] }
 }
 
 // A group as it is listed and played: its head slides, then each clip followed by its slides.
-// clipIds: the group's clips in display order ('none' is shown chronologically).
-export function groupRows(reel: Reel, g: Group, clipIds: string[] = reel.groups[g]): Row[] {
+// clipIds: the group's clips in display order ('none' is shown chronologically). 'head' has slides only.
+export function groupRows(reel: Reel, g: SlideGroup, clipIds: string[] = g === 'head' ? [] : reel.groups[g]): Row[] {
   const mine = (reel.slides ?? []).filter(s => s.group === g)
   const at = (after: string | null): Row[] => mine.filter(s => s.after === after).map(slide => ({ kind: 'slide', slide }))
   const rows: Row[] = at(null)
@@ -253,7 +258,7 @@ export function groupRows(reel: Reel, g: Group, clipIds: string[] = reel.groups[
 }
 
 // The spot for something put at row k (0 = before the first row) of a group's rows.
-export function spotAt(rows: Row[], g: Group, k: number): SlideSpot {
+export function spotAt(rows: Row[], g: SlideGroup, k: number): SlideSpot {
   let after: string | null = null, index = 0
   for (const r of rows.slice(0, k)) {
     if (r.kind === 'clip') { after = r.id; index = 0 } else index++
@@ -285,8 +290,9 @@ function keepSlides(old: Reel, next: Reel): Reel {
   if (!next.slides?.length) return next
   const kept: Slide[] = [], moved: Slide[] = []
   for (const s of next.slides) {
+    if (s.after === null || s.group === 'head') { kept.push(s); continue }
     const ids = next.groups[s.group]
-    if (s.after === null || ids.includes(s.after)) { kept.push(s); continue }
+    if (ids.includes(s.after)) { kept.push(s); continue }
     const before = old.groups[s.group].slice(0, Math.max(0, old.groups[s.group].indexOf(s.after)))
     moved.push({ ...s, after: before.reverse().find(id => ids.includes(id)) ?? null })
   }

@@ -40,6 +40,7 @@ const groups = (): { title: string; keys: [string, string][] }[] => [
       ['Ctrl + Y', t('やり直す')],
       ['Ctrl + C / Ctrl + V', t('図形をコピー / 貼り付け')],
       ['Delete', t('選択中の図形を削除')],
+      ['← / ↑ / → / ↓', t('選択中の図形を少し動かす（Shift で大きく）')],
       ['?', t('この一覧を開く / 閉じる')],
     ],
   },

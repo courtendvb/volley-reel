@@ -18,6 +18,7 @@ import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './upd
 import { Library } from './library'
 import { Project } from './project'
 import { readSettings, recentProjects, rememberProject, saveSettings } from './appSettings'
+import { lastFolder, rememberFolder, type ExportKind } from '../shared/exportFolders'
 import { corruptFirstReel, registerSmokeIpc, runSmoke, type SmokeContext } from './smokeRun'
 import { grabFrame, rawFrame } from './media'
 import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
@@ -51,6 +52,15 @@ const proj = () => { if (!project) throw new Error(t('プロジェクトが開�
 const assetsDir = () => join(proj().dir, 'assets')
 const smokeContext: SmokeContext = { library: () => library, project: () => project, setProject: p => { project = p }, win: () => win, takeAsset: p => takeAsset(p), takeSlideFile: p => takeSlideFile(p) }
 const exportsDir = async () => { const dir = join(proj().dir, 'exports'); await mkdir(dir, { recursive: true }); return dir }
+// Where a save dialog starts: the folder this project last wrote that kind of file to, else (videos)
+// the project's exports folder, or nothing (documents: the system's choice). remembered: after a save.
+const startFolder = async (kind: ExportKind): Promise<string | null> => {
+  const last = project ? lastFolder(readSettings().exportFolders, project.dir, kind, existsSync) : null
+  return last ?? (kind === 'video' ? exportsDir() : null)
+}
+const remembered = (kind: ExportKind, dir: string) => {
+  if (project) saveSettings({ exportFolders: rememberFolder(readSettings().exportFolders, project.dir, kind, dir) })
+}
 
 app.whenReady().then(async () => {
   // The interface language (設定 → Language); the first start follows Windows' display language.
@@ -207,18 +217,21 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('export:choosePath', async (_e, name: string) => {
-    const dir = await exportsDir()
+    const dir = (await startFolder('video'))!
     const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'reel'
     const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
-    return r.canceled || !r.filePath ? null : r.filePath
+    if (r.canceled || !r.filePath) return null
+    remembered('video', dirname(r.filePath))
+    return r.filePath
   })
 
   // One MP4 per scene: a folder, then a path in it for each file name (names come safe and unique
   // from sceneFileNames). Returns which of them are already there, so the user can say whether to overwrite.
   ipcMain.handle('export:chooseFolder', async (_e, names: string[]) => {
-    const dir = await exportsDir()
+    const dir = (await startFolder('video'))!
     const r = await dialog.showOpenDialog(win!, { title: t('シーンごとに書き出すフォルダ'), defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
+    remembered('video', r.filePaths[0])
     const paths = names.map(n => join(r.filePaths[0], `${n}.mp4`))
     return { paths, existing: paths.filter(p => existsSync(p)) }
   })
@@ -265,6 +278,14 @@ function registerIpc(): void {
   })
   ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
   ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
+  // A team's logo copied into the project's assets, to put on a card as a picture; null without one.
+  ipcMain.handle('logo:use', async (_e, code: string) => {
+    const l = lib(), f = (await l.logos())[code.toUpperCase()], data = f ? await l.readLogo(code) : null
+    if (!f || !data) return null
+    const ext = extname(f).slice(1).toLowerCase()
+    const { width, height } = nativeImage.createFromBuffer(Buffer.from(data)).getSize()
+    return { assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext), width: width || 1, height: height || 1 }
+  })
   // Add-on packs: read from a .vrpack the user picks, kept in the library for every project.
   ipcMain.handle('pack:list', () => library?.packs() ?? [])
   ipcMain.handle('pack:import', async () => {
@@ -277,15 +298,19 @@ function registerIpc(): void {
   })
   // A card as a picture, or the cards as a PDF: to a file the user names; the path, or null.
   ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf', data: Uint8Array) => {
-    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: `${name.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
+    const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`, dir = await startFolder('docs')
+    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
     if (r.canceled || !r.filePath) return null
+    remembered('docs', dirname(r.filePath))
     await writeFile(r.filePath, data)
     return r.filePath
   })
   // The match report as an A4 PDF: its page drawn in a hidden window, printed, saved where the user says.
   ipcMain.handle('report:pdf', async (_e, html: string, name: string) => {
-    const r = await dialog.showSaveDialog(win!, { title: t('マッチレポートを PDF に書き出す'), defaultPath: `${name.replace(/[\\/:*?"<>|]/g, '_')}.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+    const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.pdf`, dir = await startFolder('docs')
+    const r = await dialog.showSaveDialog(win!, { title: t('マッチレポートを PDF に書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
     if (r.canceled || !r.filePath) return null
+    remembered('docs', dirname(r.filePath))
     const w = new BrowserWindow({ show: false, webPreferences: { javascript: false } })
     try {
       await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)

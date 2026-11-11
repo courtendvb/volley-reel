@@ -49,6 +49,10 @@ export interface SmokeOpts {
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   picker?: boolean // the player picker opened, a player ticked, closed by its button, Esc and a click outside
+  sceneTitle?: boolean // a scene card with a long name: its title's top-left stays, and dragging it saves a top-left
+  cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
+  setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
+  presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
@@ -145,10 +149,13 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
+    if (opts.cardInsert) return smokeCardInsert(res, opts.cardInsert)
+    if (opts.sceneTitle) return smokeSceneTitle(res)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
-    if (opts.presets) return smokePresets()
+    if (opts.presets || opts.presetServe) return smokePresets(!!opts.presetServe)
     if (opts.picker) return smokePicker()
+    if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.cardOwn) return smokeCardOwn(res)
@@ -225,12 +232,12 @@ export function installSmoke(h: SmokeHost): void {
       const b = el.getBoundingClientRect()
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 40, clientY: b.top + b.height / 2 })); await sleep(150)
     }
-    await rightClick(document.querySelector('.reel-groups .group:first-child .group-head')!)
+    await rightClick(document.querySelector('.reel-groups .group:not(.head) .group-head')!)
     log.headMenu = document.querySelector('.slide-menu-title')?.textContent
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100)
     log.headMenuClosed = !document.querySelector('.slide-menu')
     log.gapButtons = document.querySelectorAll('.slide-gap').length // the hover ＋ between rows is gone
-    await rightClick(document.querySelector('.reel-groups .group:first-child .clip-row')!)
+    await rightClick(document.querySelector('.reel-groups .group:not(.head) .clip-row')!)
     log.rowMenu = document.querySelector('.slide-menu-title')?.textContent
     const items = [...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].map(b => `${b.textContent}${b.disabled ? '(off)' : ''}`)
     log.menu = items
@@ -263,7 +270,7 @@ export function installSmoke(h: SmokeHost): void {
 
     // Drag the blank slide onto the top half of the first row: it goes to the head.
     const blankRow = [...document.querySelectorAll<HTMLElement>('.slide-row')].find(r => r.textContent?.includes('無地'))!
-    const firstRow = document.querySelector<HTMLElement>('.reel-groups .group:first-child .clip-row')!
+    const firstRow = document.querySelector<HTMLElement>('.reel-groups .group:not(.head) .clip-row')!
     const dt = new DataTransfer()
     blankRow.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
     const fb = firstRow.getBoundingClientRect()
@@ -272,6 +279,13 @@ export function installSmoke(h: SmokeHost): void {
     firstRow.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: fb.top + 2 }))
     await sleep(300)
     log.afterDrag = rows()
+
+    // The scene's head: not shown while empty; a blank slide put there shows it, and it plays before marker 1.
+    log.sceneHeadHidden = !document.querySelector('.reel-groups .group.head')
+    await putSlide({ group: 'head', after: null, index: 0 }, 'blank')
+    await waitFor(() => (scene().slides ?? []).some(x => x.group === 'head') || null, 5000, 'head slide')
+    await sleep(200)
+    log.sceneHeadRows = document.querySelectorAll('.reel-groups .group.head .slide-row').length
 
     // The plan, and a through-play: each item as it starts.
     const describe = (p: PlanItem[]) => p.map(it => it.kind === 'card' ? (it.card.slide ? `slide ${it.durationSec}s` : `[card ${it.card.marker}]`) : `clip${ids.indexOf(it.clip.id)}`)
@@ -331,6 +345,8 @@ export function installSmoke(h: SmokeHost): void {
     if (latest.current.overlay.titleCard.background?.toUpperCase() !== '#3F48CC') throw new Error(`card background not set: ${latest.current.overlay.titleCard.background}`)
     log.card = { title: scene().markerCardTitles?.[1], background: latest.current.overlay.titleCard.background,
       planName: currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1)?.kind === 'card' ? (currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1) as { card: { name: string } }).card.name : null }
+    // The scene's rows for the screenshot (the head section on top).
+    ;[...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === t('シーン'))?.click(); await sleep(300)
     return { ...log, videoExport: opts.videoExportTo ?? null, exported }
   }
 
@@ -1000,6 +1016,76 @@ export function installSmoke(h: SmokeHost): void {
   // originals, on another clip lands in place with the show time moved to that clip's IN.
   // Player photos (add-on packs): a pack read in, the play's player found in it and put on the clip
   // by a click; a photo set for a player the pack has none for, then taken off with ↺.
+  // The card bar's ＋ 選手の写真 and ＋ ロゴ: a pack and a logo for the first play's team, a marker card
+  // of a scene of that play, then a photo and the logo picked from the bar's lists.
+  const smokeSceneTitle = async (res: PlayRef[]) => {
+    const r0 = res.find(x => x.play.rallyId !== null)!
+    const sc = { ...addClips(newReel('A very long scene name: serves of the opposite in rotation one'), [{ matchId: r0.matchId, play: r0.play }]).reel, sceneCard: true }
+    smokeUse(sc)
+    await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+    editCard(sc.id, null); await sleep(400)
+    ;[...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === t('タイトルの位置'))!.click(); await sleep(200)
+    const ed = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=card-editor]'), 5000, 'card editor')
+    const eb = ed.getBoundingClientRect()
+    const ept = (fx: number, fy: number) => ({ clientX: eb.left + fx * eb.width, clientY: eb.top + fy * eb.height, bubbles: true, pointerId: 1 })
+    // The title's top-left is at 10% / 40% by default: grab it just inside and move it 5% right and down.
+    ed.dispatchEvent(new PointerEvent('pointerdown', ept(0.13, 0.5))); await sleep(40)
+    ed.dispatchEvent(new PointerEvent('pointermove', ept(0.16, 0.53))); await sleep(40)
+    ed.dispatchEvent(new PointerEvent('pointermove', ept(0.18, 0.55))); await sleep(40)
+    ed.dispatchEvent(new PointerEvent('pointerup', ept(0.18, 0.55))); await sleep(300)
+    const lay = latest.current.overlay.titleCard.sceneLayout
+    if (!lay || lay.origin !== 'tl' || Math.abs(lay.x - 0.15) > 0.01 || Math.abs(lay.y - 0.45) > 0.01) throw new Error(`scene layout after the drag: ${JSON.stringify(lay)}`)
+    return { sceneLayout: { x: +lay.x.toFixed(3), y: +lay.y.toFixed(3), scale: lay.scale, origin: lay.origin } }
+  }
+
+  const smokeCardInsert = async (res: PlayRef[], spec: string) => {
+    const [packFile, logoFile] = spec.split('|')
+    const r0 = res.find(x => x.play.rallyId !== null)!
+    const d = latest.current.dvwsRef![r0.matchId], team = d.teams[r0.play.side === '*' ? 0 : 1].code.toUpperCase()
+    await api.smokeImportPack!(packFile); await refreshPacks()
+    await window.api.smokeSetLogo!(team, logoFile)
+    // Marker 1: a play of r0's player; marker 2: a play of #21 (the pack has both photos).
+    const r1 = res.find(x => x.play.rallyId !== null && x.play.jersey === 21 && x.play.side === r0.play.side)!
+    const made = addClips(newReel('card insert smoke'), [{ matchId: r0.matchId, play: r0.play }, { matchId: r1.matchId, play: r1.play }])
+    let sc = toggleMarker(toggleMarker(made.reel, made.ids[0], 1), made.ids[1], 2)
+    smokeUse(sc)
+    await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+    editCard(sc.id, 1)
+    const pick = async (label: string) => {
+      const sel = await waitFor(() => document.querySelector<HTMLSelectElement>(`.card-edit-bar select[aria-label="${t(label)}"]`), 8000, label)
+      const options = [...sel.querySelectorAll('option')].map(o => o.textContent ?? '')
+      const v = [...sel.options].find(o => o.value)!.value
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, v)
+      sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(800)
+      return options
+    }
+    const photoOptions = await pick('選手の写真を入れる')
+    const logoOptions = await pick('ロゴを入れる')
+    // The photo on this card only; the logo on every marker card (the video's).
+    const own = () => latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []
+    const shared = () => latest.current.overlay.titleCard.objects?.marker ?? []
+    await waitFor(() => (own().length === 1 && shared().length === 1) || null, 8000, () => `photo on the card, logo on all (own ${own().length}, all ${shared().length})`)
+    // ＋ 写真枠: on every marker card too, each filled with its own marker's player.
+    ;[...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === t('＋ 写真枠'))!.click()
+    await waitFor(() => shared().some(a => a.kind === 'image' && a.frame) || null, 5000, 'photo frame on every marker card')
+    updateReel({ ...latest.current.reels.find(x => x.id === sc.id)!, markerCards: { 1: true, 2: true } })
+    await sleep(300)
+    const frameOn = (m: number) => {
+      const card = currentPlan('scene').find(it => it.kind === 'card' && it.card.marker === m)
+      const f = card?.kind === 'card' ? card.card.annotations?.find(a => a.kind === 'image' && a.frame) : undefined
+      return f?.kind === 'image' ? decodeURIComponent(f.assetId) : null
+    }
+    const frames = { 1: frameOn(1), 2: frameOn(2) }
+    if (!frames[1]?.endsWith('miwa.png') || !frames[2]?.endsWith('eiro.png')) throw new Error(`frames: ${JSON.stringify(frames)}`)
+    // Left off marker 2's card: gone there, still on marker 1's.
+    const frameId = shared().find(a => a.kind === 'image' && a.frame)!.id
+    updateReel({ ...latest.current.reels.find(x => x.id === sc.id)!, markerCardHidden: { 2: [frameId] } })
+    await sleep(300)
+    if (frameOn(2) !== null || !frameOn(1)) throw new Error(`hidden on 2: ${frameOn(2)} / on 1: ${frameOn(1)}`)
+    await sleep(500)
+    return { team, photoOptions, logoOptions, own: own().length, shared: shared().map(a => (a.kind === 'image' && a.frame ? 'frame' : a.kind)), frames }
+  }
+
   const smokePhotos = async (res: PlayRef[], packFile: string) => {
     const packs = await api.smokeImportPack!(packFile)
     await refreshPacks()
@@ -1543,7 +1629,57 @@ export function installSmoke(h: SmokeHost): void {
   // its preview (scenes, names, title cards, markers, clips, on disk); made again from its 作り直す;
   // a position set by hand (saved, moving a player's attacks) and undone; the video deleted
   // with its scenes, then the deletion undone (back on disk) and redone.
-  const smokePresets = async () => {
+  // A setter's slide: データスライド作成, セット, the layout, 作成; the slide's court titles and how many
+  // sets each holds, read back from the made slide (the screenshot shows it in the editor).
+  const smokeSetter = async (layout: string) => {
+    const button = (root: ParentNode, text: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === text)
+    button(document, t('データスライド作成'))!.click()
+    const dialog = await waitFor(() => document.querySelector<HTMLElement>('.board-dialog'), 5000, 'board dialog')
+    if (layout === 'serve') {
+      // サーブ, points and the heatmap without lines, 始点 on (the default): the preview shot with and
+      // without the starts, then the slide made with them.
+      const box = (text: string) => [...dialog.querySelectorAll<HTMLLabelElement>('label.check')].find(l => l.textContent?.trim() === text)!.querySelector('input')!
+      const turn = async (text: string, on: boolean) => { if (box(text).checked !== on) box(text).click(); await sleep(300) }
+      button(dialog, t('サーブ'))!.click(); await sleep(400)
+      await turn(t('線'), false); await turn(t('ヒートマップ'), true)
+      const startsDefault = box(t('始点')).checked
+      await turn(t('始点'), false); await sleep(600); await api.smokeShot!('serve-board-nostarts.png')
+      await turn(t('始点'), true); await sleep(600); await api.smokeShot!('serve-board-starts.png')
+      button(dialog, t('作成'))!.click()
+      const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'S') ?? null, 10000, 'serve slide')
+      await sleep(800)
+      const look = slide.charts?.[0]?.chart.look
+      if (!look?.starts || look.lines || !look.heat) throw new Error(`serve look: ${JSON.stringify(look)}`)
+      return { startsDefault, look: { points: look.points, lines: look.lines, heat: look.heat, starts: look.starts }, charts: slide.charts!.length, starts: slide.charts!.map(c => c.chart.dots.filter(d => d.start).length) }
+    }
+    if (layout === 'rot') {
+      // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
+      button(dialog, t('ローテーション'))!.click(); await sleep(400)
+      const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent
+      button(dialog, t('作成'))!.click()
+      const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')
+      await sleep(600)
+      const each = slides.map(s => {
+        const texts = s.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+        return { p: texts.find(x => /^P\d$/.test(x)), so: texts.find(x => x.startsWith('Side-out')), tables: texts.filter(x => /pass$|^CALL /.test(x)).length, discs: s.annotations.filter(a => a.kind === 'polygon' && a.disc?.part === 'top').length }
+      })
+      if (each.map(e => e.p).join() !== 'P1,P6,P5,P4,P3,P2') throw new Error(`rotations: ${JSON.stringify(each)}`)
+      return { setter, each }
+    }
+    button(dialog, t('セット'))!.click(); await sleep(300)
+    button(dialog, layout === 'rotation' ? t('ローテ別サイドアウト') : t('レセプション・コール別'))!.click(); await sleep(300)
+    const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent
+    const slotLabel = dialog.querySelector('.board-slot-no')?.textContent
+    button(dialog, t('作成'))!.click()
+    const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.setLayout === layout) ?? null, 10000, 'setter slide')
+    await sleep(600)
+    const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+    const titles = layout === 'rotation' ? ['S1', 'S6', 'S5', 'S4', 'S3', 'S2'] : texts.filter(x => /Reception$/.test(x))
+    if (layout === 'rotation' && !titles.every(x => texts.includes(x))) throw new Error(`rotation titles: ${texts.join(' | ')}`)
+    return { setter, slotLabel, layout: slide.board!.config.setLayout, titles, counts: texts.filter(x => /^n \d+ · K/.test(x)), zone21: texts.filter(x => x === 'Zone2/1').length }
+  }
+
+  const smokePresets = async (serveOnly = false) => {
     const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
       for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
     }
@@ -1568,6 +1704,22 @@ export function installSmoke(h: SmokeHost): void {
     window.confirm = () => true // 作り直す and 削除 ask first
     try {
       const code = latest.current.settings?.ourTeamCodes[0] ?? ''
+      if (serveOnly) {
+        // Serves: the order of servers and their markers chosen apart.
+        await open()
+        await pick(t('ビデオ'), t('サーブ'))
+        await pick(t('選手の並べ方'), t('打数順'))
+        await pick(t('マーカーの分け方'), t('ゾーン別'))
+        const byZone = await waitFor(() => { const p = preview(); return p.length ? p : null }, 5000, 'preview rows')
+        const names = new Set(byZone.flatMap(r => r.markers.map(m => m.name)))
+        if ([...names].some(n => !['Zone1', 'Zone6', 'Zone5', t('ショート')].includes(n))) throw new Error(`zone markers: ${[...names].join(', ')}`)
+        if (byZone.some((r, i) => i && r.total > byZone[i - 1].total)) throw new Error('servers not by count')
+        await pick(t('マーカーの分け方'), t('時系列'))
+        const byTime = preview()
+        if (byTime.some(r => r.markers.length !== 1 || r.markers[0].n !== r.total)) throw new Error(`time markers: ${JSON.stringify(byTime.slice(0, 3))}`)
+        await pick(t('マーカーの分け方'), t('ゾーン別'))
+        return { byZone: byZone.slice(0, 4), timeRows: byTime.length, hint: dialog()!.querySelectorAll('.hint')[1]?.textContent }
+      }
       // 1. A block video by middle, for the target team.
       await open()
       await pick(t('ビデオ'), t('ブロック'))
@@ -1882,6 +2034,18 @@ export function installSmoke(h: SmokeHost): void {
 
     await stroke([[0.4, 0.4]]) // select the arrow
     const selAfterClick = latest.current.selectedAnn
+    // The arrow keys nudge it: three presses right, one Shift+Down (five times as far), and back.
+    const arrowAt = () => { const a = anns().find(x => x.kind === 'arrow') as { x1: number; y1: number } | undefined; return a ? [a.x1, a.y1] : [NaN, NaN] }
+    const press = async (k: string, shift = false) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey: shift, bubbles: true })); await sleep(80) }
+    const [nx0, ny0] = arrowAt()
+    for (let i = 0; i < 3; i++) await press('ArrowRight')
+    await press('ArrowDown', true)
+    const [nx1, ny1] = arrowAt()
+    const nudged = { dx: Math.round((nx1 - nx0) * 1920), dy: Math.round((ny1 - ny0) * 1080), playerTime: playback.current.time }
+    for (let i = 0; i < 3; i++) await press('ArrowLeft')
+    await press('ArrowUp', true)
+    const [nx2, ny2] = arrowAt()
+    if (nudged.dx !== 6 || nudged.dy !== 10 || Math.abs(nx2 - nx0) > 1e-6 || Math.abs(ny2 - ny0) > 1e-6) throw new Error(`arrow-key nudge: ${JSON.stringify({ nudged, back: [nx2 - nx0, ny2 - ny0] })}`)
     await playback.seekAndWait(range.in + 3)
     // The object tools' button (the headline bar has one of the same name: told apart by its tooltip).
     const btn = await waitFor(() => document.querySelector<HTMLButtonElement>(`button[title="${t('今の再生位置から表示する')}"]`), 5000, () => `ここから表示 (selected: ${latest.current.selectedAnn}, objects: ${anns().map(x => `${x.kind}:${x.id.slice(0, 4)}`).join(' ')}, panel tabs: ${[...document.querySelectorAll('.stage-tabs button[aria-selected=true]')].map(b => b.textContent).join('/')}, drawn: ${drawn.join(',')}, after click: ${selAfterClick}, rect: ${JSON.stringify(rect && { x: (rect as { x?: number }).x, y: (rect as { y?: number }).y })})`)
@@ -1904,7 +2068,7 @@ export function installSmoke(h: SmokeHost): void {
     const saved = (await api.listReels()).find(x => x.id === built.id)
     return {
       drawn, rect, arrowShowFromRel: arrow.showFrom !== undefined ? +(arrow.showFrom - range.in).toFixed(2) : null,
-      alphaBefore, alphaAfter, savedAnnotations: saved?.clips[ids[0]].annotations.length ?? 0,
+      alphaBefore, alphaAfter, savedAnnotations: saved?.clips[ids[0]].annotations.length ?? 0, nudged,
       text: anns().find(a => a.kind === 'text'),
     }
   }

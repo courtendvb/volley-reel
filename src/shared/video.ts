@@ -4,8 +4,8 @@
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { SlideFlights, SlideMarks } from './court'
-import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
-import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg } from './reel'
+import type { CardKind, CardLayout, OverlayPatch, OverlaySettings } from './overlay'
+import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg, type SlideGroup } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
 import type { VideoPreset } from './presets'
@@ -17,6 +17,7 @@ export interface Video {
   overlay?: OverlayPatch // read through overlaySettings()
   annotations?: Annotation[] // objects shown on every clip of the video (表示範囲: 動画全体)
   cardAnnotations?: Annotation[] // objects on the video's title card (its opening card)
+  cardHidden?: string[] // objects of every video card (titleCard.objects) not shown on this one
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
   cardLayout?: CardLayout // the opening card's own title place and size
   captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
@@ -59,11 +60,20 @@ export function dropScene(v: Video, sceneId: string): Video {
 // video: the opening card with the video's name. annotations: objects drawn on the card.
 // slide: a slide of a scene, played like a card (drawn as its page instead of a title).
 // layout: this card's own title place and size, apart from its kind's.
-export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]; layout?: CardLayout
+// scene: the scene a scene or marker card is of (none: the video's card).
+export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]; layout?: CardLayout; scene?: string
   slide?: { id: string; bg: SlideBg; flights?: SlideFlights } & SlideMarks }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
   | { kind: 'clip'; clip: Clip; sceneId: string; group: Group } // group: the marker group it plays in ('none' = unmarked)
+
+// The objects a card shows: those on every card of its kind (the video's), less the ones it hides,
+// under its own.
+export function cardObjects(own: Annotation[] | undefined, kind: CardKind, overlay: OverlaySettings, hidden: string[] | undefined): Annotation[] {
+  const shared = overlay.titleCard.objects?.[kind] ?? []
+  const off = new Set(hidden ?? [])
+  return [...shared.filter(a => !off.has(a.id)), ...(own ?? [])]
+}
 
 // One scene's clips in play order, with a card before each marker group when marker cards are on,
 // and its slides where they sit. order is the scene's play order (playOrder, minus clips that can't
@@ -74,16 +84,17 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
 }
 
 // planScene by group: each marker group that plays (its card first) and the unmarked clips, in order.
-function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): { group: Group; items: PlanItem[] }[] {
-  const out: { group: Group; items: PlanItem[] }[] = []
+// The scene's head slides (group 'head') lead the first part, or are a part of their own with nothing else.
+function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): { group: SlideGroup; items: PlanItem[] }[] {
+  const out: { group: SlideGroup; items: PlanItem[] }[] = []
   const playable = new Set(order.map(c => c.id))
-  const items = (g: Group, ids?: string[]): PlanItem[] => groupRows(scene, g, ids).flatMap((r): PlanItem[] =>
-    r.kind === 'slide' ? [slideItem(r.slide)] : playable.has(r.id) ? [{ kind: 'clip', clip: scene.clips[r.id], sceneId: scene.id, group: g }] : [])
+  const items = (g: SlideGroup, ids?: string[]): PlanItem[] => groupRows(scene, g, ids).flatMap((r): PlanItem[] =>
+    r.kind === 'slide' ? [slideItem(r.slide)] : playable.has(r.id) && g !== 'head' ? [{ kind: 'clip', clip: scene.clips[r.id], sceneId: scene.id, group: g }] : [])
   for (const g of scene.groupOrder.filter(m => !scene.markerOff?.[m])) {
     const list = items(g)
     if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
-      list.unshift({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
+      list.unshift({ kind: 'card', card: { marker: g, scene: scene.id, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: cardObjects(scene.markerCardAnnotations?.[g], 'marker', overlay, scene.markerCardHidden?.[g]) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ group: g, items: list })
   }
@@ -91,6 +102,11 @@ function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matche
   const unmarked = new Set(scene.groups.none)
   const rest = scene.scope === 'all' ? items('none', order.filter(c => unmarked.has(c.id)).map(c => c.id)) : []
   if (rest.length) out.push({ group: 'none', items: rest })
+  const head = items('head')
+  if (head.length) {
+    if (out.length) out[0] = { ...out[0], items: [...head, ...out[0].items] }
+    else out.push({ group: 'head', items: head })
+  }
   return out
 }
 
@@ -99,7 +115,7 @@ function slideItem(s: Slide): PlanItem {
 }
 
 export function slideCard(s: Slide): Card {
-  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg, ...(s.flights ? { flights: s.flights } : {}), ...(s.heat ? { heat: s.heat } : {}), ...(s.landings ? { landings: s.landings } : {}), ...(s.cones ? { cones: s.cones } : {}), ...(s.chart ? { chart: s.chart } : {}), ...(s.charts ? { charts: s.charts } : {}), ...(s.zones ? { zones: s.zones } : {}) }, annotations: s.annotations }
+  return { marker: null, name: '', match: null, slide: { id: s.id, bg: s.bg, ...(s.flights ? { flights: s.flights } : {}), ...(s.heat ? { heat: s.heat } : {}), ...(s.landings ? { landings: s.landings } : {}), ...(s.cones ? { cones: s.cones } : {}), ...(s.chart ? { chart: s.chart } : {}), ...(s.charts ? { charts: s.charts } : {}), ...(s.setCharts ? { setCharts: s.setCharts } : {}), ...(s.zones ? { zones: s.zones } : {}) }, annotations: s.annotations }
 }
 
 // A whole video: each scene in turn, led by a scene card (the scene's name) when scene cards are on.
@@ -118,7 +134,10 @@ export interface Chapter { at: number; title: string }
 export function planVideoChapters(video: Video, scenes: Record<string, Reel>, orderOf: (s: Reel) => Clip[], overlay: OverlaySettings,
   matches: Record<string, Match>, ourCodes: string[]): { plan: PlanItem[]; chapters: Chapter[] } {
   const plan: PlanItem[] = [], chapters: Chapter[] = []
-  if (overlay.titleCard.videoCard) plan.push({ kind: 'card', card: videoCard(video, scenes, matches, ourCodes), durationSec: overlay.titleCard.durationSec })
+  if (overlay.titleCard.videoCard) {
+    const vc = videoCard(video, scenes, matches, ourCodes)
+    plan.push({ kind: 'card', card: { ...vc, annotations: cardObjects(vc.annotations, 'video', overlay, video.cardHidden) }, durationSec: overlay.titleCard.durationSec })
+  }
   for (const id of video.sceneIds) {
     const s = scenes[id]
     if (!s) continue
@@ -127,7 +146,7 @@ export function planVideoChapters(video: Video, scenes: Record<string, Reel>, or
     if (!parts.length) continue
     const card = sceneCard(s, order, overlay, matches, ourCodes)
     for (const [i, p] of parts.entries()) {
-      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('マーカー {0}', p.group)}`
+      const name = parts.length === 1 || p.group === 'head' ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('マーカー {0}', p.group)}`
       chapters.push({ at: chapters.length ? plan.length : 0, title: name })
       if (i === 0 && card) plan.push(card)
       plan.push(...p.items)
@@ -146,7 +165,7 @@ export function planSceneWithCard(s: Reel, order: Clip[], overlay: OverlaySettin
 
 function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem | null {
   if (!(s.sceneCard ?? overlay.titleCard.sceneCards)) return null
-  const card: Card = { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [], layout: s.cardLayout }
+  const card: Card = { marker: null, scene: s.id, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: cardObjects(s.cardAnnotations, 'scene', overlay, s.cardHidden), layout: s.cardLayout }
   return { kind: 'card', card, durationSec: overlay.titleCard.durationSec }
 }
 

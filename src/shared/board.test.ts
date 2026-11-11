@@ -206,6 +206,10 @@ describe('boardSlide', () => {
     expect(made.charts[0].chart.look).toMatchObject({ heat: true, points: false, lines: false, lineOpacity: 0.3 })
     const after = restyleBoard({ charts: made.charts }, { lines: true })
     expect(after.charts!.every(c => c.chart.look.lines && c.chart.look.heat)).toBe(true)
+    expect(made.charts[0].chart.look.starts).toBeUndefined()
+    const starts = restyleBoard({ charts: made.charts }, { starts: true })
+    expect(starts.charts!.every(c => c.chart.look.starts)).toBe(true)
+    expect(boardSlide(players(2), 'S', { split: false, display: { starts: true } }, {}).charts[0].chart.look.starts).toBe(true)
   })
   it('makes the notes one object of fixed cells, one column each to write in', () => {
     const r = boardSlide(players(3), 'S', { split: false, notes: true }, {})

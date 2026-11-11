@@ -199,18 +199,19 @@ describe('flight', () => {
 })
 
 describe('playDirection', () => {
-  it("serve and attack leave the player's side; reception and dig come to it; a set has no way", () => {
+  it("serve and attack leave the player's side; reception, dig and set go the near court's way down", () => {
     expect(playDirection(serve, fit)).toBe('down') // away, far in set 1
     expect(playDirection(reception, fit)).toBe('down') // home, near: the serve comes down to it
     expect(playDirection(attack, fit)).toBe('up') // from the near side
     expect(playDirection(dig, fit)).toBe('up') // the far side digs the near side's attack
-    expect(playDirection(set, fit)).toBeNull()
+    expect(playDirection(set, fit)).toBe('down') // no net crossed: on the near court, down
   })
 
   it('turns with the sides', () => {
     const swapped: CourtFit = { ...fit, nearSet1: fit.nearSet1 === '*' ? 'a' : '*' }
     expect(playDirection(serve, swapped)).toBe('up')
     expect(playDirection(attack, swapped)).toBe('down')
+    expect(playDirection(set, swapped)).toBe('up') // on the far court
   })
 })
 

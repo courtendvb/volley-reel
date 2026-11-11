@@ -355,13 +355,13 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
   for (let i = 1; i < 30; i++) { const x = nl[0] + ((nr[0] - nl[0]) * i) / 30; out.push(line([x, netTop], [x, nl[1] - low], 1, '#0F172A', { opacity: 0.22 })) }
   for (let i = 1; i < 4; i++) { const y = netTop + ((up - low) * i) / 4; out.push(line([nl[0], y], [nr[0], y], 1, '#0F172A', { opacity: 0.18 })) }
   out.push(line([nl[0], netTop], [nr[0], netTop], 5, '#FFFFFF'), line([nl[0], nl[1] - low], [nr[0], nr[1] - low], 1.5, '#F8FAFC'))
-  // Each place's share where it is hit from: Z4, the quick (in front of the setter, right of the
-  // middle) and Z2/1 hung on the net's tape over their places; Pipe from the back, in the middle
-  // where it takes off behind the far attack line. A tab in the place's colour with its name, the share beside it.
-  const LABEL: [SetPlace, TeamPt][] = [['right', { u: 0.86, v: 0.5 }], ['middle', { u: 0.58, v: 0.5 }], ['left', { u: 0.14, v: 0.5 }], ['pipe', { u: 0.5, v: 0.25 }]]
+  // Each place's share where it is hit from: Z2/1, the quick and Z4 in a row on the net, evenly
+  // spaced with the quick in the middle; Pipe straight under the quick, over the far attack line. A
+  // tab in the place's colour with its name, the share beside it. Picture points (tuned by hand).
+  const LABEL: [SetPlace, [number, number]][] = [['right', [0.163, 0.429]], ['middle', [0.34, 0.429]], ['left', [0.517, 0.429]], ['pipe', [0.34, 0.326]]]
   const tw = 0.04, nw = 0.056, bh = 0.042
-  for (const [k, spot] of LABEL) {
-    const [cx, cy] = spot.v === 0.5 ? [team(spot)[0], netTop] : team(spot), by = cy - bh / 2
+  for (const [k, [cx, cy]] of LABEL) {
+    const by = cy - bh / 2
     const x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
     const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
     out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))

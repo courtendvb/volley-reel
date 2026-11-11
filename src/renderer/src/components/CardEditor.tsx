@@ -114,7 +114,8 @@ const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker ===
 // What can be put on a card as a picture: players' photos from the packs (the card's own players
 // first) and the logos the library has for teams.
 export interface CardPhotoChoice { key: string; label: string; own: boolean; pack: string; photo: string }
-export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void }
+export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void
+  onFrame: () => void } // a photo frame: filled with the card's player with the most clips when it plays
 
 export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
@@ -155,8 +156,9 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
             title={t('相手チームのロゴの位置と大きさを、タイトルとは別に決める（この動画のすべての{0}のカード）', what)}>{t('ロゴ')}</button>
         )}
       </div>
-      {tool === 'objects' && inserts && (inserts.photos.length > 0 || inserts.logos.length > 0) && (
+      {tool === 'objects' && inserts && (
         <>
+          <button onClick={inserts.onFrame} title={t('写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ')}>{t('＋ 写真枠')}</button>
           {inserts.photos.length > 0 && (
             <select value="" aria-label={t('選手の写真を入れる')} title={t('パックの選手の顔写真を、このカードに画像として入れる（あとで動かせる）')}
               onChange={e => { const c = inserts.photos.find(x => x.key === e.target.value); if (c) inserts.onPhoto(c.pack, c.photo) }}>

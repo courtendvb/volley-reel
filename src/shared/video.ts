@@ -59,7 +59,8 @@ export function dropScene(v: Video, sceneId: string): Video {
 // video: the opening card with the video's name. annotations: objects drawn on the card.
 // slide: a slide of a scene, played like a card (drawn as its page instead of a title).
 // layout: this card's own title place and size, apart from its kind's.
-export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]; layout?: CardLayout
+// scene: the scene a scene or marker card is of (none: the video's card).
+export type Card = { marker: number | null; name: string; match: string | null; opp?: string | null; video?: boolean; annotations?: Annotation[]; layout?: CardLayout; scene?: string
   slide?: { id: string; bg: SlideBg; flights?: SlideFlights } & SlideMarks }
 export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
@@ -84,7 +85,7 @@ function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matche
     const list = items(g)
     if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
-      list.unshift({ kind: 'card', card: { marker: g, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
+      list.unshift({ kind: 'card', card: { marker: g, scene: scene.id, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ group: g, items: list })
   }
@@ -152,7 +153,7 @@ export function planSceneWithCard(s: Reel, order: Clip[], overlay: OverlaySettin
 
 function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem | null {
   if (!(s.sceneCard ?? overlay.titleCard.sceneCards)) return null
-  const card: Card = { marker: null, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [], layout: s.cardLayout }
+  const card: Card = { marker: null, scene: s.id, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [], layout: s.cardLayout }
   return { kind: 'card', card, durationSec: overlay.titleCard.durationSec }
 }
 

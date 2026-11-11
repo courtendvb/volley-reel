@@ -1095,6 +1095,8 @@ export const EN: Record<string, string> = {
   "折れ線 / 多角形": "Polyline / polygon",
   "選択中の図形を削除": "Delete the selected object",
   "選択中の図形を少し動かす（Shift で大きく）": "Nudge the selected objects (Shift: further)",
+  "＋ 写真枠": "＋ Photo frame",
+  "写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ": "Put a photo frame on the card. When it plays and in the export, it shows the player with the most clips in this marker (the scene for a scene card, the video for the video's card) who has a photo in the packs. Drag to place and size it",
   "中はマーカー 1 にサービスエース（#）、2 に CD パス（+ /）、3 に AB パス（! -）、4 にサーブミス（=）を入れます。": "Inside: marker 1 aces (#), 2 Out of System (+ /), 3 In System (! -), 4 errors (=).",
   "中は落ちたゾーンで、マーカー 1 に Zone1、2 に Zone6、3 に Zone5（その前の 9・8・7 の奥半分を含む）、4 にショート（ゾーン 2・3・4 と 7B・7C・8B・8C・9B・9C）を入れます。サーブミスとゾーンのないものはマーカーなしで最後に入ります。": "Inside, by where the serve landed: marker 1 Zone1, 2 Zone6, 3 Zone5 (each with the deep half of 9, 8, 7 in front of it), 4 short (zones 2, 3, 4 and 7B 7C 8B 8C 9B 9C). Errors and serves without a zone go last, without a marker.",
   "中はマーカー 1 に、すべてのサーブを試合の順に入れます。": "Inside: every serve in marker 1, in match order.",

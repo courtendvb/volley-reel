@@ -29,6 +29,7 @@ interface Base {
   groupId?: string // objects with the same group id are selected and moved together
   fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
+  locked?: boolean // part of the background (a data slide's court): drawn, but not picked by a click
 }
 
 interface Fillable {
@@ -213,6 +214,7 @@ export interface StylePatch {
   bold?: boolean
   outline?: boolean
   box?: TextBox | null
+  font?: string | null // a text's font; null: back to the usual
 }
 
 // Applies the parts of a style that make sense for the annotation's kind.
@@ -220,8 +222,11 @@ export function applyStyle(a: Annotation, s: StylePatch): Annotation {
   const common = { ...a, color: s.color ?? a.color, ...(s.opacity !== undefined ? { opacity: s.opacity } : {}) }
   if (common.kind === 'image') return common
   if (common.kind === 'text') {
-    return { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
+    const text = { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
       ...(s.outline !== undefined ? { outline: s.outline } : {}), ...(s.box !== undefined ? { box: s.box } : {}) }
+    if (s.font === undefined) return text
+    const { font: _f, ...rest } = text
+    return s.font ? { ...rest, font: s.font } : rest
   }
   const lined = { ...common, width: s.width ?? common.width, ...(s.dash !== undefined ? { dash: s.dash } : {}),
     ...(s.lineOpacity !== undefined ? { lineOpacity: s.lineOpacity } : {}) }
@@ -278,6 +283,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   }
   for (let i = list.length - 1; i >= 0; i--) {
     const a = list[i]
+    if (a.locked) continue
     if (a.kind === 'arrow') { if (nearPath([[a.x1, a.y1], [a.x2, a.y2]], false, a.width)) return a; continue }
     if (a.kind === 'freehand' || a.kind === 'polyline') { if (nearPath(a.points, false, a.width)) return a; continue }
     if (a.kind === 'polygon') { if (nearPath(a.points, true, a.width) || (a.fill && pointInPolygon(x, y, a.points))) return a; continue }

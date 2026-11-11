@@ -1,8 +1,8 @@
 // A serve-target slide: which serves keep a team from siding out. Every reception of the team, by who
 // received it and the serve's type (jump / float), by where the serve went (Zone1, Zone6, Zone5,
 // short), with how often the pass was good (# +), how often the first attack after it was a kill, and
-// how often the team got an attack in after it, and how often it won the rally (side-out). The lowest
-// side-outs are marked: the serves to hit.
+// and how often the team got an attack in after it; rates well off the team's own are marked. (The
+// side-out is read too, but not shown.)
 // Pure: no files, no DOM.
 import type { Annotation } from './annotation'
 import { serveZoneMarker } from './presets'
@@ -110,8 +110,8 @@ function rateFill(n: number, of: number, teamN: number, teamOf: number): string 
 }
 const colored = (fill: string | undefined) => (fill ? { fill, bold: true } : {})
 
-// The rows of a block: per serve kind, receptions, good passes, kills of the first attack and side-outs;
-// then side-out of both kinds together.
+// The rows of a block: per serve kind, receptions, the team's attacks after them, good passes and
+// kills of the first attack.
 function statColumn(out: Annotation[], g: string, x: number, y: number, w: number, rh: number, list: Received[], team: ReceiveStats) {
   const half = w / 2
   SERVE_KINDS.forEach((k, i) => {
@@ -121,13 +121,10 @@ function statColumn(out: Annotation[], g: string, x: number, y: number, w: numbe
     cell(out, g, cx, y + 2 * rh, half, rh, String(s.attacks)) // the team's attacks after these receptions
     cell(out, g, cx, y + 3 * rh, half, rh, pct(s.good, s.n), colored(rateFill(s.good, s.n, team.good, team.n)))
     cell(out, g, cx, y + 4 * rh, half, rh, pct(s.kills, s.attacks), colored(rateFill(s.kills, s.attacks, team.kills, team.attacks)))
-    cell(out, g, cx, y + 5 * rh, half, rh, pct(s.sideOuts, s.known), colored(rateFill(s.sideOuts, s.known, team.sideOuts, team.known)))
   })
-  const all = receiveStats(list)
-  cell(out, g, x, y + 6 * rh, w, rh, pct(all.sideOuts, all.known), { bold: true, ...colored(rateFill(all.sideOuts, all.known, team.sideOuts, team.known)) })
 }
 function rowLabels(out: Annotation[], g: string, x: number, y: number, w: number, rh: number) {
-  const labels = ['Serve', 'Receptions', 'Team RA', 'Good pass (AB%)', '1st attack K%', 'Side-out %', 'Side-out (all)']
+  const labels = ['Serve', 'Receptions', 'Team RA', 'Good pass (AB%)', '1st attack K%']
   labels.forEach((l, i) => cell(out, g, x, y + i * rh, w, rh, l, { fill: '#F1F5F9', bold: true, size: 11 }))
 }
 
@@ -145,7 +142,7 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
   // The heading.
   const hg = uid()
   out.push(words(0.015, 0.012, `${v.team} reception vs serve`, 26, ink, { groupId: hg }))
-  out.push(words(0.015, 0.058, `${team.n} receptions · good pass ${pct(team.good, team.n)} · side-out ${pct(team.sideOuts, team.known)}   blue: 10 points or more over the team's (good for the receivers), red: 10 or more under (bad)`, 13, ink, { groupId: hg, bold: false }))
+  out.push(words(0.015, 0.058, `${team.n} receptions · good pass ${pct(team.good, team.n)}   blue: 10 points or more over the team's (good for the receivers), red: 10 or more under (bad)`, 13, ink, { groupId: hg, bold: false }))
   // The receivers: photo, number and name, then the stats; the team's at the end.
   const top = 0.1, photoH = 0.13, nameH = 0.032, rh = 0.034, labelW = 0.11
   const cols = rs.length + 1, colW = Math.min(0.13, (0.985 - 0.015 - labelW) / cols)
@@ -173,7 +170,7 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
   cell(out, tg, tx, top + photoH, colW, nameH, v.team, { fill: HEAD, color: '#FFFFFF', bold: true, size: 13 })
   statColumn(out, tg, tx, statY, colW, rh, all, team)
   // Below: by where the serve went.
-  const zy = statY + 7 * rh + 0.04, zg = uid(), zw = colW
+  const zy = statY + 5 * rh + 0.04, zg = uid(), zw = colW
   rowLabels(out, zg, 0.015, zy + nameH, labelW, rh)
   TARGET_ZONES.forEach((z, i) => {
     const x = 0.015 + labelW + i * zw

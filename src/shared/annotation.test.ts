@@ -46,6 +46,7 @@ describe('hit testing', () => {
     expect(hitTest(ctx, list, 0.3, 0.3, 1280, 720)?.id).toBe('a') // on the arrow line
     expect(hitTest(ctx, list, 0.3, 0.2, 1280, 720)).toBeNull() // off the line
     expect(hitTest(ctx, list, 0.7, 0.7, 1280, 720)?.id).toBe('r')
+    expect(hitTest(ctx, list.map(a => (a.id === 'r' ? { ...a, locked: true } : a)), 0.7, 0.7, 1280, 720)?.id).not.toBe('r') // a locked one is clicked through
     expect(hitTest(ctx, list, 0.15, 0.82, 1280, 720)?.id).toBe('t')
   })
 })
@@ -110,5 +111,15 @@ describe('style on several objects', () => {
     expect(out[1]).toMatchObject({ color: '#0000FF', lineOpacity: 0.4 })
     expect(out[2]).toMatchObject({ color: '#FFFFFF' })
     expect(applyStyle(list[2], { lineOpacity: 0.4 })).not.toHaveProperty('lineOpacity')
+  })
+})
+
+describe('a text font from the format panel', () => {
+  it('sets a font on texts, and takes it off again', () => {
+    const tx: Annotation = { id: 't', kind: 'text', color: '#000000', x: 0, y: 0, text: '7', size: 16 }
+    const set = applyStyle(tx, { font: 'Bahnschrift' })
+    expect(set.kind === 'text' && set.font).toBe('Bahnschrift')
+    expect('font' in applyStyle(set, { font: null })).toBe(false)
+    expect(applyStyle(set, { size: 20 })).toMatchObject({ font: 'Bahnschrift', size: 20 })
   })
 })

@@ -256,7 +256,7 @@ describe('a setter\'s sets', () => {
   it('rates the attacks after the sets', () => {
     expect(boardRates(boardPlayers([d], 'E')[0], 'E').map(r => [r.label, r.value])).toEqual([['K%', '50%'], ['EFF%', '25%']])
   })
-  it('draws the distribution as zones, arrows or both, no charts', () => {
+  it('paints the distribution in the zones, without arrows whatever a card was made with, no charts', () => {
     const cols = boardPlayers([d], 'E')
     const kinds = (view: 'zones' | 'arrows' | 'both') => {
       const s = boardSlide(cols, 'E', { split: false, setView: view }, {})
@@ -264,9 +264,7 @@ describe('a setter\'s sets', () => {
       return s.annotations
     }
     const zones = kinds('zones'), arrows = kinds('arrows'), both = kinds('both')
-    expect(zones.filter(a => a.kind === 'arrow')).toHaveLength(0)
-    expect(arrows.filter(a => a.kind === 'arrow')).toHaveLength(3)
-    expect(both.filter(a => a.kind === 'arrow')).toHaveLength(3)
+    for (const anns of [zones, arrows, both]) expect(anns.filter(a => a.kind === 'arrow')).toHaveLength(0)
     expect(zones.some(a => a.kind === 'text' && a.text === '50%')).toBe(true)
     // painted zones: the most used the strongest
     const painted = zones.filter(a => a.kind === 'rect' && a.fill && a.fill !== '#F3D9B1' && a.fill !== '#FFFFFF')

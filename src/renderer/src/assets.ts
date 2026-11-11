@@ -2,6 +2,7 @@
 // A PDF is inserted as a picture of its first page, rendered here with pdf.js and saved as a PNG.
 import type { ImageLookup } from '../../shared/annotation'
 import { t } from '../../shared/i18n'
+import { mainColor } from '../../shared/rotationBoard'
 
 const api = window.api
 // Decoded pictures take width × height × 4 bytes each (a phone photo is ~48 MB), so: they are
@@ -119,6 +120,16 @@ export function logoImage(code: string | null | undefined): ImageBitmap | null {
 
 export async function preloadLogos(codes: (string | null | undefined)[]): Promise<void> {
   await Promise.all([...new Set(codes.filter((c): c is string => !!c))].map(loadLogo))
+}
+
+// A team's colour from its logo in the library (its most common strong colour), or null.
+export async function logoColor(code: string): Promise<string | null> {
+  const bmp = await loadLogo(code)
+  if (!bmp) return null
+  const c = new OffscreenCanvas(48, 48), g = c.getContext('2d')
+  if (!g) return null
+  g.drawImage(bmp, 0, 0, 48, 48)
+  return mainColor(g.getImageData(0, 0, 48, 48).data)
 }
 
 export function forgetLogo(code: string): void {

@@ -391,7 +391,7 @@ function drawLandings(ctx: Ctx, w: number, h: number, { fit, points, rough }: Sl
 // What a slide keeps of the court: the shots' marks and a play's zones, fixed when they were put on.
 export interface SlideZones { fit: CourtFit; zones: PlayZones; detail: GridStyle['detail'] }
 // setCharts: a setter's set charts placed on the slide (a rotation slide), x / y / h as 0..1 of the picture.
-export interface PlacedSetChart { chart: SetChart; x: number; y: number; h: number }
+export interface PlacedSetChart { chart: SetChart; x: number; y: number; h: number; rich?: boolean } // rich: jersey discs, no title (drawSetChart)
 export interface SlideMarks { heat?: SlideHeat; landings?: SlideHeat; zones?: SlideZones; cones?: SlideCones; chart?: DirectionChart; charts?: PlacedChart[]; setCharts?: PlacedSetChart[] }
 export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, heatOpacity?: number): void {
   if (s.heat) drawHeat(ctx, w, h, s.heat, heatOpacity)
@@ -400,7 +400,7 @@ export function drawSlideMarks(ctx: Ctx, w: number, h: number, s: SlideMarks, he
   if (s.landings) drawLandings(ctx, w, h, s.landings)
   if (s.chart) drawChart(ctx, s.chart, chartBox(w, h, 'center', 1, s.chart.look.name))
   for (const c of s.charts ?? []) drawChart(ctx, c.chart, { x: c.x * w, y: c.y * h, h: c.h * h })
-  for (const c of s.setCharts ?? []) drawSetChart(ctx, c.chart, { x: c.x * w, y: c.y * h, h: c.h * h })
+  for (const c of s.setCharts ?? []) drawSetChart(ctx, c.chart, { x: c.x * w, y: c.y * h, h: c.h * h }, 'auto', false, !!c.rich)
 }
 
 // Many flights at once on a slide: they leave together after a moment and then stay. `progress` as

@@ -35,6 +35,7 @@ interface Base {
 interface Fillable {
   fill?: string | null // none when missing or null
   fillOpacity?: number // 0..1; default 1
+  shade?: 'ball' // the fill lit as a ball: a highlight up left, darker toward the bottom
 }
 
 export interface TextBox {
@@ -347,7 +348,7 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       ctx.beginPath()
       if (a.kind === 'rect') ctx.rect(a.x * W, a.y * H, a.w * W, a.h * H)
       else ctx.ellipse((a.x + a.w / 2) * W, (a.y + a.h / 2) * H, (a.w / 2) * W, (a.h / 2) * H, 0, 0, Math.PI * 2)
-      fillAndStroke(ctx, a, a.width * s)
+      fillAndStroke(ctx, a, a.width * s, { x: a.x * W, y: a.y * H, w: a.w * W, h: a.h * H })
       break
     }
     default: {
@@ -479,11 +480,25 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
   lines.forEach((l, i) => ctx.fillText(l, lineX(i), ty + i * lh))
 }
 
-function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash; lineOpacity?: number }, lw: number): void {
+function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash; lineOpacity?: number }, lw: number, box?: { x: number; y: number; w: number; h: number }): void {
   if (a.fill) {
-    ctx.save(); ctx.globalAlpha *= a.fillOpacity ?? 1; ctx.fillStyle = a.fill; ctx.fill(); ctx.restore()
+    ctx.save(); ctx.globalAlpha *= a.fillOpacity ?? 1
+    if (a.shade === 'ball' && box && /^#[0-9a-f]{6}$/i.test(a.fill)) {
+      const r = Math.max(box.w, box.h) / 2, cx = box.x + box.w / 2, cy = box.y + box.h / 2
+      const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.05, cx, cy, r)
+      g.addColorStop(0, tint(a.fill, '#FFFFFF', 0.42)); g.addColorStop(0.35, tint(a.fill, '#FFFFFF', 0.08))
+      g.addColorStop(0.75, a.fill); g.addColorStop(1, tint(a.fill, '#000000', 0.38))
+      ctx.fillStyle = g
+    } else ctx.fillStyle = a.fill
+    ctx.fill(); ctx.restore()
   }
   if (lw > 0) { ctx.save(); ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = lw; setDash(ctx, a.dash, lw); ctx.stroke(); ctx.restore() }
+}
+
+// A colour toward another (#rrggbb), t of the way.
+function tint(a: string, b: string, t: number): string {
+  const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16)
+  return '#' + [0, 1, 2].map(i => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, '0')).join('')
 }
 
 function arrowHead(ctx: Ctx, x: number, y: number, ang: number, head: number): void {

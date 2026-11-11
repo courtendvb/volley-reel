@@ -186,7 +186,7 @@ function registerIpc(): void {
     const v = await dialog.showOpenDialog(win!, { title: t('試合の動画を選択'), properties: ['openFile'],
       filters: [videoFilter()] })
     if (v.canceled || !v.filePaths[0]) return null
-    const d = await dialog.showOpenDialog(win!, { title: t('スカウトファイル（.dvw）を選択'), properties: ['openFile'],
+    const d = await dialog.showOpenDialog(win!, { title: t('スカウトファイル（.dvw / .vsm）を選択'), properties: ['openFile'],
       filters: [dvwFilter] })
     if (d.canceled || !d.filePaths[0]) return null
     return l.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
@@ -430,7 +430,7 @@ function registerIpc(): void {
 }
 
 const videoFilter = () => ({ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] })
-const dvwFilter = { name: 'DataVolley', extensions: ['dvw', 'DVW'] }
+const dvwFilter = { name: 'DataVolley / VolleyStation', extensions: ['dvw', 'DVW', 'vsm', 'VSM'] }
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 const ASSET_ID = /^[0-9a-f-]{36}\.(png|jpg|webp|gif|bmp)$/
 const OBJECTS_MARK = '[SyncScout Video Editor: objects copied]' // on the system clipboard after copying objects

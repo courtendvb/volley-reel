@@ -15,7 +15,7 @@ export const EN: Record<string, string> = {
   "プロジェクトが開かれていません": "No project is open",
   "試合の動画を選択": "Choose the match video",
   "動画": "Video",
-  "スカウトファイル（.dvw）を選択": "Choose the scout file (.dvw)",
+  "スカウトファイル（.dvw / .vsm）を選択": "Choose the scout file (.dvw / .vsm)",
   "試合が見つかりません: {0}": "Match not found: {0}",
   "{0} の動画を選択（元: {1}）": "Choose the video for {0} (was: {1})",
   "{0} の DVW を選択（元: {1}）": "Choose the DVW for {0} (was: {1})",

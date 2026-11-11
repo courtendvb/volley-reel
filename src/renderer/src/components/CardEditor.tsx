@@ -119,11 +119,12 @@ export interface CardPhotoChoice { key: string; label: string; own: boolean; pac
 export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void
   onFrame: () => void } // a photo frame: filled with the card's player with the most clips when it plays
 
-export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts }: {
+export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
   tool: 'objects' | 'title' | 'logo'; onTool: (t: 'objects' | 'title' | 'logo') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
   inserts?: CardInserts
+  hiddenCount?: number; onShowHidden?: () => void // objects of every card of this kind left off this one
 }) {
   const kind = layoutKey(card), def = defaultLayout(card)
   const shared = asTopLeft(card, settings.titleCard[kind] ?? def), own = !!card.layout
@@ -207,6 +208,10 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
             <span>{Math.round(layout.scale * 100)}%</span></label>
           {!own && <button onClick={() => set(def)}>{t('元に戻す')}</button>}
         </>
+      )}
+      {tool === 'objects' && hiddenCount > 0 && onShowHidden && (
+        <span className="muted">{t('すべての{0}のカードの図形 {1} 個を、このカードでは出していません', what, hiddenCount)}
+          {' '}<button className="link" onClick={onShowHidden}>{t('出す')}</button></span>
       )}
       <span className="spacer" />
       <button className="primary" onClick={onDone}>{t('完了')}</button>

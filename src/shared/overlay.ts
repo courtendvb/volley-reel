@@ -1,5 +1,6 @@
 // Automatic overlays from the scout data (design §3.7): scoreboard, player caption, title card.
 // Settings live on the reel; each clip can hide an element or rewrite the caption.
+import type { Annotation } from './annotation'
 import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { effectName, skillName } from './labels'
@@ -25,6 +26,7 @@ export interface OverlaySettings {
     markerLayout?: CardLayout; sceneLayout?: CardLayout
     videoCard?: boolean; videoLayout?: CardLayout // videoCard: an opening card with the video's name
     logos?: Partial<Record<CardKind, LogoPlace>> // the opponent's logo apart from the title, per kind of card; missing = beside / above the title
+    objects?: Partial<Record<CardKind, Annotation[]>> // objects on every card of a kind (a photo frame, a logo…), under each card's own
     background?: string } // the cards' (and blank slides') background; missing = a darker shade of the theme's base
   // Fade from and to black at the start and end of every clip and card.
   transition: { fade: boolean; durationSec: number }

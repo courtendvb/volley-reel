@@ -26,6 +26,9 @@ interface Props {
   canVideo: boolean // a video is open, so objects can be put on all of it
   marker?: number | null // the marker group the clip is open in (objects can be put on all of its clips)
   cardMode?: boolean // objects on a title card: no clip timing, no display scope
+  // On a title card: whether an object is on this card only or on every card of its kind (kindName:
+  // 「マーカーの」…), and leaving one of every card off this card.
+  cardScope?: { of: (id: string) => 'card' | 'all'; set: (id: string, to: 'card' | 'all') => void; kindName: string; hide: (id: string) => void }
   extraIds?: string[] // objects picked with Shift+click besides the selected one
   editPoints: boolean
   onEditPoints: (on: boolean) => void
@@ -275,7 +278,19 @@ export function AnnotationTools(p: Props) {
       <div className="ann-row">
         {sel && p.cardMode ? (
           <>
-            <span className="muted">{t('タイトルカードの上の図形です')}</span>
+            {p.cardScope ? (
+              <>
+                <select aria-label={t('カードの表示範囲')} value={p.cardScope.of(sel.id)} className={`scope-${p.cardScope.of(sel.id) === 'all' ? 'video' : 'clip'}`}
+                  title={t('このカードだけに置くか、この動画のすべての{0}カードに置くか', p.cardScope.kindName)}
+                  onChange={e => p.cardScope!.set(sel.id, e.target.value as 'card' | 'all')}>
+                  <option value="card">{t('表示: このカードだけ')}</option>
+                  <option value="all">{t('表示: すべての{0}カード', p.cardScope.kindName)}</option>
+                </select>
+                {p.cardScope.of(sel.id) === 'all' && (
+                  <button onClick={() => p.cardScope!.hide(sel.id)} title={t('この図形を、このカードでだけ出さない（ほかのカードには出る）')}>{t('このカードでは出さない')}</button>
+                )}
+              </>
+            ) : <span className="muted">{t('タイトルカードの上の図形です')}</span>}
             <span className="spacer" />
             {deleteButton}
           </>

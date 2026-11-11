@@ -73,6 +73,7 @@ const api: Api = {
   pickLogo: code => ipcRenderer.invoke('logo:pick', code),
   removeLogo: code => ipcRenderer.invoke('logo:remove', code),
   readLogo: code => ipcRenderer.invoke('logo:read', code),
+  useLogo: code => ipcRenderer.invoke('logo:use', code),
   listPacks: () => ipcRenderer.invoke('pack:list'),
   importPack: () => ipcRenderer.invoke('pack:import'),
   removePack: id => ipcRenderer.invoke('pack:remove', id),

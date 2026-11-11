@@ -111,10 +111,16 @@ const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker ===
 // Below the video while a card is being edited: whether it is shown, its text (the name unless set;
 // a line break makes a second line), the background of every card, what the pointer edits (the
 // objects on this card, or the title's place and size for every card of this kind), reset and done.
-export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle }: {
+// What can be put on a card as a picture: players' photos from the packs (the card's own players
+// first) and the logos the library has for teams.
+export interface CardPhotoChoice { key: string; label: string; own: boolean; pack: string; photo: string }
+export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void }
+
+export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
   tool: 'objects' | 'title' | 'logo'; onTool: (t: 'objects' | 'title' | 'logo') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
+  inserts?: CardInserts
 }) {
   const kind = layoutKey(card), def = defaultLayout(card)
   const shared = settings.titleCard[kind] ?? def, own = !!card.layout
@@ -149,6 +155,28 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
             title={t('相手チームのロゴの位置と大きさを、タイトルとは別に決める（この動画のすべての{0}のカード）', what)}>{t('ロゴ')}</button>
         )}
       </div>
+      {tool === 'objects' && inserts && (inserts.photos.length > 0 || inserts.logos.length > 0) && (
+        <>
+          {inserts.photos.length > 0 && (
+            <select value="" aria-label={t('選手の写真を入れる')} title={t('パックの選手の顔写真を、このカードに画像として入れる（あとで動かせる）')}
+              onChange={e => { const c = inserts.photos.find(x => x.key === e.target.value); if (c) inserts.onPhoto(c.pack, c.photo) }}>
+              <option value="">{t('＋ 選手の写真')}</option>
+              {[true, false].map(own => {
+                const list = inserts.photos.filter(x => x.own === own)
+                return list.length ? <optgroup key={String(own)} label={own ? t('このカードのクリップの選手') : t('試合のほかの選手')}>
+                  {list.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}</optgroup> : null
+              })}
+            </select>
+          )}
+          {inserts.logos.length > 0 && (
+            <select value="" aria-label={t('ロゴを入れる')} title={t('チームのロゴを、このカードに画像として入れる（あとで動かせる。ロゴは「設定」で登録）')}
+              onChange={e => { if (e.target.value) inserts.onLogo(e.target.value) }}>
+              <option value="">{t('＋ ロゴ')}</option>
+              {inserts.logos.map(x => <option key={x.code} value={x.code}>{x.label}</option>)}
+            </select>
+          )}
+        </>
+      )}
       {tool === 'logo' && (
         <>
           <label className="check"><input type="checkbox" checked={logoAt !== 'hidden'} onChange={e => setLogo(e.target.checked ? undefined : 'hidden')} /> {t('ロゴを出す')}</label>

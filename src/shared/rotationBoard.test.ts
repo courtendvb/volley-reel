@@ -41,11 +41,18 @@ describe('a rotation', () => {
     expect(rotationLineup([d], 'HTH', 5)).toBeNull()
     expect(rotationLineup([d], 'XXX', 2)).toBeNull()
   })
-  it('makes the slide: P2, the six players, three pass tables and two call tables, all inside', () => {
+  it('makes the slide: P2, the six players, three pass tables and the calls most used first, all inside; the court fixed', () => {
     const anns = rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation: rotationFormation([d], 'HTH', 2, rotationLineup([d], 'HTH', 2), 'S'), callNames: d.codeNames }, 'both', '#0F172A')
     const texts = anns.flatMap(a => (a.kind === 'text' ? [a.text] : []))
     expect(texts).toContain('P2')
-    expect(['# pass', '+ pass', '! pass', 'CALL KA Quick A', 'CALL KB'].every(x => texts.includes(x))).toBe(true)
+    expect(['# pass', '+ pass', '! pass', '1. CALL KA Quick A', '2. CALL KB'].every(x => texts.includes(x))).toBe(true)
+    expect(texts.some(x => x.startsWith('SD '))).toBe(false) // no dumps tag on the court
+    expect(texts).toContain('EIRO') // the setter's heading over the chart
+    expect(anns.filter(a => a.locked).length).toBeGreaterThan(20) // the court, net and antennas
+    expect(anns.some(a => a.locked && (a.kind === 'text' || (a.kind === 'polygon' && a.disc)))).toBe(false) // players and numbers move
+    const withPhoto = rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation: [], photo: { assetId: 'ph', width: 300, height: 400 } }, 'both', '#0F172A')
+    expect(withPhoto.find(a => a.kind === 'image')).toMatchObject({ assetId: 'ph', fit: 'cover' })
+    expect(anns.some(a => a.kind === 'image')).toBe(false)
     expect(texts).toEqual(expect.arrayContaining(['2', '10', '19', '92', '6', '7'])) // the players' discs
     for (const a of anns) if (a.kind === 'rect' || a.kind === 'circle') { expect(a.x + a.w).toBeLessThanOrEqual(1); expect(a.y + a.h).toBeLessThanOrEqual(1) }
     for (const a of anns) if (a.kind === 'text' && a.box?.width) expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1)

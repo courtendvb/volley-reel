@@ -5,7 +5,7 @@
 // reception (# / + / !) and after a # or + reception for the two setter calls used most, as small
 // tables. Made of objects the slide editor moves and restyles. Pure: no files, no DOM.
 import type { Annotation } from './annotation'
-import { setterCall } from './setChart'
+import { setChartWidth, setterCall } from './setChart'
 import { splitSets, type SetPlace, type SetSplit, type SetterSet, type SetView } from './setterBoard'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 import { homography, project, type CourtFit } from './courtGeometry'
@@ -123,7 +123,7 @@ export interface FormationSpot { jersey: number; role?: PlayerRole; libero?: boo
 // is the libero). In the team's frame (u from its left, v from its end line to the net at 0.5).
 const RECEIVE: Record<number, [number, number][]> = {
   1: [[0.9, 0.07], [0.8, 0.2], [0.45, 0.45], [0.1, 0.45], [0.2, 0.17], [0.5, 0.15]],
-  6: [[0.64, 0.27], [0.82, 0.15], [0.9, 0.45], [0.6, 0.45], [0.18, 0.2], [0.45, 0.14]],
+  6: [[0.7, 0.27], [0.82, 0.15], [0.9, 0.45], [0.6, 0.45], [0.18, 0.2], [0.45, 0.14]],
   5: [[0.3, 0.3], [0.5, 0.14], [0.82, 0.15], [0.9, 0.45], [0.18, 0.21], [0.08, 0.45]],
   4: [[0.38, 0.45], [0.18, 0.17], [0.5, 0.14], [0.92, 0.07], [0.82, 0.2], [0.58, 0.45]],
   3: [[0.6, 0.45], [0.18, 0.2], [0.45, 0.14], [0.66, 0.05], [0.84, 0.14], [0.9, 0.45]],
@@ -216,6 +216,9 @@ const light = (hex: string) => { const n = parseInt(hex.slice(1, 7), 16); return
 const FLOOR = '#2B4A6F', COURT_FILL = '#E7C89C', FRONT_FILL = '#DDB784', PLANK = '#8A5A2B', LINE = '#FFFFFF'
 const BLOCKER = '#CBD5E1'
 export const TEAM_COLOR = '#1D4ED8' // a team without a colour of its own
+// The five players' discs (not the libero's): their fill and outline.
+export interface DiscLook { fill: string; line: string }
+export const discLine = (fill: string) => mix(fill, '#000000', 0.45)
 
 // The main colour of a picture (a team's logo), from its RGBA pixels: the most common strong colour,
 // leaving out see-through, white, black and grey pixels. Null when it has none.
@@ -238,13 +241,14 @@ export function mainColor(px: ArrayLike<number>): string | null {
 // colour, the libero in white), the other team's three blockers at the net, a cone for each spiker's
 // usual course in this rotation, each place's share beyond the net over where it is hit from, and
 // the dumps by the setter.
-function courtView(so: SetterSet[], formation: FormationSpot[], teamColor: string): Annotation[] {
+function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook): Annotation[] {
   const H = homography(COURT), at = (u: number, v: number): [number, number] => { const q = project(H, u, v); return [q.x, q.y] }
   const team = onPicture(H), out: Annotation[] = [], g = uid()
   const poly = (pts: [number, number][], fill: string | null, o: Partial<Extract<Annotation, { kind: 'polygon' }>> = {}): Annotation =>
-    ({ id: uid(), kind: 'polygon', color: '#FFFFFF', width: 0, points: pts, fill, fillOpacity: 1, groupId: g, ...o })
+    ({ id: uid(), kind: 'polygon', color: '#FFFFFF', width: 0, points: pts, fill, fillOpacity: 1, groupId: g, locked: true, ...o })
   const line = (a: [number, number], b: [number, number], width: number, color = LINE, o: { opacity?: number; dash?: 'dash' } = {}): Annotation =>
-    ({ id: uid(), kind: 'polyline', color, width, points: [a, b], groupId: g, ...o })
+    ({ id: uid(), kind: 'polyline', color, width, points: [a, b], groupId: g, locked: true, ...o })
+  // The court and the net are fixed (locked: a click goes through them).
   // Floor and court: the free zone, the court in wood with its planks, the front zones a shade
   // darker, and the lines (the centre line, the attack lines and their dashes out of court).
   out.push(poly([at(-0.07, -0.035), at(1.07, -0.035), at(1.07, 1.03), at(-0.07, 1.03)], FLOOR))
@@ -271,14 +275,14 @@ function courtView(so: SetterSet[], formation: FormationSpot[], teamColor: strin
       const a = c.from + ((c.to - c.from) * i) / steps
       rim.push(team({ u: c.apex.u + (Math.sin(a) * c.reach) / COURT_W, v: c.apex.v + (Math.cos(a) * c.reach) / COURT_L }))
     }
-    const share = list.length / total
-    out.push(poly([team(c.apex), ...rim], color, { fillOpacity: 0.28 + 0.4 * share, color: mix(color, '#000000', 0.25), width: 1.5 }))
+    const share = list.length / total, cg = uid()
+    out.push(poly([team(c.apex), ...rim], color, { fillOpacity: 0.28 + 0.4 * share, color: mix(color, '#000000', 0.25), width: 1.5, groupId: cg, locked: false }))
     const mid = rim[steps >> 1]
-    tips.push(words(mid[0], mid[1] + 0.006, `#${list[0].attack.jersey}`, 12, '#FFFFFF', { align: 'center', groupId: g, box: { fill: mix(color, '#000000', 0.2), fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 2, radius: 3 } }))
+    tips.push(words(mid[0], mid[1] + 0.006, `#${list[0].attack.jersey}`, 12, '#FFFFFF', { align: 'center', groupId: cg, box: { fill: mix(color, '#000000', 0.2), fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 2, radius: 3 } }))
   }
   out.push(...tips)
   // The players: a shadow on the floor, then the disc; the far ones first so nearer ones cover them.
-  const corners = COURT, rimColor = mix(teamColor, '#000000', 0.45)
+  const corners = COURT, { fill: teamColor, line: rimColor } = look
   const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string) => {
     const gg = uid(), f = invert(H, p)
     out.push({ id: uid(), kind: 'polygon', color: '#000000', width: 0, points: discOutline(corners, { u: f.u + 0.004, v: f.v + 0.006, r: 0.6, z: 0 }).top, fill: '#000000', fillOpacity: 0.28, groupId: gg })
@@ -290,7 +294,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], teamColor: strin
   }
   for (const s of [...formation].sort((a, b) => a.at.v - b.at.v)) {
     const p = team({ u: Math.min(1, Math.max(0, s.at.u)), v: Math.min(0.49, Math.max(0.02, s.at.v)) })
-    if (s.libero) disc(p, '#FFFFFF', teamColor, String(s.jersey), teamColor)
+    if (s.libero) disc(p, '#FFFFFF', light(teamColor) ? rimColor : teamColor, String(s.jersey), light(teamColor) ? rimColor : teamColor)
     else disc(p, teamColor, rimColor, String(s.jersey), light(teamColor) ? '#0F172A' : '#FFFFFF')
   }
   // The net: posts, a see-through mesh, the white tape along its top and the cable at its foot, and
@@ -300,13 +304,14 @@ function courtView(so: SetterSet[], formation: FormationSpot[], teamColor: strin
   for (let i = 1; i < 30; i++) { const x = nl[0] + ((nr[0] - nl[0]) * i) / 30; out.push(line([x, netTop], [x, nl[1] - low], 1, '#0F172A', { opacity: 0.22 })) }
   for (let i = 1; i < 4; i++) { const y = netTop + ((up - low) * i) / 4; out.push(line([nl[0], y], [nr[0], y], 1, '#0F172A', { opacity: 0.18 })) }
   out.push(line([nl[0], netTop], [nr[0], netTop], 5, '#FFFFFF'), line([nl[0], nl[1] - low], [nr[0], nr[1] - low], 1.5, '#F8FAFC'))
-  // Each place's share in a row hung on the net's tape, each over where it is hit from across the court: Z2/1 on the team's right, the quick right
-  // of the middle, Pipe left of it (from the back), Z4 on the team's left. A tab in the place's colour
-  // with its name, the share beside it.
-  const LABEL: [SetPlace, number][] = [['right', 0.86], ['middle', 0.62], ['pipe', 0.38], ['left', 0.14]]
-  const tw = 0.04, nw = 0.056, bh = 0.042, by = netTop - bh / 2
-  for (const [k, u] of LABEL) {
-    const [cx] = team({ u, v: 0.5 }), x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
+  // Each place's share where it is hit from: Z4, the quick (in front of the setter, right of the
+  // middle) and Z2/1 hung on the net's tape over their places; Pipe from the back, in the middle
+  // where it takes off behind the far attack line. A tab in the place's colour with its name, the share beside it.
+  const LABEL: [SetPlace, TeamPt][] = [['right', { u: 0.86, v: 0.5 }], ['middle', { u: 0.58, v: 0.5 }], ['left', { u: 0.14, v: 0.5 }], ['pipe', { u: 0.5, v: 0.25 }]]
+  const tw = 0.04, nw = 0.056, bh = 0.042
+  for (const [k, spot] of LABEL) {
+    const [cx, cy] = spot.v === 0.5 ? [team(spot)[0], netTop] : team(spot), by = cy - bh / 2
+    const x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
     const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
     out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
     out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 22, '#0F172A', { align: 'center', groupId: gg, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
@@ -316,12 +321,9 @@ function courtView(so: SetterSet[], formation: FormationSpot[], teamColor: strin
     const [x, y] = at(u, 0.5)
     for (let i = 0; i < 5; i++) out.push(line([x, y - up - i * 0.014], [x, y - up - (i + 1) * 0.014], 3, i % 2 ? '#FFFFFF' : '#DC2626'))
   }
-  for (const p of [nl, nr]) out.push({ id: uid(), kind: 'rect', color: '#1E293B', x: p[0] - 0.006, y: p[1] - up - 0.02, w: 0.012, h: up + 0.05, width: 1, fill: '#475569', fillOpacity: 1, groupId: g })
+  for (const p of [nl, nr]) out.push({ id: uid(), kind: 'rect', color: '#1E293B', x: p[0] - 0.006, y: p[1] - up - 0.02, w: 0.012, h: up + 0.05, width: 1, fill: '#475569', fillOpacity: 1, groupId: g, locked: true })
   // The other team's front row at the net: three blockers, plain.
   for (const u of [0.2, 0.5, 0.8]) disc(at(u, 0.535), BLOCKER, '#94A3B8', '', '')
-  const setter = formation.find(s => s.setter)
-  const [sx, sy] = team(setter?.at ?? { u: 0.62, v: 0.46 })
-  out.push(words(sx + 0.042, sy - 0.04, `SD ${pct(sp.by.dump.n, total)}`, 13, '#0F172A', { groupId: g, box: { fill: '#FACC15', fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 3, radius: 3 } }))
   return out
 }
 
@@ -341,11 +343,35 @@ export interface RotationSlideData {
   sets: SetterSet[] // the setter's, every rotation
   formation: FormationSpot[]
   callNames?: Record<string, string>
+  photo?: { assetId: string; width: number; height: number } // the setter's, by the set chart
   teamColor?: string // the side-out team's colour, its players' discs
+  discLine?: string // and their outline (missing: a darker shade of it)
 }
 
 // Where the set chart goes on the slide (top right), as a share of the picture's height.
-export const ROTATION_CHART = { x: 0.795, y: 0.02, h: 0.46 }
+// The right-hand area (over the tables) and the set chart in its middle, under the setter's heading.
+const RIGHT = { x: 0.69, w: 0.302 }
+const CHART_H = 0.36
+export const ROTATION_CHART = { x: RIGHT.x + RIGHT.w / 2 - (setChartWidth(CHART_H) * 9) / 16 / 2, y: 0.128, h: CHART_H, rich: true }
+
+// The setter's heading over the chart: their photo (when there is one), the jersey on the team's
+// colour, the name large, what the chart shows under it; on a light panel with a bar in the colour.
+function setterHeading(v: RotationSlideData, fill: string): Annotation[] {
+  const g = uid(), out: Annotation[] = [], y = 0.015, h = 0.1, ink = '#0F172A'
+  out.push({ id: uid(), kind: 'rect', color: '#E2E8F0', x: RIGHT.x, y, w: RIGHT.w, h, width: 1, fill: '#F8FAFC', fillOpacity: 1, groupId: g })
+  out.push({ id: uid(), kind: 'rect', color: fill, x: RIGHT.x, y, w: 0.006, h, width: 0, fill, fillOpacity: 1, groupId: g })
+  let x = RIGHT.x + 0.016
+  if (v.photo) {
+    const pw = 0.05, ph = h - 0.016
+    out.push({ id: uid(), kind: 'image', color: fill, x, y: y + 0.008, w: pw, h: ph, assetId: v.photo.assetId, fit: 'cover', groupId: g })
+    out.push({ id: uid(), kind: 'rect', color: fill, x, y: y + 0.008, w: pw, h: ph, width: 2, fill: null, groupId: g })
+    x += pw + 0.012
+  }
+  out.push(words(x, y + 0.014, `#${v.setter.jersey}`, 20, light(fill) ? ink : '#FFFFFF', { groupId: g, box: { fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 4, radius: 5 } }))
+  out.push(words(x + 0.045, y + 0.008, v.setter.lastName.toUpperCase(), 28, ink, { groupId: g }))
+  out.push(words(x, y + 0.062, `S${v.rotation} · ${v.team} · Set distribution after # + ! reception`, 13, '#475569', { bold: false, groupId: g }))
+  return out
+}
 
 export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string): Annotation[] {
   const out: Annotation[] = [], rot = inRotation(v.sets, v.rotation), so = sideOut(rot)
@@ -355,9 +381,11 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
   out.push({ id: uid(), kind: 'polyline', color: ink, width: 5, points: [[0.03, 0.15], [0.145, 0.15]], groupId: headGroup })
   out.push(words(0.165, 0.035, `${v.team}  #${v.setter.jersey} ${v.setter.lastName.toUpperCase()}`, 24, ink, { groupId: headGroup }))
   out.push(words(0.165, 0.085, `Side-out (# + ! reception)   n ${all.total} · K ${pct(all.kills, all.total)} · ERR ${pct(all.errors, all.total)}`, 15, ink, { bold: false, groupId: headGroup }))
-  out.push(...courtView(so, v.formation, v.teamColor ?? TEAM_COLOR))
+  const fill = v.teamColor ?? TEAM_COLOR
+  out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }))
+  out.push(...setterHeading(v, fill))
   // Bottom right: by reception, and by setter call (the chart is above them).
-  const colW = 0.145, gap = 0.01, x1 = 0.69, x2 = x1 + colW + 0.012
+  const colW = 0.145, gap = 0.01, x1 = RIGHT.x, x2 = x1 + colW + 0.012
   let y = 0.5
   const recs: [string, string, { fill: string; text: string }][] = [['#', '# pass', { fill: '#DBEAFE', text: '#0F172A' }], ['+', '+ pass', { fill: '#DCFCE7', text: '#0F172A' }], ['!', '! pass', { fill: '#FDE8D0', text: '#0F172A' }]]
   for (const [e, title, head] of recs) {
@@ -365,10 +393,11 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
     out.push(...tb.out); y += tb.h + gap
   }
   y = 0.5
-  const heads = [{ fill: '#3B5BDB', text: '#FFFFFF' }, { fill: '#E03131', text: '#FFFFFF' }]
-  topCalls(rot).forEach(({ call, sets }, i) => {
+  // The setter calls of this rotation, the most used first, as many as the pass tables beside them.
+  const head = { fill: '#334155', text: '#FFFFFF' }
+  topCalls(rot, 3).forEach(({ call, sets }, i) => {
     const name = v.callNames?.[call]
-    const tb = table(`CALL ${call}${name ? ` ${name}` : ''}`, heads[i], splitSets(sets), x2, y, colW)
+    const tb = table(`${i + 1}. CALL ${call}${name ? ` ${name}` : ''}`, head, splitSets(sets), x2, y, colW)
     out.push(...tb.out); y += tb.h + gap
   })
   return out

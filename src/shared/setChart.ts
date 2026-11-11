@@ -16,7 +16,7 @@ export const SET_COLORS: Record<SetTarget, string> = { left: '#2563EB', middle: 
 export type SetResult = 'kill' | 'play' | 'lost'
 // at: x across, y from the end line (0) to the net (1), as the chart shows it; click: as the scout
 // clicked it, seen by the team (for the court on the video); both null when the set was not clicked.
-export interface SetDot { at: { x: number; y: number } | null; click: ClickPoint | null; target: SetTarget; result: SetResult }
+export interface SetDot { at: { x: number; y: number } | null; click: ClickPoint | null; target: SetTarget; result: SetResult; jersey?: number } // jersey: the attacker's
 export interface SetChart {
   title: string; rotation: number | null; dots: SetDot[]
   rotLabel: string // the rotations in the title: S2, S1/S4, or All
@@ -146,7 +146,7 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     // Where the set was given from (a set's first click); a setter's own attack: where it was hit.
     // A set known only by where it went has no point (it still counts in the shares).
     const click = p.skill === 'E' ? p.startClick ?? null : p.startClick ?? p.endClick ?? null, at = spot(click)
-    dots.push({ at, click: at ? click : null, target, result })
+    dots.push({ at, click: at ? click : null, target, result, jersey: attack.jersey })
   })
   const total = dots.length
   const rotLabel = !rots ? 'All' : rots.map(r => `S${r}`).join('/')
@@ -165,6 +165,51 @@ const spot = (c: ClickPoint | null) => (c && c.v >= -0.1 && c.v <= 0.6 ? { x: 1 
 const pct = (n: number, of: number) => `${of ? Math.round((n / of) * 100) : 0}%`
 const TEXT = '#0F172A'
 export const setChartWidth = (h: number) => h * 0.78
+
+// The sets as discs with the attacker's jersey, in the colour of where the attack came from: filled
+// for a kill, white for the ball staying in play, white with a dark mark at its corner for a point
+// lost. Discs that would cover each other are moved apart, kept on the court.
+function drawJerseyDots(ctx: Ctx, list: { x: number; y: number; d: SetDot }[], r: number, court: { x: number; y: number; w: number }): void {
+  const ps = list.map(p => ({ ...p }))
+  for (let pass = 0; pass < 12; pass++) for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+    const a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, dist = Math.hypot(dx, dy), min = r * 1.9
+    if (dist >= min) continue
+    const [ux, uy] = dist > 1e-6 ? [dx / dist, dy / dist] : [Math.cos(j * 2.4), Math.sin(j * 2.4)], push = (min - dist) / 2
+    a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push
+    for (const p of [a, b]) { p.x = Math.min(court.x + court.w - r, Math.max(court.x + r, p.x)); p.y = Math.min(court.y + court.w - r, Math.max(court.y + r, p.y)) }
+  }
+  for (const { x, y, d } of ps) {
+    const color = SET_COLORS[d.target], kill = d.result === 'kill'
+    ctx.beginPath(); ctx.arc(x, y + r * 0.14, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(15,23,42,0.25)'; ctx.fill() // its shadow
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fillStyle = kill ? color : '#FFFFFF'; ctx.fill()
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.22); ctx.stroke()
+    ctx.fillStyle = kill ? '#FFFFFF' : color; ctx.font = `bold ${r * 1.05}px sans-serif`
+    ctx.fillText(d.jersey !== undefined ? String(d.jersey) : '', x, y + r * 0.05, r * 1.8)
+    if (d.result === 'lost') {
+      const k = r * 0.38, cx = x + r * 0.75, cy = y - r * 0.75
+      ctx.beginPath(); ctx.arc(cx, cy, k * 1.2, 0, Math.PI * 2); ctx.fillStyle = TEXT; ctx.fill()
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(1, k * 0.35)
+      ctx.beginPath(); ctx.moveTo(cx - k * 0.6, cy - k * 0.6); ctx.lineTo(cx + k * 0.6, cy + k * 0.6); ctx.moveTo(cx + k * 0.6, cy - k * 0.6); ctx.lineTo(cx - k * 0.6, cy + k * 0.6); ctx.stroke()
+    }
+  }
+}
+
+// The key to the jersey discs: kill, in play, lost.
+function drawKey(ctx: Ctx, cx: number, cy: number, size: number, maxW: number): void {
+  const items: [string, SetResult][] = [['Kill', 'kill'], ['In play', 'play'], ['Lost', 'lost']]
+  ctx.font = `${size}px sans-serif`
+  const r = size * 0.5, each = items.map(([t]) => r * 2.6 + ctx.measureText(t).width), total = Math.min(maxW, each.reduce((a, b) => a + b, 0) + size * 1.5 * (items.length - 1))
+  let x = cx - total / 2
+  items.forEach(([label, kind], i) => {
+    ctx.beginPath(); ctx.arc(x + r, cy, r, 0, Math.PI * 2)
+    ctx.fillStyle = kind === 'kill' ? '#475569' : '#FFFFFF'; ctx.fill(); ctx.strokeStyle = '#475569'; ctx.lineWidth = Math.max(1, r * 0.3); ctx.stroke()
+    if (kind === 'lost') { ctx.beginPath(); ctx.arc(x + r * 1.7, cy - r * 0.7, r * 0.45, 0, Math.PI * 2); ctx.fillStyle = TEXT; ctx.fill() }
+    ctx.fillStyle = '#475569'; ctx.textAlign = 'left'; ctx.fillText(label, x + r * 2.6, cy)
+    x += each[i] + size * 1.5
+  })
+  ctx.textAlign = 'center'
+}
 
 // The places' names, in the scout's terms on every screen.
 export const SET_NAMES: Record<SetTarget, string> = { left: 'Zone4', middle: 'Zone3', right: 'Zone2', back: 'Zone1', pipe: 'Pipe', dump: 'SD' }
@@ -196,25 +241,30 @@ export const setChartShows = (c: SetChart, view: SetChartView = 'auto'): 'points
 
 // The panel: the setter and rotation, K% and ERR% of the attacks after the sets, then their half court
 // with each place's share written on it away from the net, and the sets as points (or the places
-// painted). flip: the net at the top, seen from the setter's side.
-export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y: number; h: number }, view: SetChartView = 'auto', flip = false): void {
+// painted). flip: the net at the top, seen from the setter's side. rich (a rotation slide, whose
+// heading is drawn apart): no title or totals; each set a disc with the attacker's jersey, the discs
+// moved apart where they would cover each other, and a key to the marks under the court.
+export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y: number; h: number }, view: SetChartView = 'auto', flip = false, rich = false): void {
   const w = setChartWidth(h), f = h / 24
   ctx.save()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   // The labels: the front row's places on the end line, the back row's beyond it (outside the court).
   const fs = f * 0.9, bh = fs * 2.6, gap = fs * 0.3
-  const more = c.filtered ? f * 1.3 : 0 // a line for what the sets are kept to
-  const side = Math.min(w * 0.9, h - f * 5 - more - bh * 2 - gap), cl = x + (w - side) / 2
-  const ct = y + f * 4.4 + more + (flip ? bh / 2 : bh * 1.5 + gap)
-  const ph = ct + side + (flip ? bh * 1.5 + gap : f * 0.6) - y
+  const more = c.filtered && !rich ? f * 1.3 : 0 // a line for what the sets are kept to
+  const head = rich ? f * 0.4 : f * 4.4, key = rich ? f * 1.8 : 0
+  const side = Math.min(w * 0.9, h - head - f * 0.6 - more - bh * 2 - gap - key), cl = x + (w - side) / 2
+  const ct = y + head + more + (flip ? bh / 2 : bh * 1.5 + gap)
+  const ph = ct + side + (flip ? bh * 1.5 + gap : f * 0.6) + key - y
   ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.fillRect(x, y, w, ph)
-  // Title and the totals.
-  ctx.fillStyle = '#E2E8F0'; ctx.fillRect(x, y, w, f * 2.2)
-  ctx.fillStyle = TEXT; ctx.font = `bold ${f * 1.25}px sans-serif`
-  ctx.fillText(`${c.title}  ${c.rotLabel}`, x + w / 2, y + f * 1.1, w * 0.96)
-  ctx.font = `${f}px sans-serif`
-  ctx.fillText(`K: ${pct(c.kills, c.total)} | ERR: ${pct(c.errors, c.total)} | n: ${c.total}`, x + w / 2, y + f * 3.2, w * 0.96)
-  if (c.filtered) { ctx.fillStyle = '#475569'; ctx.font = `${f * 0.85}px sans-serif`; ctx.fillText(c.filtered, x + w / 2, y + f * 4.5, w * 0.96) }
+  if (!rich) {
+    // Title and the totals.
+    ctx.fillStyle = '#E2E8F0'; ctx.fillRect(x, y, w, f * 2.2)
+    ctx.fillStyle = TEXT; ctx.font = `bold ${f * 1.25}px sans-serif`
+    ctx.fillText(`${c.title}  ${c.rotLabel}`, x + w / 2, y + f * 1.1, w * 0.96)
+    ctx.font = `${f}px sans-serif`
+    ctx.fillText(`K: ${pct(c.kills, c.total)} | ERR: ${pct(c.errors, c.total)} | n: ${c.total}`, x + w / 2, y + f * 3.2, w * 0.96)
+    if (c.filtered) { ctx.fillStyle = '#475569'; ctx.font = `${f * 0.85}px sans-serif`; ctx.fillText(c.filtered, x + w / 2, y + f * 4.5, w * 0.96) }
+  }
   // A point of the chart (x across, y from the end line to the net) on the panel: flipped, turned round.
   const at = (px: number, py: number) => (flip ? { x: cl + (1 - px) * side, y: ct + (1 - py) * side } : { x: cl + px * side, y: ct + py * side })
   const zones = setChartShows(c, view) === 'zones'
@@ -236,7 +286,9 @@ export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y:
   const across = (py: number, width: number, reach = 0) => { const a = at(0, py), b = at(1, py); ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(Math.min(a.x, b.x) - reach, a.y); ctx.lineTo(Math.max(a.x, b.x) + reach, a.y); ctx.stroke() }
   across(2 / 3, Math.max(1, f / 12))
   across(1, Math.max(2, f / 4), side * 0.05)
-  if (!zones) {
+  if (!zones && rich) drawJerseyDots(ctx, c.dots.flatMap(d => (d.at ? [{ ...at(d.at.x, d.at.y), d }] : [])), side / 19, { x: cl, y: ct, w: side })
+  if (rich) drawKey(ctx, x + w / 2, ct + side + (flip ? bh * 1.5 + gap : f * 0.6) + key / 2, f * 0.8, w * 0.96)
+  if (!zones && !rich) {
     const r = Math.max(2.5, side / 45)
     for (const d of c.dots) {
       if (!d.at) continue

@@ -4,7 +4,7 @@ import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardP
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
-import { ROTATIONS, TEAM_COLOR } from '../../../shared/rotationBoard'
+import { ROTATIONS, TEAM_COLOR, discLine as darker } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -24,7 +24,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string } // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string } // marker 'head': the scene's head, in no marker
 
 interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks
 
@@ -58,6 +58,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const [pickedColor, setPickedColor] = useState<string | null>(initial?.teamColor ?? null)
   const [logoTint, setLogoTint] = useState<string | null>(null)
   const teamColor = pickedColor ?? logoTint ?? TEAM_COLOR
+  // Their outline: chosen here, else a darker shade of the fill.
+  const [pickedLine, setPickedLine] = useState<string | null>(initial?.discLine ?? null)
+  const discLine = pickedLine ?? darker(teamColor)
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
   const [notes, setNotes] = useState(initial?.notes ?? false)
@@ -111,7 +114,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>
         <div className="filter-row">
           <label className="field-label" htmlFor="board-team">{t('チーム')}</label>
-          <select id="board-team" value={open} onChange={e => { setTeam(e.target.value); setPickedColor(null) }}>
+          <select id="board-team" value={open} onChange={e => { setTeam(e.target.value); setPickedColor(null); setPickedLine(null) }}>
             {teams.map(([code, name]) => <option key={code} value={code}>{`${code} — ${name}`}</option>)}
           </select>
           {!oneSetter && skill !== 'T' && <>
@@ -122,13 +125,14 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           </>}
         </div>
         {skill === 'R' && (
-          <div className="filter-row" title={t('ローテーション（セッターの位置）ごとに 1 枚。大きな P 番号、コートにそのローテの並びと # + ! レセプションからの攻撃配分、右に # ・ + ・ ! パス別とセッターコール上位 2 つの配分の表')}>
+          <div className="filter-row" title={t('ローテーション（セッターの位置）ごとに 1 枚。大きな P 番号、コートにそのローテの並びと # + ! レセプションからの攻撃配分、右に # ・ + ・ ! パス別と、そのローテで多いセッターコール順に 3 つまでの配分の表')}>
             <span className="field-label">{t('ローテ')}</span>
             {ROTATIONS.map(r => (
               <label key={r} className="check"><input type="checkbox" checked={rotations.includes(r)}
                 onChange={e => setRotations(ROTATIONS.filter(x => (x === r ? e.target.checked : rotations.includes(x))))} /> P{r}</label>
             ))}
             <span className="check" title={t('選手の円の色。最初はライブラリにあるチームのロゴの色です')}>{t('チームカラー')} <PaletteColor value={teamColor} label={t('チームカラー')} onChange={setPickedColor} /></span>
+            <span className="check" title={t('リベロ以外の 5 人の円の線の色。最初はチームカラーを暗くした色です')}>{t('線')} <PaletteColor value={discLine} label={t('選手の円の線の色')} onChange={setPickedLine} /></span>
           </div>
         )}
         {skill === 'E' && (
@@ -168,7 +172,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos}
-          opts={{ setView, setLayout, rotation: rotations[0] ?? 1, teamColor, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+          opts={{ setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
         {oneSetter ? (
           <div className="filter-row" title={t('セッターのトスのあと、同じチームのアタックがどのゾーンから打たれたかの割合')}>
             <span className="field-label">{t('配分')}</span>
@@ -211,7 +215,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={!columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

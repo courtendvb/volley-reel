@@ -29,6 +29,7 @@ interface Base {
   groupId?: string // objects with the same group id are selected and moved together
   fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
+  locked?: boolean // part of the background (a data slide's court): drawn, but not picked by a click
 }
 
 interface Fillable {
@@ -278,6 +279,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   }
   for (let i = list.length - 1; i >= 0; i--) {
     const a = list[i]
+    if (a.locked) continue
     if (a.kind === 'arrow') { if (nearPath([[a.x1, a.y1], [a.x2, a.y2]], false, a.width)) return a; continue }
     if (a.kind === 'freehand' || a.kind === 'polyline') { if (nearPath(a.points, false, a.width)) return a; continue }
     if (a.kind === 'polygon') { if (nearPath(a.points, true, a.width) || (a.fill && pointInPolygon(x, y, a.points))) return a; continue }

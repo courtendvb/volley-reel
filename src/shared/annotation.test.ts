@@ -46,6 +46,7 @@ describe('hit testing', () => {
     expect(hitTest(ctx, list, 0.3, 0.3, 1280, 720)?.id).toBe('a') // on the arrow line
     expect(hitTest(ctx, list, 0.3, 0.2, 1280, 720)).toBeNull() // off the line
     expect(hitTest(ctx, list, 0.7, 0.7, 1280, 720)?.id).toBe('r')
+    expect(hitTest(ctx, list.map(a => (a.id === 'r' ? { ...a, locked: true } : a)), 0.7, 0.7, 1280, 720)?.id).not.toBe('r') // a locked one is clicked through
     expect(hitTest(ctx, list, 0.15, 0.82, 1280, 720)?.id).toBe('t')
   })
 })

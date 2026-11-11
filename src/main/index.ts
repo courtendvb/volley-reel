@@ -265,6 +265,14 @@ function registerIpc(): void {
   })
   ipcMain.handle('logo:remove', async (_e, code: string) => { await library?.removeLogo(code); return library?.logos() ?? {} })
   ipcMain.handle('logo:read', (_e, code: string) => library?.readLogo(code) ?? null)
+  // A team's logo copied into the project's assets, to put on a card as a picture; null without one.
+  ipcMain.handle('logo:use', async (_e, code: string) => {
+    const l = lib(), f = (await l.logos())[code.toUpperCase()], data = f ? await l.readLogo(code) : null
+    if (!f || !data) return null
+    const ext = extname(f).slice(1).toLowerCase()
+    const { width, height } = nativeImage.createFromBuffer(Buffer.from(data)).getSize()
+    return { assetId: await saveAsset(data, ext === 'jpeg' ? 'jpg' : ext), width: width || 1, height: height || 1 }
+  })
   // Add-on packs: read from a .vrpack the user picks, kept in the library for every project.
   ipcMain.handle('pack:list', () => library?.packs() ?? [])
   ipcMain.handle('pack:import', async () => {

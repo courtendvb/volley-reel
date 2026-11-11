@@ -87,7 +87,9 @@ export function useObjects({ latest, updateReel, updateVideo, cardEditRef, cardA
 
   // A picture (from get) in the middle of the open clip or card, 30% of its width, selected to
   // move or resize. tell: say so when nothing is open to put it on (a paste can come at any time).
-  const placeImage = useCallback(async (get: () => Promise<{ assetId: string; width: number; height: number } | null>, tell = false): Promise<string | null> => {
+  // at: its width as a share of the frame and, optionally, the middle of where it goes (0..1; else the
+  // frame's middle). A photo or logo on a card goes in smaller, to one side.
+  const placeImage = useCallback(async (get: () => Promise<{ assetId: string; width: number; height: number } | null>, tell = false, at: { w: number; cx?: number; cy?: number } = { w: 0.3 }): Promise<string | null> => {
     const { reel: r, activeClipId: id, matches: ms } = latest.current
     const c = r && id ? r.clips[id] : null
     const onCard = !!cardEditRef.current
@@ -98,9 +100,9 @@ export function useObjects({ latest, updateReel, updateVideo, cardEditRef, cardA
       const m = c ? ms[c.matchId] : undefined
       const frame = m?.width && m.height ? m.width / m.height : 16 / 9
       const ratio = (img.height / img.width) * frame // normalized height per normalized width
-      let w = 0.3, h = w * ratio
+      let w = at.w, h = w * ratio
       if (h > 0.8) { h = 0.8; w = h / ratio }
-      const a: Annotation = { id: crypto.randomUUID(), kind: 'image', color: '#FFFFFF', x: (1 - w) / 2, y: (1 - h) / 2, w, h, assetId: img.assetId }
+      const a: Annotation = { id: crypto.randomUUID(), kind: 'image', color: '#FFFFFF', x: Math.min(1 - w, Math.max(0, (at.cx ?? 0.5) - w / 2)), y: Math.min(1 - h, Math.max(0, (at.cy ?? 0.5) - h / 2)), w, h, assetId: img.assetId }
       if (cardEditRef.current) { setCardAnns([...cardAnnsRef.current, a]) } else {
         const now = scopedNow()
         if (now) setAnns([...mergeScoped(now), a])

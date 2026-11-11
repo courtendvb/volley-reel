@@ -24,7 +24,8 @@ import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow } from './components/ClipOverlayRow'
 import { addScene, planScene, planVideo, type PlanItem } from '../../shared/video'
-import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type SlideMark } from './components/CardEditor'
+import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type CardInserts, type SlideMark } from './components/CardEditor'
+import { cardPlayers, cardTeams } from '../../shared/cardPeople'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
 import { PlayerPhotos } from './components/PlayerPhotos'
@@ -47,7 +48,7 @@ import { DEFAULT_GRID_STYLE, cleanGridStyle, markStyle, marksBySkill, floorAt, h
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
-import { captionPhoto } from '../../shared/pack'
+import { captionPhoto, findPhoto } from '../../shared/pack'
 import { usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
@@ -491,6 +492,30 @@ export function App() {
   })
   const [reportOpen, setReportOpen] = useState(false) // the match report
 
+  // A title card's pictures to put on it: the photos of its clips' players (then the rest of those
+  // matches'), and the logos the library has for the teams (those matches' first). Its clips: a
+  // marker card's group, a scene card's scene, the video card's scenes.
+  const [logoCodes, setLogoCodes] = useState<string[]>([])
+  const editingTitleCard = !!cardEditCard && !cardEdit?.slideId
+  useEffect(() => { if (editingTitleCard) void api.listLogos().then(l => setLogoCodes(Object.keys(l))) }, [editingTitleCard])
+  const cardInserts = useMemo((): CardInserts | undefined => {
+    if (!editingTitleCard || !cardEdit) return undefined
+    const scenes = cardEdit.sceneId ? [reels.find(r => r.id === cardEdit.sceneId)].filter(Boolean) : (video?.sceneIds ?? []).map(id => reels.find(r => r.id === id)).filter(Boolean)
+    const clips = (scenes as Reel[]).flatMap(r => (cardEdit.marker !== null ? r.groups[cardEdit.marker] : Object.keys(r.clips)).map(id => r.clips[id]).filter(Boolean))
+    const photos = cardPlayers(clips, dvws).flatMap(cp => {
+      const ph = findPhoto(packs, cp.player, cp.team)
+      return ph ? [{ key: `${cp.team}|${cp.player.key}|${cp.player.jersey}`, label: `${cp.team} #${cp.player.jersey} ${ph.player.label ?? cp.player.lastName}`, own: cp.clips > 0, pack: ph.pack, photo: ph.player.photo }] : []
+    })
+    const teams = cardTeams(clips, dvws), have = new Set(logoCodes)
+    const logos = [...teams.filter(tm => have.has(tm.code)).map(tm => ({ code: tm.code, label: `${tm.code} ${tm.name}` })),
+      ...logoCodes.filter(c => !teams.some(tm => tm.code === c)).sort().map(c => ({ code: c, label: c }))]
+    return {
+      photos, logos,
+      onPhoto: (pack, photo) => void placeImage(() => api.usePackPhoto(pack, photo), true, { w: 0.15, cx: 0.12, cy: 0.72 }), // lower left, clear of the title
+      onLogo: code => void placeImage(() => api.useLogo(code), true, { w: 0.1, cx: 0.9, cy: 0.14 }), // top right
+    }
+  }, [editingTitleCard, cardEdit, reels, video, dvws, packs, logoCodes, placeImage])
+
   const setOverlay = useCallback((s: OverlaySettings) => {
     const v = latest.current.video
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
@@ -645,7 +670,7 @@ export function App() {
             {cardEditCard && !editingSlide && (
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
-                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} />
+                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} inserts={cardInserts} />
             )}
             {cardEditCard && cardTool === 'objects' && (
               <div className="filter-row">

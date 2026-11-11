@@ -48,6 +48,7 @@ export interface SmokeOpts {
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
+  cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -145,6 +146,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.ann) return smokeAnn(res)
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
+    if (opts.cardInsert) return smokeCardInsert(res, opts.cardInsert)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.presets) return smokePresets()
@@ -1009,6 +1011,33 @@ export function installSmoke(h: SmokeHost): void {
   // originals, on another clip lands in place with the show time moved to that clip's IN.
   // Player photos (add-on packs): a pack read in, the play's player found in it and put on the clip
   // by a click; a photo set for a player the pack has none for, then taken off with ↺.
+  // The card bar's ＋ 選手の写真 and ＋ ロゴ: a pack and a logo for the first play's team, a marker card
+  // of a scene of that play, then a photo and the logo picked from the bar's lists.
+  const smokeCardInsert = async (res: PlayRef[], spec: string) => {
+    const [packFile, logoFile] = spec.split('|')
+    const r0 = res.find(x => x.play.rallyId !== null)!
+    const d = latest.current.dvwsRef![r0.matchId], team = d.teams[r0.play.side === '*' ? 0 : 1].code.toUpperCase()
+    await api.smokeImportPack!(packFile); await refreshPacks()
+    await window.api.smokeSetLogo!(team, logoFile)
+    let sc = addClips(newReel('card insert smoke'), [{ matchId: r0.matchId, play: r0.play }]).reel
+    for (const id of sc.groups.none.slice()) sc = toggleMarker(sc, id, 1)
+    smokeUse(sc)
+    await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+    editCard(sc.id, 1)
+    const pick = async (label: string) => {
+      const sel = await waitFor(() => document.querySelector<HTMLSelectElement>(`.card-edit-bar select[aria-label="${t(label)}"]`), 8000, label)
+      const options = [...sel.querySelectorAll('option')].map(o => o.textContent ?? '')
+      const v = [...sel.options].find(o => o.value)!.value
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, v)
+      sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(800)
+      return options
+    }
+    const photoOptions = await pick('選手の写真を入れる')
+    const logoOptions = await pick('ロゴを入れる')
+    const anns = await waitFor(() => { const a = latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []; return a.length >= 2 ? a : null }, 8000, 'two pictures on the card')
+    return { team, photoOptions, logoOptions, onCard: anns.map(a => (a.kind === 'image' ? `image ${a.w.toFixed(2)}x${a.h.toFixed(2)}` : a.kind)) }
+  }
+
   const smokePhotos = async (res: PlayRef[], packFile: string) => {
     const packs = await api.smokeImportPack!(packFile)
     await refreshPacks()

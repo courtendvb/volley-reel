@@ -39,11 +39,12 @@ describe('serve targets', () => {
     expect(receiveStats(all)).toEqual({ n: 5, good: 3, attacks: 4, kills: 2, sideOuts: 3, known: 5 })
     expect(receivers(all).map(r => [r.jersey, r.n])).toEqual([[11, 3], [10, 2]])
   })
-  it('draws a column per receiver and the team, the zones and their panels', () => {
+  it('draws a column per receiver and the team, and the zones', () => {
     const anns = serveTargetSlide({ team: 'HTH', teamName: 'H', receptions: all, players: {}, photos: {} })
     const texts = anns.flatMap(a => (a.kind === 'text' ? [a.text] : []))
     expect(texts.filter(t => /^#1[01] /.test(t))).toHaveLength(2)
-    expect(['Zone1', 'Zone6', 'Zone5', 'Short', 'All · Zone1', 'Jump · Short', 'Float · Zone6'].every(t => texts.includes(t))).toBe(true)
+    expect(['Zone1', 'Zone6', 'Zone5', 'Short', 'Team RA'].every(t => texts.includes(t))).toBe(true)
+    expect(texts.some(t => t.includes(' · Zone'))).toBe(false) // no zone panels
     for (const a of anns) if (a.kind === 'text' && a.box?.width) expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1.001)
   })
 })

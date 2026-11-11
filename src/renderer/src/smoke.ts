@@ -1663,7 +1663,7 @@ export function installSmoke(h: SmokeHost): void {
       await sleep(800)
       const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
       const names = texts.filter(x => /^#\d+ /.test(x))
-      if (!names.length || !texts.includes('Zone1') || !texts.some(x => x.startsWith('All · Zone'))) throw new Error(`serve target: ${texts.slice(0, 20).join(' | ')}`)
+      if (!names.length || !texts.includes('Zone1') || !texts.includes('Team RA') || texts.some(x => x.startsWith('All · Zone'))) throw new Error(`serve target: ${texts.slice(0, 20).join(' | ')}`)
       const images = slide.annotations.filter(a => a.kind === 'image')
       const teamX = slide.annotations.find(a => a.kind === 'text' && a.text === 'HTH')
       const logoAbove = !!logoFile && teamX?.kind === 'text' && images.some(a => a.kind === 'image' && Math.abs(a.x + a.w / 2 - teamX.x) < 0.01)

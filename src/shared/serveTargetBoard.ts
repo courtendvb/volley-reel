@@ -1,7 +1,8 @@
 // A serve-target slide: which serves keep a team from siding out. Every reception of the team, by who
 // received it and the serve's type (jump / float), by where the serve went (Zone1, Zone6, Zone5,
 // short), with how often the pass was good (# +), how often the first attack after it was a kill, and
-// how often the team won the rally (side-out). The lowest side-outs are marked: the serves to hit.
+// how often the team got an attack in after it, and how often it won the rally (side-out). The lowest
+// side-outs are marked: the serves to hit.
 // Pure: no files, no DOM.
 import type { Annotation } from './annotation'
 import { serveZoneMarker } from './presets'
@@ -90,7 +91,7 @@ const words = (x: number, y: number, text: string, size: number, color: string, 
 const pct = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : '–')
 const ASPECT = 16 / 9
 const INK = '#0F172A', LINE = '#94A3B8', HEAD = '#0F172A', JUMP = '#DC2626', FLOAT = '#1D4ED8'
-const GOOD_FOR_US = '#DBEAFE', BAD_FOR_US = '#FEE2E2' // a low side-out (blue: aim there), a high one
+const GOOD = '#BFDBFE', BAD = '#FECACA' // a rate well over the team's (good for the receivers) and well under
 const ROLE_FILL: Record<PlayerRole, string> = { OP: '#DC2626', MB: '#16A34A', OH: '#2563EB', S: '#FACC15', L: '#64748B' }
 const MIN_N = 3 // fewer receptions than this: no colour, too few to tell
 
@@ -100,12 +101,14 @@ function cell(out: Annotation[], g: string, x: number, y: number, w: number, h: 
     box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: LINE, strokeWidth: 1, padding: 3, width: w, height: h } }))
 }
 
-// A side-out share coloured against the team's: well under (blue, the serve to hit) or over (red).
-function soFill(s: ReceiveStats, team: ReceiveStats): string | undefined {
-  if (s.known < MIN_N || !team.known) return undefined
-  const v = s.sideOuts / s.known, t = team.sideOuts / team.known
-  return v <= t - 0.1 ? GOOD_FOR_US : v >= t + 0.1 ? BAD_FOR_US : undefined
+// A rate coloured against the team's, as the receivers see it: 10 points or more over it blue (good),
+// under it red (bad). Fewer than MIN_N behind it: no colour.
+function rateFill(n: number, of: number, teamN: number, teamOf: number): string | undefined {
+  if (of < MIN_N || !teamOf) return undefined
+  const v = n / of, t = teamN / teamOf
+  return v >= t + 0.1 ? GOOD : v <= t - 0.1 ? BAD : undefined
 }
+const colored = (fill: string | undefined) => (fill ? { fill, bold: true } : {})
 
 // The rows of a block: per serve kind, receptions, good passes, kills of the first attack and side-outs;
 // then side-out of both kinds together.
@@ -113,37 +116,19 @@ function statColumn(out: Annotation[], g: string, x: number, y: number, w: numbe
   const half = w / 2
   SERVE_KINDS.forEach((k, i) => {
     const s = receiveStats(list.filter(r => r.kind === k)), cx = x + i * half
-    cell(out, g, cx, y, half, rh, k === 'jump' ? 'Jump' : 'Float', { fill: k === 'jump' ? '#FEE2E2' : '#DBEAFE', color: k === 'jump' ? JUMP : FLOAT, bold: true, size: 12 })
+    cell(out, g, cx, y, half, rh, k === 'jump' ? 'Jump' : 'Float', { fill: '#F1F5F9', color: k === 'jump' ? JUMP : FLOAT, bold: true, size: 12 })
     cell(out, g, cx, y + rh, half, rh, String(s.n))
-    cell(out, g, cx, y + 2 * rh, half, rh, pct(s.good, s.n))
-    cell(out, g, cx, y + 3 * rh, half, rh, pct(s.kills, s.attacks))
-    const fill = soFill(s, team)
-    cell(out, g, cx, y + 4 * rh, half, rh, pct(s.sideOuts, s.known), { bold: !!fill, ...(fill ? { fill } : {}) })
+    cell(out, g, cx, y + 2 * rh, half, rh, String(s.attacks)) // the team's attacks after these receptions
+    cell(out, g, cx, y + 3 * rh, half, rh, pct(s.good, s.n), colored(rateFill(s.good, s.n, team.good, team.n)))
+    cell(out, g, cx, y + 4 * rh, half, rh, pct(s.kills, s.attacks), colored(rateFill(s.kills, s.attacks, team.kills, team.attacks)))
+    cell(out, g, cx, y + 5 * rh, half, rh, pct(s.sideOuts, s.known), colored(rateFill(s.sideOuts, s.known, team.sideOuts, team.known)))
   })
-  const all = receiveStats(list), fill = soFill(all, team)
-  cell(out, g, x, y + 5 * rh, w, rh, pct(all.sideOuts, all.known), { bold: true, ...(fill ? { fill } : {}) })
+  const all = receiveStats(list)
+  cell(out, g, x, y + 6 * rh, w, rh, pct(all.sideOuts, all.known), { bold: true, ...colored(rateFill(all.sideOuts, all.known, team.sideOuts, team.known)) })
 }
 function rowLabels(out: Annotation[], g: string, x: number, y: number, w: number, rh: number) {
-  const labels = ['Serve', 'Receptions', 'Good pass (AB%)', '1st attack K%', 'Side-out %', 'Side-out (all)']
+  const labels = ['Serve', 'Receptions', 'Team RA', 'Good pass (AB%)', '1st attack K%', 'Side-out %', 'Side-out (all)']
   labels.forEach((l, i) => cell(out, g, x, y + i * rh, w, rh, l, { fill: '#F1F5F9', bold: true, size: 11 }))
-}
-
-// A zone's panel: how many serves went there and what the team did after: the share of its first
-// attacks from Z4, Quick and Z2/1 (count and kill rate), and Pipe's.
-function zonePanel(out: Annotation[], x: number, y: number, w: number, h: number, title: string, list: Received[], head: string) {
-  const g = uid(), s = receiveStats(list), att = list.filter(r => r.place)
-  out.push({ id: uid(), kind: 'rect', color: '#C2410C', x, y, w, h, width: 1.5, fill: '#FDBA74', fillOpacity: 0.55, groupId: g })
-  out.push(words(x + 0.006, y + 0.004, title, 13, '#FFFFFF', { groupId: g, box: { fill: head, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3 } }))
-  out.push(words(x + 0.008, y + 0.033, `n ${s.n} · SO ${pct(s.sideOuts, s.known)}`, 12, INK, { groupId: g }))
-  const pipe = att.filter(r => r.place === 'pipe')
-  out.push(words(x + 0.008, y + 0.054, `Pipe ${pct(pipe.length, att.length)} · ${pipe.length} · K ${pct(pipe.filter(r => r.attack?.effect === '#').length, pipe.length)}`, 10, '#166534', { groupId: g, bold: false }))
-  const cw = (w - 0.012) / 3
-  ;(['left', 'middle', 'right'] as AttackPlace[]).forEach((p, i) => {
-    const here = att.filter(r => r.place === p), cx = x + 0.006 + i * cw + cw / 2
-    out.push(words(cx, y + 0.074, p === 'left' ? 'Z4' : p === 'middle' ? 'Quick' : 'Z2/1', 10, '#7C2D12', { align: 'center', groupId: g }))
-    out.push(words(cx, y + 0.089, pct(here.length, att.length), 13, INK, { align: 'center', groupId: g }))
-    out.push(words(cx, y + 0.11, `${here.length} · K ${pct(here.filter(r => r.attack?.effect === '#').length, here.length)}`, 10, '#4338CA', { align: 'center', groupId: g, bold: false }))
-  })
 }
 
 export interface ServeTargetData {
@@ -160,7 +145,7 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
   // The heading.
   const hg = uid()
   out.push(words(0.015, 0.012, `${v.team} reception vs serve`, 26, ink, { groupId: hg }))
-  out.push(words(0.015, 0.058, `${team.n} receptions · good pass ${pct(team.good, team.n)} · side-out ${pct(team.sideOuts, team.known)}   blue: side-out 10 points or more under the team's (the serve to hit), red: over`, 13, ink, { groupId: hg, bold: false }))
+  out.push(words(0.015, 0.058, `${team.n} receptions · good pass ${pct(team.good, team.n)} · side-out ${pct(team.sideOuts, team.known)}   blue: 10 points or more over the team's (good for the receivers), red: 10 or more under (bad)`, 13, ink, { groupId: hg, bold: false }))
   // The receivers: photo, number and name, then the stats; the team's at the end.
   const top = 0.1, photoH = 0.13, nameH = 0.032, rh = 0.034, labelW = 0.11
   const cols = rs.length + 1, colW = Math.min(0.13, (0.985 - 0.015 - labelW) / cols)
@@ -187,19 +172,13 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
   }
   cell(out, tg, tx, top + photoH, colW, nameH, v.team, { fill: HEAD, color: '#FFFFFF', bold: true, size: 13 })
   statColumn(out, tg, tx, statY, colW, rh, all, team)
-  // Bottom left: by where the serve went.
-  const zy = statY + 6 * rh + 0.04, zg = uid(), zw = 0.085
+  // Below: by where the serve went.
+  const zy = statY + 7 * rh + 0.04, zg = uid(), zw = colW
   rowLabels(out, zg, 0.015, zy + nameH, labelW, rh)
   TARGET_ZONES.forEach((z, i) => {
     const x = 0.015 + labelW + i * zw
     cell(out, zg, x, zy, zw, nameH, ZONE_NAMES[z], { fill: HEAD, color: '#FFFFFF', bold: true, size: 13 })
     statColumn(out, zg, x, zy + nameH, zw, rh, all.filter(r => r.zone === z), team)
-  })
-  // Bottom right: each zone's panel, for every serve, then jump and float.
-  const px = 0.015 + labelW + TARGET_ZONES.length * zw + 0.02, pw = (0.985 - px) / TARGET_ZONES.length, ph = 0.128
-  const rowsOf: [string, Received[], string][] = [['All', all, HEAD], ['Jump', all.filter(r => r.kind === 'jump'), JUMP], ['Float', all.filter(r => r.kind === 'float'), FLOAT]]
-  rowsOf.forEach(([label, list, head], ri) => {
-    TARGET_ZONES.forEach((z, zi) => zonePanel(out, px + zi * pw + 0.003, zy + ri * (ph + 0.006), pw - 0.006, ph, `${label} · ${ZONE_NAMES[z]}`, list.filter(r => r.zone === z), head))
   })
   return out
 }

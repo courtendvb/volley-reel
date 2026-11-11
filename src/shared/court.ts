@@ -133,9 +133,9 @@ export function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code' |
   const dots = mine.flatMap((p, i): ChartDot[] => {
     const c = playClicks(p), rough = c.startRough || c.endRough
     const start = c.startRough ? scattered(c.start!, i) : c.start, end = c.endRough ? scattered(c.end!, i) : c.end
-    return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect, ...(rough ? { rough } : {}) }] : []
+    return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect, ...(rough ? { rough } : {}), ...(c.startRough ? { startRough: true } : {}) }] : []
   })
-  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
+  return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, ...(style.starts ? { starts: true } : {}), lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
 }
 
 // The i-th rough point moved a little around its zone's middle, the same way every time.

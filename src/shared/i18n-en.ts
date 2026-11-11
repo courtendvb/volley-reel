@@ -786,6 +786,7 @@ export const EN: Record<string, string> = {
   "動画では": "In a video",
   "動画で出す秒数": "Seconds in a video",
   "データスライド": "Data slide",
+  "サーブを打った位置も、点（四角）とヒートマップで出します": "Where each serve was hit from too, as points (squares) and on the heatmap",
   "データスライド作成": "Make a data slide",
   "複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る": "Makes a slide of several players' serves or attacks, with charts and data",
   "このスライドを画像に書き出します": "Saves this slide as a picture",

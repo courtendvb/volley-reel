@@ -129,7 +129,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             </div>
           </div>
         )}
-        {skill === 'T' && <p className="hint">{t('このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。サイドアウト率がチーム全体より 10 ポイント以上低いところを青、高いところを赤で示します。下には、ゾーンごとのその後の攻撃の配分')}</p>}
+        {skill === 'T' && <p className="hint">{t('このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。チーム全体より 10 ポイント以上良い数字を青、悪い数字を赤で示します')}</p>}
         {skill !== 'T' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
           {shown.map((s, i) => {
             const p = inTeam.find(x => x.key === s.key)

@@ -1095,6 +1095,8 @@ export const EN: Record<string, string> = {
   "折れ線 / 多角形": "Polyline / polygon",
   "選択中の図形を削除": "Delete the selected object",
   "選択中の図形を少し動かす（Shift で大きく）": "Nudge the selected objects (Shift: further)",
+  "ローテーション（セッターの位置）ごとに 1 枚。大きな P 番号、コートにそのローテの並びと # + ! レセプションからの攻撃配分、右に # ・ + ・ ! パス別とセッターコール上位 2 つの配分の表": "One slide per rotation (the setter's position): the P number large, the court with that rotation's players and the attack distribution after a #, + or ! reception, and on the right tables by pass (# / + / !) and for the two setter calls used most",
+  "ローテーション": "Rotation",
   "動画の": "video ",
   "シーンの": "scene ",
   "マーカーの": "marker ",

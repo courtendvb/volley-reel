@@ -100,7 +100,7 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
   const [boardOpen, setBoardOpen] = useState(false)
   const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
   const makeBoard = async (c: BoardChoice) => {
-    const { setView, setLayout, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
+    const { setView, setLayout, rotations, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched } = c, perSlide = columns.length
     const old = boardEdit
     setBoardOpen(false); setBoardEdit(null)
     try {
@@ -111,10 +111,12 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
       }
       const list: Slide[] = []
       const kept = old ? keptByHand(old) : { hand: [], noteTexts: [] }
-      for (let i = 0; i < columns.length; i += perSlide) {
-        const s = newSlide({ kind: 'blank', color: background }, old?.durationSec ?? BOARD_SEC), part = columns.slice(i, i + perSlide)
-        const { annotations, charts, noteIds } = boardSlide(part, skill, { setView, ...(skill === 'E' ? { setLayout } : {}), split, notes, noteSize, noteFills, background, display, ...(markStyle(gridStyle, skill).chart ? { style: markStyle(gridStyle, skill).chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
-        const config = { setView, ...(skill === 'E' ? { setLayout } : {}), display, skill, team, split, notes, noteSize, noteFills, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null, ...(x.attention ? { attention: true } : {}) })) }
+      // A rotation: one slide per rotation picked, of the one setter; the rest: the columns, perSlide a slide.
+      const runs = skill === 'R' ? rotations.map(rotation => ({ part: columns.slice(0, 1), rotation })) : Array.from({ length: Math.ceil(columns.length / perSlide) }, (_, k) => ({ part: columns.slice(k * perSlide, (k + 1) * perSlide), rotation: undefined as number | undefined }))
+      for (const [i, { part, rotation }] of runs.entries()) {
+        const s = newSlide({ kind: 'blank', color: background }, old?.durationSec ?? BOARD_SEC)
+        const { annotations, charts, noteIds } = boardSlide(part, skill, { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation } : {}), split, notes, noteSize, noteFills, background, display, ...(markStyle(gridStyle, skill).chart ? { style: markStyle(gridStyle, skill).chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
+        const config = { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation } : {}), display, skill, team, split, notes, noteSize, noteFills, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null, ...(x.attention ? { attention: true } : {}) })) }
         list.push({ ...s, annotations: i ? annotations : [...annotations, ...kept.hand], charts, board: { config, made: annotations.map(a => a.id), noteIds } })
       }
       if (old && cardEdit?.sceneId) {

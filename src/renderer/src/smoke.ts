@@ -1603,6 +1603,20 @@ export function installSmoke(h: SmokeHost): void {
     const button = (root: ParentNode, text: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === text)
     button(document, t('データスライド作成'))!.click()
     const dialog = await waitFor(() => document.querySelector<HTMLElement>('.board-dialog'), 5000, 'board dialog')
+    if (layout === 'rot') {
+      // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
+      button(dialog, t('ローテーション'))!.click(); await sleep(400)
+      const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent
+      button(dialog, t('作成'))!.click()
+      const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')
+      await sleep(600)
+      const each = slides.map(s => {
+        const texts = s.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+        return { p: texts.find(x => /^P\d$/.test(x)), so: texts.find(x => x.startsWith('Side-out')), tables: texts.filter(x => /pass$|^CALL /.test(x)).length, discs: s.annotations.filter(a => a.kind === 'circle').length }
+      })
+      if (each.map(e => e.p).join() !== 'P1,P6,P5,P4,P3,P2') throw new Error(`rotations: ${JSON.stringify(each)}`)
+      return { setter, each }
+    }
     button(dialog, t('セット'))!.click(); await sleep(300)
     button(dialog, layout === 'rotation' ? t('ローテ別サイドアウト') : t('レセプション・コール別'))!.click(); await sleep(300)
     const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent

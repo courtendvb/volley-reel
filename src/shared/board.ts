@@ -7,9 +7,11 @@ import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type Dir
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
+import { ROTATIONS, rotationLineup, rotationSlide, type Lineup } from './rotationBoard'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
-export type BoardSkill = 'S' | 'A' | 'E' // E: a setter's sets, shown by where the attack after each came from
+// E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets
+export type BoardSkill = 'S' | 'A' | 'E' | 'R'
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -25,10 +27,12 @@ export interface BoardPlayer {
   attention?: boolean // marked "Attention" on the card: the one to watch
   sets?: SetterSet[] // a setter's sets and dumps with the attack each led to (setterBoard.ts)
   callNames?: Record<string, string> // the setter calls' names in the DVWs
+  lineups?: Record<number, Lineup | null> // a rotation slide: the team's lineup in each rotation
 }
 
 // Everyone who served or attacked, most plays first. keep: only these plays (the search).
-export function boardPlayers(dvws: ParsedDVW[], skill: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
+export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
+  const skill = skill0 === 'R' ? 'E' : skill0 // a rotation is read from its setter's sets
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
     for (const [i, p] of d.plays.entries()) {
@@ -45,7 +49,10 @@ export function boardPlayers(dvws: ParsedDVW[], skill: BoardSkill, keep?: (p: Pl
   }
   if (skill === 'E') {
     const callNames = Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>
-    for (const p of out.values()) { p.sets = setterSets(dvws, p.key, keep); p.callNames = callNames }
+    for (const p of out.values()) {
+      p.sets = setterSets(dvws, p.key, keep); p.callNames = callNames
+      if (skill0 === 'R') p.lineups = Object.fromEntries(ROTATIONS.map(r => [r, rotationLineup(dvws, p.team, r)]))
+    }
   }
   return [...out.values()].sort((a, b) => b.plays.length - a.plays.length)
 }
@@ -182,6 +189,7 @@ export interface BoardConfig {
   display?: ChartDisplay // what the charts show
   setView?: SetView // sets: zones painted, arrows, or both; missing: both
   setLayout?: SetLayout // sets: one setter's six courts (setterBoard.ts); missing: setters side by side (cards made before)
+  rotation?: number // a rotation slide: which (1–6)
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -196,6 +204,7 @@ export interface BoardOptions {
   display?: ChartDisplay
   setView?: SetView
   setLayout?: SetLayout
+  rotation?: number // a rotation slide's rotation
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -292,6 +301,10 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 
 // One slide's columns, side by side; for a setter with a layout, their slide of six courts.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[] } {
+  if (skill === 'R') {
+    const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
+    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], lineup: p.lineups?.[r] ?? null, callNames: p.callNames }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [] }
+  }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }
   const annotations: Annotation[] = [], charts: PlacedChart[] = [], noteIds: string[] = [], notesGroup = uid()
   const style = { ...(opts.style ?? DEFAULT_CHART), ...opts.display, scope: 'player' as const, name: false, stats: false }

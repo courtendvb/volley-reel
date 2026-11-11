@@ -4,7 +4,7 @@ import { hasTiming, type ClipTiming } from './timing'
 import { roundCoords, type Annotation } from './annotation'
 import type { BoardMade, PlacedChart } from './board'
 import type { DirectionChart } from './chart'
-import type { SlideCones, SlideFlights, SlideHeat, SlideZones } from './court'
+import type { PlacedSetChart, SlideCones, SlideFlights, SlideHeat, SlideZones } from './court'
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
@@ -79,6 +79,7 @@ export interface Slide {
   cones?: SlideCones // where a player's attacks went, as cones
   chart?: DirectionChart // a player's direction chart, fixed when it was put on
   charts?: PlacedChart[] // the charts of a slide comparing players (shared/board.ts)
+  setCharts?: PlacedSetChart[] // a rotation slide's set chart (shared/rotationBoard.ts)
   board?: BoardMade // how that slide was made
   zones?: SlideZones // a play's zones or clicks
 }

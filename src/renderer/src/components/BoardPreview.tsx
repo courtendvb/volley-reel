@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { drawAnnotation } from '../../../shared/annotation'
 import { boardSlide, type BoardOptions, type BoardPhoto, type BoardPlayer, type BoardSkill } from '../../../shared/board'
 import { drawChart } from '../../../shared/chart'
+import { drawSetChart } from '../../../shared/setChart'
 import { findPhoto } from '../../../shared/pack'
 import { packPhotoImage, subscribeAssets } from '../assets'
 import { usePacks } from '../packs'
@@ -37,6 +38,7 @@ export function BoardPreview({ columns, skill, opts, photos: withPhotos }: { col
     ctx.fillStyle = opts.background ?? '#FFFFFF'; ctx.fillRect(0, 0, W, H)
     if (!slide) return
     for (const ch of slide.charts) drawChart(ctx, ch.chart, { x: ch.x * W, y: ch.y * H, h: ch.h * H })
+    for (const ch of slide.setCharts ?? []) drawSetChart(ctx, ch.chart, { x: ch.x * W, y: ch.y * H, h: ch.h * H })
     for (const a of slide.annotations) drawAnnotation(ctx, a, W, H, id => images.get(id) ?? null)
   }, [slide, images, opts.background])
   return (

@@ -1612,7 +1612,7 @@ export function installSmoke(h: SmokeHost): void {
       await sleep(600)
       const each = slides.map(s => {
         const texts = s.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
-        return { p: texts.find(x => /^P\d$/.test(x)), so: texts.find(x => x.startsWith('Side-out')), tables: texts.filter(x => /pass$|^CALL /.test(x)).length, discs: s.annotations.filter(a => a.kind === 'circle').length }
+        return { p: texts.find(x => /^P\d$/.test(x)), so: texts.find(x => x.startsWith('Side-out')), tables: texts.filter(x => /pass$|^CALL /.test(x)).length, discs: s.annotations.filter(a => a.kind === 'polygon' && a.disc?.part === 'top').length }
       })
       if (each.map(e => e.p).join() !== 'P1,P6,P5,P4,P3,P2') throw new Error(`rotations: ${JSON.stringify(each)}`)
       return { setter, each }

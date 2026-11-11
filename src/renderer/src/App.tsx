@@ -488,7 +488,7 @@ export function App() {
   const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
   const {
     cardEdit, setCardEdit, focusEdit, setFocusEdit, cardTool, setCardTool, cardToolsOpen, setCardToolsOpen,
-    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown,
+    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown,
     editCard, editingSlide, editingSource,
   } = useCardEdit({ latest, settings, video, reels, matches, overlay, setOverlay: o => setOverlay(o), selectedAnn, setSelectedAnn, updateReel, updateVideo })
   const {
@@ -529,11 +529,11 @@ export function App() {
     return {
       photos, logos,
       onPhoto: (pack, photo) => void placeImage(() => api.usePackPhoto(pack, photo), true, { w: 0.15, cx: 0.12, cy: 0.72 }), // lower left, clear of the title
-      onLogo: code => void placeImage(() => api.useLogo(code), true, { w: 0.1, cx: 0.9, cy: 0.14 }), // top right
+      onLogo: code => void placeImage(() => api.useLogo(code), true, { w: 0.1, cx: 0.9, cy: 0.14, shared: true }), // top right, on every card of the kind
       // A portrait frame (3:4) lower left, clear of the title.
       onFrame: () => {
         const w = 0.14, h = (w * 4 / 3) * (16 / 9), id = crypto.randomUUID()
-        setCardAnns([...(cardEditCard?.annotations ?? []), { id, kind: 'image', color: '#FFFFFF', x: 0.12 - w / 2, y: Math.min(1 - h, 0.78 - h / 2), w, h, assetId: 'frame:top', frame: 'top', fit: 'cover' }])
+        setCardAnns([...(cardEditCard?.annotations ?? []), { id, kind: 'image', color: '#FFFFFF', x: 0.12 - w / 2, y: Math.min(1 - h, 0.78 - h / 2), w, h, assetId: 'frame:top', frame: 'top', fit: 'cover' }], { all: [id] }) // on every card of the kind
         setAnnTool('select'); setSelectedAnn(id)
       },
     }
@@ -693,7 +693,8 @@ export function App() {
             {cardEditCard && !editingSlide && (
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
-                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} inserts={cardInserts} />
+                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} inserts={cardInserts}
+                hiddenCount={cardHiddenIds.length} onShowHidden={() => hideOnCard(cardHiddenIds, false)} />
             )}
             {cardEditCard && cardTool === 'objects' && (
               <div className="filter-row">
@@ -705,6 +706,8 @@ export function App() {
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle} cardMode
                 annotations={cardEditCard.annotations ?? []} scopeOf={() => 'clip'} onScope={() => {}} canVideo={false} selectedId={selectedAnn}
+                {...(editingTitleCard ? { cardScope: { of: cardScopeOf, set: setCardScope, hide: (id: string) => { hideOnCard([id], true); setSelectedAnn(null) },
+                  kindName: cardEditCard.video ? t('動画の') : cardEditCard.marker === null ? t('シーンの') : t('マーカーの') } } : {})}
                 editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setCardAnns} onInsertImage={() => void insertImage()} clip={{ in: 0, out: 0 }} disabled={false}
               />

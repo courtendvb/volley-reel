@@ -49,6 +49,8 @@ export interface Reel {
   markerAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on every clip of a marker group (表示範囲: マーカー全体)
   cardAnnotations?: Annotation[] // objects on the scene's title card
   markerCardAnnotations?: Partial<Record<Marker, Annotation[]>> // objects on each marker's title card
+  cardHidden?: string[] // objects of every scene card (titleCard.objects) not shown on this scene's
+  markerCardHidden?: Partial<Record<Marker, string[]>> // the same for each marker's card
   cardTitle?: string // the scene card's text when it differs from the name (may have line breaks: one line each)
   markerCardTitles?: Partial<Record<Marker, string>> // the same for each marker's card
   cardLayout?: CardLayout // the scene card's own title place and size; missing = the video's for scene cards

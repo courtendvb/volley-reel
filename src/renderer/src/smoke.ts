@@ -1042,8 +1042,10 @@ export function installSmoke(h: SmokeHost): void {
     const d = latest.current.dvwsRef![r0.matchId], team = d.teams[r0.play.side === '*' ? 0 : 1].code.toUpperCase()
     await api.smokeImportPack!(packFile); await refreshPacks()
     await window.api.smokeSetLogo!(team, logoFile)
-    let sc = addClips(newReel('card insert smoke'), [{ matchId: r0.matchId, play: r0.play }]).reel
-    for (const id of sc.groups.none.slice()) sc = toggleMarker(sc, id, 1)
+    // Marker 1: a play of r0's player; marker 2: a play of #21 (the pack has both photos).
+    const r1 = res.find(x => x.play.rallyId !== null && x.play.jersey === 21 && x.play.side === r0.play.side)!
+    const made = addClips(newReel('card insert smoke'), [{ matchId: r0.matchId, play: r0.play }, { matchId: r1.matchId, play: r1.play }])
+    let sc = toggleMarker(toggleMarker(made.reel, made.ids[0], 1), made.ids[1], 2)
     smokeUse(sc)
     await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
     editCard(sc.id, 1)
@@ -1057,17 +1059,29 @@ export function installSmoke(h: SmokeHost): void {
     }
     const photoOptions = await pick('選手の写真を入れる')
     const logoOptions = await pick('ロゴを入れる')
-    const anns = await waitFor(() => { const a = latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []; return a.length >= 2 ? a : null }, 8000, 'two pictures on the card')
-    // ＋ 写真枠: a frame, filled in the plan with the photo of the marker's player (the one clip's).
+    // The photo on this card only; the logo on every marker card (the video's).
+    const own = () => latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []
+    const shared = () => latest.current.overlay.titleCard.objects?.marker ?? []
+    await waitFor(() => (own().length === 1 && shared().length === 1) || null, 8000, () => `photo on the card, logo on all (own ${own().length}, all ${shared().length})`)
+    // ＋ 写真枠: on every marker card too, each filled with its own marker's player.
     ;[...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === t('＋ 写真枠'))!.click()
-    await waitFor(() => (latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []).some(a => a.kind === 'image' && a.frame) || null, 5000, 'photo frame')
-    updateReel({ ...latest.current.reels.find(x => x.id === sc.id)!, markerCards: { 1: true } })
+    await waitFor(() => shared().some(a => a.kind === 'image' && a.frame) || null, 5000, 'photo frame on every marker card')
+    updateReel({ ...latest.current.reels.find(x => x.id === sc.id)!, markerCards: { 1: true, 2: true } })
     await sleep(300)
-    const card = currentPlan('scene').find(it => it.kind === 'card' && it.card.marker === 1)
-    const filled = card?.kind === 'card' ? card.card.annotations?.find(a => a.kind === 'image' && a.frame) : undefined
-    if (!filled || filled.kind !== 'image' || !filled.assetId.startsWith('pack:')) throw new Error(`frame not filled: ${JSON.stringify(filled)}`)
+    const frameOn = (m: number) => {
+      const card = currentPlan('scene').find(it => it.kind === 'card' && it.card.marker === m)
+      const f = card?.kind === 'card' ? card.card.annotations?.find(a => a.kind === 'image' && a.frame) : undefined
+      return f?.kind === 'image' ? decodeURIComponent(f.assetId) : null
+    }
+    const frames = { 1: frameOn(1), 2: frameOn(2) }
+    if (!frames[1]?.endsWith('miwa.png') || !frames[2]?.endsWith('eiro.png')) throw new Error(`frames: ${JSON.stringify(frames)}`)
+    // Left off marker 2's card: gone there, still on marker 1's.
+    const frameId = shared().find(a => a.kind === 'image' && a.frame)!.id
+    updateReel({ ...latest.current.reels.find(x => x.id === sc.id)!, markerCardHidden: { 2: [frameId] } })
+    await sleep(300)
+    if (frameOn(2) !== null || !frameOn(1)) throw new Error(`hidden on 2: ${frameOn(2)} / on 1: ${frameOn(1)}`)
     await sleep(500)
-    return { team, photoOptions, logoOptions, onCard: anns.map(a => (a.kind === 'image' ? `image ${a.w.toFixed(2)}x${a.h.toFixed(2)}` : a.kind)), frame: decodeURIComponent(filled.assetId) }
+    return { team, photoOptions, logoOptions, own: own().length, shared: shared().map(a => (a.kind === 'image' && a.frame ? 'frame' : a.kind)), frames }
   }
 
   const smokePhotos = async (res: PlayRef[], packFile: string) => {

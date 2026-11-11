@@ -4,7 +4,7 @@
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { SlideFlights, SlideMarks } from './court'
-import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
+import type { CardKind, CardLayout, OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg, type SlideGroup } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
@@ -17,6 +17,7 @@ export interface Video {
   overlay?: OverlayPatch // read through overlaySettings()
   annotations?: Annotation[] // objects shown on every clip of the video (表示範囲: 動画全体)
   cardAnnotations?: Annotation[] // objects on the video's title card (its opening card)
+  cardHidden?: string[] // objects of every video card (titleCard.objects) not shown on this one
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
   cardLayout?: CardLayout // the opening card's own title place and size
   captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
@@ -66,6 +67,14 @@ export type PlanItem =
   | { kind: 'card'; card: Card; durationSec: number }
   | { kind: 'clip'; clip: Clip; sceneId: string; group: Group } // group: the marker group it plays in ('none' = unmarked)
 
+// The objects a card shows: those on every card of its kind (the video's), less the ones it hides,
+// under its own.
+export function cardObjects(own: Annotation[] | undefined, kind: CardKind, overlay: OverlaySettings, hidden: string[] | undefined): Annotation[] {
+  const shared = overlay.titleCard.objects?.[kind] ?? []
+  const off = new Set(hidden ?? [])
+  return [...shared.filter(a => !off.has(a.id)), ...(own ?? [])]
+}
+
 // One scene's clips in play order, with a card before each marker group when marker cards are on,
 // and its slides where they sit. order is the scene's play order (playOrder, minus clips that can't
 // be played). A clip with two markers is in it twice; walking the groups tells which group each
@@ -85,7 +94,7 @@ function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matche
     const list = items(g)
     if (!list.length) continue
     if (markerCardOn(scene, g, overlay.titleCard.enabled)) {
-      list.unshift({ kind: 'card', card: { marker: g, scene: scene.id, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: scene.markerCardAnnotations?.[g] ?? [] }, durationSec: overlay.titleCard.durationSec })
+      list.unshift({ kind: 'card', card: { marker: g, scene: scene.id, name: scene.markerCardTitles?.[g] || scene.markerNames[g], ...cardMatch(scene, scene.groups[g], matches, ourCodes), layout: scene.markerCardLayouts?.[g], annotations: cardObjects(scene.markerCardAnnotations?.[g], 'marker', overlay, scene.markerCardHidden?.[g]) }, durationSec: overlay.titleCard.durationSec })
     }
     out.push({ group: g, items: list })
   }
@@ -125,7 +134,10 @@ export interface Chapter { at: number; title: string }
 export function planVideoChapters(video: Video, scenes: Record<string, Reel>, orderOf: (s: Reel) => Clip[], overlay: OverlaySettings,
   matches: Record<string, Match>, ourCodes: string[]): { plan: PlanItem[]; chapters: Chapter[] } {
   const plan: PlanItem[] = [], chapters: Chapter[] = []
-  if (overlay.titleCard.videoCard) plan.push({ kind: 'card', card: videoCard(video, scenes, matches, ourCodes), durationSec: overlay.titleCard.durationSec })
+  if (overlay.titleCard.videoCard) {
+    const vc = videoCard(video, scenes, matches, ourCodes)
+    plan.push({ kind: 'card', card: { ...vc, annotations: cardObjects(vc.annotations, 'video', overlay, video.cardHidden) }, durationSec: overlay.titleCard.durationSec })
+  }
   for (const id of video.sceneIds) {
     const s = scenes[id]
     if (!s) continue
@@ -153,7 +165,7 @@ export function planSceneWithCard(s: Reel, order: Clip[], overlay: OverlaySettin
 
 function sceneCard(s: Reel, order: Clip[], overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): PlanItem | null {
   if (!(s.sceneCard ?? overlay.titleCard.sceneCards)) return null
-  const card: Card = { marker: null, scene: s.id, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: s.cardAnnotations ?? [], layout: s.cardLayout }
+  const card: Card = { marker: null, scene: s.id, name: s.cardTitle || s.name, ...cardMatch(s, order.map(c => c.id), matches, ourCodes), annotations: cardObjects(s.cardAnnotations, 'scene', overlay, s.cardHidden), layout: s.cardLayout }
   return { kind: 'card', card, durationSec: overlay.titleCard.durationSec }
 }
 

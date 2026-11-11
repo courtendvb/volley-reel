@@ -1,7 +1,9 @@
 // Who and which teams a title card is about, to put a player's photo or a team's logo on it: the
 // players of the card's clips, the most clips first, then the rest of those matches' players; the
 // teams of those matches, the most clips first. Pure, so it is unit-tested.
+import type { Annotation } from './annotation'
 import type { ParsedDVW, Player } from './types'
+import type { Card, PlanItem } from './video'
 
 export interface CardPlayer { player: Player; team: string; teamName: string; clips: number }
 export interface CardTeam { code: string; name: string; clips: number }
@@ -47,4 +49,30 @@ export function cardTeams(clips: ClipRef[], dvws: Record<string, ParsedDVW>): Ca
     })
   }
   return [...out.values()].sort((a, b) => b.clips - a.clips || a.code.localeCompare(b.code))
+}
+
+// A card's photo frames filled: each takes `photo` (an image id), or goes when there is none, so an
+// empty frame never shows in the video. Other objects stay as they are.
+export function fillFrames(list: Annotation[] | undefined, photo: string | null): Annotation[] | undefined {
+  if (!list?.some(a => a.kind === 'image' && a.frame)) return list
+  return list.flatMap(a => (a.kind === 'image' && a.frame ? (photo ? [{ ...a, assetId: photo }] : []) : [a]))
+}
+
+// The cards of a plan with their frames filled; photoFor finds a card's photo (only asked for cards with a frame).
+export function fillPlanFrames(plan: PlanItem[], photoFor: (card: Card) => string | null): PlanItem[] {
+  return plan.map(it => {
+    if (it.kind !== 'card' || it.card.slide || !it.card.annotations?.some(a => a.kind === 'image' && a.frame)) return it
+    return { ...it, card: { ...it.card, annotations: fillFrames(it.card.annotations, photoFor(it.card)) } }
+  })
+}
+
+// The player a card is about: the one with the most of its clips who has a photo (photoOf: their
+// photo's image id, or null). Null when no one has.
+export function topPhoto(clips: ClipRef[], dvws: Record<string, ParsedDVW>, photoOf: (p: CardPlayer) => string | null): string | null {
+  for (const p of cardPlayers(clips, dvws)) {
+    if (!p.clips) break
+    const id = photoOf(p)
+    if (id) return id
+  }
+  return null
 }

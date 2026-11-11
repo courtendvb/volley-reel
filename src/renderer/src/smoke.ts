@@ -1036,7 +1036,16 @@ export function installSmoke(h: SmokeHost): void {
     const photoOptions = await pick('選手の写真を入れる')
     const logoOptions = await pick('ロゴを入れる')
     const anns = await waitFor(() => { const a = latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []; return a.length >= 2 ? a : null }, 8000, 'two pictures on the card')
-    return { team, photoOptions, logoOptions, onCard: anns.map(a => (a.kind === 'image' ? `image ${a.w.toFixed(2)}x${a.h.toFixed(2)}` : a.kind)) }
+    // ＋ 写真枠: a frame, filled in the plan with the photo of the marker's player (the one clip's).
+    ;[...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === t('＋ 写真枠'))!.click()
+    await waitFor(() => (latest.current.reels.find(x => x.id === sc.id)?.markerCardAnnotations?.[1] ?? []).some(a => a.kind === 'image' && a.frame) || null, 5000, 'photo frame')
+    updateReel({ ...latest.current.reels.find(x => x.id === sc.id)!, markerCards: { 1: true } })
+    await sleep(300)
+    const card = currentPlan('scene').find(it => it.kind === 'card' && it.card.marker === 1)
+    const filled = card?.kind === 'card' ? card.card.annotations?.find(a => a.kind === 'image' && a.frame) : undefined
+    if (!filled || filled.kind !== 'image' || !filled.assetId.startsWith('pack:')) throw new Error(`frame not filled: ${JSON.stringify(filled)}`)
+    await sleep(500)
+    return { team, photoOptions, logoOptions, onCard: anns.map(a => (a.kind === 'image' ? `image ${a.w.toFixed(2)}x${a.h.toFixed(2)}` : a.kind)), frame: decodeURIComponent(filled.assetId) }
   }
 
   const smokePhotos = async (res: PlayRef[], packFile: string) => {

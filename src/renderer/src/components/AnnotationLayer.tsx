@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type 
 import { composing } from '../keys'
 import {
   applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
-  type Annotation, type AnnotationKind, type ImageAnnotation, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
+  type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
@@ -32,6 +32,7 @@ export type AnnStyle = StylePatch & { color: string; width: number; size: number
 export const textStyle = (s: AnnStyle): AnnStyle => ({ ...s, color: s.textColor ?? '#FFFFFF' })
 
 interface Props {
+  images?: ImageLookup // how pictures are found (a title card's photo frame shows its player); else the project's assets
   size: { w: number; h: number }
   annotations: Annotation[]
   clip: { key: string; in: number; out: number }
@@ -125,7 +126,7 @@ export function AnnotationLayer(p: Props) {
         const img = assetImage(cropImg.assetId), f = fullRect(cropImg)
         if (img) { ctx.save(); ctx.globalAlpha = 0.35; ctx.drawImage(img, f.x * p.size.w, f.y * p.size.h, f.w * p.size.w, f.h * p.size.h); ctx.restore() }
       }
-      drawAnnotation(ctx, a, p.size.w, p.size.h, assetImage)
+      drawAnnotation(ctx, a, p.size.w, p.size.h, p.images ?? assetImage)
     }
     ctx.globalAlpha = 1
     // The other selected objects and the selected one's group: a thin frame each.
@@ -154,7 +155,7 @@ export function AnnotationLayer(p: Props) {
       }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds])
+  }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds, p.images])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {

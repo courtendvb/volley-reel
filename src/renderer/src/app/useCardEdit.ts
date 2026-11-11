@@ -42,7 +42,7 @@ export function useCardEdit({ latest, settings, video, reels, matches, overlay, 
     if (cardEdit.slideId) { const sl = sc.slides?.find(s => s.id === cardEdit.slideId); return sl ? slideCard(sl) : null }
     const m = cardEdit.marker
     const ids = m === null ? Object.keys(sc.clips) : sc.groups[m]
-    return { marker: m, name: (m === null ? sc.cardTitle || sc.name : sc.markerCardTitles?.[m] || sc.markerNames[m]), ...cardMatch(sc, ids, matches, codes),
+    return { marker: m, scene: sc.id, name: (m === null ? sc.cardTitle || sc.name : sc.markerCardTitles?.[m] || sc.markerNames[m]), ...cardMatch(sc, ids, matches, codes),
       annotations: (m === null ? sc.cardAnnotations : sc.markerCardAnnotations?.[m]) ?? [], layout: m === null ? sc.cardLayout : sc.markerCardLayouts?.[m] }
   }, [cardEdit, reels, video, matches, settings])
   const cardEditRef = useRef(cardEdit)

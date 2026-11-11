@@ -68,7 +68,9 @@ export type Annotation = Base & (
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number; cell?: ZoneCell; disc?: DiscPart } & Fillable) // cell: a court zone painted from the zone panel; disc: part of a disc on the court
   // crop: the part of the picture shown (fractions of its width / height); missing = all of it.
-  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop; quad?: Quad }
+  | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop; quad?: Quad
+      frame?: 'top' // a photo frame on a title card: filled with the photo of the card's player with the most clips (cardPeople.ts)
+      fit?: 'cover' } // the picture fills the box, cut to its shape (else stretched to it)
 )
 
 // Corners of a picture laid with perspective: top-left, top-right, bottom-left, bottom-right of the picture.
@@ -132,6 +134,13 @@ export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: num
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {
   return t >= (a.showFrom ?? clip.in) - 1e-3 && t <= (a.showTo ?? clip.out) + 1e-3
+}
+
+// The part of a picture iw × ih that fills a box bw × bh (same units as each other), centred: a crop as shares.
+export function coverCrop(iw: number, ih: number, bw: number, bh: number): Crop | undefined {
+  if (!(iw > 0 && ih > 0 && bw > 0 && bh > 0)) return undefined
+  const k = (bw / bh) / (iw / ih) // > 1: the box is wider than the picture, so its top and bottom go
+  return k >= 1 ? { x: 0, y: (1 - 1 / k) / 2, w: 1, h: 1 / k } : { x: (1 - k) / 2, y: 0, w: k, h: 1 }
 }
 
 export function translate(a: Annotation, dx: number, dy: number): Annotation {
@@ -292,14 +301,21 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
     case 'image': {
       const img = images?.(a.assetId) ?? null
       if (img) {
-        const c = a.crop, iw = (img as { width: number }).width, ih = (img as { height: number }).height
+        const iw = (img as { width: number }).width, ih = (img as { height: number }).height
+        const c = a.crop ?? (a.fit === 'cover' && !a.quad ? coverCrop(iw, ih, a.w * W, a.h * H) : undefined)
         const src = c ? { x: c.x * iw, y: c.y * ih, w: c.w * iw, h: c.h * ih } : { x: 0, y: 0, w: iw, h: ih }
         if (a.quad) drawWarped(ctx, img, src, a.quad.map(([x, y]) => [x * W, y * H]) as Quad)
         else if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
         else ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H)
         break
       }
-      // Not loaded (yet): a placeholder, so the object can still be seen and picked.
+      // Not loaded (yet): a placeholder, so the object can still be seen and picked. A photo frame
+      // with no photo says what it is for.
+      if (a.frame) {
+        ctx.fillStyle = 'rgba(148,163,184,0.25)'; ctx.fillRect(a.x * W, a.y * H, a.w * W, a.h * H)
+        ctx.fillStyle = 'rgba(226,232,240,0.95)'; ctx.font = `bold ${Math.max(10, Math.round(14 * s))}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        ctx.fillText('PHOTO', (a.x + a.w / 2) * W, (a.y + a.h / 2) * H, a.w * W * 0.9)
+      }
       ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(148,163,184,0.9)'
       if (a.quad) { ctx.beginPath(); for (const [x, y] of quadRing(a.quad)) ctx.lineTo(x * W, y * H); ctx.closePath(); ctx.stroke() }
       else ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H)

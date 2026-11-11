@@ -115,9 +115,9 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
       const runs = skill === 'R' ? rotations.map(rotation => ({ part: columns.slice(0, 1), rotation })) : Array.from({ length: Math.ceil(columns.length / perSlide) }, (_, k) => ({ part: columns.slice(k * perSlide, (k + 1) * perSlide), rotation: undefined as number | undefined }))
       for (const [i, { part, rotation }] of runs.entries()) {
         const s = newSlide({ kind: 'blank', color: background }, old?.durationSec ?? BOARD_SEC)
-        const { annotations, charts, noteIds } = boardSlide(part, skill, { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation } : {}), split, notes, noteSize, noteFills, background, display, ...(markStyle(gridStyle, skill).chart ? { style: markStyle(gridStyle, skill).chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
+        const { annotations, charts, noteIds, setCharts } = boardSlide(part, skill, { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation } : {}), split, notes, noteSize, noteFills, background, display, ...(markStyle(gridStyle, skill).chart ? { style: markStyle(gridStyle, skill).chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
         const config = { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation } : {}), display, skill, team, split, notes, noteSize, noteFills, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null, ...(x.attention ? { attention: true } : {}) })) }
-        list.push({ ...s, annotations: i ? annotations : [...annotations, ...kept.hand], charts, board: { config, made: annotations.map(a => a.id), noteIds } })
+        list.push({ ...s, annotations: i ? annotations : [...annotations, ...kept.hand], charts, ...(setCharts ? { setCharts } : {}), board: { config, made: annotations.map(a => a.id), noteIds } })
       }
       if (old && cardEdit?.sceneId) {
         // In place of the card; if it no longer fits on one, the rest right after it.

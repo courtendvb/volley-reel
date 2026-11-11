@@ -160,13 +160,15 @@ export interface FormationSpot { jersey: number; role?: PlayerRole; libero?: boo
 // overlap rule. By the setter's zone (the rotation), then by the player's place in the rotation order
 // after the setter: setter, outside 1, middle 1, opposite, outside 2, middle 2 (the back row's middle
 // is the libero). In the team's frame (u from its left, v from its end line to the net at 0.5).
+// Tuned by hand on real slides: the front players a step off the net, and in rotation 4 the outside
+// hitter in zone 2 swinging over to pass on the left.
 const RECEIVE: Record<number, [number, number][]> = {
-  1: [[0.9, 0.07], [0.8, 0.2], [0.45, 0.45], [0.1, 0.45], [0.2, 0.17], [0.5, 0.15]],
-  6: [[0.7, 0.27], [0.82, 0.15], [0.9, 0.45], [0.6, 0.45], [0.18, 0.2], [0.45, 0.14]],
-  5: [[0.3, 0.3], [0.5, 0.14], [0.82, 0.15], [0.9, 0.45], [0.18, 0.21], [0.08, 0.45]],
-  4: [[0.38, 0.45], [0.18, 0.17], [0.5, 0.14], [0.92, 0.07], [0.82, 0.2], [0.58, 0.45]],
-  3: [[0.6, 0.45], [0.18, 0.2], [0.45, 0.14], [0.66, 0.05], [0.84, 0.14], [0.9, 0.45]],
-  2: [[0.9, 0.45], [0.25, 0.2], [0.08, 0.45], [0.08, 0.06], [0.5, 0.14], [0.82, 0.15]],
+  1: [[0.9, 0.1], [0.79, 0.19], [0.45, 0.35], [0.08, 0.35], [0.2, 0.17], [0.5, 0.15]],
+  6: [[0.65, 0.28], [0.82, 0.15], [0.88, 0.3], [0.63, 0.37], [0.18, 0.2], [0.45, 0.14]],
+  5: [[0.3, 0.3], [0.5, 0.14], [0.82, 0.15], [0.88, 0.32], [0.17, 0.18], [0.11, 0.35]],
+  4: [[0.08, 0.44], [0.53, 0.16], [0.79, 0.18], [0.92, 0.07], [0.26, 0.18], [0.16, 0.35]],
+  3: [[0.6, 0.45], [0.18, 0.2], [0.45, 0.14], [0.66, 0.05], [0.84, 0.14], [0.82, 0.33]],
+  2: [[0.67, 0.45], [0.25, 0.2], [0.1, 0.35], [0.37, 0.05], [0.5, 0.14], [0.82, 0.15]],
 }
 
 // The team's libero in a rotation: of the players not in the lineup, the one with the most receptions

@@ -78,7 +78,8 @@ describe('where the side-out team stands, and its attacks', () => {
     const at = Object.fromEntries(f.map(s => [s.jersey, s.at]))
     expect(at[21].u).toBeGreaterThan(0.75) // zone 1: the team's right, behind its zone 2
     expect(at[21].v).toBeLessThan(at[1].v)
-    expect(at[22].v).toBeGreaterThan(0.4) // the opposite in zone 4 by the net
+    expect(at[22].v).toBeGreaterThan(0.3) // the opposite in zone 4 a step off the net
+    expect(at[22].u).toBeLessThan(0.2)
     expect(rotationFormation([d], 'HTH', 1, null, 'S')).toEqual([])
   })
   it('keeps the overlap rule in every rotation', () => {

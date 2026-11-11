@@ -4,7 +4,8 @@ import { boardSlide, type BoardOptions, type BoardPhoto, type BoardPlayer, type 
 import { drawChart } from '../../../shared/chart'
 import { drawSetChart } from '../../../shared/setChart'
 import { findPhoto } from '../../../shared/pack'
-import { packPhotoImage, subscribeAssets } from '../assets'
+import { logoImage, packPhotoImage, subscribeAssets } from '../assets'
+import { logoKey } from '../../../shared/serveTargetBoard'
 import { usePacks } from '../packs'
 import { prepareCanvas } from '../canvas'
 import { t } from '../../../shared/i18n'
@@ -28,8 +29,11 @@ export function BoardPreview({ columns, skill, opts, photos: withPhotos }: { col
       photos[p.key] = { assetId: id, width: img.width, height: img.height }
       images.set(id, img)
     }
+    // A serve target: the team's logo, from the library.
+    const team = skill === 'T' && withPhotos ? columns[0]?.team : undefined, logo = team ? logoImage(team) : null
+    if (team && logo) { photos[logoKey(team)] = { assetId: 'preview:logo', width: logo.width, height: logo.height }; images.set('preview:logo', logo) }
     return { photos, images }
-  }, [columns, packs, withPhotos, tick])
+  }, [columns, packs, withPhotos, tick, skill])
   const slide = useMemo(() => (columns.length ? boardSlide(columns, skill, opts, photos) : null), [columns, skill, opts, photos])
   useEffect(() => {
     const c = canvas.current

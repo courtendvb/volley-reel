@@ -79,7 +79,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   }, [open, skill, searched]) // eslint-disable-line react-hooks/exhaustive-deps
   const shown = fill(slots, count)
   const setSlot = (i: number, s: Slot) => setSlots(shown.map((x, k) => (k === i ? s : x)))
-  const columns = shown.flatMap(s => {
+  // A serve target: the team's receivers, all of them (the slide keeps those who received enough).
+  const columns = skill === 'T' ? inTeam : shown.flatMap(s => {
     const p = inTeam.find(x => x.key === s.key), c = p ? boardColumn(p, s.code || null, names) : null
     return c ? [s.attention ? { ...c, attention: true } : c] : []
   })
@@ -90,7 +91,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <div className="filter-row">
           <span className="field-label">{t('プレー')}</span>
           <div className="segmented" role="radiogroup">
-            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')]] as [BoardSkill, string][]).map(([k, label]) => (
+            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')], ['T', t('サーブの狙い')]] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}
           </div>
@@ -101,7 +102,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           <select id="board-team" value={open} onChange={e => setTeam(e.target.value)}>
             {teams.map(([code, name]) => <option key={code} value={code}>{`${code} — ${name}`}</option>)}
           </select>
-          {!oneSetter && <>
+          {!oneSetter && skill !== 'T' && <>
             <label className="field-label" htmlFor="board-count">{t('人数')}</label>
             <select id="board-count" value={count} onChange={e => { setSlots(shown); setCount(+e.target.value) }}>
               {Array.from({ length: MOST_PER_SLIDE }, (_, i) => i + 1).map(n => <option key={n} value={n}>{t('{0} 人', n)}</option>)}
@@ -128,7 +129,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             </div>
           </div>
         )}
-        <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
+        {skill === 'T' && <p className="hint">{t('このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。サイドアウト率がチーム全体より 10 ポイント以上低いところを青、高いところを赤で示します。下には、ゾーンごとのその後の攻撃の配分')}</p>}
+        {skill !== 'T' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
           {shown.map((s, i) => {
             const p = inTeam.find(x => x.key === s.key)
             const codes = skill === 'A' && p ? attackCodes([p]) : []
@@ -150,7 +152,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
               </div>
             )
           })}
-        </div>
+        </div>}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos}
           opts={{ setView, setLayout, rotation: rotations[0] ?? 1, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
@@ -163,11 +165,11 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
               ))}
             </div>
           </div>
-        ) : <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
+        ) : skill !== 'T' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
-          {!oneSetter && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
-          {notes && !oneSetter && <>
+          {!oneSetter && skill !== 'T' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
+          {notes && !oneSetter && skill !== 'T' && <>
             <label className="check" title={t('ノート欄の高さ。文字の大きさも一緒に変わります')}>{t('高さ')}
               <input type="number" min={NOTE_SIZE.min * 100} max={NOTE_SIZE.max * 100} step={NOTE_SIZE.step * 100} value={Math.round(noteSize * 100)} style={{ width: 60 }} aria-label={t('ノート欄の高さ（%）')}
                 onChange={e => { const n = +e.target.value / 100; if (n >= NOTE_SIZE.min && n <= NOTE_SIZE.max) setNoteSize(n) }} />%</label>

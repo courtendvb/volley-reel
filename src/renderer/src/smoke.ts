@@ -48,6 +48,7 @@ export interface SmokeOpts {
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
+  sceneTitle?: boolean // a scene card with a long name: its title's top-left stays, and dragging it saves a top-left
   cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
@@ -148,6 +149,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.copy) return smokeCopy(res)
     if (opts.photos) return smokePhotos(res, opts.photos)
     if (opts.cardInsert) return smokeCardInsert(res, opts.cardInsert)
+    if (opts.sceneTitle) return smokeSceneTitle(res)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.presets || opts.presetServe) return smokePresets(!!opts.presetServe)
@@ -1014,6 +1016,26 @@ export function installSmoke(h: SmokeHost): void {
   // by a click; a photo set for a player the pack has none for, then taken off with ↺.
   // The card bar's ＋ 選手の写真 and ＋ ロゴ: a pack and a logo for the first play's team, a marker card
   // of a scene of that play, then a photo and the logo picked from the bar's lists.
+  const smokeSceneTitle = async (res: PlayRef[]) => {
+    const r0 = res.find(x => x.play.rallyId !== null)!
+    const sc = { ...addClips(newReel('A very long scene name: serves of the opposite in rotation one'), [{ matchId: r0.matchId, play: r0.play }]).reel, sceneCard: true }
+    smokeUse(sc)
+    await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+    editCard(sc.id, null); await sleep(400)
+    ;[...document.querySelectorAll<HTMLButtonElement>('.card-edit-bar button')].find(b => b.textContent === t('タイトルの位置'))!.click(); await sleep(200)
+    const ed = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=card-editor]'), 5000, 'card editor')
+    const eb = ed.getBoundingClientRect()
+    const ept = (fx: number, fy: number) => ({ clientX: eb.left + fx * eb.width, clientY: eb.top + fy * eb.height, bubbles: true, pointerId: 1 })
+    // The title's top-left is at 10% / 40% by default: grab it just inside and move it 5% right and down.
+    ed.dispatchEvent(new PointerEvent('pointerdown', ept(0.13, 0.5))); await sleep(40)
+    ed.dispatchEvent(new PointerEvent('pointermove', ept(0.16, 0.53))); await sleep(40)
+    ed.dispatchEvent(new PointerEvent('pointermove', ept(0.18, 0.55))); await sleep(40)
+    ed.dispatchEvent(new PointerEvent('pointerup', ept(0.18, 0.55))); await sleep(300)
+    const lay = latest.current.overlay.titleCard.sceneLayout
+    if (!lay || lay.origin !== 'tl' || Math.abs(lay.x - 0.15) > 0.01 || Math.abs(lay.y - 0.45) > 0.01) throw new Error(`scene layout after the drag: ${JSON.stringify(lay)}`)
+    return { sceneLayout: { x: +lay.x.toFixed(3), y: +lay.y.toFixed(3), scale: lay.scale, origin: lay.origin } }
+  }
+
   const smokeCardInsert = async (res: PlayRef[], spec: string) => {
     const [packFile, logoFile] = spec.split('|')
     const r0 = res.find(x => x.play.rallyId !== null)!

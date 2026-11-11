@@ -2,7 +2,7 @@ import { PaletteColor } from './PaletteColor'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, cardKind, drawCard, type Box, type TitleBox } from '../../../shared/overlayDraw'
 import { drawFlights, drawSlideMarks } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
@@ -35,7 +35,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
   const [tick, setTick] = useState(0)
   useEffect(() => subscribeAssets(() => setTick(n => n + 1)), [])
   const kind = layoutKey(card)
-  const layout = card.layout ?? settings.titleCard[kind] ?? defaultLayout(card)
+  const layout = asTopLeft(card, card.layout ?? settings.titleCard[kind] ?? defaultLayout(card))
 
   useEffect(() => {
     const c = canvas.current
@@ -91,9 +91,8 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
       set({ ...d.start, x: clamp(d.start.x + (x - d.from[0]) / size.w, 0, 1), y: clamp(d.start.y + (y - d.from[1]) / size.h, 0, 1) })
       return
     }
-    // Resize by the corner: marker titles grow from their top-left, scene titles from their center.
-    const w0 = card.marker === null ? d.box.w / 2 : d.box.w
-    const w1 = card.marker === null ? x - (d.box.x + d.box.w / 2) : x - d.box.x
+    // Resize by the corner: the title grows from its top-left.
+    const w0 = d.box.w, w1 = x - d.box.x
     if (w0 > 0) set({ ...d.start, scale: clamp(d.start.scale * (w1 / w0), 0.3, 3) })
   }
   const onUp = () => { drag.current = null }
@@ -105,6 +104,9 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
 }
 
 const layoutKey = (card: Card): 'videoLayout' | 'sceneLayout' | 'markerLayout' => (card.video ? 'videoLayout' : card.marker === null ? 'sceneLayout' : 'markerLayout')
+// A scene or video card's layout as a top-left (one saved as a centre is read as one), so what the
+// editor saves is a top-left.
+const asTopLeft = (card: Card, l: CardLayout) => (card.marker === null ? sceneTopLeft(l) : l)
 const defaultLayout = (card: Card) => (card.video ? DEFAULT_VIDEO_LAYOUT : card.marker === null ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT)
 const cardKindName = (card: Card) => (card.video ? t('動画') : card.marker === null ? t('シーン') : t('マーカー'))
 
@@ -124,8 +126,8 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
   inserts?: CardInserts
 }) {
   const kind = layoutKey(card), def = defaultLayout(card)
-  const shared = settings.titleCard[kind] ?? def, own = !!card.layout
-  const layout = card.layout ?? shared
+  const shared = asTopLeft(card, settings.titleCard[kind] ?? def), own = !!card.layout
+  const layout = card.layout ? asTopLeft(card, card.layout) : shared
   const set = (l: CardLayout) => (own ? onOwn(l) : onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } }))
   const what = cardKindName(card)
   // The opponent's logo apart from the title: for every card of this kind, like the title's place.

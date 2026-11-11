@@ -9,11 +9,13 @@ import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
 import { ROTATIONS, ROTATION_CHART, rotationFormation, rotationLineup, rotationSlide, type FormationSpot } from './rotationBoard'
 import { setChart, type SetChart } from './setChart'
+import { serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
-// E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets
-export type BoardSkill = 'S' | 'A' | 'E' | 'R'
+// E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets;
+// T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns
+export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T'
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -31,11 +33,12 @@ export interface BoardPlayer {
   callNames?: Record<string, string> // the setter calls' names in the DVWs
   formations?: Record<number, FormationSpot[]> // a rotation slide: where the team lines up to receive in each rotation
   setCharts?: Record<number, SetChart | null> // and the setter's set chart in each, after a # + ! reception
+  receptions?: Received[] // a serve-target slide: all the team's receptions (the same list on each of its players)
 }
 
 // Everyone who served or attacked, most plays first. keep: only these plays (the search).
 export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
-  const skill = skill0 === 'R' ? 'E' : skill0 // a rotation is read from its setter's sets
+  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 // a rotation is read from its setter's sets, a serve target from the receptions
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
     for (const [i, p] of d.plays.entries()) {
@@ -59,6 +62,13 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
         const plays = dvws.flatMap(d => d.plays), set = p.plays[0], name = `#${p.player.jersey} ${p.player.lastName.toUpperCase()}`
         p.setCharts = Object.fromEntries(ROTATIONS.map(r => [r, set ? setChart(set, plays, () => name, { rot: [r], phases: ['r'], recs: ['#', '+', '!'] }) : null]))
       }
+    }
+  }
+  if (skill0 === 'T') {
+    const byTeam = new Map<string, Received[]>()
+    for (const p of out.values()) {
+      if (!byTeam.has(p.team)) byTeam.set(p.team, teamReceptions(dvws, p.team, keep))
+      p.receptions = byTeam.get(p.team)
     }
   }
   return [...out.values()].sort((a, b) => b.plays.length - a.plays.length)
@@ -308,6 +318,10 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 
 // One slide's columns, side by side; for a setter with a layout, their slide of six courts.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[]; setCharts?: PlacedSetChart[] } {
+  if (skill === 'T') {
+    const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
+    return { annotations: p ? serveTargetSlide({ team: p.team, teamName: p.teamName, receptions: p.receptions ?? [], players: Object.fromEntries(columns.map(c => [c.key, c.player])), photos }, ink) : [], charts: [], noteIds: [] }
+  }
   if (skill === 'R') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
     const sc = p?.setCharts?.[r]

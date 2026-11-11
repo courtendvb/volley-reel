@@ -3,6 +3,7 @@
 // slides open for editing right away. Also saving the cards and slides as a picture or a PDF.
 import { useMemo, useState, type RefObject } from 'react'
 import { boardSlide, keptByHand, type BoardPhoto } from '../../../shared/board'
+import { logoKey } from '../../../shared/serveTargetBoard'
 import { markStyle, type GridStyle } from '../../../shared/court'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { findPhoto, type PackInfo } from '../../../shared/pack'
@@ -108,6 +109,11 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
       for (const p of withPhotos ? columns : []) {
         const found = photos[p.key] ? null : findPhoto(packs, p.player, p.team)
         if (found) photos[p.key] = await api.usePackPhoto(found.pack, found.player.photo)
+      }
+      // A serve target: the team's logo too, when the library has one.
+      if (withPhotos && skill === 'T' && columns[0]) {
+        const logo = await api.useLogo(columns[0].team)
+        if (logo) photos[logoKey(columns[0].team)] = logo
       }
       const list: Slide[] = []
       const kept = old ? keptByHand(old) : { hand: [], noteTexts: [] }

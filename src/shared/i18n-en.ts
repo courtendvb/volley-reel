@@ -1096,6 +1096,8 @@ export const EN: Record<string, string> = {
   "折れ線 / 多角形": "Polyline / polygon",
   "選択中の図形を削除": "Delete the selected object",
   "選択中の図形を少し動かす（Shift で大きく）": "Nudge the selected objects (Shift: further)",
+  "サーブの狙い": "Serve targets",
+  "このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。サイドアウト率がチーム全体より 10 ポイント以上低いところを青、高いところを赤で示します。下には、ゾーンごとのその後の攻撃の配分": "Lays out this team's receptions by receiver (with photos) and serve type (jump / float), and by the zone the serve went to. Side-outs 10 points or more under the team's are blue, over are red. Below: each zone's attack distribution after the reception",
   "ローテーション（セッターの位置）ごとに 1 枚。大きな P 番号、コートにそのローテの並びと # + ! レセプションからの攻撃配分、右に # ・ + ・ ! パス別とセッターコール上位 2 つの配分の表": "One slide per rotation (the setter's position): the P number large, the court with that rotation's players and the attack distribution after a #, + or ! reception, and on the right tables by pass (# / + / !) and for the two setter calls used most",
   "ローテーション": "Rotation",
   "動画の": "video ",

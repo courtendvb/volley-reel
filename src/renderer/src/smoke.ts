@@ -1652,6 +1652,24 @@ export function installSmoke(h: SmokeHost): void {
       if (!look?.starts || look.lines || !look.heat) throw new Error(`serve look: ${JSON.stringify(look)}`)
       return { startsDefault, look: { points: look.points, lines: look.lines, heat: look.heat, starts: look.starts }, charts: slide.charts!.length, starts: slide.charts!.map(c => c.chart.dots.filter(d => d.start).length) }
     }
+    if (layout.startsWith('target')) {
+      // サーブの狙い: the team's receivers with their photos (from a pack read in first), and the zones.
+      const [, pack, logoFile] = layout.split('|')
+      if (pack) { await api.smokeImportPack!(pack); await refreshPacks() }
+      if (logoFile) { await window.api.smokeSetLogo!('HTH', logoFile); forgetLogo('HTH') } // the team's logo, above its column
+      button(dialog, t('サーブの狙い'))!.click(); await sleep(400)
+      button(dialog, t('作成'))!.click()
+      const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'T') ?? null, 15000, 'serve target slide')
+      await sleep(800)
+      const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+      const names = texts.filter(x => /^#\d+ /.test(x))
+      if (!names.length || !texts.includes('Zone1') || !texts.some(x => x.startsWith('All · Zone'))) throw new Error(`serve target: ${texts.slice(0, 20).join(' | ')}`)
+      const images = slide.annotations.filter(a => a.kind === 'image')
+      const teamX = slide.annotations.find(a => a.kind === 'text' && a.text === 'HTH')
+      const logoAbove = !!logoFile && teamX?.kind === 'text' && images.some(a => a.kind === 'image' && Math.abs(a.x + a.w / 2 - teamX.x) < 0.01)
+      if (logoFile && !logoAbove) throw new Error('no logo above the team column')
+      return { team: slide.board!.config.team, heading: texts[0], receivers: names, pictures: images.length, logoAbove }
+    }
     if (layout === 'rot') {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
       button(dialog, t('ローテーション'))!.click(); await sleep(400)

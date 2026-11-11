@@ -184,7 +184,7 @@ function drawJerseyDots(ctx: Ctx, list: { x: number; y: number; d: SetDot }[], r
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2)
     ctx.fillStyle = kill ? color : '#FFFFFF'; ctx.fill()
     ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.22); ctx.stroke()
-    ctx.fillStyle = kill ? '#FFFFFF' : color; ctx.font = `bold ${r * 1.05}px sans-serif`
+    ctx.fillStyle = kill ? '#FFFFFF' : color; ctx.font = `bold ${r * 1.15}px Bahnschrift, "Segoe UI", sans-serif`
     ctx.fillText(d.jersey !== undefined ? String(d.jersey) : '', x, y + r * 0.05, r * 1.8)
     if (d.result === 'lost') {
       const k = r * 0.38, cx = x + r * 0.75, cy = y - r * 0.75
@@ -267,7 +267,8 @@ export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y:
   }
   // A point of the chart (x across, y from the end line to the net) on the panel: flipped, turned round.
   const at = (px: number, py: number) => (flip ? { x: cl + (1 - px) * side, y: ct + (1 - py) * side } : { x: cl + px * side, y: ct + py * side })
-  const zones = setChartShows(c, view) === 'zones'
+  // rich: the points wherever any set was clicked (those without a click are only in the shares).
+  const zones = rich ? !c.dots.some(d => d.at) : setChartShows(c, view) === 'zones'
   if (zones) {
     // Only where the sets went: each place painted the stronger the more sets went there.
     const top = Math.max(...SET_TARGETS.map(k => c.by[k].n), 1)

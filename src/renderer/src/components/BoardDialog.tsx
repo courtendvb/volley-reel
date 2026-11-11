@@ -71,7 +71,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const [inMarker, setInMarker] = useState<Marker>(scene?.groupOrder[0] ?? MARKERS[0])
   const [asCard, setAsCard] = useState(false) // a title card at the scene's head, outside the markers
   const marker: Marker | 'head' = asCard ? 'head' : inMarker
-  const [setView, setSetView] = useState<SetView>(initial?.setView ?? 'both')
+  const setView: SetView = initial?.setView ?? 'zones' // set slides paint the zones only (no arrows); kept for cards made before
   const [setLayout, setSetLayout] = useState<SetLayout>(initial?.setLayout ?? 'reception')
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, starts: true, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
@@ -173,16 +173,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos}
           opts={{ setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
-        {oneSetter ? (
-          <div className="filter-row" title={t('セッターのトスのあと、同じチームのアタックがどのゾーンから打たれたかの割合')}>
-            <span className="field-label">{t('配分')}</span>
-            <div className="segmented" role="radiogroup" aria-label={t('配分の見せ方')}>
-              {([['zones', t('ゾーンを塗る')], ['arrows', t('矢印')], ['both', t('両方')]] as [SetView, string][]).map(([k, label]) => (
-                <button key={k} role="radio" aria-checked={setView === k} className={setView === k ? 'on' : ''} onClick={() => setSetView(k)}>{label}</button>
-              ))}
-            </div>
-          </div>
-        ) : skill !== 'T' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
+        {!oneSetter && skill !== 'T' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
           {!oneSetter && skill !== 'T' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}

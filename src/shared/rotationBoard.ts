@@ -121,7 +121,7 @@ function rateTable(r: SideOutRate, x: number, y: number, fill: string): Annotati
   cells.forEach(([head, value], i) => {
     const cx = x + i * cw + cw / 2
     out.push(words(cx, y, head, 13, light(fill) ? '#0F172A' : '#FFFFFF', { align: 'center', groupId: g, box: { fill, fillOpacity: 1, stroke: '#FFFFFF', strokeWidth: 1, padding: 3, width: cw, height: hh } }))
-    out.push(words(cx, y + hh, value, 30, '#0F172A', { align: 'center', groupId: g, box: { fill: '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: 3, width: cw, height: vh } }))
+    out.push(words(cx, y + hh, value, 32, '#0F172A', { align: 'center', groupId: g, font: NUMBER_FONT, box: { fill: '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: 3, width: cw, height: vh } }))
   })
   return out
 }
@@ -255,6 +255,9 @@ const light = (hex: string) => { const n = parseInt(hex.slice(1, 7), 16); return
 const FLOOR = '#2B4A6F', COURT_FILL = '#E7C89C', FRONT_FILL = '#DDB784', PLANK = '#8A5A2B', LINE = '#FFFFFF'
 const BLOCKER = '#CBD5E1'
 export const TEAM_COLOR = '#1D4ED8' // a team without a colour of its own
+// The slide's numbers (jerseys, shares, the P and the table) in a sporty face Windows has; elsewhere
+// the usual one. Changeable on each text in the format panel.
+export const NUMBER_FONT = 'Bahnschrift'
 // The five players' discs (not the libero's): their fill and outline.
 export interface DiscLook { fill: string; line: string }
 export const discLine = (fill: string) => mix(fill, '#000000', 0.45)
@@ -324,7 +327,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
     const share = list.length / total, cg = uid()
     out.push(poly([team(c.apex), ...rim], color, { fillOpacity: 0.28 + 0.4 * share, color: mix(color, '#000000', 0.25), width: 1.5, groupId: cg, locked: false }))
     const mid = rim[steps >> 1]
-    tips.push(words(mid[0], mid[1] + 0.006, `#${list[0].attack.jersey}`, 12, '#FFFFFF', { align: 'center', groupId: cg, box: { fill: mix(color, '#000000', 0.2), fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 2, radius: 3 } }))
+    tips.push(words(mid[0], mid[1] + 0.006, `#${list[0].attack.jersey}`, 13, '#FFFFFF', { align: 'center', groupId: cg, font: NUMBER_FONT, box: { fill: mix(color, '#000000', 0.2), fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 2, radius: 3 } }))
   }
   out.push(...tips)
   // The players: a shadow on the floor, then the disc; the far ones first so nearer ones cover them.
@@ -336,7 +339,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
     out.push(side, top)
     if (!label) return
     const pts = top.kind === 'polygon' ? top.points : [], cx = pts.reduce((a, q) => a + q[0], 0) / (pts.length || 1), cy = pts.reduce((a, q) => a + q[1], 0) / (pts.length || 1)
-    out.push(words(cx, cy - 10 / 720, label, 16, ink, { align: 'center', groupId: gg }))
+    out.push(words(cx, cy - 11 / 720, label, 18, ink, { align: 'center', groupId: gg, font: NUMBER_FONT }))
   }
   for (const s of [...formation].sort((a, b) => a.at.v - b.at.v)) {
     const p = team({ u: Math.min(1, Math.max(0, s.at.u)), v: Math.min(0.49, Math.max(0.02, s.at.v)) })
@@ -360,7 +363,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
     const x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
     const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
     out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
-    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 22, '#0F172A', { align: 'center', groupId: gg, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
+    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 24, '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
     out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], 12, '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
   }
   for (const u of [0, 1]) {
@@ -415,7 +418,7 @@ function setterHeading(v: RotationSlideData, fill: string): Annotation[] {
     out.push({ id: uid(), kind: 'rect', color: fill, x, y: y + 0.008, w: pw, h: ph, width: 2, fill: null, groupId: g })
     x += pw + 0.012
   }
-  out.push(words(x, y + 0.014, `#${v.setter.jersey}`, 20, light(fill) ? ink : '#FFFFFF', { groupId: g, box: { fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 4, radius: 5 } }))
+  out.push(words(x, y + 0.014, `#${v.setter.jersey}`, 22, light(fill) ? ink : '#FFFFFF', { groupId: g, font: NUMBER_FONT, box: { fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 4, radius: 5 } }))
   out.push(words(x + 0.045, y + 0.008, v.setter.lastName.toUpperCase(), 28, ink, { groupId: g }))
   out.push(words(x, y + 0.062, `S${v.rotation} · ${v.team} · Set distribution after # + ! reception`, 13, '#475569', { bold: false, groupId: g }))
   return out
@@ -433,9 +436,11 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
     out.push({ id: uid(), kind: 'image', color: ink, x, y: 0.02 + (h - Math.min(h, (w * 16 * v.logo.height) / (9 * v.logo.width))) / 2, w, h: Math.min(h, (w * 16 * v.logo.height) / (9 * v.logo.width)), assetId: v.logo.assetId })
     x += w + 0.014
   }
-  out.push(words(x, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup }))
-  out.push({ id: uid(), kind: 'polyline', color: fill, width: 6, points: [[x, 0.15], [x + 0.115, 0.15]], groupId: headGroup })
-  out.push(...rateTable(v.rates ?? { n: 0, won: 0, firstBall: 0 }, x + 0.14, 0.03, fill))
+  // The underline as long as the P and its digit (the ink of Bahnschrift's is about half the size each).
+  const pw = (80 * 0.5 * 2) / 1280
+  out.push(words(x, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup, font: NUMBER_FONT }))
+  out.push({ id: uid(), kind: 'polyline', color: fill, width: 6, points: [[x + 0.003, 0.15], [x + 0.003 + pw, 0.15]], groupId: headGroup })
+  out.push(...rateTable(v.rates ?? { n: 0, won: 0, firstBall: 0 }, x + pw + 0.035, 0.03, fill))
   out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }))
   out.push(...setterHeading(v, fill))
   // Bottom right: by reception, and by setter call (the chart is above them).

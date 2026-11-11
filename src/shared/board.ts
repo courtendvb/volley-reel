@@ -206,7 +206,7 @@ export interface BoardConfig {
   split: boolean; notes: boolean; photos: boolean; background: string; searched: boolean
   noteSize?: number; noteFills?: [string, string]
   display?: ChartDisplay // what the charts show
-  setView?: SetView // sets: zones painted, arrows, or both; missing: both
+  setView?: SetView // sets: what older cards were made with; set slides now paint the zones only
   setLayout?: SetLayout // sets: one setter's six courts (setterBoard.ts); missing: setters side by side (cards made before)
   rotation?: number // a rotation slide: which (1–6)
   teamColor?: string // a rotation slide: the side-out team's colour
@@ -318,7 +318,7 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
     const w = 0.15, h = Math.min(0.27, (w * ASPECT * photo.height) / photo.width)
     out.push(...framed(EDGE + 0.008, 0.12, w, h, photo.assetId, ink))
   }
-  out.push(...setterCourts(p.sets ?? [], layout, p.callNames ?? {}, opts.setView ?? 'both', ink, { left, top: 0.1, bottom: 0.995, photo: !!photo }))
+  out.push(...setterCourts(p.sets ?? [], layout, p.callNames ?? {}, 'zones', ink, { left, top: 0.1, bottom: 0.995, photo: !!photo }))
   return out
 }
 
@@ -342,7 +342,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   const widthOf = (h: number) => (skill === 'E' ? h : chartWidth(h)) / ASPECT // a set diagram is a square half court
   // The chart of these plays, or for a setter the set diagram, in its box.
   const place = (p: BoardPlayer, plays: Play[], x: number, y: number, h: number) => {
-    if (skill === 'E') annotations.push(...setDiagram(p, x, y, h, opts.setView ?? 'both', ink))
+    if (skill === 'E') annotations.push(...setDiagram(p, x, y, h, 'zones', ink)) // the places painted, no arrows
     else charts.push({ chart: directionChart(plays[0], style, () => plays), x, y, h })
   }
   const countOf = (p: BoardPlayer, plays: Play[]) => (skill === 'E' ? setDistribution(p).total : plays.length)

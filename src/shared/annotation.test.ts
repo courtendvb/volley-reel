@@ -113,3 +113,13 @@ describe('style on several objects', () => {
     expect(applyStyle(list[2], { lineOpacity: 0.4 })).not.toHaveProperty('lineOpacity')
   })
 })
+
+describe('a text font from the format panel', () => {
+  it('sets a font on texts, and takes it off again', () => {
+    const tx: Annotation = { id: 't', kind: 'text', color: '#000000', x: 0, y: 0, text: '7', size: 16 }
+    const set = applyStyle(tx, { font: 'Bahnschrift' })
+    expect(set.kind === 'text' && set.font).toBe('Bahnschrift')
+    expect('font' in applyStyle(set, { font: null })).toBe(false)
+    expect(applyStyle(set, { size: 20 })).toMatchObject({ font: 'Bahnschrift', size: 20 })
+  })
+})

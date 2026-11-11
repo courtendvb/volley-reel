@@ -214,6 +214,7 @@ export interface StylePatch {
   bold?: boolean
   outline?: boolean
   box?: TextBox | null
+  font?: string | null // a text's font; null: back to the usual
 }
 
 // Applies the parts of a style that make sense for the annotation's kind.
@@ -221,8 +222,11 @@ export function applyStyle(a: Annotation, s: StylePatch): Annotation {
   const common = { ...a, color: s.color ?? a.color, ...(s.opacity !== undefined ? { opacity: s.opacity } : {}) }
   if (common.kind === 'image') return common
   if (common.kind === 'text') {
-    return { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
+    const text = { ...common, size: s.size ?? common.size, ...(s.bold !== undefined ? { bold: s.bold } : {}),
       ...(s.outline !== undefined ? { outline: s.outline } : {}), ...(s.box !== undefined ? { box: s.box } : {}) }
+    if (s.font === undefined) return text
+    const { font: _f, ...rest } = text
+    return s.font ? { ...rest, font: s.font } : rest
   }
   const lined = { ...common, width: s.width ?? common.width, ...(s.dash !== undefined ? { dash: s.dash } : {}),
     ...(s.lineOpacity !== undefined ? { lineOpacity: s.lineOpacity } : {}) }

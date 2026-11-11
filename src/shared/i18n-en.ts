@@ -225,6 +225,7 @@ export const EN: Record<string, string> = {
   "文字の色": "Text color",
   "サイズ": "Size",
   "太字": "Bold",
+  "標準のフォント": "Usual font",
   "縁取り": "Outline text",
   "枠付き": "Boxed",
   "文字の枠": "Text box",

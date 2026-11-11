@@ -12,10 +12,10 @@ import { TeamLogos } from './TeamLogos'
 import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
 import { IS_MAC } from '../../../shared/keys'
+import { FONTS } from '../fonts'
 import { arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec } from '../keys'
 
 // Fonts every computer of its kind has; the list a project's headline can pick from.
-const FONTS = IS_MAC ? ['Hiragino Sans', 'Hiragino Mincho ProN', 'Helvetica Neue', 'Georgia', 'Impact'] : ['Yu Gothic UI', 'Meiryo', 'BIZ UDPGothic', 'Yu Mincho', 'Arial', 'Georgia', 'Impact']
 
 interface Props {
   settings: ProjectSettings

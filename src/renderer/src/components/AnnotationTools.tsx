@@ -1,4 +1,5 @@
 import { PaletteColor } from './PaletteColor'
+import { FONTS } from '../fonts'
 import { useState, type ReactNode } from 'react'
 import { ZonePainter } from './ZonePainter'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
@@ -90,6 +91,7 @@ export function AnnotationTools(p: Props) {
     bold: (sel?.kind === 'text' ? sel.bold : p.style.bold) ?? true,
     outline: (sel?.kind === 'text' ? sel.outline : p.style.outline) ?? true,
     box: (sel?.kind === 'text' ? sel.box : p.style.box) ?? null,
+    font: sel?.kind === 'text' ? sel.font ?? '' : '',
   }
   const kinds = picked.length > 1 ? picked.map(a => a.kind) : [kind]
   const lineKinds = kinds.some(k => k === null || (k !== 'text' && k !== 'image'))
@@ -228,6 +230,10 @@ export function AnnotationTools(p: Props) {
             <Num label={t('サイズ')} value={v.size} min={10} max={160} step={2} onChange={size => set({ size })} disabled={p.disabled} />
             <label className="check"><input type="checkbox" checked={v.bold} onChange={e => set({ bold: e.target.checked })} disabled={p.disabled} /> {t('太字')}</label>
             <label className="check"><input type="checkbox" checked={v.outline} onChange={e => set({ outline: e.target.checked })} disabled={p.disabled} /> {t('縁取り')}</label>
+            {sel && <select value={v.font} aria-label={t('フォント')} title={t('フォント')} disabled={p.disabled} onChange={e => set({ font: e.target.value || null }, isText)}>
+              <option value="">{t('標準のフォント')}</option>
+              {[...new Set([...FONTS, ...(v.font ? [v.font] : [])])].map(f => <option key={f} value={f} style={{ fontFamily: `"${f}"` }}>{f}</option>)}
+            </select>}
             <label className="check"><input type="checkbox" checked={!!v.box} aria-label={t('枠付き')} disabled={p.disabled}
               onChange={e => set({ box: e.target.checked ? { ...DEFAULT_TEXT_BOX } : null })} /> {t('枠付き')}</label>
           </Group>

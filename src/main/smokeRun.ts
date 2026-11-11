@@ -129,6 +129,7 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_COURT=1: fit the court grid by dragging a corner, save it with the match, swap the near side, light a play's zones,
 //  lay a picture on the near half with perspective and drag a corner, move its transparency slider with the real
 //  mouse and keys; with VR_SMOKE_EXPORT=<out.mp4> also export the clip with the court]
+// [VR_SMOKE_SETTER=reception|rotation: a setter's data slide made from the dialog]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string): Promise<void> {
@@ -163,6 +164,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       court: !!process.env.VR_SMOKE_COURT,
       savedFilters: !!process.env.VR_SMOKE_SAVEDFILTERS,
       presets: !!process.env.VR_SMOKE_PRESETS,
+      setter: process.env.VR_SMOKE_SETTER,
       captionPhoto: !!process.env.VR_SMOKE_CAPTIONPHOTO,
       captionNames: !!process.env.VR_SMOKE_CAPTIONNAMES,
       courtPoints: process.env.VR_SMOKE_COURTPOINTS,

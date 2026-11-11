@@ -6,6 +6,7 @@ import type { Annotation } from './annotation'
 import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type DirectionChart } from './chart'
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
+import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
 export type BoardSkill = 'S' | 'A' | 'E' // E: a setter's sets, shown by where the attack after each came from
@@ -22,6 +23,8 @@ export interface BoardPlayer {
   codeName?: string
   follow?: (Play | null)[] // a setter's sets: the same team's attack right after each, if there was one
   attention?: boolean // marked "Attention" on the card: the one to watch
+  sets?: SetterSet[] // a setter's sets and dumps with the attack each led to (setterBoard.ts)
+  callNames?: Record<string, string> // the setter calls' names in the DVWs
 }
 
 // Everyone who served or attacked, most plays first. keep: only these plays (the search).
@@ -39,6 +42,10 @@ export function boardPlayers(dvws: ParsedDVW[], skill: BoardSkill, keep?: (p: Pl
       if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) had.won++
       out.set(key, had)
     }
+  }
+  if (skill === 'E') {
+    const callNames = Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>
+    for (const p of out.values()) { p.sets = setterSets(dvws, p.key, keep); p.callNames = callNames }
   }
   return [...out.values()].sort((a, b) => b.plays.length - a.plays.length)
 }
@@ -105,6 +112,7 @@ export function setDistribution(p: BoardPlayer): { total: number; zones: SetZone
   return { total, zones }
 }
 export type SetView = 'zones' | 'arrows' | 'both'
+export type { SetLayout } from './setterBoard'
 
 // The attacking team's half seen from above, the net at the top: the zones' rows from the net back,
 // left to right as the team faces the net.
@@ -173,6 +181,7 @@ export interface BoardConfig {
   noteSize?: number; noteFills?: [string, string]
   display?: ChartDisplay // what the charts show
   setView?: SetView // sets: zones painted, arrows, or both; missing: both
+  setLayout?: SetLayout // sets: one setter's six courts (setterBoard.ts); missing: setters side by side (cards made before)
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -186,6 +195,7 @@ export interface BoardOptions {
   noteFills?: [string, string] // the notes' lines by turns
   display?: ChartDisplay
   setView?: SetView
+  setLayout?: SetLayout
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -260,8 +270,29 @@ const attentionWidth = (size: number) => (size * 0.66 * 9 + 8) / 1280
 const attentionTag = (cx: number, y: number, size: number, groupId: string): Annotation =>
   words(cx, y, 'Attention', size, ATTENTION_TEXT, { align: 'center', groupId, box: { fill: ATTENTION, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 3 } })
 
-// One slide's columns, side by side.
+// One setter's slide (setterBoard.ts): the heading, the photo at the left, six courts.
+const LAYOUT_NAMES: Record<SetLayout, string> = { reception: 'Set distribution by reception', rotation: 'Side-out by rotation (# + ! reception)' }
+function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, photo: BoardPhoto | undefined): Annotation[] {
+  const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', out: Annotation[] = []
+  const role = (p.player.role && ROLE_COLORS[p.player.role]) || NO_ROLE, name = p.player.lastName.toUpperCase(), nameGroup = uid()
+  out.push(words(EDGE + 0.004, 0.024, String(p.player.jersey), 26, role.text, { box: { fill: role.fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 5, radius: 7 } }))
+  out.push(words(EDGE + 0.05, 0.024, `${name}  ${p.team}`, 28, ink, { groupId: nameGroup }))
+  out.push(...underline(EDGE + 0.05, 0.6, 0.024 + 35 / 720, role.fill === NO_ROLE.fill ? ink : role.fill, nameGroup))
+  const all = splitSets(p.sets ?? [])
+  out.push(words(0.988 - 0.36, 0.022, LAYOUT_NAMES[layout], 18, ink, { bold: true }))
+  out.push(words(0.988 - 0.36, 0.058, `n ${all.total} · K ${pct(all.kills, all.total)} · ERR ${pct(all.errors, all.total)}`, 15, ink, { bold: false }))
+  const left = 0.19
+  if (photo) {
+    const w = 0.15, h = Math.min(0.27, (w * ASPECT * photo.height) / photo.width)
+    out.push(...framed(EDGE + 0.008, 0.12, w, h, photo.assetId, ink))
+  }
+  out.push(...setterCourts(p.sets ?? [], layout, p.callNames ?? {}, opts.setView ?? 'both', ink, { left, top: 0.1, bottom: 0.995, photo: !!photo }))
+  return out
+}
+
+// One slide's columns, side by side; for a setter with a layout, their slide of six courts.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[] } {
+  if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }
   const annotations: Annotation[] = [], charts: PlacedChart[] = [], noteIds: string[] = [], notesGroup = uid()
   const style = { ...(opts.style ?? DEFAULT_CHART), ...opts.display, scope: 'player' as const, name: false, stats: false }
   const col = 1 / Math.max(1, columns.length), ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'

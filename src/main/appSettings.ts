@@ -5,9 +5,11 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import type { RecentProject } from '../shared/types'
 import type { Lang } from '../shared/i18n'
+import type { ExportFolders } from '../shared/exportFolders'
 import type { Project } from './project'
 
-export interface AppSettings { libraryPath?: string; recentProjects?: RecentProject[]; lang?: Lang }
+// exportFolders: where each project last wrote its videos and its documents (shared/exportFolders.ts).
+export interface AppSettings { libraryPath?: string; recentProjects?: RecentProject[]; lang?: Lang; exportFolders?: ExportFolders }
 
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
 

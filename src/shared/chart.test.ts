@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_CHART, cleanLineColors, cleanPointScale, lineColor, pointColor, setChartColors, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart } from './chart'
+import { DEFAULT_CHART, cleanLineColors, cleanPointScale, lineColor, pointColor, setChartColors, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart, servedFrom } from './chart'
 import { DEFAULT_GRID_STYLE, playerMarks, type CourtFit, DEFAULT_CORNERS } from './court'
 import type { ParsedDVW, Play } from './types'
 
@@ -35,6 +35,16 @@ describe('chartStats', () => {
   })
   it('sorts each result', () => {
     expect(['#', '=', '/', '+', '-', '!'].map(chartResult)).toEqual(['kill', 'error', 'blocked', 'pos', 'neg', 'neg'])
+  })
+})
+
+describe('servedFrom', () => {
+  it('squeezes the depth behind the end line into the strip, in order, and leaves the court alone', () => {
+    const near = servedFrom({ x: 0.2, y: -1 / 18 }), far = servedFrom({ x: 0.2, y: -8 / 18 })
+    expect(far.y).toBeLessThan(near.y)
+    expect(far.y * 18).toBeGreaterThan(-1.2)
+    expect(near.x).toBe(0.2)
+    expect(servedFrom({ x: 0.4, y: 0.3 })).toEqual({ x: 0.4, y: 0.3 })
   })
 })
 
@@ -140,6 +150,19 @@ describe('the chart of a player', () => {
     expect(m({ scope: 'zone' }).stats.att).toBe(1)
     const log = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : () => {}), set: () => true }) as unknown as CanvasRenderingContext2D
     expect(() => drawChart(log, m({}), chartBox(1280, 720, 'center'))).not.toThrow()
+  })
+  it("draws a serve's starts as squares only when asked", () => {
+    const serve = hit({ skill: 'S', code: '*05SQ-~~~16C', startZone: 1, startClick: { u: 0.8, v: -0.2 }, endClick: { u: 0.3, v: 0.8 } })
+    const squares = (starts: boolean, skill: 'S' | 'A' = 'S') => {
+      let n = 0
+      const ctx = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : k === 'fillRect' ? () => { n++ } : () => {}), set: () => true }) as unknown as CanvasRenderingContext2D
+      const c = playerMarks(serve, fit, { ...DEFAULT_GRID_STYLE, chart: { ...DEFAULT_CHART, lines: false, starts } }, () => [serve])!.chart!
+      drawChart(ctx, { ...c, skill }, chartBox(1280, 720, 'center'))
+      return n - 1 // the panel's own ground
+    }
+    expect(squares(false)).toBe(0)
+    expect(squares(true)).toBe(1)
+    expect(squares(true, 'A')).toBe(0)
   })
   it('does not come with other skills, and carries the name', () => {
     expect(marks({}, undefined, hit({ skill: 'R' }))).toBeNull()

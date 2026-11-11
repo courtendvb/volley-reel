@@ -129,7 +129,7 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_COURT=1: fit the court grid by dragging a corner, save it with the match, swap the near side, light a play's zones,
 //  lay a picture on the near half with perspective and drag a corner, move its transparency slider with the real
 //  mouse and keys; with VR_SMOKE_EXPORT=<out.mp4> also export the clip with the court]
-// [VR_SMOKE_SETTER=reception|rotation: a setter's data slide made from the dialog]
+// [VR_SMOKE_SETTER=reception|rotation|rot|serve: a setter's data slide made from the dialog (serve: a server's, with the starts)]
 // [VR_SMOKE_CARDINSERT=<pack.vrpack>|<logo image>: a player's photo and a team logo put on a marker card from its bar]
 // [VR_SMOKE_PRESETSERVE=1: the serve preset's player order and markers (zone, in order) in the dialog's preview]
 // [VR_SMOKE_SCENETITLE=1: a scene card with a long name; dragging its title saves a top-left]

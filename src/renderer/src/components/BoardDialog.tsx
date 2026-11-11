@@ -8,7 +8,8 @@ import { ROTATIONS } from '../../../shared/rotationBoard'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
-// What a chart shows: points, lines and a heatmap, any of them together, and how strong the lines are.
+// What a chart shows: points, lines and a heatmap, any of them together, and how strong the lines are;
+// on a serve's, whether the points and heatmap take in where it was served from as well.
 export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { colors?: ChartLook['colors'] }; skill?: BoardSkill; onChange: (patch: ChartDisplay) => void }) {
   return (
     <>
@@ -16,6 +17,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
       <label className="check"><input type="checkbox" checked={value.points !== false} onChange={e => onChange({ points: e.target.checked })} /> {t('点')}</label>
       <label className="check"><input type="checkbox" checked={!!value.lines} onChange={e => onChange({ lines: e.target.checked })} /> {t('線')}</label>
       <label className="check"><input type="checkbox" checked={!!value.heat} onChange={e => onChange({ heat: e.target.checked })} /> {t('ヒートマップ')}</label>
+      {skill === 'S' && <label className="check" title={t('サーブを打った位置も、点（四角）とヒートマップで出します')}><input type="checkbox" checked={!!value.starts} disabled={value.points === false && !value.heat} onChange={e => onChange({ starts: e.target.checked })} /> {t('始点')}</label>}
       {value.lines && <label className="check">{t('線の濃さ')} <input type="range" min={0.1} max={1} step={0.05} value={value.lineOpacity ?? LINE_OPACITY} aria-label={t('線の濃さ')} onChange={e => onChange({ lineOpacity: +e.target.value })} /></label>}
     </>
   )
@@ -63,7 +65,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const marker: Marker | 'head' = asCard ? 'head' : inMarker
   const [setView, setSetView] = useState<SetView>(initial?.setView ?? 'both')
   const [setLayout, setSetLayout] = useState<SetLayout>(initial?.setLayout ?? 'reception')
-  const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, lineOpacity: LINE_OPACITY })
+  const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, starts: true, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
   // no place yet. A change of team or skill starts again.
   const fill = (list: Slot[], n: number) => {

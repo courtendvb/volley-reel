@@ -278,11 +278,11 @@ export function installSmoke(h: SmokeHost): void {
     await sleep(300)
     log.afterDrag = rows()
 
-    // The scene's head: right-click its header, a blank slide there; it plays before marker 1.
-    await rightClick(document.querySelector('.reel-groups .group.head .group-head')!)
-    log.sceneHeadMenu = document.querySelector('.slide-menu-title')?.textContent
-    ;[...document.querySelectorAll<HTMLButtonElement>('.slide-menu button')].find(b => b.textContent === '無地のスライド')!.click()
+    // The scene's head: not shown while empty; a blank slide put there shows it, and it plays before marker 1.
+    log.sceneHeadHidden = !document.querySelector('.reel-groups .group.head')
+    await putSlide({ group: 'head', after: null, index: 0 }, 'blank')
     await waitFor(() => (scene().slides ?? []).some(x => x.group === 'head') || null, 5000, 'head slide')
+    await sleep(200)
     log.sceneHeadRows = document.querySelectorAll('.reel-groups .group.head .slide-row').length
 
     // The plan, and a through-play: each item as it starts.
@@ -1603,6 +1603,23 @@ export function installSmoke(h: SmokeHost): void {
     const button = (root: ParentNode, text: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === text)
     button(document, t('データスライド作成'))!.click()
     const dialog = await waitFor(() => document.querySelector<HTMLElement>('.board-dialog'), 5000, 'board dialog')
+    if (layout === 'serve') {
+      // サーブ, points and the heatmap without lines, 始点 on (the default): the preview shot with and
+      // without the starts, then the slide made with them.
+      const box = (text: string) => [...dialog.querySelectorAll<HTMLLabelElement>('label.check')].find(l => l.textContent?.trim() === text)!.querySelector('input')!
+      const turn = async (text: string, on: boolean) => { if (box(text).checked !== on) box(text).click(); await sleep(300) }
+      button(dialog, t('サーブ'))!.click(); await sleep(400)
+      await turn(t('線'), false); await turn(t('ヒートマップ'), true)
+      const startsDefault = box(t('始点')).checked
+      await turn(t('始点'), false); await sleep(600); await api.smokeShot!('serve-board-nostarts.png')
+      await turn(t('始点'), true); await sleep(600); await api.smokeShot!('serve-board-starts.png')
+      button(dialog, t('作成'))!.click()
+      const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'S') ?? null, 10000, 'serve slide')
+      await sleep(800)
+      const look = slide.charts?.[0]?.chart.look
+      if (!look?.starts || look.lines || !look.heat) throw new Error(`serve look: ${JSON.stringify(look)}`)
+      return { startsDefault, look: { points: look.points, lines: look.lines, heat: look.heat, starts: look.starts }, charts: slide.charts!.length, starts: slide.charts!.map(c => c.chart.dots.filter(d => d.start).length) }
+    }
     if (layout === 'rot') {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
       button(dialog, t('ローテーション'))!.click(); await sleep(400)

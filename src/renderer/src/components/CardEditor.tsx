@@ -235,7 +235,7 @@ export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
-        {look && <ChartShow value={look} {...(slide.board ? { skill: slide.board.config.skill } : {})} onChange={p => onChange(restyleBoard(slide, p))} />}
+        {look && <ChartShow value={look} skill={slide.board?.config.skill ?? slide.charts?.[0]?.chart.skill ?? 'A'} onChange={p => onChange(restyleBoard(slide, p))} />}
         <span className="spacer" />
         <label className="check muted" title={t('動画の中で流すときの秒数')}>{t('動画では')}
           <input type="number" aria-label={t('動画で出す秒数')} min={0.5} max={120} step={0.5} value={slide.durationSec} style={{ width: 56 }}

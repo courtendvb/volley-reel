@@ -17,10 +17,11 @@ export interface ChartLook {
   lines: boolean; stats: boolean; name: boolean; colors: Record<ChartResult, string>
   points?: boolean // the landings as points; missing: yes
   heat?: boolean // a heatmap of the landings under them
+  starts?: boolean // a serve's: where it was served from too, as points and / or a heatmap as those are on; missing: no
   lineOpacity?: number // 0..1; missing: LINE_OPACITY
 }
 export const LINE_OPACITY = 0.7
-export type ChartDisplay = Partial<Pick<ChartLook, 'points' | 'lines' | 'heat' | 'lineOpacity'>>
+export type ChartDisplay = Partial<Pick<ChartLook, 'points' | 'lines' | 'heat' | 'starts' | 'lineOpacity'>>
 export const CHART_EFFECTS = ['#', '+', '!', '-', '/', '=']
 export interface ChartStyle extends ChartLook { scope: ChartScope; corner: ChartCorner; scale: number }
 
@@ -100,7 +101,7 @@ export function chartStats(plays: Pick<Play, 'effect' | 'code'>[], skill: 'A' | 
 }
 
 // x across, y from the attacker's end line (0) to the other one (1), as court units.
-export interface ChartDot { start: Pt | null; end: Pt | null; result: ChartResult; effect?: string; rough?: boolean } // no effect: made before lines had their own colours
+export interface ChartDot { start: Pt | null; end: Pt | null; result: ChartResult; effect?: string; rough?: boolean; startRough?: boolean } // startRough: the start is only its zone's // no effect: made before lines had their own colours
 export interface DirectionChart { name: string; skill?: 'A' | 'S'; dots: ChartDot[]; stats: ChartStats; look: ChartLook } // no skill: an attack
 
 export function chartName(dvw: ParsedDVW | undefined, play: Pick<Play, 'side' | 'jersey'>): string {
@@ -121,14 +122,19 @@ export function chartBox(w: number, h: number, where: ChartCorner | 'center', sc
   return { x: where === 'tl' || where === 'bl' ? edge : w - panelWidth(ph, named) - edge, y: where === 'tl' || where === 'tr' ? edge : h - ph - edge, h: ph }
 }
 
-// The landings as a small picture of the floor (the court and the 3 m around it, as heatGrid lays it),
-// smoothed up when drawn; kept, since charts are drawn again and again while a card is edited.
-const heatImages = new WeakMap<ChartDot[], OffscreenCanvas | null>()
-function heatImage(dots: ChartDot[]): OffscreenCanvas | null {
-  if (heatImages.has(dots)) return heatImages.get(dots)!
-  const ends = dots.flatMap(d => (d.end ? [{ end: d.end, rough: !!d.rough }] : []))
+// The landings (or a serve's starts) as a small picture of the floor (the court and the 3 m around it,
+// as heatGrid lays it), smoothed up when drawn; kept, since charts are drawn again and again while a card is edited.
+type HeatEnd = 'start' | 'end'
+const heatImages: Record<HeatEnd, WeakMap<ChartDot[], OffscreenCanvas | null>> = { start: new WeakMap(), end: new WeakMap() }
+function heatImage(dots: ChartDot[], which: HeatEnd = 'end'): OffscreenCanvas | null {
+  const kept = heatImages[which]
+  if (kept.has(dots)) return kept.get(dots)!
+  const ends = dots.flatMap(d => {
+    const p = which === 'end' ? d.end : d.start && servedFrom(d.start)
+    return p ? [{ p, rough: which === 'end' ? !!d.rough : !!d.startRough }] : []
+  })
   if (!ends.length || typeof OffscreenCanvas === 'undefined') return null
-  const { cols, rows, data } = heatGrid(ends.map(e => e.end), ends.map(e => (e.rough ? 1 : 0)))
+  const { cols, rows, data } = heatGrid(ends.map(e => e.p), ends.map(e => (e.rough ? 1 : 0)))
   const canvas = new OffscreenCanvas(cols, rows), c = canvas.getContext('2d')!, image = c.createImageData(cols, rows)
   data.forEach((v, i) => {
     if (v < 0.04) return
@@ -136,8 +142,17 @@ function heatImage(dots: ChartDot[]): OffscreenCanvas | null {
     image.data[at] = r; image.data[at + 1] = g; image.data[at + 2] = b; image.data[at + 3] = 255 * 0.7 * Math.min(1, v * 5)
   })
   c.putImageData(image, 0, 0)
-  heatImages.set(dots, canvas)
+  kept.set(dots, canvas)
   return canvas
+}
+
+// Where a serve was hit from, brought into the chart's strip behind the end line: the strip is 1.44 m
+// deep and servers stand up to 8 m back, so the depth behind the line is squeezed to under 1.2 m, the
+// order kept; across the court it stays where it was.
+const BEHIND_M = 1.2, BEHIND_SOFT_M = 1.5
+export function servedFrom(p: Pt): Pt {
+  const back = -p.y * 18
+  return back <= 0 ? p : { x: p.x, y: -(BEHIND_M * back) / (back + BEHIND_SOFT_M) / 18 }
 }
 
 const TEXT = '#0F172A', OFF_COURT = 0.3 // points further off the court than this are left out: a slip of the scout's
@@ -158,9 +173,13 @@ export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox
   const across = (v: number, width: number, reach = 0) => { ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(left - reach, top + v * 2 * cw); ctx.lineTo(left + cw + reach, top + v * 2 * cw); ctx.stroke() }
   across(1 / 3, thin); across(2 / 3, thin); across(0.5, thin * 3, cw * 0.05)
 
+  const starts = !!look.starts && skill === 'S'
   if (look.heat) {
-    const image = heatImage(dots)
-    if (image) { const metre = cw / 9, m = 3 * metre; ctx.drawImage(image, left - m, top - m, cw + m * 2, cw * 2 + m * 2) }
+    const metre = cw / 9, m = 3 * metre
+    for (const which of starts ? ['start', 'end'] as const : ['end'] as const) {
+      const image = heatImage(dots, which)
+      if (image) ctx.drawImage(image, left - m, top - m, cw + m * 2, cw * 2 + m * 2)
+    }
   }
   if (look.lines) {
     ctx.lineCap = 'round'
@@ -175,6 +194,14 @@ export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox
     }
     ctx.setLineDash([])
     ctx.globalAlpha = 1
+  }
+  // A serve's start as a square, so it is not taken for a landing; hollow when it is only its zone's.
+  if (look.points !== false && starts) for (const d of dots) {
+    if (!d.start || d.start.x < -OFF_COURT || d.start.x > 1 + OFF_COURT) continue
+    const p = at(servedFrom(d.start)), color = pointColor(look, d.effect, d.result, skill), a = r * 0.85
+    // A white edge first, so the squares stand out on the heatmap of the starts under them.
+    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(1.5, r * 0.6); ctx.strokeRect(p.x - a, p.y - a, a * 2, a * 2)
+    if (d.startRough) { ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.5); ctx.strokeRect(p.x - a, p.y - a, a * 2, a * 2) } else { ctx.fillStyle = color; ctx.fillRect(p.x - a, p.y - a, a * 2, a * 2) }
   }
   if (look.points !== false) for (const d of dots) {
     if (!inView(d.end)) continue

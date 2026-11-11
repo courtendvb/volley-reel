@@ -60,6 +60,7 @@ export function ReelPanel(p: Props) {
   const [more, setMore] = useState(false) // the scene's settings shown
   const { reel } = p
   const [dragOver, setDragOver] = useState<{ key: string; after: boolean } | null>(null)
+  const [slideDrag, setSlideDrag] = useState(false) // a slide is being dragged: the scene's head shows as a place to drop it
   const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number } | null>(null)
   useEffect(() => {
     if (!menu) return
@@ -121,7 +122,7 @@ export function ReelPanel(p: Props) {
   const onDropSlide = (e: DragEvent, g: SlideGroup, rows: Row[], k: number) => {
     const id = e.dataTransfer.getData(DT_SLIDE)
     const s = reel.slides?.find(x => x.id === id)
-    setDragOver(null)
+    setDragOver(null); setSlideDrag(false)
     if (!s) return
     e.preventDefault(); e.stopPropagation()
     const from = rows.findIndex(r => r.kind === 'slide' && r.slide.id === id)
@@ -152,7 +153,7 @@ export function ReelPanel(p: Props) {
     <div
       key={s.id} role="listitem" draggable
       className={`clip-row slide-row${s.id === p.editingSlideId ? ' active' : ''}${lineClass(`s${s.id}`)}`}
-      onDragStart={e => { e.dataTransfer.setData(DT_SLIDE, s.id); e.dataTransfer.effectAllowed = 'move' }}
+      onDragStart={e => { e.dataTransfer.setData(DT_SLIDE, s.id); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => setSlideDrag(true)) }} // after the drag has begun: changing the list under it would stop it
       onDragOver={e => { if (!takes(e, g)) return; e.preventDefault(); e.stopPropagation(); setDragOver({ key: `s${s.id}`, after: lower(e) }) }}
       onDrop={e => dropOnRow(e, g, rows, k)}
       onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
@@ -263,11 +264,12 @@ export function ReelPanel(p: Props) {
       <p className="count">{p.orderCount} {t('クリップ')}{reel.slides?.length ? t('・スライド {0}', reel.slides.length) : ''}{t('・')}{formatLength(p.orderSec)}{t('（マーカー付き {0} / 全 {1}）', marked, Object.keys(reel.clips).length)}</p>
 
       <div className="reel-groups" role="list" onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null) }}
-        onDragEnd={() => setDragOver(null)}>
-        {/* The scene's head: slides that belong to no marker and always play first. */}
-        <section className={`group head${dragOver?.key === 'ghead' ? ' drop-into' : ''}`}
+        onDragEnd={() => { setDragOver(null); setSlideDrag(false) }}>
+        {/* The scene's head: slides that belong to no marker and always play first. Shown when it has
+            some, or while a slide is dragged (to drop it there). */}
+        {(headRows.length > 0 || slideDrag) && <section className={`group head${dragOver?.key === 'ghead' ? ' drop-into' : ''}`}
           onDragOver={e => { if (dragging(e, DT_SLIDE)) { e.preventDefault(); setDragOver({ key: 'ghead', after: false }) } }}
-          onDrop={e => { if (dragging(e, DT_SLIDE)) onDropSlide(e, 'head', headRows, headRows.length) }}>
+          onDrop={e => { if (dragging(e, DT_SLIDE)) { onDropSlide(e, 'head', headRows, headRows.length); setSlideDrag(false) } }}>
           <header className="group-head" onContextMenu={e => openMenu(e, spotAt(headRows, 'head', 0), AT_HEAD)}
             title={t('マーカーに入らないスライド。シーンのタイトルカードのあと、マーカーより前にいつも流れます（右クリックで入れる・スライドをここへドラッグ）')}>
             <span className="swatch none">▣</span>
@@ -275,7 +277,7 @@ export function ReelPanel(p: Props) {
             <span className="muted">{headRows.length}</span>
           </header>
           {rowsOf('head', [])}
-        </section>
+        </section>}
         {reel.groupOrder.map(m => (
           <section key={m} className={`group${reel.markerOff?.[m] ? ' off' : ''}${dragOver?.key === `g${m}` ? ' drop-into' : ''}${lineClass(`h${m}`)}`}
             onDragOver={overGroup(m)} onDrop={e => onDropGroup(e, m)}>

@@ -6,7 +6,8 @@ import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
-import { parseDVW } from '../shared/dvw'
+import { parseScout } from '../shared/vsm'
+
 import { rosterOf, type RosterPlayer } from '../shared/packMaker'
 import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
@@ -16,6 +17,11 @@ import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Pal
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 import { t } from '../shared/i18n'
+
+// A scout file: a DataVolley .dvw (Windows-1252 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
+export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
+const readScout = async (path: string): Promise<ParsedDVW> => parseScout(await readFile(path, extname(path).toLowerCase() === '.vsm' ? 'utf8' : 'latin1'))
+const scoutStem = (path: string) => basename(path, extname(path))
 
 const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
 const cleanCode = (code: string) => {
@@ -291,7 +297,7 @@ export class Library {
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     let next: Match, note: string
     if (part === 'dvw') {
-      const dvw = parseDVW(await readFile(path, 'latin1'))
+      const dvw = await readScout(path)
       if (!dvw.plays.length) throw new Error(t('{0} にプレーがありません', basename(path)))
       const codes = dvw.teams.map(t => t.code).join('-'), was = m.teams.map(t => t.code).join('-')
       next = { ...m, dvwPath: path }
@@ -355,7 +361,7 @@ export class Library {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
-    return parseDVW(await readFile(m.dvwPath, 'latin1'))
+    return readScout(m.dvwPath)
   }
 
   // Takes over a match from a pre-v3 project. Returns the library id to use: the same id, or the
@@ -371,7 +377,7 @@ export class Library {
   async importMatch(videoPath: string, dvwPath: string, progress: (p: ImportProgress) => void): Promise<Match> {
     const existing = this.findBySources(videoPath, dvwPath)
     if (existing) return existing
-    const dvw = parseDVW(await readFile(dvwPath, 'latin1'))
+    const dvw = await readScout(dvwPath)
     if (!dvw.plays.length) throw new Error(t('{0} にプレーがありません', basename(dvwPath)))
 
     progress({ stage: 'probe', message: t('{0} を確認しています', basename(videoPath)) })
@@ -397,7 +403,7 @@ export class Library {
     const date = matchDate(dvw.date, dvwPath)
     const match: Match = {
       id,
-      name: `${date ?? basename(dvwPath, '.dvw')} ${home.code}-${away.code}`,
+      name: `${date ?? scoutStem(dvwPath)} ${home.code}-${away.code}`,
       date,
       sourceVideoPath: videoPath,
       videoPath: playable,
@@ -424,19 +430,23 @@ export class Library {
     const dvwPaths: string[] = [], videos: string[] = []
     for (const f of folders) await walk(f, 3, p => {
       const ext = extname(p).slice(1).toLowerCase()
-      if (ext === 'dvw') dvwPaths.push(p)
+      if (SCOUT_EXTENSIONS.includes(ext)) dvwPaths.push(p)
       else if (VIDEO_EXTENSIONS.includes(ext)) videos.push(p)
     })
     const infos: DvwInfo[] = []
     const unreadable: string[] = []
     for (const p of dvwPaths) {
       try {
-        const d = parseDVW(await readFile(p, 'latin1'))
+        const d = await readScout(p)
         infos.push({ path: p, date: matchDate(d.date, p), home: d.teams[0].code, away: d.teams[1].code })
       } catch {
         unreadable.push(p)
       }
     }
+    // The same match as a .dvw and a .vsm (VolleyStation writes both): the .dvw only.
+    const key = (i: DvwInfo) => `${i.date}|${i.home}|${i.away}`
+    const dvwKeys = new Set(infos.filter(i => extname(i.path).toLowerCase() === '.dvw').map(key))
+    for (let k = infos.length - 1; k >= 0; k--) if (extname(infos[k].path).toLowerCase() === '.vsm' && dvwKeys.has(key(infos[k]))) infos.splice(k, 1)
     const inLibrary = new Set(this.list().map(m => norm(m.dvwPath)))
     const pairs = pairFiles(infos, videos).map(p => ({
       dvwPath: p.dvw.path, date: p.dvw.date, home: p.dvw.home, away: p.dvw.away,

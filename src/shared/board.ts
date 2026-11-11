@@ -7,9 +7,9 @@ import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type Dir
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
-import { ROTATIONS, ROTATION_CHART, rotationFormation, rotationLineup, rotationSlide, type FormationSpot } from './rotationBoard'
+import { ROTATIONS, ROTATION_CHART, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type SideOutRate } from './rotationBoard'
 import { setChart, type SetChart } from './setChart'
-import { serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
+import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
@@ -32,6 +32,7 @@ export interface BoardPlayer {
   sets?: SetterSet[] // a setter's sets and dumps with the attack each led to (setterBoard.ts)
   callNames?: Record<string, string> // the setter calls' names in the DVWs
   formations?: Record<number, FormationSpot[]> // a rotation slide: where the team lines up to receive in each rotation
+  sideOut?: Record<number, SideOutRate> // and its serve receive in each
   setCharts?: Record<number, SetChart | null> // and the setter's set chart in each, after a # + ! reception
   receptions?: Received[] // a serve-target slide: all the team's receptions (the same list on each of its players)
 }
@@ -59,6 +60,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
       p.sets = setterSets(dvws, p.key, keep); p.callNames = callNames
       if (skill0 === 'R') {
         p.formations = Object.fromEntries(ROTATIONS.map(r => [r, rotationFormation(dvws, p.team, r, rotationLineup(dvws, p.team, r), p.key)]))
+        p.sideOut = rotationSideOut(dvws, p.team, keep)
         const plays = dvws.flatMap(d => d.plays), set = p.plays[0], name = `#${p.player.jersey} ${p.player.lastName.toUpperCase()}`
         p.setCharts = Object.fromEntries(ROTATIONS.map(r => [r, set ? setChart(set, plays, () => name, { rot: [r], phases: ['r'], recs: ['#', '+', '!'] }) : null]))
       }
@@ -329,7 +331,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   if (skill === 'R') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
     const sc = p?.setCharts?.[r]
-    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}) }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
+    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
       ...(sc ? { setCharts: [{ chart: sc, ...ROTATION_CHART }] } : {}) }
   }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCone, attackLine, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSlide, sideOut, topCalls } from './rotationBoard'
+import { attackCone, attackLine, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, sideOut, topCalls } from './rotationBoard'
 import { setterSets } from './setterBoard'
 import type { ParsedDVW, Play } from './types'
 
@@ -108,5 +108,38 @@ describe('where the side-out team stands, and its attacks', () => {
     expect(attackCone([])).toBeNull()
     const l = attackLine({ startClick: null, startZone: 4, endClick: null, endZone: 5 } as unknown as Play)! // zone 4 to the other side's zone 5
     expect([l.from.u, l.from.v, l.to.u, l.to.v].map(x => +x.toFixed(4))).toEqual([0.1667, 0.4167, 0.8333, 0.9167])
+  })
+})
+
+describe("a rotation's serve receive", () => {
+  // Rally id: the home team receives in rotation 3, then (attack: its first attack's effect, if any) it
+  // wins or loses the rally.
+  const rally = (id: number, attack: string | null, won: boolean, rot = 3) => ({
+    plays: [
+      { side: 'a', skill: 'S', rallyId: id, homeRot: rot, awayRot: 1 },
+      { side: '*', skill: 'R', rallyId: id, homeRot: rot, awayRot: 1 },
+      { side: '*', skill: 'E', rallyId: id, homeRot: rot, awayRot: 1 },
+      ...(attack ? [{ side: '*', skill: 'A', effect: attack, rallyId: id, homeRot: rot, awayRot: 1 }] : []),
+      { side: 'a', skill: 'D', rallyId: id, homeRot: rot, awayRot: 1 },
+      { side: '*', skill: 'A', effect: '#', rallyId: id, homeRot: rot, awayRot: 1 }, // a later attack: not the first ball
+    ],
+    rally: { id, wonBy: won ? '*' : 'a' },
+  })
+  const rs = [rally(0, '#', true), rally(1, '-', true), rally(2, '=', false), rally(3, null, false), rally(4, '#', true, 4)]
+  const d = { teams: [{ code: 'hth' }, { code: 'okb' }], plays: rs.flatMap(r => r.plays), rallies: Object.fromEntries(rs.map(r => [r.rally.id, r.rally])) } as unknown as ParsedDVW
+  it('counts its receptions, the rallies won after them, and those won by the first attack', () => {
+    const so = rotationSideOut([d], 'HTH')
+    expect(so[3]).toEqual({ n: 4, won: 2, firstBall: 1 })
+    expect(so[4]).toEqual({ n: 1, won: 1, firstBall: 1 })
+    expect(so[1]).toEqual({ n: 0, won: 0, firstBall: 0 })
+    expect(rotationSideOut([d], 'OKB')[3].n).toBe(0)
+  })
+  it('heads the slide with them: Receptions, Side-out %, FBSO %', () => {
+    const anns = rotationSlide({ rotation: 3, team: 'HTH', setter: { jersey: 2, lastName: 'Eiro' } as never, sets: [], formation: [], rates: rotationSideOut([d], 'HTH')[3], logo: { assetId: 'lg', width: 200, height: 200 } }, 'both', '#0F172A')
+    const texts = anns.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+    expect(texts).toEqual(expect.arrayContaining(['Receptions', '4', 'Side-out %', '50%', 'FBSO %', '25%']))
+    expect(texts.some(x => x.startsWith('HTH  #'))).toBe(false) // the setter's name only over the chart
+    const logo = anns.find(a => a.kind === 'image' && a.assetId === 'lg'), p = anns.find(a => a.kind === 'text' && a.text === 'P3')
+    expect(logo?.kind === 'image' && p?.kind === 'text' && logo.x + logo.w < p.x).toBe(true) // the logo first, at the top left
   })
 })

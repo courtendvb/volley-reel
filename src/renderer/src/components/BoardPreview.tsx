@@ -29,8 +29,8 @@ export function BoardPreview({ columns, skill, opts, photos: withPhotos }: { col
       photos[p.key] = { assetId: id, width: img.width, height: img.height }
       images.set(id, img)
     }
-    // A serve target: the team's logo, from the library.
-    const team = skill === 'T' && withPhotos ? columns[0]?.team : undefined, logo = team ? logoImage(team) : null
+    // A serve target or a rotation: the team's logo, from the library.
+    const team = (skill === 'T' || skill === 'R') && withPhotos ? columns[0]?.team : undefined, logo = team ? logoImage(team) : null
     if (team && logo) { photos[logoKey(team)] = { assetId: 'preview:logo', width: logo.width, height: logo.height }; images.set('preview:logo', logo) }
     return { photos, images }
   }, [columns, packs, withPhotos, tick, skill])

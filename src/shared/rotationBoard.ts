@@ -52,6 +52,32 @@ export function rotationLineup(dvws: ParsedDVW[], team: string, r: number): Line
   return top ? { jerseys: top.jerseys, players: top.players } : null
 }
 
+// The team's serve receive in each rotation: its receptions, the rallies it won after them (side-out)
+// and those it won with the first attack after the reception, a kill (first-ball side-out). keep: only
+// these receptions (the search).
+export interface SideOutRate { n: number; won: number; firstBall: number }
+export function rotationSideOut(dvws: ParsedDVW[], team: string, keep?: (p: Play) => boolean): Record<number, SideOutRate> {
+  const out: Record<number, SideOutRate> = Object.fromEntries(ROTATIONS.map(r => [r, { n: 0, won: 0, firstBall: 0 }]))
+  for (const d of dvws) {
+    const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
+    if (i < 0) continue
+    const side = i === 0 ? '*' : 'a'
+    d.plays.forEach((p, k) => {
+      if (p.side !== side || p.skill !== 'R' || p.rallyId === null || (keep && !keep(p))) return
+      const r = out[(side === '*' ? p.homeRot : p.awayRot) ?? 0]
+      if (!r) return
+      r.n++
+      if (d.rallies[p.rallyId]?.wonBy === side) r.won++
+      // The first attack of the team after it, before the ball goes over.
+      for (const q of d.plays.slice(k + 1)) {
+        if (q.rallyId !== p.rallyId || q.side !== side) break
+        if (q.skill === 'A') { if (q.effect === '#') r.firstBall++; break }
+      }
+    })
+  }
+  return out
+}
+
 // The setter calls used most after a # or + reception, with their sets.
 export function topCalls(sets: SetterSet[], most = 2): { call: string; sets: SetterSet[] }[] {
   const good = sets.filter(s => afterRec(s, '#+') && s.set.skill === 'E' && setterCall(s.set))
@@ -85,6 +111,19 @@ function table(title: string, head: { fill: string; text: string }, sp: SetSplit
     cell(c, 4, pct(sp.by[k].n, sp.total), { bold: big, color: big ? '#DC2626' : '#0F172A' })
   })
   return { out, h: rh * 5 }
+}
+
+// The rotation's serve receive: receptions, side-out % and first-ball side-out %, a head in the team's
+// colour over each number. One group.
+function rateTable(r: SideOutRate, x: number, y: number, fill: string): Annotation[] {
+  const g = uid(), cw = 0.085, hh = 0.04, vh = 0.07, out: Annotation[] = []
+  const cells: [string, string][] = [['Receptions', String(r.n)], ['Side-out %', pct(r.won, r.n)], ['FBSO %', pct(r.firstBall, r.n)]]
+  cells.forEach(([head, value], i) => {
+    const cx = x + i * cw + cw / 2
+    out.push(words(cx, y, head, 13, light(fill) ? '#0F172A' : '#FFFFFF', { align: 'center', groupId: g, box: { fill, fillOpacity: 1, stroke: '#FFFFFF', strokeWidth: 1, padding: 3, width: cw, height: hh } }))
+    out.push(words(cx, y + hh, value, 30, '#0F172A', { align: 'center', groupId: g, box: { fill: '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: 3, width: cw, height: vh } }))
+  })
+  return out
 }
 
 // ---- where the players stand ----------------------------------------------------------------
@@ -258,18 +297,25 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
   out.push(poly([at(0, 0), at(1, 0), at(1, 1), at(0, 1)], null, { color: LINE, width: 3 }))
   for (const v of [1 / 3, 2 / 3]) out.push(line(at(0, v), at(1, v), 2.5), line(at(-0.07, v), at(0, v), 1.5, LINE, { dash: 'dash' }), line(at(1, v), at(1.07, v), 1.5, LINE, { dash: 'dash' }))
   out.push(line(at(0, 0.5), at(1, 0.5), 3))
-  // Cones: each spiker's usual course (of two attacks or more), in the colour of where they mostly hit
+  // Cones: a spiker's usual course (of two attacks or more), in the colour of where they mostly hit
   // from; the stronger the more of the side-out they took. Their number at the cone's far end.
   const total = so.length || 1, sp = splitSets(so)
   const bySpiker = new Map<string, SetterSet[]>()
   for (const s of so) if (s.place !== 'dump') bySpiker.set(s.attack.playerKey, [...(bySpiker.get(s.attack.playerKey) ?? []), s])
   const tips: Annotation[] = []
-  for (const list of [...bySpiker.values()].filter(l => l.length >= 2).sort((a, b) => a.length - b.length)) {
-    const c = mainCourse(list.flatMap(s => { const l = attackLine(s.attack); return l ? [l] : [] }))
-    if (!c) continue
+  // One cone a place: of the spikers who mostly hit from it, the one with the most attacks.
+  const byPlace = new Map<SetPlace, SetterSet[]>()
+  for (const list of bySpiker.values()) {
+    if (list.length < 2) continue
     const places = new Map<SetPlace, number>()
     for (const s of list) places.set(s.place, (places.get(s.place) ?? 0) + 1)
-    const place = [...places.entries()].sort((a, b) => b[1] - a[1])[0][0], color = PLACE_COLOR[place] ?? '#0F172A'
+    const place = [...places.entries()].sort((a, b) => b[1] - a[1])[0][0]
+    if (list.length > (byPlace.get(place)?.length ?? 0)) byPlace.set(place, list)
+  }
+  for (const [place, list] of [...byPlace.entries()].sort((a, b) => a[1].length - b[1].length)) {
+    const c = mainCourse(list.flatMap(s => { const l = attackLine(s.attack); return l ? [l] : [] }))
+    if (!c) continue
+    const color = PLACE_COLOR[place] ?? '#0F172A'
     const steps = 14, rim: [number, number][] = []
     for (let i = 0; i <= steps; i++) {
       const a = c.from + ((c.to - c.from) * i) / steps
@@ -344,6 +390,8 @@ export interface RotationSlideData {
   formation: FormationSpot[]
   callNames?: Record<string, string>
   photo?: { assetId: string; width: number; height: number } // the setter's, by the set chart
+  logo?: { assetId: string; width: number; height: number } // the team's, at the top left
+  rates?: SideOutRate // the team's serve receive in the rotation
   teamColor?: string // the side-out team's colour, its players' discs
   discLine?: string // and their outline (missing: a darker shade of it)
 }
@@ -375,13 +423,19 @@ function setterHeading(v: RotationSlideData, fill: string): Annotation[] {
 
 export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string): Annotation[] {
   const out: Annotation[] = [], rot = inRotation(v.sets, v.rotation), so = sideOut(rot)
-  // The heading: the rotation large, underlined; the team, setter and side-out numbers after it.
-  const headGroup = uid(), all = splitSets(so)
-  out.push(words(0.03, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup }))
-  out.push({ id: uid(), kind: 'polyline', color: ink, width: 5, points: [[0.03, 0.15], [0.145, 0.15]], groupId: headGroup })
-  out.push(words(0.165, 0.035, `${v.team}  #${v.setter.jersey} ${v.setter.lastName.toUpperCase()}`, 24, ink, { groupId: headGroup }))
-  out.push(words(0.165, 0.085, `Side-out (# + ! reception)   n ${all.total} · K ${pct(all.kills, all.total)} · ERR ${pct(all.errors, all.total)}`, 15, ink, { bold: false, groupId: headGroup }))
   const fill = v.teamColor ?? TEAM_COLOR
+  // The heading: the team's logo at the top left, the rotation large and underlined, then its serve
+  // receive in a table (the setter's name is over the set chart).
+  const headGroup = uid()
+  let x = 0.02
+  if (v.logo) {
+    const h = 0.13, w = Math.min(0.08, (h * 9 * v.logo.width) / (16 * v.logo.height))
+    out.push({ id: uid(), kind: 'image', color: ink, x, y: 0.02 + (h - Math.min(h, (w * 16 * v.logo.height) / (9 * v.logo.width))) / 2, w, h: Math.min(h, (w * 16 * v.logo.height) / (9 * v.logo.width)), assetId: v.logo.assetId })
+    x += w + 0.014
+  }
+  out.push(words(x, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup }))
+  out.push({ id: uid(), kind: 'polyline', color: fill, width: 6, points: [[x, 0.15], [x + 0.115, 0.15]], groupId: headGroup })
+  out.push(...rateTable(v.rates ?? { n: 0, won: 0, firstBall: 0 }, x + 0.14, 0.03, fill))
   out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }))
   out.push(...setterHeading(v, fill))
   // Bottom right: by reception, and by setter call (the chart is above them).

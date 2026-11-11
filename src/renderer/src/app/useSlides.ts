@@ -110,8 +110,8 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
         const found = photos[p.key] ? null : findPhoto(packs, p.player, p.team)
         if (found) photos[p.key] = await api.usePackPhoto(found.pack, found.player.photo)
       }
-      // A serve target: the team's logo too, when the library has one.
-      if (withPhotos && skill === 'T' && columns[0]) {
+      // A serve target or a rotation: the team's logo too, when the library has one.
+      if (withPhotos && (skill === 'T' || skill === 'R') && columns[0]) {
         const logo = await api.useLogo(columns[0].team)
         if (logo) photos[logoKey(columns[0].team)] = logo
       }

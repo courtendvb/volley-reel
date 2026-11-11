@@ -131,6 +131,7 @@ export function corruptFirstReel(dir: string): void {
 //  mouse and keys; with VR_SMOKE_EXPORT=<out.mp4> also export the clip with the court]
 // [VR_SMOKE_SETTER=reception|rotation: a setter's data slide made from the dialog]
 // [VR_SMOKE_CARDINSERT=<pack.vrpack>|<logo image>: a player's photo and a team logo put on a marker card from its bar]
+// [VR_SMOKE_PRESETSERVE=1: the serve preset's player order and markers (zone, in order) in the dialog's preview]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string): Promise<void> {
@@ -165,6 +166,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       court: !!process.env.VR_SMOKE_COURT,
       savedFilters: !!process.env.VR_SMOKE_SAVEDFILTERS,
       presets: !!process.env.VR_SMOKE_PRESETS,
+      presetServe: !!process.env.VR_SMOKE_PRESETSERVE,
       setter: process.env.VR_SMOKE_SETTER,
       cardInsert: process.env.VR_SMOKE_CARDINSERT,
       captionPhoto: !!process.env.VR_SMOKE_CAPTIONPHOTO,

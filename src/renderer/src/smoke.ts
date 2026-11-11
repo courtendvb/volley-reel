@@ -50,6 +50,7 @@ export interface SmokeOpts {
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
   cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
+  presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
@@ -149,7 +150,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.cardInsert) return smokeCardInsert(res, opts.cardInsert)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
-    if (opts.presets) return smokePresets()
+    if (opts.presets || opts.presetServe) return smokePresets(!!opts.presetServe)
     if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
@@ -1570,7 +1571,7 @@ export function installSmoke(h: SmokeHost): void {
     return { setter, slotLabel, layout: slide.board!.config.setLayout, titles, counts: texts.filter(x => /^n \d+ · K/.test(x)), zone21: texts.filter(x => x === 'Zone2/1').length }
   }
 
-  const smokePresets = async () => {
+  const smokePresets = async (serveOnly = false) => {
     const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
       for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
     }
@@ -1595,6 +1596,22 @@ export function installSmoke(h: SmokeHost): void {
     window.confirm = () => true // 作り直す and 削除 ask first
     try {
       const code = latest.current.settings?.ourTeamCodes[0] ?? ''
+      if (serveOnly) {
+        // Serves: the order of servers and their markers chosen apart.
+        await open()
+        await pick(t('ビデオ'), t('サーブ'))
+        await pick(t('選手の並べ方'), t('打数順'))
+        await pick(t('マーカーの分け方'), t('ゾーン別'))
+        const byZone = await waitFor(() => { const p = preview(); return p.length ? p : null }, 5000, 'preview rows')
+        const names = new Set(byZone.flatMap(r => r.markers.map(m => m.name)))
+        if ([...names].some(n => !['Zone1', 'Zone6', 'Zone5', t('ショート')].includes(n))) throw new Error(`zone markers: ${[...names].join(', ')}`)
+        if (byZone.some((r, i) => i && r.total > byZone[i - 1].total)) throw new Error('servers not by count')
+        await pick(t('マーカーの分け方'), t('時系列'))
+        const byTime = preview()
+        if (byTime.some(r => r.markers.length !== 1 || r.markers[0].n !== r.total)) throw new Error(`time markers: ${JSON.stringify(byTime.slice(0, 3))}`)
+        await pick(t('マーカーの分け方'), t('ゾーン別'))
+        return { byZone: byZone.slice(0, 4), timeRows: byTime.length, hint: dialog()!.querySelectorAll('.hint')[1]?.textContent }
+      }
       // 1. A block video by middle, for the target team.
       await open()
       await pick(t('ビデオ'), t('ブロック'))

@@ -283,6 +283,8 @@ export const EN: Record<string, string> = {
   "（名前）": "(name)",
   "すべてのタイトルカードと無地のスライドの背景色（この動画）": "Background of every title card and blank slide (this video)",
   "背景": "Background",
+  "チームカラー": "Team color",
+  "選手の円の色。最初はライブラリにあるチームのロゴの色です": "The color of the players' discs. At first, the color of the team's logo in the library",
   "カードの背景色": "Card background color",
   "配色（テーマ）から決まる色に戻す": "Back to the color from the theme",
   "配色に戻す": "Back to the theme",

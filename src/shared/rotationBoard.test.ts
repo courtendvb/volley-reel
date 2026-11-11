@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCone, attackLine, inRotation, rotationFormation, rotationLineup, rotationSlide, sideOut, topCalls } from './rotationBoard'
+import { attackCone, attackLine, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSlide, sideOut, topCalls } from './rotationBoard'
 import { setterSets } from './setterBoard'
 import type { ParsedDVW, Play } from './types'
 
@@ -62,19 +62,36 @@ describe('where the side-out team stands, and its attacks', () => {
     rallies: {},
   } as unknown as ParsedDVW
   const lineup = { jerseys: [21, 1, 4, 22, 11, 2], players: [d.players['*21'], null, null, null, d.players['*11'], d.players['*2']] }
-  it("puts receivers where they received, the libero for the back row's middle, the setter at the net", () => {
+  it("lines up in the standard serve receive: the outsides and the libero pass, the libero for the back row's middle", () => {
     const f = rotationFormation([d], 'HTH', 1, lineup, 'S')
-    expect(f.map(s => s.jersey)).toEqual([21, 1, 4, 22, 11, 18]) // 18 receives most of the liberos and comes on for 2
-    const at = Object.fromEntries(f.map(s => [s.jersey, s.at]))
-    expect(at[18].u).toBeGreaterThan(0.75) // zone 1: the team's right
-    expect(at[11].u).toBeLessThan(0.5) // zone 6, sub C: left of the middle
-    expect(at[21].v).toBeGreaterThan(0.4) // by the net
+    expect(f.map(s => s.jersey)).toEqual([21, 1, 4, 22, 11, 18]) // 18 receives most of those not in the lineup and comes on for 2
+    expect(f.filter(s => s.receives).map(s => s.jersey)).toEqual([1, 11, 18])
     expect(f.find(s => s.jersey === 18)?.libero).toBe(true)
+    expect(f.find(s => s.setter)?.jersey).toBe(21)
+    const at = Object.fromEntries(f.map(s => [s.jersey, s.at]))
+    expect(at[21].u).toBeGreaterThan(0.75) // zone 1: the team's right, behind its zone 2
+    expect(at[21].v).toBeLessThan(at[1].v)
+    expect(at[22].v).toBeGreaterThan(0.4) // the opposite in zone 4 by the net
+    expect(rotationFormation([d], 'HTH', 1, null, 'S')).toEqual([])
   })
-  it('moves players on the same spot apart', () => {
-    const same = { ...d, plays: [rec(11, 6, null), rec(11, 6, null), rec(18, 6, null), rec(18, 6, null)] } as unknown as ParsedDVW
-    const f = rotationFormation([same], 'HTH', 1, lineup, 'S'), a = f.find(s => s.jersey === 11)!.at, b = f.find(s => s.jersey === 18)!.at
-    expect(Math.hypot((a.u - b.u) * 9, (a.v - b.v) * 18)).toBeGreaterThanOrEqual(1.4)
+  it('keeps the overlap rule in every rotation', () => {
+    for (const r of [1, 2, 3, 4, 5, 6]) {
+      const jerseys = [1, 2, 3, 4, 5, 6].map(z => ((z - r + 6) % 6) + 1) // the setter (1) in zone r
+      const f = rotationFormation([], 'HTH', r, { jerseys, players: jerseys.map(j => (j === 1 ? { key: 'S' } as never : null)) }, 'S')
+      const pos = Object.fromEntries([1, 2, 3, 4, 5, 6].map(zone => [zone, f[(zone - r + 6) % 6].at])) // the formation runs from the setter on
+      for (const [front, back] of [[4, 5], [3, 6], [2, 1]]) expect(pos[front].v, `P${r}: ${front} before ${back}`).toBeGreaterThan(pos[back].v)
+      for (const [left, right] of [[4, 3], [3, 2], [5, 6], [6, 1]]) expect(pos[left].u, `P${r}: ${left} left of ${right}`).toBeLessThan(pos[right].u)
+      expect(f.filter(s => s.receives)).toHaveLength(2) // no libero without receptions: the outsides
+    }
+  })
+  it("draws a spiker's usual course, and finds a logo's main colour", () => {
+    const line = (to: [number, number]) => ({ from: { u: 0.17, v: 0.45 }, to: { u: to[0], v: to[1] } })
+    const c = mainCourse([line([0.2, 0.9]), line([0.22, 0.95]), line([0.25, 0.92]), line([0.9, 0.6])])!
+    expect(Math.abs(c.to - c.from)).toBeLessThan(0.4) // the three down the line, not the cross
+    expect(mainCourse([])).toBeNull()
+    const px = [255, 255, 255, 255, 200, 20, 30, 255, 204, 24, 28, 255, 0, 0, 255, 0, 20, 20, 20, 255]
+    expect(mainColor(px)).toBe('#ca161d')
+    expect(mainColor([255, 255, 255, 255])).toBeNull()
   })
   it('draws a cone over where the attacks went', () => {
     const line = (to: [number, number]) => ({ from: { u: 0.17, v: 0.45 }, to: { u: to[0], v: to[1] } })

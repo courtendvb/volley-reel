@@ -207,6 +207,7 @@ export interface BoardConfig {
   setView?: SetView // sets: zones painted, arrows, or both; missing: both
   setLayout?: SetLayout // sets: one setter's six courts (setterBoard.ts); missing: setters side by side (cards made before)
   rotation?: number // a rotation slide: which (1–6)
+  teamColor?: string // a rotation slide: the side-out team's colour
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -222,6 +223,7 @@ export interface BoardOptions {
   setView?: SetView
   setLayout?: SetLayout
   rotation?: number // a rotation slide's rotation
+  teamColor?: string // and the team's colour, its players' discs
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -325,7 +327,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   if (skill === 'R') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
     const sc = p?.setCharts?.[r]
-    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
+    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}) }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
       ...(sc ? { setCharts: [{ chart: sc, ...ROTATION_CHART }] } : {}) }
   }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }

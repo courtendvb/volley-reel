@@ -4,6 +4,7 @@ import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardP
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
+import { ROTATIONS } from '../../../shared/rotationBoard'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
@@ -20,7 +21,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean } // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean } // marker 'head': the scene's head, in no marker
 
 interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks
 
@@ -46,7 +47,10 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const inTeam = useMemo(() => everyone.filter(p => p.team === open), [everyone, open])
   const names = useMemo(() => Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>, [dvws])
   const [count0, setCount] = useState(initial?.columns.length ?? 3)
-  const count = skill === 'E' ? 1 : count0 // a set slide is one setter's
+  const oneSetter = skill === 'E' || skill === 'R' // a set or rotation slide is one setter's
+  const count = oneSetter ? 1 : count0
+  // A rotation slide per rotation picked (all six by default; a slide made again: its own).
+  const [rotations, setRotations] = useState<number[]>(initial?.rotation ? [initial.rotation] : ROTATIONS)
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
   const [notes, setNotes] = useState(initial?.notes ?? false)
@@ -84,7 +88,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <div className="filter-row">
           <span className="field-label">{t('プレー')}</span>
           <div className="segmented" role="radiogroup">
-            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')]] as [BoardSkill, string][]).map(([k, label]) => (
+            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')]] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}
           </div>
@@ -95,13 +99,22 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           <select id="board-team" value={open} onChange={e => setTeam(e.target.value)}>
             {teams.map(([code, name]) => <option key={code} value={code}>{`${code} — ${name}`}</option>)}
           </select>
-          {skill !== 'E' && <>
+          {!oneSetter && <>
             <label className="field-label" htmlFor="board-count">{t('人数')}</label>
             <select id="board-count" value={count} onChange={e => { setSlots(shown); setCount(+e.target.value) }}>
               {Array.from({ length: MOST_PER_SLIDE }, (_, i) => i + 1).map(n => <option key={n} value={n}>{t('{0} 人', n)}</option>)}
             </select>
           </>}
         </div>
+        {skill === 'R' && (
+          <div className="filter-row" title={t('ローテーション（セッターの位置）ごとに 1 枚。大きな P 番号、コートにそのローテの並びと # + ! レセプションからの攻撃配分、右に # ・ + ・ ! パス別とセッターコール上位 2 つの配分の表')}>
+            <span className="field-label">{t('ローテ')}</span>
+            {ROTATIONS.map(r => (
+              <label key={r} className="check"><input type="checkbox" checked={rotations.includes(r)}
+                onChange={e => setRotations(ROTATIONS.filter(x => (x === r ? e.target.checked : rotations.includes(x))))} /> P{r}</label>
+            ))}
+          </div>
+        )}
         {skill === 'E' && (
           <div className="filter-row">
             <span className="field-label">{t('スライド')}</span>
@@ -119,7 +132,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             const codes = skill === 'A' && p ? attackCodes([p]) : []
             return (
               <div key={i} className="board-slot">
-                <span className="board-slot-no">{skill === 'E' ? t('セッター') : t('{0} 番目', i + 1)}</span>
+                <span className="board-slot-no">{oneSetter ? t('セッター') : t('{0} 番目', i + 1)}</span>
                 <select value={s.key} aria-label={t('{0} 番目', i + 1)} onChange={e => setSlot(i, { key: e.target.value, code: '' })}>
                   <option value="">{t('（なし）')}</option>
                   {inTeam.map(x => <option key={x.key} value={x.key}>{`#${x.player.jersey} ${x.player.lastName}`}</option>)}
@@ -130,7 +143,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
                     {codes.map(c => <option key={c.code} value={c.code}>{`${c.code} (${c.count})${names[c.code] ? ` ${names[c.code]}` : ''}`}</option>)}
                   </select>
                 )}
-                {skill !== 'E' && <label className="check board-attention" title={t('この選手に「Attention」の赤いマークを付けます（写真の上、写真がなければ名前の行の右）')}>
+                {!oneSetter && <label className="check board-attention" title={t('この選手に「Attention」の赤いマークを付けます（写真の上、写真がなければ名前の行の右）')}>
                   <input type="checkbox" checked={!!s.attention} disabled={!p} onChange={e => setSlot(i, { ...s, attention: e.target.checked })} /> Attention</label>}
               </div>
             )
@@ -138,8 +151,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos}
-          opts={{ setView, setLayout, split, notes: notes && skill !== 'E', noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
-        {skill === 'E' ? (
+          opts={{ setView, setLayout, rotation: rotations[0] ?? 1, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+        {oneSetter ? (
           <div className="filter-row" title={t('セッターのトスのあと、同じチームのアタックがどのゾーンから打たれたかの割合')}>
             <span className="field-label">{t('配分')}</span>
             <div className="segmented" role="radiogroup" aria-label={t('配分の見せ方')}>
@@ -151,8 +164,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         ) : <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
-          {skill !== 'E' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
-          {notes && skill !== 'E' && <>
+          {!oneSetter && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
+          {notes && !oneSetter && <>
             <label className="check" title={t('ノート欄の高さ。文字の大きさも一緒に変わります')}>{t('高さ')}
               <input type="number" min={NOTE_SIZE.min * 100} max={NOTE_SIZE.max * 100} step={NOTE_SIZE.step * 100} value={Math.round(noteSize * 100)} style={{ width: 60 }} aria-label={t('ノート欄の高さ（%）')}
                 onChange={e => { const n = +e.target.value / 100; if (n >= NOTE_SIZE.min && n <= NOTE_SIZE.max) setNoteSize(n) }} />%</label>
@@ -181,7 +194,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!columns.length} onClick={() => onCreate({ setView, setLayout, display, skill, columns, split, notes: notes && skill !== 'E', noteSize, noteFills, photos, background, marker, team: open, searched })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={!columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

@@ -94,14 +94,17 @@ const TITLE_ROOM = 0.082, SD_ROOM = 0.04 // above a court: its title and numbers
 // One court: its title and numbers above, the places painted the stronger the more sets went there
 // and / or arrows from the setter as thick as the share, each place's share, count and kill rate, and
 // the dumps under it. One group, to move as one. h: the court's height (0..1 of the picture).
-export function setCourt(panel: SetPanel, x: number, y: number, h: number, view: SetView, ink: string): Annotation[] {
-  const sp = splitSets(panel.sets), groupId = uid(), w = h / ASPECT
+// head: false leaves the title and numbers out (the caller writes its own); groupId: the group to join.
+export function setCourt(panel: SetPanel, x: number, y: number, h: number, view: SetView, ink: string, head = true, groupId = uid()): Annotation[] {
+  const sp = splitSets(panel.sets), w = h / ASPECT
   const at = (u: number, v: number): [number, number] => [x + u * w, y + v * h]
   const size = (k: number) => Math.max(10, Math.round(h * 720 * k))
   const top = Math.max(0, ...SET_PLACES.map(k => sp.by[k].n))
   const out: Annotation[] = [
-    words(x + w / 2, y - TITLE_ROOM, panel.title, 20, ink, { align: 'center', groupId }),
-    words(x + w / 2, y - TITLE_ROOM + 0.04, `n ${sp.total} · K ${pct(sp.kills, sp.total)} · ERR ${pct(sp.errors, sp.total)}`, 14, ink, { align: 'center', groupId, bold: false }),
+    ...(head ? [
+      words(x + w / 2, y - TITLE_ROOM, panel.title, 20, ink, { align: 'center', groupId }),
+      words(x + w / 2, y - TITLE_ROOM + 0.04, `n ${sp.total} · K ${pct(sp.kills, sp.total)} · ERR ${pct(sp.errors, sp.total)}`, 14, ink, { align: 'center', groupId, bold: false }),
+    ] : []),
     { id: uid(), kind: 'rect', color: '#FFFFFF', x, y, w, h, width: 2, fill: '#F3D9B1', fillOpacity: 1, groupId },
   ]
   for (const k of SET_PLACES) {

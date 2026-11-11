@@ -3,7 +3,7 @@
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
 import type { Ctx } from './court'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, type Anchor, type CaptionData, type CardKind, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CardKind, type CardLayout, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
 
@@ -140,7 +140,7 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   }
   if (d.marker === null) {
     // The video's opening card is drawn like a scene card, larger by default, with its own layout.
-    const L = d.layout ?? (d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT)
+    const L = sceneTopLeft(d.layout ?? (d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT))
     const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo, L)
     const ownBox = own()
     ctx.restore()
@@ -220,36 +220,42 @@ function logoRatio(img: CanvasImageSource): number {
   return w > 0 && h > 0 ? w / h : 1
 }
 
-// The scene title (with its match line and the logo above), centered on the layout's point.
+// The scene title (with the logo and the match line above it), its top-left at the layout's point
+// (sceneTopLeft): a longer title grows to the right, and is made smaller to stay inside the frame.
 function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null, L: CardLayout): TitleBox {
-  const k = k0 * L.scale
-  const nameFont = font(36 * k), matchFont = font(12 * k, 400)
   const labels = titleLines(name, 'SCENE')
   const more = labels.length - 1 // each further line makes the plate 44 (× k) taller
+  const x = W * L.x, top = H * L.y
+  const sizes = (k: number) => {
+    const plateW = Math.max(...labels.map(l => measure(ctx, l, font(36 * k), 0.08 * 36 * k))) + 56 * k
+    const total = 22 * k + plateW - 6 * k
+    const mw = match ? measure(ctx, match, font(12 * k, 400), 0.4 * 12 * k) : 0
+    // Logo: at most 120 px tall at 720p and half the width.
+    let lh = logo ? 120 * k : 0, lw = logo ? lh * logoRatio(logo) : 0
+    if (logo && lw > W * 0.5) { lw = W * 0.5; lh = lw / logoRatio(logo) }
+    return { plateW, total, mw, lh, lw, w: Math.max(total, mw, lw) }
+  }
+  let k = k0 * L.scale
+  const first = sizes(k)
+  if (x + first.w > W * 0.98) k *= Math.max(0.2, (W * 0.98 - x) / first.w)
+  const { plateW, total, mw, lh, lw } = sizes(k)
+  const nameFont = font(36 * k), matchFont = font(12 * k, 400)
   const blockW = 22 * k, h = (58 + 44 * more) * k, slant = 12 * k
-  const plateW = Math.max(...labels.map(l => measure(ctx, l, nameFont, 0.08 * 36 * k))) + 56 * k
-  const total = blockW + plateW - 6 * k
-  const mw = match ? measure(ctx, match, matchFont, 0.4 * 12 * k) : 0
-  // Logo: at most 120 px tall at 720p and half the width.
-  let lh = logo ? 120 * k : 0, lw = logo ? lh * logoRatio(logo) : 0
-  if (logo && lw > W * 0.5) { lw = W * 0.5; lh = lw / logoRatio(logo) }
-  // Heights above the plate's top: the match line, then the logo.
+  // Heights above the plate's top: the logo, then the match line.
   const above = logo ? (match ? 44 : 20) * k + lh : match ? 32 * k : 0
-  const cx = W * L.x, y = H * L.y - (above + h) / 2 + above
-  const x = cx - total / 2
+  const y = top + above
   if (match) {
     ctx.textBaseline = 'middle'
-    text(ctx, match, cx - mw / 2, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
+    text(ctx, match, x, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
   }
-  const logoBox = logo ? { x: cx - lw / 2, y: y - (match ? 44 : 20) * k - lh, w: lw, h: lh } : null
+  const logoBox = logo ? { x, y: y - (match ? 44 : 20) * k - lh, w: lw, h: lh } : null
   if (logoBox) ctx.drawImage(logo!, logoBox.x, logoBox.y, logoBox.w, logoBox.h)
   const px = x + blockW - 6 * k
   fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])
   fillPoly(ctx, theme.accent, [[x, y], [x + blockW, y], [x + blockW - slant, y + h], [x, y + h]])
   ctx.textBaseline = 'middle'
   labels.forEach((l, i) => text(ctx, l, px + slant + 18 * k, y + h / 2 + (i - more / 2) * 44 * k, nameFont, TEXT, 0.08 * 36 * k))
-  const w = Math.max(total, mw, lw)
-  return { x: cx - w / 2, y: y - above, w, h: above + h, ...(logoBox ? { logo: logoBox } : {}) }
+  return { x, y: top, w: Math.max(total, mw, lw), h: above + h, ...(logoBox ? { logo: logoBox } : {}) }
 }
 
 // Top / bottom × left / center / right, with a margin of 2.5% of the height.

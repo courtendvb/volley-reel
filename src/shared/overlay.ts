@@ -35,14 +35,24 @@ export interface OverlaySettings {
   chapters: { enabled: boolean }
 }
 
-// x / y: the marker title's top-left, or the scene title's center (0..1 of the frame); scale: 1 = default size.
-export interface CardLayout { x: number; y: number; scale: number }
+// x / y: the title's top-left (0..1 of the frame), so a longer title only grows to the right and down;
+// scale: 1 = default size. A scene or video card's layout saved before origin was its title's centre:
+// sceneTopLeft reads it as a top-left.
+export interface CardLayout { x: number; y: number; scale: number; origin?: 'tl' }
 export type CardKind = 'marker' | 'scene' | 'video'
 // The logo on its own: its centre (0..1 of the frame) and height (share of the frame's), or not shown.
 export type LogoPlace = { x: number; y: number; h: number } | 'hidden'
 export const DEFAULT_MARKER_LAYOUT: CardLayout = { x: 0.1, y: 0.3, scale: 1 }
-export const DEFAULT_SCENE_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1 }
-export const DEFAULT_VIDEO_LAYOUT: CardLayout = { x: 0.5, y: 0.5, scale: 1.4 }
+export const DEFAULT_SCENE_LAYOUT: CardLayout = { x: 0.1, y: 0.4, scale: 1, origin: 'tl' }
+export const DEFAULT_VIDEO_LAYOUT: CardLayout = { x: 0.1, y: 0.36, scale: 1.4, origin: 'tl' }
+
+// A scene or video card's layout as a top-left. One saved as a centre is moved by half of a usual
+// title (a few words, its match line above), the same for every title, so it stays put from card to card.
+const OLD_HALF_W = 0.105, OLD_HALF_H = 0.0625
+export function sceneTopLeft(L: CardLayout): CardLayout {
+  if (L.origin === 'tl') return L
+  return { x: Math.max(0.02, L.x - OLD_HALF_W * L.scale), y: Math.max(0.02, L.y - OLD_HALF_H * L.scale), scale: L.scale, origin: 'tl' }
+}
 
 export interface ClipOverlayOverride {
   scoreboard?: { hidden?: boolean }

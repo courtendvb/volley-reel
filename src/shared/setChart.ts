@@ -104,6 +104,12 @@ function setBeforeAt(plays: Play[], i: number): Play | null {
   return null
 }
 export const setBefore = (plays: Play[], attack: Play): Play | null => setBeforeAt(plays, plays.indexOf(attack))
+// The attack a setter's contact at i led to: after a set, the team's next contact if it is an attack;
+// the setter's own attack not after a set of the team (a dump) is its own. Null otherwise.
+export function attackOfContact(plays: Play[], i: number): Play | null {
+  const p = plays[i]
+  return p.skill === 'E' ? nextAttack(plays, i) : p.skill === 'A' && !setBeforeAt(plays, i) ? p : null
+}
 
 // The chart of the setter of `play` (a set, or an attack: the set before it) in the rotation it was
 // in, from `plays` (every match, each match's plays together and in order).
@@ -129,7 +135,7 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     if (recs && (p.phase !== 'r' || !p.recEffect || !recs.includes(p.recEffect))) return
     if (scores && !scores.includes(bandOf(p.side === '*' ? p.score.home : p.score.away))) return
     // A set and the attack after it, or the setter attacking themself (not after a set of their own).
-    const attack = p.skill === 'E' ? nextAttack(plays, i) : p.skill === 'A' && !setBeforeAt(plays, i) ? p : null
+    const attack = attackOfContact(plays, i)
     if (!attack) return
     const target = setTarget(attack, setter)
     if (!target) return

@@ -48,6 +48,7 @@ export interface SmokeOpts {
   captionNames?: boolean // a name typed on one clip goes to every clip of that player in the video; 'this clip only' stays on the clip
   captionPhoto?: boolean // with VR_PACKS_DIR: the player's photo by the caption, bottom-left then top-left, and in the export
   savedFilters?: boolean // the filter saved under a name, put back, saved again, removed and the removal undone
+  setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
   mem?: number // with obj: seconds of playback to sample the JS heap over
@@ -147,6 +148,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.presets) return smokePresets()
+    if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.cardOwn) return smokeCardOwn(res)
@@ -1520,6 +1522,25 @@ export function installSmoke(h: SmokeHost): void {
   // its preview (scenes, names, title cards, markers, clips, on disk); made again from its 作り直す;
   // a position set by hand (saved, moving a player's attacks) and undone; the video deleted
   // with its scenes, then the deletion undone (back on disk) and redone.
+  // A setter's slide: データスライド作成, セット, the layout, 作成; the slide's court titles and how many
+  // sets each holds, read back from the made slide (the screenshot shows it in the editor).
+  const smokeSetter = async (layout: string) => {
+    const button = (root: ParentNode, text: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === text)
+    button(document, t('データスライド作成'))!.click()
+    const dialog = await waitFor(() => document.querySelector<HTMLElement>('.board-dialog'), 5000, 'board dialog')
+    button(dialog, t('セット'))!.click(); await sleep(300)
+    button(dialog, layout === 'rotation' ? t('ローテ別サイドアウト') : t('レセプション・コール別'))!.click(); await sleep(300)
+    const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent
+    const slotLabel = dialog.querySelector('.board-slot-no')?.textContent
+    button(dialog, t('作成'))!.click()
+    const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.setLayout === layout) ?? null, 10000, 'setter slide')
+    await sleep(600)
+    const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+    const titles = layout === 'rotation' ? ['S1', 'S6', 'S5', 'S4', 'S3', 'S2'] : texts.filter(x => /Reception$/.test(x))
+    if (layout === 'rotation' && !titles.every(x => texts.includes(x))) throw new Error(`rotation titles: ${texts.join(' | ')}`)
+    return { setter, slotLabel, layout: slide.board!.config.setLayout, titles, counts: texts.filter(x => /^n \d+ · K/.test(x)), zone21: texts.filter(x => x === 'Zone2/1').length }
+  }
+
   const smokePresets = async () => {
     const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
       for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }

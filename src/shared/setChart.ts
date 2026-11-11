@@ -143,7 +143,9 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     by[target].n++
     if (result === 'kill') { by[target].kills++; kills++ }
     if (result === 'lost') errors++
-    const click = p.startClick ?? p.endClick ?? null, at = spot(click)
+    // Where the set was given from (a set's first click); a setter's own attack: where it was hit.
+    // A set known only by where it went has no point (it still counts in the shares).
+    const click = p.skill === 'E' ? p.startClick ?? null : p.startClick ?? p.endClick ?? null, at = spot(click)
     dots.push({ at, click: at ? click : null, target, result })
   })
   const total = dots.length

@@ -160,9 +160,17 @@ export function parseDVW(text: string): ParsedDVW {
 
   // A set without a click for where it went goes to the attack that follows it, when it is the same
   // team's; that attack's tempo also shapes the set's flight.
+  // A set with one click only: by that attack's hitting spot it is where the set went (at the spot),
+  // or where it was given from (away from it), whichever column the scout put it in.
   for (const p of plays) {
     const q = plays[p.id + 1]
     if (p.skill !== 'E' || q?.skill !== 'A' || q.side !== p.side || q.rallyId !== p.rallyId) continue
+    const only = !p.startClick !== !p.endClick ? (p.startClick ?? p.endClick)! : null
+    if (only && q.startClick) {
+      const atHit = Math.hypot((only.u - q.startClick.u) * 9, (only.v - q.startClick.v) * 18) < SET_AT_HIT_M
+      p.startClick = atHit ? null : only
+      p.endClick = atHit ? only : null
+    }
     if (!p.endClick) p.endClick = q.startClick
     p.setTo = q.code.charAt(4)
   }
@@ -252,6 +260,9 @@ function clickPoint(raw: string | undefined): ClickPoint | null {
   const row = Math.floor((i - 1) / 100), col = (i - 1) % 100
   return { u: (((col + 0.5) * 4) / 100 - 0.5) / 3, v: (((row + 0.5) * 7) / 100 - 0.5) / 6 } // v: own end line 0, net 0.5
 }
+
+// A set's only click within this many metres of the attack's hitting spot is where the set went.
+const SET_AT_HIT_M = 1.5
 
 // The same place seen from the other side of the net.
 const turned = (p: ClickPoint | null | undefined): ClickPoint | null => (p ? { u: 1 - p.u, v: 1 - p.v } : null)

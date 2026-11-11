@@ -16,7 +16,8 @@ import { t } from '../../../shared/i18n'
 import { formatLength } from '../format'
 
 const api = window.api
-const onlyMarker = (sc: Reel, m: Marker) => ({ ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] })
+// One marker group alone: its clips and slides (the scene's head slides belong to no marker, so stay out).
+const onlyMarker = (sc: Reel, m: Marker) => ({ ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m], slides: sc.slides?.filter(s => s.group !== 'head') })
 
 export type ExportState = { status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string }
 

@@ -53,12 +53,12 @@ export function phaseMarker(attack: Play): Marker | null {
 }
 const PHASE_NAMES = (): Partial<Record<Marker, string>> => ({ 1: t('良いレセプション'), 2: t('悪いレセプション'), 3: t('トランジション') })
 
-// A serve by its result: an ace, the reception broken (+ /), returned well (! -), an error.
+// A serve by its result: an ace, an out-of-system pass (+ /), an in-system pass (! -), an error.
 export function serveMarker(serve: Play): Marker | null {
   const e = serve.effect
   return e === '#' ? 1 : e === '+' || e === '/' ? 2 : e === '!' || e === '-' ? 3 : e === '=' ? 4 : null
 }
-const SERVE_NAMES = (): Partial<Record<Marker, string>> => ({ 1: t('サービスエース'), 2: t('崩した'), 3: t('返された'), 4: t('サーブミス') })
+const SERVE_NAMES = (): Partial<Record<Marker, string>> => ({ 1: t('サービスエース'), 2: t('Cパス'), 3: t('ABパス'), 4: t('サーブミス') })
 
 const SKILL: Record<Exclude<PresetKind, 'sideout'>, string> = { serve: 'S', block: 'B', attack: 'A' }
 const otherTeam = { our: 'opp', opp: 'our', all: 'all' } as const

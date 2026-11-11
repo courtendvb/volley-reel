@@ -5,7 +5,7 @@ import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { SlideFlights, SlideMarks } from './court'
 import type { CardLayout, OverlayPatch, OverlaySettings } from './overlay'
-import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg } from './reel'
+import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg, type SlideGroup } from './reel'
 import type { Match } from './types'
 import { t } from './i18n'
 import type { VideoPreset } from './presets'
@@ -74,11 +74,12 @@ export function planScene(order: Clip[], scene: Reel, overlay: OverlaySettings, 
 }
 
 // planScene by group: each marker group that plays (its card first) and the unmarked clips, in order.
-function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): { group: Group; items: PlanItem[] }[] {
-  const out: { group: Group; items: PlanItem[] }[] = []
+// The scene's head slides (group 'head') lead the first part, or are a part of their own with nothing else.
+function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matches: Record<string, Match>, ourCodes: string[]): { group: SlideGroup; items: PlanItem[] }[] {
+  const out: { group: SlideGroup; items: PlanItem[] }[] = []
   const playable = new Set(order.map(c => c.id))
-  const items = (g: Group, ids?: string[]): PlanItem[] => groupRows(scene, g, ids).flatMap((r): PlanItem[] =>
-    r.kind === 'slide' ? [slideItem(r.slide)] : playable.has(r.id) ? [{ kind: 'clip', clip: scene.clips[r.id], sceneId: scene.id, group: g }] : [])
+  const items = (g: SlideGroup, ids?: string[]): PlanItem[] => groupRows(scene, g, ids).flatMap((r): PlanItem[] =>
+    r.kind === 'slide' ? [slideItem(r.slide)] : playable.has(r.id) && g !== 'head' ? [{ kind: 'clip', clip: scene.clips[r.id], sceneId: scene.id, group: g }] : [])
   for (const g of scene.groupOrder.filter(m => !scene.markerOff?.[m])) {
     const list = items(g)
     if (!list.length) continue
@@ -91,6 +92,11 @@ function sceneParts(order: Clip[], scene: Reel, overlay: OverlaySettings, matche
   const unmarked = new Set(scene.groups.none)
   const rest = scene.scope === 'all' ? items('none', order.filter(c => unmarked.has(c.id)).map(c => c.id)) : []
   if (rest.length) out.push({ group: 'none', items: rest })
+  const head = items('head')
+  if (head.length) {
+    if (out.length) out[0] = { ...out[0], items: [...head, ...out[0].items] }
+    else out.push({ group: 'head', items: head })
+  }
   return out
 }
 
@@ -127,7 +133,7 @@ export function planVideoChapters(video: Video, scenes: Record<string, Reel>, or
     if (!parts.length) continue
     const card = sceneCard(s, order, overlay, matches, ourCodes)
     for (const [i, p] of parts.entries()) {
-      const name = parts.length === 1 ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('マーカー {0}', p.group)}`
+      const name = parts.length === 1 || p.group === 'head' ? s.name : `${s.name} - ${p.group === 'none' ? t('その他') : s.markerNames[p.group] || t('マーカー {0}', p.group)}`
       chapters.push({ at: chapters.length ? plan.length : 0, title: name })
       if (i === 0 && card) plan.push(card)
       plan.push(...p.items)

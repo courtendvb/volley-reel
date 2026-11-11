@@ -24,7 +24,7 @@ export interface PlayRef {
 
 export interface PlayFilter {
   team: 'all' | TeamRole // the project's target team or its opponents, whichever side they played
-  dir: 'all' | PlayDir // up the screen or down it; sets, and plays whose way isn't known, are left out
+  dir: 'all' | PlayDir // up the screen or down it; plays whose way isn't known are left out
   persons: string[] // empty = any
   skills: string[] // empty = any
   effects: string[]

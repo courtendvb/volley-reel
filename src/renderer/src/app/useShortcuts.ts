@@ -3,7 +3,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { chronological, type Clip, type Group, type Marker, type Reel } from '../../../shared/reel'
 import { mergeScoped, type ScopedAnnotations } from '../../../shared/annotationScope'
-import { withGroups, type Annotation } from '../../../shared/annotation'
+import { translate, withGroups, type Annotation } from '../../../shared/annotation'
 import type { PlayRef } from '../../../shared/filter'
 import type { Tool } from '../components/AnnotationLayer'
 import { arrowSec, composing, ctrlArrowSec } from '../keys'
@@ -37,6 +37,11 @@ interface ShortcutHandlers {
   setTag: (n: string) => void
   markerKey: (m: Marker | null) => void
 }
+
+// The arrow keys nudge the selected objects, for fine placement: a couple of pixels of a 1080p
+// frame a press, five times that with Shift.
+export const NUDGE_PX = 2, NUDGE_SHIFT = 5
+const NUDGE: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
 
 const TOOLS: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', g: 'triangle', l: 'polyline', p: 'polygon' }
 
@@ -79,6 +84,19 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       }
       if (e.altKey) return
       if (e.key === '?') { h.toggleShortcuts(); return }
+      // An object selected: the arrows move it (its group and the other selected ones with it).
+      const way = NUDGE[e.key], sel = latest.selectedAnn
+      if (way && sel) {
+        const card = h.editingCard(), now = card ? null : h.scopedNow()
+        const list = card ? h.cardAnns() : now ? mergeScoped(now) : []
+        if (list.some(a => a.id === sel)) {
+          e.preventDefault()
+          const px = NUDGE_PX * (e.shiftKey ? NUDGE_SHIFT : 1), ids = withGroups(list, [sel, ...h.extraSel()])
+          const moved = list.map(a => (ids.includes(a.id) ? translate(a, (way[0] * px) / 1920, (way[1] * px) / 1080) : a))
+          if (card) h.setCardAnns(moved); else h.setAnns(moved)
+          return
+        }
+      }
       if (e.code === 'Space') { e.preventDefault(); playback.toggle() }
       else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && h.focusPane.current === 'scene') {
         // Up / Down in the scene editor (last clicked): the clip above / below, opened like a click on it.

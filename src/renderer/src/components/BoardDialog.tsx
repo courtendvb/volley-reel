@@ -20,7 +20,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker; team: string; searched: boolean }
+export interface BoardChoice { setView: SetView; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean } // marker 'head': the scene's head, in no marker
 
 interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks
 
@@ -33,7 +33,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   initial?: BoardConfig // changing a card already made
   chartStyle?: (skill: BoardSkill) => ChartStyle | undefined // the charts' look from the 表示 tab, for the preview
   onCreate: (c: BoardChoice) => void
-  onImport: (marker: Marker) => void // a PDF or pictures as cards instead
+  onImport: (marker: Marker | 'head') => void // a PDF or pictures as cards instead
   onClose: () => void
 }) {
   const [skill, setSkill] = useState<BoardSkill>(initial?.skill ?? 'S')
@@ -53,7 +53,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const [noteFills, setNoteFills] = useState<[string, string]>(initial?.noteFills ?? NOTE_FILLS)
   const [photos, setPhotos] = useState(initial?.photos ?? true)
   const [background, setBackground] = useState(initial?.background ?? '#FFFFFF')
-  const [marker, setMarker] = useState<Marker>(scene?.groupOrder[0] ?? MARKERS[0])
+  const [inMarker, setInMarker] = useState<Marker>(scene?.groupOrder[0] ?? MARKERS[0])
+  const [asCard, setAsCard] = useState(false) // a title card at the scene's head, outside the markers
+  const marker: Marker | 'head' = asCard ? 'head' : inMarker
   const [setView, setSetView] = useState<SetView>(initial?.setView ?? 'both')
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
@@ -147,13 +149,19 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           <label className="check" title={t('スライドの背景色')}>{t('背景')} <PaletteColor value={background} label={t('スライドの背景色')} onChange={setBackground} /></label>
         </div>
         {!initial && <div className="filter-row">
-          <label className="field-label" htmlFor="board-marker">{t('入れる先')}</label>
-          {scene ? (
-            <select id="board-marker" value={marker} title={t('マーカーの先頭に、タイトルカードのように入ります')} onChange={e => setMarker(+e.target.value as Marker)}>
+          <span className="field-label">{t('入れる先')}</span>
+          <div className="segmented" role="radiogroup" aria-label={t('入れる先')}>
+            <button role="radio" aria-checked={!asCard} className={!asCard ? 'on' : ''} onClick={() => setAsCard(false)}
+              title={t('マーカーの先頭にスライドとして入ります。そのマーカーを流すときだけ出ます')}>{t('マーカーの中')}</button>
+            <button role="radio" aria-checked={asCard} className={asCard ? 'on' : ''} onClick={() => setAsCard(true)}
+              title={t('どのマーカーにも入れず、シーンの頭（シーンのタイトルカードのあと、マーカーより前）にタイトルカードのように入ります。マーカーのオン・オフにかかわらず流れます')}>{t('タイトルカード（マーカー外）')}</button>
+          </div>
+          {!asCard && (scene ? (
+            <select id="board-marker" value={inMarker} aria-label={t('入れるマーカー')} title={t('マーカーの先頭に、タイトルカードのように入ります')} onChange={e => setInMarker(+e.target.value as Marker)}>
               {scene.groupOrder.map(m => <option key={m} value={m}>{scene.markerNames[m] || t('マーカー {0}', m)}</option>)}
             </select>
-          ) : <span className="muted">{t('新しいシーンの先頭のマーカーに入ります')}</span>}
-          <button className="link" title={t('PowerPoint から書き出した PDF や画像を、1 枚ずつカードとしてこのマーカーの先頭に入れます')} onClick={() => onImport(marker)}>{t('PDF・画像を読み込む…')}</button>
+          ) : <span className="muted">{t('新しいシーンの先頭のマーカーに入ります')}</span>)}
+          <button className="link" title={asCard ? t('PowerPoint から書き出した PDF や画像を、1 枚ずつカードとしてシーンの頭に入れます') : t('PowerPoint から書き出した PDF や画像を、1 枚ずつカードとしてこのマーカーの先頭に入れます')} onClick={() => onImport(marker)}>{t('PDF・画像を読み込む…')}</button>
         </div>}
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">

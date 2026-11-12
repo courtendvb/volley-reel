@@ -254,6 +254,7 @@ export interface Api {
   savePaletteItem(name: string, annotations: Annotation[], category?: string | null): Promise<Palette>
   addPaletteCategory(name: string): Promise<Palette>
   renamePaletteCategory(id: string, name: string): Promise<Palette>
+  movePaletteCategory(id: string, to: number): Promise<Palette> // `to` counted among the other tabs
   removePaletteCategory(id: string): Promise<Palette> // only an empty one
   setPaletteItemCategory(id: string, category: string | null): Promise<Palette>
   removePaletteItem(id: string): Promise<Palette> // a locked item is kept

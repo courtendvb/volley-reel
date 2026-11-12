@@ -36,6 +36,7 @@ export async function savePaletteItem(name: string, anns: Annotation[], category
 
 export async function addPaletteCategory(name: string): Promise<Palette> { const p = await api.addPaletteCategory(name); set(p); return p }
 export async function renamePaletteCategory(id: string, name: string): Promise<void> { set(await api.renamePaletteCategory(id, name)) }
+export async function movePaletteCategory(id: string, to: number): Promise<void> { set(await api.movePaletteCategory(id, to)) }
 export async function removePaletteCategory(id: string): Promise<void> { set(await api.removePaletteCategory(id)) }
 export async function setPaletteItemCategory(id: string, category: string | null): Promise<void> { set(await api.setPaletteItemCategory(id, category)) }
 

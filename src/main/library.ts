@@ -95,6 +95,16 @@ export class Library {
     return this.savePalette({ ...p, categories: (p.categories ?? []).map(c => (c.id === id ? { ...c, name: name.trim() } : c)) })
   }
 
+  // Puts a category at `to` (counted among the others), for the order of the tabs.
+  async movePaletteCategory(id: string, to: number): Promise<Palette> {
+    const p = await this.palette()
+    const cat = p.categories?.find(c => c.id === id)
+    if (!cat) return p
+    const rest = (p.categories ?? []).filter(c => c.id !== id)
+    rest.splice(Math.max(0, Math.min(to, rest.length)), 0, cat)
+    return this.savePalette({ ...p, categories: rest })
+  }
+
   // Only an empty category goes, so removing a tab never takes items with it.
   async removePaletteCategory(id: string): Promise<Palette> {
     const p = await this.palette()

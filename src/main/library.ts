@@ -17,6 +17,7 @@ import type { ImportProgress, LibraryInfo, Match, MissingFiles, MissingPart, Pal
 import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 import { t } from '../shared/i18n'
+import { withServeMark } from '../shared/serveMark'
 
 // A scout file: a DataVolley .dvw (Windows-1252 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
@@ -340,6 +341,15 @@ export class Library {
       throw new Error(t('コートの四隅が不正です'))
     const { court: _old, ...rest } = m
     const next: Match = court ? { ...rest, court } : rest
+    await this.saveMatch(next)
+  }
+
+  // A serve's hit or touch on a match (serveMark.ts); null clears it.
+  async setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    const next = withServeMark(m, fingerprint, patch)
+    this.matches.set(id, next) // before the write, so a mark set right after builds on this one
     await this.saveMatch(next)
   }
 

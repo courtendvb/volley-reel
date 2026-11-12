@@ -2,13 +2,13 @@
 // self-checks), and small helpers App and its hooks share.
 import type { PlayFilter, PlayRef } from '../../../shared/filter'
 import { markersOf, relink, type Clip, type Group, type Marker, type Reel } from '../../../shared/reel'
-import type { CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
+import type { CaptionData, OverlaySettings, ScoreboardData, SpeedData } from '../../../shared/overlay'
 import type { LibraryInfo, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
 import { opponentLabel, type Video } from '../../../shared/video'
 import type { PlayKey } from '../components/PlayList'
 import type { ClipInfo } from '../components/ReelPanel'
 
-type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData }
+type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData; speed?: SpeedData | null }
 
 export interface AppLatest {
   results: PlayRef[]; filter: PlayFilter; matches: Record<string, Match>; reels: Reel[]; reelId: string | null; reel: Reel | null

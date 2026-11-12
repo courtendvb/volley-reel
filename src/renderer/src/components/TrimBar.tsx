@@ -14,8 +14,11 @@ interface Props {
   overrides: { in: boolean; out: boolean }
   overlapLabels: string[]
   onTrim: (edge: 'in' | 'out', t: number | null) => void
-  speed: { value: number | null; usual: number | null } | null // a serve's speed for its flight, in km/h; null on other skills
+  // A serve's speed for its flight, in km/h (measured: from the red line to the reception's touch); null on other skills.
+  speed: { value: number | null; usual: number | null; measured: number | null } | null
   onSpeed: (kmh: number | null) => void
+  touchTime: number | null // a serve: when the reception touches the ball (the blue line), marked by hand; null = not marked
+  onTouchTime: (t: number | null) => void
   skillTime: number | null // the red line, moved by hand from keyTime; null = on it
   onSkillTime: (t: number | null) => void
   loop: boolean // loop the clip (off: play on past OUT to see around it)
@@ -36,14 +39,14 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, speed, onSpeed, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming, onFrameSlide }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, speed, onSpeed, touchTime, onTouchTime, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming, onFrameSlide }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
   // While a show / hide time sticks to another time: that time, drawn as a guide line.
   const [snapGuide, setSnapGuide] = useState<number | null>(null)
   // Dragging an object's start or end, on the main track or on its own lane (same scale).
   const objDrag = useRef<{ id: string; edge: 'from' | 'to'; rect: DOMRect } | null>(null)
   const track = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<'in' | 'out' | 'skill' | null>(null)
+  const [drag, setDrag] = useState<'in' | 'out' | 'skill' | 'touch' | null>(null)
   const skillAt = skillTime ?? keyTime
 
   const lo = Math.max(0, Math.min(range.in, def.in) - CONTEXT_SEC)
@@ -57,7 +60,7 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     return timeOn(clientX, r.left, r.width)
   }
 
-  const startDrag = (edge: 'in' | 'out' | 'skill') => (e: PointerEvent) => {
+  const startDrag = (edge: 'in' | 'out' | 'skill' | 'touch') => (e: PointerEvent) => {
     e.stopPropagation()
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
     setDrag(edge)
@@ -87,6 +90,13 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
       setSnapGuide(sn.snapped)
       onSkillTime(sn.snapped !== null ? null : Math.round(sn.t * 100) / 100)
       playback.seek(sn.t)
+      return
+    }
+    if (drag === 'touch') {
+      // Frames matter here (a serve flies well under a second), so the time is kept to the millisecond.
+      const at = Math.max(skillAt + 0.05, t)
+      onTouchTime(Math.round(at * 1000) / 1000)
+      playback.seek(at)
       return
     }
     onTrim(drag, t)
@@ -137,6 +147,10 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         <div className="trim-range" style={{ left: pct(range.in), width: `calc(${pct(range.out)} - ${pct(range.in)})` }} />
         <div className={`trim-key${drag === 'skill' ? ' dragging' : ''}`} style={{ left: pct(skillAt) }} onPointerDown={startDrag('skill')}
           title={t('スキルの起点（ドラッグ）。軌道はここから動きます')} />
+        {speed && touchTime !== null && (
+          <div className={`trim-touch${drag === 'touch' ? ' dragging' : ''}`} style={{ left: pct(touchTime) }} onPointerDown={startDrag('touch')}
+            title={t('レシーブのタッチ（ドラッグ）。赤線からここまでで速度を出します')} />
+        )}
         <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title={t('IN（ドラッグ）')} />
         <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title={t('OUT（ドラッグ）')} />
         {(timing?.slows ?? []).map((s, k) => (
@@ -180,7 +194,14 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
           onSet={() => onTrim('out', playback.current.time)} onType={v => onTrim('out', keyTime + v)} onReset={() => onTrim('out', null)} />
         <Edge name={t('起点')} keyName="◎" value={rel(skillAt)} overridden={skillTime !== null}
           onSet={() => onSkillTime(Math.round(playback.current.time * 100) / 100)} onType={v => onSkillTime(v ? Math.round((keyTime + v) * 100) / 100 : null)} onReset={() => onSkillTime(null)} />
-        {speed?.usual && <Speed value={speed.value} usual={speed.usual} onChange={onSpeed} />}
+        {speed && (
+          <Edge name={t('タッチ')} keyName="◎" value={touchTime === null ? '' : (touchTime - keyTime).toFixed(3)} overridden={touchTime !== null}
+            title={t('レシーブがボールに触れたコマで押します（Shift+← → で 1 コマずつ）')} unsetLabel={t('未設定')}
+            onSet={() => onTouchTime(Math.round(playback.current.time * 1000) / 1000)}
+            onType={v => onTouchTime(Math.round((keyTime + v) * 1000) / 1000)} onReset={() => onTouchTime(null)} resetLabel={t('外す')} />
+        )}
+        {speed?.measured ? <Measured kmh={speed.measured} sec={touchTime! - skillAt} hitByHand={skillTime !== null} />
+          : speed?.usual && <Speed value={speed.value} usual={speed.usual} onChange={onSpeed} />}
         <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → {0} 秒、Shift+← → 1 フレーム', arrowSec())}</span>
       </div>
     </div>
@@ -249,6 +270,16 @@ function Speed({ value, usual, onChange }: { value: number | null; usual: number
   )
 }
 
+// The speed from the red line to the blue one, which the flight then follows (the field gives way to it).
+function Measured({ kmh, sec, hitByHand }: { kmh: number; sec: number; hitByHand: boolean }) {
+  return (
+    <span className="trim-edge trim-measured" title={t('赤線（ヒット）から青線（タッチ）までの時間と、サーブ位置からレシーブ位置までの距離から出した平均の速さです')}>
+      {t('速度')} <b>{kmh} km/h</b> <span className="muted small">{t('（{0} 秒）', sec.toFixed(3))}</span>
+      {!hitByHand && <span className="overlap" title={t('赤線が DVW の秒のままです。サーブを打ったコマに合わせてください')}>⚠ {t('起点が未調整')}</span>}
+    </span>
+  )
+}
+
 // Seconds from the key play, typed or set to the playhead (◎).
 function SecField({ value, label, onType, onNow }: { value: string; label: string; onType: (v: number) => void; onNow: () => void }) {
   const [text, setText] = useState(value)
@@ -266,19 +297,20 @@ function SecField({ value, label, onType, onNow }: { value: string; label: strin
   )
 }
 
-function Edge({ name, keyName, value, overridden, onSet, onType, onReset }: {
+function Edge({ name, keyName, value, overridden, onSet, onType, onReset, title, unsetLabel, resetLabel }: {
   name: string; keyName: string; value: string; overridden: boolean
   onSet: () => void; onType: (v: number) => void; onReset: () => void
+  title?: string; unsetLabel?: string; resetLabel?: string // the button's tip, and the words for not set and for clearing
 }) {
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
   const commit = () => { const v = parseFloat(text); if (isFinite(v)) onType(v); else setText(value) }
   return (
     <span className="trim-edge">
-      <button onClick={onSet} title={t('再生位置を {0} にする ({1})', name, keyName)}>{keyName} {name}</button>
+      <button onClick={onSet} title={title ?? t('再生位置を {0} にする ({1})', name, keyName)}>{keyName} {name}</button>
       <input type="number" step={0.1} value={text} aria-label={t('{0}（キープレーからの秒）', name)}
         onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
-      {overridden ? <button className="link" onClick={onReset}>{t('既定に戻す')}</button> : <span className="muted small">{t('既定')}</span>}
+      {overridden ? <button className="link" onClick={onReset}>{resetLabel ?? t('既定に戻す')}</button> : <span className="muted small">{unsetLabel ?? t('既定')}</span>}
     </span>
   )
 }

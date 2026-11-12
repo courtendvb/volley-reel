@@ -2,8 +2,8 @@
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
-import type { CaptionData, OverlaySettings, ScoreboardData } from '../../shared/overlay'
-import { drawCaption, drawCard, drawScoreboard } from '../../shared/overlayDraw'
+import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
@@ -18,7 +18,7 @@ const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
 
 interface Deps {
   range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
-  overlayData: (c: Clip) => { scoreboard: ScoreboardData; caption: CaptionData } | null
+  overlayData: (c: Clip) => { scoreboard: ScoreboardData; caption: CaptionData; speed?: SpeedData | null } | null
   matches: Record<string, Match>
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
@@ -148,8 +148,8 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
         if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones, flies ? null : 1)
-        if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, overlay.theme)
-        if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, overlay.theme, packPhotoImage(data!.caption.photo))
+        if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, lookTheme(overlay))
+        if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, lookTheme(overlay), packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),
     })
@@ -169,6 +169,12 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
         if (hasFlight(d.courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !d.courtStyle!.noLift)
       }) })
     }
+  }
+  // A serve's speed plate, from the reception's touch to the end of the clip.
+  const sp = data?.speed
+  if (sp && overlay.serveSpeed.enabled && sp.touchSec < r.out) {
+    const from = playedAt(ps, Math.max(r.in, sp.touchSec), 'start')
+    if (played - from > 0.001) layers.push({ from, to: played, png: await png(ctx => drawServeSpeed(ctx, W, H, sp.kmh, overlay.serveSpeed, lookTheme(overlay))) })
   }
   const timed = new Map<string, Annotation[]>()
   for (const a of anns) {

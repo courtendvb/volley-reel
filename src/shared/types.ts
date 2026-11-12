@@ -116,7 +116,11 @@ export interface Match {
   warnings: string[]
   importedAt: string
   court?: CourtFit // the court grid fitted to this video (missing: not fitted yet)
+  serveMarks?: Record<string, ServeMark> // by play fingerprint: serves' hits and touches marked by hand (serveMark.ts)
 }
+
+// A serve's hit and its reception's touch, video times marked by hand frame by frame.
+export interface ServeMark { hit?: number; touch?: number }
 
 export interface ProjectSettings {
   ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
@@ -202,6 +206,7 @@ export interface Api {
   setProjectMatches(ids: string[]): Promise<ProjectInfo>
   parseMatch(id: string): Promise<ParsedDVW>
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
+  setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
   saveReel(r: Reel): Promise<void>

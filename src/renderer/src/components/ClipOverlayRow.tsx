@@ -58,6 +58,7 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       </select>
       <label className="check"><input type="checkbox" checked={!o?.playerCaption?.hidden}
         onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> {t('テロップ')}</label>
+      <ServeSpeedCheck overlay={s} onOverlay={onOverlay} />
       <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       {canVideo && (
@@ -90,5 +91,13 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
         )}
       </span>
     </div>
+  )
+}
+
+// The serve speed plate on the video (the video's setting): a serve with its hit and touch marked shows it from the touch.
+export function ServeSpeedCheck({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <label className="check" title={t('ヒットとタッチを打ったサーブの速度を、タッチのコマから動画に出します（この動画のすべて）')}>
+      <input type="checkbox" checked={s.serveSpeed.enabled} onChange={e => onOverlay({ ...s, serveSpeed: { ...s.serveSpeed, enabled: e.target.checked } })} /> {t('サーブ速度')}</label>
   )
 }

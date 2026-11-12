@@ -210,6 +210,8 @@ function registerIpc(): void {
     return project?.info() ?? null
   })
 
+  ipcMain.handle('match:setServeMark', (_e, id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => lib().setServeMark(id, fingerprint, patch))
+
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
     const p = proj()
     await p.saveSettings(s)

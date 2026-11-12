@@ -41,6 +41,7 @@ export interface SmokeOpts {
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
+  serveTouch?: boolean // a serve's hit and its reception's touch marked on the trim bar: the measured speed in the bar and the caption
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
   cardOwn?: boolean // 「このカードだけ」: one marker card's title moved and scaled apart from the others, then back
   flightStill?: boolean // with courtPoints: the animation off, the whole curve on one layer
@@ -160,6 +161,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.cardOwn) return smokeCardOwn(res)
     if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo, opts.flightStill)
+    if (opts.serveTouch) return smokeServeTouch(res)
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
@@ -1185,6 +1187,36 @@ export function installSmoke(h: SmokeHost): void {
 
   // Slow and hold: the trim bar's ＋ スロー at IN+1 s and ＋ 停止 at IN+3 s; the loop plays the stretch at
   // half speed and stops on the hold for its seconds; the export is as long as the clip played.
+  // A serve's hit (起点) and its reception's touch (タッチ) set at the playhead from the trim bar: the bar
+  // shows the speed from one to the other, the caption carries it, the flight lasts that long, and 外す clears it.
+  const smokeServeTouch = async (res: PlayRef[]) => {
+    const r = res.find(x => x.play.skill === 'S' && x.play.startClick && x.play.endClick)
+    if (!r) throw new Error('no serve with both clicks in the results (VR_SMOKE_FILTER {"skills":["S"]})')
+    const { reel: added, ids } = addClips(newReel('touch smoke'), [{ matchId: r.matchId, play: r.play }])
+    const built = { ...added, scope: 'all' as const }
+    const v = newVideo('touch smoke', [built.id])
+    setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+    await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'touch reel')
+    const clip = () => latest.current.reel!.clips[ids[0]]
+    activateClip(clip()); await sleep(800)
+    await openPanel('trim')
+    const key = r.play.time + latest.current.matches[r.matchId].offsetSec
+    const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.trim-fields button')].find(b => b.textContent === label)!
+    const before = { marker: !!document.querySelector('.trim-touch'), speedField: !!document.querySelector('input[aria-label="' + t('サーブの速度（km/h）') + '"]') }
+    playback.pause(); await playback.seekAndWait(key + 0.2)
+    button('◎ ' + t('起点')).click(); await sleep(300)
+    await playback.seekAndWait(key + 0.9)
+    button('◎ ' + t('タッチ')).click(); await sleep(400)
+    const c = clip()
+    const measured = document.querySelector('.trim-measured')?.textContent ?? null
+    const caption = latest.current.overlayData!(c)?.caption.line ?? null
+    const flight = flightTiming(r.play, latest.current.matches[r.matchId].offsetSec, c)
+    await api.smokeShot!('serve-touch.png')
+    button(t('外す')).click(); await sleep(300)
+    const cleared = { touchSec: clip().touchSec ?? null, marker: !!document.querySelector('.trim-touch'), measured: !!document.querySelector('.trim-measured') }
+    return { serveTouch: { play: r.play.code, before, skillSec: c.skillSec, touchSec: c.touchSec, measured, caption, flight, cleared } }
+  }
+
   const smokeSlowHold = async (res: PlayRef[], exportTo?: string) => {
     const r = res[0]
     const { reel: added, ids } = addClips(newReel('slow smoke'), [{ matchId: r.matchId, play: r.play }])

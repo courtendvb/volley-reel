@@ -27,6 +27,7 @@ export interface Clip {
   timing?: ClipTiming // slow stretches and holds (shared/timing.ts); video times like inSec / outSec
   speedKmh?: number // a serve's speed through the air, estimated by hand: how fast its flight goes
   skillSec?: number // when the play really happens, moved by hand from the DVW's whole second (the red line); starts the ball's flight
+  touchSec?: number // a serve: when the reception touches the ball, marked by hand frame by frame; with skillSec it measures the serve's speed
 }
 
 // "keyplay": key play ± seconds. "toEnd": from just before the key play to the end of its rally.
@@ -450,6 +451,11 @@ export function setTiming(reel: Reel, clipId: string, timing: ClipTiming): Reel 
 // Where the red line of a clip is: a video time, or null back on the DVW's time.
 export function setSkillTime(reel: Reel, clipId: string, sec: number | null): Reel {
   return patchClip(reel, clipId, ({ skillSec: _old, ...rest }) => (sec === null ? rest : { ...rest, skillSec: sec }))
+}
+
+// When a serve's reception touches the ball (a video time), or null to clear it.
+export function setTouchTime(reel: Reel, clipId: string, sec: number | null): Reel {
+  return patchClip(reel, clipId, ({ touchSec: _old, ...rest }) => (sec === null ? rest : { ...rest, touchSec: sec }))
 }
 
 // A serve's speed for its flight, or null back on the default.

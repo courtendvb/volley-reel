@@ -18,7 +18,8 @@ export interface OverlaySettings {
   theme: OverlayTheme
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   // photo: the player's photo from the player packs, above a caption at the bottom (below one at the top).
-  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean }
+  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean
+    showSpeed?: boolean } // a serve's measured speed (hit to the reception's touch) after the line; missing = shown
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
@@ -123,13 +124,16 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
 }
 
 // The name: the clip's own, else the video's name for the player (Video.captionNames), else the DVW's.
-export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption'], names?: Record<string, string>): CaptionData {
+// speedKmh: a serve's measured speed (court.ts measuredSpeed), put after the line, the clip's own line too.
+export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption'], names?: Record<string, string>, speedKmh?: number | null): CaptionData {
   const parts = [s.showSkill ? skillName(play.skill) : null, s.showEvaluation ? effectName(play.skill, play.effect) : null].filter(Boolean) as string[]
   const autoLine = parts.length ? parts.join(' · ').toUpperCase() : null
   const name = o?.name?.trim() || names?.[play.playerKey]?.trim() || displayName(dvw.players, play.side, play.jersey)
+  const line = o?.line !== undefined && o.line.trim() !== '' ? o.line.trim().toUpperCase() : autoLine
+  const speed = speedKmh && s.showSpeed !== false ? `${speedKmh} KM/H` : null
   return {
     number: s.showNumber ? play.jersey : null,
     name: s.showName ? name : null,
-    line: o?.line !== undefined && o.line.trim() !== '' ? o.line.trim().toUpperCase() : autoLine,
+    line: line && speed ? `${line} · ${speed}` : line ?? speed,
   }
 }

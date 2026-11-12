@@ -309,6 +309,11 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .trim-key { position: absolute; top: 0; bottom: 14px; width: 10px; margin-left: -5px; cursor: ew-resize; }
 .trim-key::before { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: #DC2626; }
 .trim-key.dragging::before, .trim-key:hover::before { left: 3px; width: 4px; }
+/* A serve's reception touch, marked by hand: blue, the end of the flight that starts at the red line. */
+.trim-touch { position: absolute; top: 0; bottom: 14px; width: 10px; margin-left: -5px; cursor: ew-resize; }
+.trim-touch::before { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: #2563EB; }
+.trim-touch.dragging::before, .trim-touch:hover::before { left: 3px; width: 4px; }
+.trim-measured b { font-variant-numeric: tabular-nums; }
 .trim-handle { position: absolute; top: 2px; width: 10px; height: 28px; margin-left: -5px; background: var(--primary); border-radius: 3px; cursor: ew-resize; }
 .trim-handle.dragging { background: #1E3A8A; }
 .trim-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }

@@ -53,6 +53,14 @@ describe('caption data', () => {
     expect(captionData(D, D.plays[2], s, { line: '  ' }).line).toBe('SERVE · ACE')
   })
 
+  it("puts a serve's measured speed after the line, the clip's own too, unless switched off", () => {
+    expect(captionData(D, D.plays[2], s, undefined, undefined, 98).line).toBe('SERVE · ACE · 98 KM/H')
+    expect(captionData(D, D.plays[2], s, { line: 'jump serve' }, undefined, 98).line).toBe('JUMP SERVE · 98 KM/H')
+    expect(captionData(D, D.plays[2], { ...s, showSkill: false, showEvaluation: false }, undefined, undefined, 98).line).toBe('98 KM/H')
+    expect(captionData(D, D.plays[2], { ...s, showSpeed: false }, undefined, undefined, 98).line).toBe('SERVE · ACE')
+    expect(captionData(D, D.plays[2], s, undefined, undefined, null).line).toBe('SERVE · ACE')
+  })
+
   it("uses the video's name for the player in every clip, unless the clip has its own", () => {
     const key = D.plays[2].playerKey, names = { [key]: 'Kenta Sato' }
     expect(captionData(D, D.plays[2], s, undefined, names).name).toBe('Kenta Sato')

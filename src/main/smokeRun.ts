@@ -178,6 +178,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       cardOwn: !!process.env.VR_SMOKE_CARDOWN,
       flightStill: !!process.env.VR_SMOKE_FLIGHTSTILL,
       slowHold: !!process.env.VR_SMOKE_SLOWHOLD,
+      serveTouch: !!process.env.VR_SMOKE_SERVETOUCH,
       direction: !!process.env.VR_SMOKE_DIRECTION,
       maximize: !!process.env.VR_SMOKE_MAXIMIZE,
       listRun: !!process.env.VR_SMOKE_LISTRUN,

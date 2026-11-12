@@ -77,6 +77,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {check(t('名前'), s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
                 {check(t('スキル'), s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
                 {check(t('評価'), s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
+                {check(t('サーブ速度'), s.playerCaption.showSpeed !== false, v => set('playerCaption', { showSpeed: v }))}
                 {check(t('写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）'), s.playerCaption.photo, v => set('playerCaption', { photo: v }))}
               </div>
             </section>

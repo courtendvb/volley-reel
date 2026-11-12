@@ -3,13 +3,14 @@ import { Accordion } from './Accordion'
 import { bounds, drawAnnotation, shiftTimes, type Annotation } from '../../../shared/annotation'
 import { assetImage, subscribeAssets } from '../assets'
 import {
-  addPaletteCategory, lockPaletteItem, movePaletteItem, removePaletteCategory, removePaletteItem, renamePaletteCategory,
+  addPaletteCategory, lockPaletteItem, movePaletteCategory, movePaletteItem, removePaletteCategory, removePaletteItem, renamePaletteCategory,
   savePaletteItem, setPaletteItemCategory, usePalette, usePaletteItem,
 } from '../palette'
 import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
 
 const DT_ITEM = 'application/x-vr-palette-item'
+const DT_TAB = 'application/x-vr-palette-tab'
 const ALL = 'all' // the すべて tab: every item; saving there leaves the item without a category
 
 // Saved objects to reuse (in the library, so every project has them): save the selection (with its
@@ -55,6 +56,7 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
   const [busy, setBusy] = useState(false)
   const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null) // where a dragged item will land
   const [overTab, setOverTab] = useState<string | null>(null) // the tab a dragged item would move to
+  const [tabAt, setTabAt] = useState<{ id: string; after: boolean } | null>(null) // where a dragged tab will land
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
   const save = () => run(async () => {
     const clean = selection.map(a => shiftTimes(a, clipIn === null ? null : -clipIn))
@@ -69,13 +71,27 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
   const shown = current === ALL ? palette.items : palette.items.filter(it => it.category === current)
   const count = (id: string) => palette.items.filter(it => it.category === id).length
   // Dropped on a tab: the item moves to that category (すべて: none).
+  // A dragged tab lands before (left half) or after (right half) the one it is dropped on; すべて stays first.
   const tabDrop = (id: string) => ({
-    onDragOver: (e: DragEvent) => { if (e.dataTransfer.types.includes(DT_ITEM)) { e.preventDefault(); setOverTab(id) } },
-    onDragLeave: () => setOverTab(t => (t === id ? null : t)),
-    onDrop: (e: DragEvent) => {
-      const item = e.dataTransfer.getData(DT_ITEM)
-      setOverTab(null); setDropAt(null)
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      if (e.dataTransfer.types.includes(DT_ITEM)) { e.preventDefault(); setOverTab(id) }
+      else if (e.dataTransfer.types.includes(DT_TAB) && id !== ALL) {
+        e.preventDefault()
+        const b = e.currentTarget.getBoundingClientRect()
+        setTabAt({ id, after: e.clientX > b.left + b.width / 2 })
+      }
+    },
+    onDragLeave: () => { setOverTab(t => (t === id ? null : t)); setTabAt(t => (t?.id === id ? null : t)) },
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      const item = e.dataTransfer.getData(DT_ITEM), tabId = e.dataTransfer.getData(DT_TAB)
+      const after = tabAt?.id === id && tabAt.after
+      setOverTab(null); setDropAt(null); setTabAt(null)
       if (item) void run(() => setPaletteItemCategory(item, id === ALL ? null : id))
+      else if (tabId && id !== ALL) {
+        const from = cats.findIndex(c => c.id === tabId), slot = cats.findIndex(c => c.id === id) + (after ? 1 : 0)
+        if (from < 0 || from === slot || from + 1 === slot) return
+        void run(() => movePaletteCategory(tabId, from < slot ? slot - 1 : slot))
+      }
     },
   })
 
@@ -96,8 +112,11 @@ function PaletteBody({ selection, onUse, disabled, clipIn, wide, onFloat }: Para
 
       <div className="palette-tabs" role="tablist" aria-label={t('パレットのカテゴリ')}>
         {[{ id: ALL, name: t('すべて') }, ...cats].map(c => (
-          <span key={c.id} role="tab" aria-selected={current === c.id} className={`palette-tab${current === c.id ? ' on' : ''}${overTab === c.id ? ' drop-into' : ''}`}
-            title={c.id === ALL ? t('すべてのアイテム（ここに落とすとカテゴリから外す）') : t('ダブルクリックで名前を変える。アイテムをここに落とすとこのカテゴリへ')}
+          <span key={c.id} role="tab" aria-selected={current === c.id} className={`palette-tab${current === c.id ? ' on' : ''}${overTab === c.id ? ' drop-into' : ''}${tabAt?.id === c.id ? (tabAt.after ? ' drop-after' : ' drop-before') : ''}`}
+            title={c.id === ALL ? t('すべてのアイテム（ここに落とすとカテゴリから外す）') : t('ダブルクリックで名前を変える。ドラッグで並べ替え。アイテムをここに落とすとこのカテゴリへ')}
+            draggable={c.id !== ALL && renaming !== c.id}
+            onDragStart={e => { e.dataTransfer.setData(DT_TAB, c.id); e.dataTransfer.effectAllowed = 'move' }}
+            onDragEnd={() => setTabAt(null)}
             onClick={() => setTab(c.id)} onDoubleClick={() => { if (c.id !== ALL) setRenaming(c.id) }} {...tabDrop(c.id)}>
             {renaming === c.id ? (
               <input className="palette-tab-name" autoFocus defaultValue={c.name} aria-label={t('カテゴリの名前')} onClick={e => e.stopPropagation()}

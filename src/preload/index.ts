@@ -63,6 +63,7 @@ const api: Api = {
   savePaletteItem: (name, annotations, category) => ipcRenderer.invoke('palette:save', name, annotations, category ?? null),
   addPaletteCategory: name => ipcRenderer.invoke('palette:addCategory', name),
   renamePaletteCategory: (id, name) => ipcRenderer.invoke('palette:renameCategory', id, name),
+  movePaletteCategory: (id, to) => ipcRenderer.invoke('palette:moveCategory', id, to),
   removePaletteCategory: id => ipcRenderer.invoke('palette:removeCategory', id),
   setPaletteItemCategory: (id, category) => ipcRenderer.invoke('palette:setCategory', id, category),
   removePaletteItem: id => ipcRenderer.invoke('palette:remove', id),

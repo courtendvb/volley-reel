@@ -7,4 +7,9 @@ describe('keyName', () => {
     expect(keyName('（Ctrl+Z で戻せる）', true)).toBe('（⌘Z で戻せる）')
     expect(keyName('Ctrl + Z', false)).toBe('Ctrl + Z')
   })
+  it('says ⌥ for Alt on a Mac', () => {
+    expect(keyName('Alt + Enter', true)).toBe('⌥Enter')
+    expect(keyName('（Alt+Enter で改行）', true)).toBe('（⌥Enter で改行）')
+    expect(keyName('Alt + Enter', false)).toBe('Alt + Enter')
+  })
 })

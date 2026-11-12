@@ -21,6 +21,7 @@ import { readSettings, recentProjects, rememberProject, saveSettings } from './a
 import { lastFolder, rememberFolder, type ExportKind } from '../shared/exportFolders'
 import { corruptFirstReel, registerSmokeIpc, runSmoke, type SmokeContext } from './smokeRun'
 import { grabFrame, rawFrame } from './media'
+import { setMacMenu } from './macMenu'
 import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
 
@@ -67,6 +68,7 @@ app.whenReady().then(async () => {
   // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
   setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
   protocol.handle('media', serveMedia)
+  if (process.platform === 'darwin') setMacMenu()
   registerIpc()
 
   const libPath = process.env.VR_LIBRARY || (process.env.VR_PROJECT ? join(dirname(process.env.VR_PROJECT), 'vr-smoke-library') : readSettings().libraryPath)

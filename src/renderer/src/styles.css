@@ -576,6 +576,11 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); 
 .headline-bar input { flex: 1; min-width: 0; }
 .headline-bar.disabled { opacity: 0.55; }
 .stage-tabs .headline-bar { flex: 1; min-width: 0; margin: 0 0 3px 14px; padding: 3px 10px; }
+/* A serve picked in the list: its hit and touch at the playhead, and the speed (ServeMarkBar), under the tabs. */
+.serve-mark { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+.serve-mark-time { min-width: 52px; font-variant-numeric: tabular-nums; color: var(--sub); }
+.serve-mark-speed { font-variant-numeric: tabular-nums; }
+.serve-mark .field-label { white-space: nowrap; }
 .grip { flex: none; width: 14px; color: var(--faint); cursor: grab; text-align: center; font-size: 13px; line-height: 1; user-select: none; }
 .grip:hover { color: var(--text); }
 .gear { padding: 0 5px; border: 0; background: transparent; color: var(--sub); font-size: 14px; line-height: 1; }

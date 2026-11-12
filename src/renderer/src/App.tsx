@@ -2,10 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setTouchTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
-import type { ImportProgress, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
+import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
 import { CheckPicker } from './components/CheckPicker'
 import { ShotPick, type ShotRow } from './components/ShotPick'
 import { FilterPanel } from './components/FilterPanel'
@@ -68,6 +68,8 @@ import { useExport } from './app/useExport'
 import { useShortcuts } from './app/useShortcuts'
 import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
+import { ServeMarkBar } from './components/ServeMarkBar'
+import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
@@ -164,6 +166,19 @@ export function App() {
     } catch (e) {
       setError(String(e))
     }
+  }
+  // A serve's hit or touch (serveMark.ts): shown at once, saved with the match a moment after the last
+  // change, so dragging a line doesn't write the match on every move.
+  const markSaves = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; patch: { hit?: number | null; touch?: number | null } }>())
+  const setServeMark = (matchId: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== matchId ? m : withServeMark(m, fingerprint, patch))) })
+    const key = `${matchId}|${fingerprint}`, was = markSaves.current.get(key)
+    if (was) clearTimeout(was.timer)
+    const merged = { ...(was?.patch ?? {}), ...patch }
+    markSaves.current.set(key, { patch: merged, timer: setTimeout(() => {
+      markSaves.current.delete(key)
+      void api.setServeMark(matchId, fingerprint, merged).catch(err => setError(String(err)))
+    }, 200) })
   }
   const setCourt = (id: string, court: CourtFit | null) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
@@ -451,6 +466,15 @@ export function App() {
   // ---- trimming (design §3.5) -----------------------------------------------------------------
   const active = reel && activeClipId ? reel.clips[activeClipId] ?? null : null
   const activeInfo = active ? clipInfo(active) : null
+  // A serve's hit and touch (on the match, by play) and the speed they give: for the open clip, and for
+  // the play picked in the list when no clip of it is open.
+  const serveInfo = (m: Match | undefined, play: Play | null | undefined, clip: Clip | null) => {
+    if (!m || !play || play.skill !== 'S') return null
+    const mark = serveMarkOf(m, play), times = playTimes(mark, clip)
+    return { mark, times, measured: measuredSpeed(play, times.skillSec ?? play.time + m.offsetSec, times.touchSec) }
+  }
+  const activeServe = active && activeInfo?.ref ? serveInfo(matches[active.matchId], activeInfo.ref.play, active) : null
+  const listServe = match && selectedPlay && !(active && activeInfo?.range && active.matchId === match.id && active.playId === selectedPlay.id) ? serveInfo(match, selectedPlay, null) : null
   // The clip's own objects on the timelines under 編集 and 図形.
   const timelineObjects = active && activeInfo?.range ? active.annotations.map(a => ({
     id: a.id, label: a.kind === 'text' ? `T ${a.text}` : a.kind === 'polygon' && a.cell ? t('ゾーン {0}', zoneOfCell(a.cell)) : a.kind === 'polygon' && a.disc ? (a.disc.part === 'top' ? t('円柱') : t('円柱（側面）')) : KIND_LABEL[a.kind],
@@ -469,7 +493,8 @@ export function App() {
   const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData } | null => {
     const d = c ? dvws[c.matchId] : null, play = c && d ? d.plays[c.playId] : null
     if (!c || !d || !play) return null
-    const kmh = measuredSpeed(play, c.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), c.touchSec)
+    const tm = playTimes(serveMarkOf(matches[c.matchId], play), c)
+    const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
     const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames, kmh)
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches])
@@ -653,7 +678,7 @@ export function App() {
                   )
                 }
                 const court = match.court && (
-                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, active?.matchId === match.id && active.playId === selectedPlay.id ? active : null) : null} fitting={courtFitting}
+                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, playTimes(serveMarkOf(match, selectedPlay), active?.matchId === match.id && active.playId === selectedPlay.id ? active : null)) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
                     onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )
@@ -722,6 +747,10 @@ export function App() {
                 )}
               </StageTabs>
             )}
+            {!cardEdit && match && listServe && selectedPlay && (
+              <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
+                onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />
+            )}
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
@@ -740,13 +769,18 @@ export function App() {
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
                 onTrim={trim} loop={loopOn} onLoop={setLoopOn} onFrameSlide={() => void frameAfterClip()}
-                speed={activeInfo.ref.play.skill === 'S' ? { value: active.speedKmh ?? null, usual: serveSpeed(activeInfo.ref.play),
-                  measured: measuredSpeed(activeInfo.ref.play, active.skillSec ?? activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0), active.touchSec) } : null}
+                speed={activeServe ? { value: active.speedKmh ?? null, usual: serveSpeed(activeInfo.ref.play), measured: activeServe.measured } : null}
                 onSpeed={kmh => { const r = latest.current.reel; if (r) updateReel(setServeSpeed(r, active.id, kmh)) }}
-                touchTime={active.touchSec ?? null}
-                onTouchTime={sec => { const r = latest.current.reel; if (r) updateReel(setTouchTime(r, active.id, sec)) }}
-                skillTime={active.skillSec ?? null}
-                onSkillTime={sec => { const r = latest.current.reel; if (r) updateReel(setSkillTime(r, active.id, sec)) }}
+                touchTime={activeServe?.mark?.touch ?? null}
+                onTouchTime={sec => setServeMark(active.matchId, activeInfo.ref!.play.fingerprint, { touch: sec })}
+                skillTime={activeServe ? activeServe.times.skillSec ?? null : active.skillSec ?? null}
+                onSkillTime={sec => {
+                  const r = latest.current.reel
+                  if (!activeServe) { if (r) updateReel(setSkillTime(r, active.id, sec)); return }
+                  // A serve's hit belongs to the play: every clip of it, and the list, use it.
+                  setServeMark(active.matchId, activeInfo.ref!.play.fingerprint, { hit: sec })
+                  if (r && active.skillSec !== undefined) updateReel(setSkillTime(r, active.id, null))
+                }}
                 timing={active.timing} onTiming={tm => { const r = latest.current.reel; if (r) updateReel(setTiming(r, active.id, tm)) }}
                 objects={timelineObjects}
                 selectedObjectId={selectedAnn} onSelectObject={id => { setAnnTool('select'); setSelectedAnn(id) }}

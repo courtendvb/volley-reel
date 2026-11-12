@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  setServeSpeed, setSkillTime, setTouchTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
+  setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits,
 } from './reel'
 
@@ -377,15 +377,6 @@ describe('setServeSpeed', () => {
     const fast = setServeSpeed(reel, ids[0], 95)
     expect(fast.clips[ids[0]].speedKmh).toBe(95)
     expect('speedKmh' in setServeSpeed(fast, ids[0], null).clips[ids[0]]).toBe(false)
-  })
-})
-
-describe('setTouchTime', () => {
-  it("sets when a serve's reception touches the ball and takes it off", () => {
-    const { reel, ids } = addClips(newReel('x'), [{ matchId: 'm', play: { id: 1, fingerprint: 'f', time: 10, rallyId: 1 } as never }])
-    const touched = setTouchTime(reel, ids[0], 10.733)
-    expect(touched.clips[ids[0]].touchSec).toBe(10.733)
-    expect('touchSec' in setTouchTime(touched, ids[0], null).clips[ids[0]]).toBe(false)
   })
 })
 

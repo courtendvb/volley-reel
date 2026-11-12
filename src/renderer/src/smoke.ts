@@ -14,6 +14,7 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
+import { playTimes, serveMarkOf } from '../../shared/serveMark'
 import { DEFAULT_GRID_STYLE, courtQuad, flightTiming, homography, nearSide, playZones, playerMarks, project } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
@@ -1207,14 +1208,34 @@ export function installSmoke(h: SmokeHost): void {
     button('◎ ' + t('起点')).click(); await sleep(300)
     await playback.seekAndWait(key + 0.9)
     button('◎ ' + t('タッチ')).click(); await sleep(400)
-    const c = clip()
+    const c = clip(), markOf = () => serveMarkOf(latest.current.matches[r.matchId], r.play)
+    const mark = markOf()
     const measured = document.querySelector('.trim-measured')?.textContent ?? null
     const caption = latest.current.overlayData!(c)?.caption.line ?? null
-    const flight = flightTiming(r.play, latest.current.matches[r.matchId].offsetSec, c)
+    const flight = flightTiming(r.play, latest.current.matches[r.matchId].offsetSec, playTimes(mark, c))
     await api.smokeShot!('serve-touch.png')
     button(t('外す')).click(); await sleep(300)
-    const cleared = { touchSec: clip().touchSec ?? null, marker: !!document.querySelector('.trim-touch'), measured: !!document.querySelector('.trim-measured') }
-    return { serveTouch: { play: r.play.code, before, skillSec: c.skillSec, touchSec: c.touchSec, measured, caption, flight, cleared } }
+    const cleared = { touch: markOf()?.touch ?? null, marker: !!document.querySelector('.trim-touch'), measured: !!document.querySelector('.trim-measured') }
+    // Another serve, picked in the list with no clip of it: the bar beside the tabs marks it.
+    const r2 = res.find(x => x !== r && x.play.skill === 'S' && x.play.startClick && x.play.endClick)
+    if (!r2) throw new Error('no second serve with both clicks')
+    const key2 = r2.play.time + latest.current.matches[r2.matchId].offsetSec, mark2 = () => serveMarkOf(latest.current.matches[r2.matchId], r2.play)
+    jump(r2); await sleep(800); playback.pause()
+    const listButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.serve-mark button')].find(b => b.textContent === label)
+    if (!listButton('◎ ' + t('タッチ'))) throw new Error('no serve bar for the list play')
+    await playback.seekAndWait(key2 + 0.1)
+    listButton('◎ ' + t('ヒット'))!.click(); await sleep(200)
+    await playback.seekAndWait(key2 + 0.85)
+    listButton('◎ ' + t('タッチ'))!.click(); await sleep(400)
+    const list = { mark: mark2(), speed: document.querySelector('.serve-mark-speed')?.textContent ?? null, caption: null as string | null }
+    await api.smokeShot!('serve-touch-list.png')
+    await sleep(500) // the mark is saved a moment after the last change
+    const saved = (await api.getProject())?.matches.find(m => m.id === r2.matchId)?.serveMarks?.[r2.play.fingerprint] ?? null
+    // A clip made of it afterwards carries the speed already.
+    const { reel: withIt, ids: ids2 } = addClips(latest.current.reel!, [{ matchId: r2.matchId, play: r2.play }])
+    updateReel(withIt); await sleep(300)
+    list.caption = latest.current.overlayData!(latest.current.reel!.clips[ids2[0]])?.caption.line ?? null
+    return { serveTouch: { play: r.play.code, before, mark, measured, caption, flight, cleared, list, saved } }
   }
 
   const smokeSlowHold = async (res: PlayRef[], exportTo?: string) => {

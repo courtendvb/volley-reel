@@ -262,6 +262,7 @@ function registerIpc(): void {
   ipcMain.handle('palette:save', (_e, name: string, anns: Annotation[], category: string | null) => lib().savePaletteItem(name, anns, assetsDir(), category))
   ipcMain.handle('palette:addCategory', (_e, name: string) => lib().addPaletteCategory(name))
   ipcMain.handle('palette:renameCategory', (_e, id: string, name: string) => lib().renamePaletteCategory(id, name))
+  ipcMain.handle('palette:moveCategory', (_e, id: string, to: number) => lib().movePaletteCategory(id, to))
   ipcMain.handle('palette:removeCategory', (_e, id: string) => lib().removePaletteCategory(id))
   ipcMain.handle('palette:setCategory', (_e, id: string, category: string | null) => lib().setPaletteItemCategory(id, category))
   ipcMain.handle('palette:remove', (_e, id: string) => lib().removePaletteItem(id))

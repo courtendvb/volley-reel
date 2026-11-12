@@ -648,6 +648,8 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .palette-tab:hover { color: var(--text); background: var(--soft); }
 .palette-tab.on { color: var(--primary); font-weight: 700; background: var(--surface); border-color: var(--border); box-shadow: inset 0 -2px 0 var(--primary); }
 .palette-tab.drop-into { background: var(--primary-light); color: var(--primary); outline: 2px dashed var(--primary); outline-offset: -2px; }
+.palette-tab.drop-before { box-shadow: -3px 0 0 var(--primary); }
+.palette-tab.drop-after { box-shadow: 3px 0 0 var(--primary); }
 .palette-tab-count { font-size: 10.5px; font-weight: 400; color: var(--faint); }
 .palette-tab-name { width: 90px; padding: 0 4px; font: inherit; font-size: 12px; }
 .palette-tab-remove { padding: 0 2px; font-size: 11px; }

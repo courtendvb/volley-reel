@@ -515,6 +515,7 @@ export const EN: Record<string, string> = {
   "パレットのカテゴリ": "Palette categories",
   "すべてのアイテム（ここに落とすとカテゴリから外す）": "Every item (drop an item here to take it out of its category)",
   "ダブルクリックで名前を変える。アイテムをここに落とすとこのカテゴリへ": "Double-click to rename. Drop an item here to move it into this category",
+  "ダブルクリックで名前を変える。ドラッグで並べ替え。アイテムをここに落とすとこのカテゴリへ": "Double-click to rename. Drag to reorder. Drop an item here to move it into this category",
   "カテゴリの名前": "Category name",
   "カテゴリ「{0}」を削除": "Delete category “{0}”",
   "空のカテゴリを削除": "Delete the empty category",

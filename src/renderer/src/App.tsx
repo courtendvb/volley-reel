@@ -43,6 +43,7 @@ import { VideoPane } from './components/VideoPane'
 import { CourtLayer } from './components/CourtLayer'
 import { CourtBar } from './components/CourtBar'
 import { MatchReportDialog } from './components/MatchReportDialog'
+import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
@@ -536,6 +537,7 @@ export function App() {
     latest, dvws, settings, packs, gridStyle, overlay, activeGroup, whenIn, cardEdit, editCard, updateScene, makeScene, setProgress, setNotice, setError,
   })
   const [reportOpen, setReportOpen] = useState(false) // the match report
+  const [analysisOpen, setAnalysisOpen] = useState(false) // 分析
 
   // A title card's pictures to put on it: the photos of its clips' players (then the rest of those
   // matches'), and the logos the library has for the teams (those matches' first). Its clips: a
@@ -613,6 +615,7 @@ export function App() {
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
+        {project && <button onClick={() => setAnalysisOpen(true)} title={t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る')}>{t('分析')}</button>}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
@@ -891,6 +894,9 @@ export function App() {
       )}
       {reportOpen && project && (
         <MatchReportDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} initial={match?.id ?? null} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setReportOpen(false)} />
+      )}
+      {analysisOpen && project && (
+        <AnalysisDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setAnalysisOpen(false)} />
       )}
       {(boardOpen || boardEdit) && (
         <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={boardDvws} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}

@@ -132,6 +132,7 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_SETTER=reception|rotation|rot|serve: a setter's data slide made from the dialog (serve: a server's, with the starts)]
 // [VR_SMOKE_CARDINSERT=<pack.vrpack>|<logo image>: a player's photo and a team logo put on a marker card from its bar]
 // [VR_SMOKE_PRESETSERVE=1: the serve preset's player order and markers (zone, in order) in the dialog's preview]
+// [VR_SMOKE_ANALYSIS=1: each report of the 分析 window: a screenshot and its tables read back]
 // [VR_SMOKE_SCENETITLE=1: a scene card with a long name; dragging its title saves a top-left]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
@@ -169,6 +170,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       presets: !!process.env.VR_SMOKE_PRESETS,
       picker: !!process.env.VR_SMOKE_PICKER,
       presetServe: !!process.env.VR_SMOKE_PRESETSERVE,
+      analysis: !!process.env.VR_SMOKE_ANALYSIS,
       setter: process.env.VR_SMOKE_SETTER,
       cardInsert: process.env.VR_SMOKE_CARDINSERT,
       sceneTitle: !!process.env.VR_SMOKE_SCENETITLE,

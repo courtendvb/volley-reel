@@ -5,7 +5,7 @@ import { addClips, findClip, groupOf, groupRows, newReel, rangeDefaults, relink,
 import type { ExportJob, LibraryInfo, ProjectInfo, ScanResult, SlideFile } from '../../shared/types'
 import { drawAnnotation, type Annotation } from '../../shared/annotation'
 import { mergeScoped, scopeOf, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
-import { overlaySettings, type OverlaySettings } from '../../shared/overlay'
+import { TELOP_LOOKS, overlaySettings, type OverlaySettings } from '../../shared/overlay'
 import { newVideo, type PlanItem, type Video } from '../../shared/video'
 import type { SlideHow } from './components/ReelPanel'
 import type { Tool } from './components/AnnotationLayer'
@@ -14,6 +14,7 @@ import { canvasStats } from './canvas'
 import { playback } from './playback'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
+import { playTimes, serveMarkOf } from '../../shared/serveMark'
 import { DEFAULT_GRID_STYLE, courtQuad, flightTiming, homography, nearSide, playZones, playerMarks, project } from '../../shared/court'
 import { assetImage } from './assets'
 import { t } from '../../shared/i18n'
@@ -41,6 +42,7 @@ export interface SmokeOpts {
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
+  serveTouch?: boolean // a serve's hit and its reception's touch marked on the trim bar: the measured speed in the bar and the caption
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
   cardOwn?: boolean // 「このカードだけ」: one marker card's title moved and scaled apart from the others, then back
   flightStill?: boolean // with courtPoints: the animation off, the whole curve on one layer
@@ -160,6 +162,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.captionNames) return smokeCaptionNames(res)
     if (opts.cardOwn) return smokeCardOwn(res)
     if (opts.courtPoints) return smokeCourtPoints(opts.courtPoints, opts.exportTo, opts.flightStill)
+    if (opts.serveTouch) return smokeServeTouch(res, opts.exportTo)
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
@@ -1185,6 +1188,82 @@ export function installSmoke(h: SmokeHost): void {
 
   // Slow and hold: the trim bar's ＋ スロー at IN+1 s and ＋ 停止 at IN+3 s; the loop plays the stretch at
   // half speed and stops on the hold for its seconds; the export is as long as the clip played.
+  // A serve's hit (起点) and its reception's touch (タッチ) set at the playhead from the trim bar: the bar
+  // shows the speed from one to the other, the caption carries it, the flight lasts that long, and 外す clears it.
+  const smokeServeTouch = async (res: PlayRef[], exportTo?: string) => {
+    const r = res.find(x => x.play.skill === 'S' && x.play.startClick && x.play.endClick)
+    if (!r) throw new Error('no serve with both clicks in the results (VR_SMOKE_FILTER {"skills":["S"]})')
+    const { reel: added, ids } = addClips(newReel('touch smoke'), [{ matchId: r.matchId, play: r.play }])
+    const built = { ...added, scope: 'all' as const }
+    const v = newVideo('touch smoke', [built.id])
+    setReels(rs => [...rs, built]); setVideos(vs => [...vs, v]); setReelId(built.id); setVideoId(v.id)
+    await waitFor(() => (latest.current.reel?.id === built.id && latest.current.video?.id === v.id) || null, 20000, 'touch reel')
+    const clip = () => latest.current.reel!.clips[ids[0]]
+    activateClip(clip()); await sleep(800)
+    await openPanel('trim')
+    const key = r.play.time + latest.current.matches[r.matchId].offsetSec
+    const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.trim-fields button')].find(b => b.textContent === label)!
+    const before = { marker: !!document.querySelector('.trim-touch'), speedField: !!document.querySelector('input[aria-label="' + t('サーブの速度（km/h）') + '"]') }
+    playback.pause(); await playback.seekAndWait(key + 0.2)
+    button('◎ ' + t('起点')).click(); await sleep(300)
+    await playback.seekAndWait(key + 0.9)
+    button('◎ ' + t('タッチ')).click(); await sleep(400)
+    const c = clip(), markOf = () => serveMarkOf(latest.current.matches[r.matchId], r.play)
+    const mark = markOf()
+    const measured = document.querySelector('.trim-measured')?.textContent ?? null
+    const caption = latest.current.overlayData!(c)?.speed ?? null
+    const flight = flightTiming(r.play, latest.current.matches[r.matchId].offsetSec, playTimes(mark, c))
+    await api.smokeShot!('serve-touch.png')
+    button(t('外す')).click(); await sleep(300)
+    const cleared = { touch: markOf()?.touch ?? null, marker: !!document.querySelector('.trim-touch'), measured: !!document.querySelector('.trim-measured') }
+    // Another serve, picked in the list with no clip of it: the bar beside the tabs marks it.
+    const r2 = res.find(x => x !== r && x.play.skill === 'S' && x.play.startClick && x.play.endClick)
+    if (!r2) throw new Error('no second serve with both clicks')
+    const key2 = r2.play.time + latest.current.matches[r2.matchId].offsetSec, mark2 = () => serveMarkOf(latest.current.matches[r2.matchId], r2.play)
+    jump(r2); await sleep(800); playback.pause()
+    const listButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('.serve-mark button')].find(b => b.textContent === label)
+    if (!listButton('◎ ' + t('タッチ'))) throw new Error('no serve bar for the list play')
+    await playback.seekAndWait(key2 + 0.1)
+    listButton('◎ ' + t('ヒット'))!.click(); await sleep(200)
+    await playback.seekAndWait(key2 + 0.85)
+    listButton('◎ ' + t('タッチ'))!.click(); await sleep(400)
+    const list = { mark: mark2(), speed: document.querySelector('.serve-mark-speed')?.textContent ?? null, caption: null as unknown, plate: false }
+    // The plate comes up from the touch: a pixel of the theme's accent where it sits (top right).
+    const plateAt = () => { const cv = document.querySelector<HTMLCanvasElement>('.overlay-layer'); if (!cv) return null; const g = cv.getContext('2d')!; let n = 0; const d = g.getImageData(Math.floor(cv.width * 0.7), 0, Math.floor(cv.width * 0.3), Math.floor(cv.height * 0.15)).data; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n }
+    const beforeTouch = (await playback.seekAndWait(key2 + 0.5), await sleep(300), plateAt())
+    await playback.seekAndWait(key2 + 1.2); await sleep(300)
+    list.plate = beforeTouch === 0 && (plateAt() ?? 0) > 100
+    await api.smokeShot!('serve-touch-list.png')
+    await sleep(500) // the mark is saved a moment after the last change
+    const saved = (await api.getProject())?.matches.find(m => m.id === r2.matchId)?.serveMarks?.[r2.play.fingerprint] ?? null
+    // A clip made of it afterwards carries the speed already.
+    const { reel: withIt, ids: ids2 } = addClips(latest.current.reel!, [{ matchId: r2.matchId, play: r2.play }])
+    updateReel(withIt); await sleep(300)
+    list.caption = latest.current.overlayData!(latest.current.reel!.clips[ids2[0]])?.speed ?? null
+    // With VR_SMOKE_EXPORT: the scene exported; the plate is a layer from the touch to the clip's end.
+    let exported: unknown = null
+    if (exportTo) {
+      const job = await startExport(exportTo, { plan: currentPlan('scene'), name: 'touch smoke' })
+      if (!job) throw new Error('export did not start')
+      await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'touch export done')
+      exported = { state: latest.current.exportState?.status, clips: job.items.filter(i => i.kind === 'clip').map(i => (i.kind === 'clip' ? { in: i.in, out: i.out, layers: i.layers.map(l => [l.from ?? null, l.to ?? null]) } : null)) }
+    }
+    // Each design of the scoreboard, caption and speed plate on the clip, after the touch (look-*.png),
+    // then the settings with their thumbnails.
+    activateClip(latest.current.reel!.clips[ids2[0]]); await sleep(800); playback.pause()
+    await playback.seekAndWait(key2 + 1.3); await sleep(300)
+    const looks: string[] = []
+    for (const l of TELOP_LOOKS) {
+      setOverlay({ ...latest.current.overlay, look: l.look }); await sleep(400)
+      await api.smokeShot!(`look-${l.look}.png`)
+      looks.push(latest.current.overlay.look ?? 'slant')
+    }
+    setOverlayOpen(true); await sleep(600)
+    await api.smokeShot!('look-dialog.png')
+    setOverlayOpen(false)
+    return { serveTouch: { play: r.play.code, before, mark, measured, caption, flight, cleared, list, saved, exported, looks } }
+  }
+
   const smokeSlowHold = async (res: PlayRef[], exportTo?: string) => {
     const r = res[0]
     const { reel: added, ids } = addClips(newReel('slow smoke'), [{ matchId: r.matchId, play: r.play }])

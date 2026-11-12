@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { DEFAULT_OVERLAY, captionData, overlaySettings, scoreboardData } from './overlay'
+import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData } from './overlay'
 
 // HTH away in this made-up match; SATO appears twice on HTH so names get an initial.
 const D = parseDVW(`[3TEAMS]
@@ -84,5 +84,17 @@ describe('drawing helpers', () => {
     expect(mix('#000000', '#FFFFFF', 0.5)).toBe('#808080')
     expect(onColor('#C8102E')).toBe('#FFFFFF')
     expect(onColor('#FACC15')).toBe('#111111')
+  })
+})
+
+describe('the design of the overlays', () => {
+  it('keeps a design picked, and leaves the first one unsaved', () => {
+    expect(overlaySettings({ look: 'light' }).look).toBe('light')
+    expect('look' in overlaySettings({ look: 'slant' })).toBe(false)
+    expect('look' in overlaySettings(undefined)).toBe(false)
+  })
+  it('hands the drawing the colors with the design', () => {
+    expect(lookTheme(overlaySettings({ look: 'float' }))).toEqual({ ...DEFAULT_OVERLAY.theme, look: 'float' })
+    expect(lookTheme(DEFAULT_OVERLAY).look).toBe('slant')
   })
 })

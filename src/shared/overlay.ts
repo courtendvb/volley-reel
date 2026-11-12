@@ -14,11 +14,22 @@ export interface OverlayTheme {
   accent: string // number block, winner underline, title card number
 }
 
+// The design of the scoreboard, the caption and the serve speed plate (overlayDraw.ts lookOf): slanted
+// black plates (the first one), square see-through plates, white plates, or no plates.
+export type TelopLook = 'slant' | 'box' | 'light' | 'float'
+export const TELOP_LOOKS: { look: TelopLook; name: string }[] = [
+  { look: 'slant', name: t('スラント') }, { look: 'box', name: t('ボックス') }, { look: 'light', name: t('ライト') }, { look: 'float', name: t('フロート') },
+]
+export type LookTheme = OverlayTheme & { look?: TelopLook }
+
 export interface OverlaySettings {
   theme: OverlayTheme
+  look?: TelopLook // missing = slant
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   // photo: the player's photo from the player packs, above a caption at the bottom (below one at the top).
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean }
+  // A serve's measured speed (hit to the reception's touch, serveMark.ts) on its own plate, from the touch on.
+  serveSpeed: { enabled: boolean; anchor: Anchor; scale: number }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
@@ -69,10 +80,16 @@ export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
   { name: t('ダークグリーン × ライム'), theme: { base: '#0F1F17', accent: '#65A30D' } },
 ]
 
+// The colors with the design, for the drawing functions.
+export function lookTheme(s: OverlaySettings): LookTheme {
+  return { ...s.theme, look: s.look ?? 'slant' }
+}
+
 export const DEFAULT_OVERLAY: OverlaySettings = {
   theme: THEME_PRESETS[0].theme,
   scoreboard: { enabled: true, anchor: 'tl', scale: 1, showSets: true }, // top left: the headline sits at the top middle
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true, photo: false },
+  serveSpeed: { enabled: true, anchor: 'tr', scale: 1 },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
@@ -80,15 +97,17 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
 }
 
 // What gets saved: any part may be missing, and missing parts fall back to the defaults.
-export type OverlayPatch = { [K in keyof OverlaySettings]?: Partial<OverlaySettings[K]> }
+export type OverlayPatch = { [K in Exclude<keyof OverlaySettings, 'look'>]?: Partial<OverlaySettings[K]> } & { look?: TelopLook }
 
 // Reels saved before M6 have no overlay settings; partial objects keep the defaults underneath.
 export function overlaySettings(saved: OverlayPatch | undefined): OverlaySettings {
   const s = saved ?? {}
   return {
     theme: { ...DEFAULT_OVERLAY.theme, ...(s.theme ?? {}) },
+    ...(s.look && s.look !== 'slant' ? { look: s.look } : {}),
     scoreboard: { ...DEFAULT_OVERLAY.scoreboard, ...(s.scoreboard ?? {}) },
     playerCaption: { ...DEFAULT_OVERLAY.playerCaption, ...(s.playerCaption ?? {}) },
+    serveSpeed: { ...DEFAULT_OVERLAY.serveSpeed, ...(s.serveSpeed ?? {}) },
     titleCard: { ...DEFAULT_OVERLAY.titleCard, ...(s.titleCard ?? {}) },
     transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
     court: { ...DEFAULT_OVERLAY.court, ...(s.court ?? {}) },
@@ -102,6 +121,9 @@ export interface ScoreboardData {
   setsL: number; setsR: number
   winner: 'L' | 'R' | null // who took this rally
 }
+
+// A serve's measured speed and when its plate comes up: the reception's touch (a video time).
+export interface SpeedData { kmh: number; touchSec: number }
 
 // photo: the player's photo in a pack (shared/pack.ts captionPhoto), when the caption shows one.
 export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null }

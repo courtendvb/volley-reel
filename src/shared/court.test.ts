@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -454,6 +454,24 @@ describe('a serve with its speed', () => {
     expect(flightTiming({ ...(serve as object), endClick: null } as never, 0, { speedKmh: 72 }).sec).toBe(1)
     expect(flightTiming({ ...(serve as object), skill: 'A', code: '*05AH-' } as never, 0, { speedKmh: 72 }).sec).toBe(0.5)
     expect(serveSpeed({ ...(serve as object), startClick: null } as never)).toBeNull()
+  })
+})
+
+describe('a serve with its reception touch marked', () => {
+  const serve = { time: 100, code: '*05SQ-', skill: 'S', startClick: { u: 0.5, v: 0 }, endClick: { u: 0.5, v: 1 } } as never
+  it('measures 18 m in 0.648 s as 100 km/h', () => {
+    expect(measuredSpeed(serve, 100.2, 100.848)).toBe(100)
+  })
+  it('flies from the hit to the touch, over a speed typed in', () => {
+    const f = flightTiming(serve, 0, { skillSec: 100.2, touchSec: 100.848, speedKmh: 60 })
+    expect(f.startSec).toBe(100.2)
+    expect(f.sec).toBeCloseTo(0.648)
+  })
+  it('needs the touch after the hit and both clicks', () => {
+    expect(measuredSpeed(serve, 100.2, 100.1)).toBeNull()
+    expect(measuredSpeed(serve, 100.2, undefined)).toBeNull()
+    expect(measuredSpeed({ ...(serve as object), endClick: null } as never, 100, 100.7)).toBeNull()
+    expect(flightTiming(serve, 0, { skillSec: 100.2, touchSec: 100 }).sec).toBe(1)
   })
 })
 

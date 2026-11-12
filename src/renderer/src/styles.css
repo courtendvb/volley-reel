@@ -776,3 +776,10 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .report-bar { display: flex; align-items: center; gap: 10px; }
 .report-bar h2 { margin: 0; }
 .report-page { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--border); border-radius: 4px; background: #FFFFFF; }
+
+/* The design of the scoreboard, caption and serve speed (OverlayDialog LookButton): a thumbnail each. */
+.ov-looks { display: grid; grid-template-columns: repeat(2, max-content); gap: 8px; margin-top: 6px; }
+.ov-look { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; border: 2px solid var(--line); border-radius: 6px; background: var(--panel, transparent); }
+.ov-look.on { border-color: var(--primary); }
+.ov-look.on span { color: var(--primary); font-weight: 600; }
+.ov-look canvas { display: block; border-radius: 3px; }

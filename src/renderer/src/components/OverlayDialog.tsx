@@ -1,7 +1,7 @@
 import { PaletteColor } from './PaletteColor'
 import { useEffect, useRef } from 'react'
-import type { Anchor, CaptionData, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
-import { cardBackground, drawCaption, drawScoreboard, drawTitleCard } from '../../../shared/overlayDraw'
+import { TELOP_LOOKS, lookTheme, type Anchor, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
+import { cardBackground, drawCaption, drawScoreboard, drawServeSpeed, drawTitleCard } from '../../../shared/overlayDraw'
 import { t } from '../../../shared/i18n'
 import { packPhotoImage } from '../assets'
 
@@ -20,7 +20,7 @@ const PREVIEW_W = 560, PREVIEW_H = 315
 export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props) {
   const frame = useRef<HTMLCanvasElement>(null)
   const card = useRef<HTMLCanvasElement>(null)
-  const set = <K extends keyof OverlaySettings>(k: K, patch: Partial<OverlaySettings[K]>) => onChange({ ...s, [k]: { ...s[k], ...patch } })
+  const set = <K extends Exclude<keyof OverlaySettings, 'look'>>(k: K, patch: Partial<OverlaySettings[K]>) => onChange({ ...s, [k]: { ...s[k], ...patch } })
 
   useEffect(() => {
     const c = frame.current
@@ -29,8 +29,9 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
     ctx.fillStyle = '#6B5136'; ctx.fillRect(0, 0, c.width, c.height)
     const v = document.querySelector<HTMLVideoElement>('.video-box video')
     if (v && v.readyState >= 2) ctx.drawImage(v, 0, 0, c.width, c.height)
-    if (s.scoreboard.enabled) drawScoreboard(ctx, c.width, c.height, sample.scoreboard, s.scoreboard, s.theme)
-    if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, s.theme, packPhotoImage(sample.caption.photo))
+    if (s.scoreboard.enabled) drawScoreboard(ctx, c.width, c.height, sample.scoreboard, s.scoreboard, lookTheme(s))
+    if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, lookTheme(s), packPhotoImage(sample.caption.photo))
+    if (s.serveSpeed.enabled) drawServeSpeed(ctx, c.width, c.height, 98, s.serveSpeed, lookTheme(s))
     const t = card.current
     if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, s.theme)
   }, [s, sample])
@@ -64,6 +65,16 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
             </section>
 
             <section>
+              <span className="field-label">{t('デザイン')}</span>
+              <div className="ov-looks" role="radiogroup" aria-label={t('スコアボード・テロップ・サーブ速度のデザイン')}>
+                {TELOP_LOOKS.map(l => (
+                  <LookButton key={l.look} name={l.name} on={(s.look ?? 'slant') === l.look} settings={{ ...s, look: l.look }} sample={sample}
+                    onPick={() => onChange(l.look === 'slant' ? (({ look: _l, ...rest }) => rest)(s) : { ...s, look: l.look })} />
+                ))}
+              </div>
+            </section>
+
+            <section>
               <div className="filter-row">{check(t('スコアボード'), s.scoreboard.enabled, v => set('scoreboard', { enabled: v }))}<span className="spacer" />
                 {anchor(s.scoreboard.anchor, v => set('scoreboard', { anchor: v }), t('スコアボードの位置'))}{scale(s.scoreboard.scale, v => set('scoreboard', { scale: v }), t('スコアボードのサイズ'))}</div>
               <div className="filter-row indent">{check(t('セット数'), s.scoreboard.showSets, v => set('scoreboard', { showSets: v }))}</div>
@@ -77,9 +88,14 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {check(t('名前'), s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
                 {check(t('スキル'), s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
                 {check(t('評価'), s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
-                {check(t('サーブ速度'), s.playerCaption.showSpeed !== false, v => set('playerCaption', { showSpeed: v }))}
                 {check(t('写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）'), s.playerCaption.photo, v => set('playerCaption', { photo: v }))}
               </div>
+            </section>
+
+            <section>
+              <div className="filter-row">{check(t('サーブ速度'), s.serveSpeed.enabled, v => set('serveSpeed', { enabled: v }))}<span className="spacer" />
+                {anchor(s.serveSpeed.anchor, v => set('serveSpeed', { anchor: v }), t('サーブ速度の位置'))}{scale(s.serveSpeed.scale, v => set('serveSpeed', { scale: v }), t('サーブ速度のサイズ'))}</div>
+              <p className="hint">{t('ヒットとタッチを打ったサーブに、タッチのコマから出ます')}</p>
             </section>
 
             <section>
@@ -109,3 +125,26 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
     </div>
   )
 }
+
+// One design to pick: the caption and the speed plate drawn small in it, over a plain floor color.
+function LookButton({ name, on, settings, sample, onPick }: { name: string; on: boolean; settings: OverlaySettings; sample: Props['sample']; onPick: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#B08A5E'; ctx.fillRect(0, 0, c.width, c.height)
+    ctx.fillStyle = '#9C7650'; ctx.fillRect(0, c.height * 0.55, c.width, c.height * 0.45)
+    const theme = lookTheme(settings)
+    drawScoreboard(ctx, c.width, c.height, sample.scoreboard, { ...settings.scoreboard, anchor: 'tl', scale: 1.9 }, theme)
+    drawCaption(ctx, c.width, c.height, { ...sample.caption, photo: null }, { ...settings.playerCaption, anchor: 'bl', scale: 2.6, photo: false }, theme)
+    drawServeSpeed(ctx, c.width, c.height, 98, { ...settings.serveSpeed, anchor: 'tr', scale: 1.7 }, theme)
+  }, [settings, sample])
+  return (
+    <button type="button" role="radio" aria-checked={on} className={`ov-look${on ? ' on' : ''}`} onClick={onPick}>
+      <canvas ref={ref} width={LOOK_W * 2} height={LOOK_H * 2} style={{ width: LOOK_W, height: LOOK_H }} />
+      <span>{name}</span>
+    </button>
+  )
+}
+const LOOK_W = 168, LOOK_H = 94

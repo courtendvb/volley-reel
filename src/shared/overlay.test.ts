@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { DEFAULT_OVERLAY, captionData, overlaySettings, scoreboardData } from './overlay'
+import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData } from './overlay'
 
 // HTH away in this made-up match; SATO appears twice on HTH so names get an initial.
 const D = parseDVW(`[3TEAMS]
@@ -53,14 +53,6 @@ describe('caption data', () => {
     expect(captionData(D, D.plays[2], s, { line: '  ' }).line).toBe('SERVE · ACE')
   })
 
-  it("puts a serve's measured speed after the line, the clip's own too, unless switched off", () => {
-    expect(captionData(D, D.plays[2], s, undefined, undefined, 98).line).toBe('SERVE · ACE · 98 KM/H')
-    expect(captionData(D, D.plays[2], s, { line: 'jump serve' }, undefined, 98).line).toBe('JUMP SERVE · 98 KM/H')
-    expect(captionData(D, D.plays[2], { ...s, showSkill: false, showEvaluation: false }, undefined, undefined, 98).line).toBe('98 KM/H')
-    expect(captionData(D, D.plays[2], { ...s, showSpeed: false }, undefined, undefined, 98).line).toBe('SERVE · ACE')
-    expect(captionData(D, D.plays[2], s, undefined, undefined, null).line).toBe('SERVE · ACE')
-  })
-
   it("uses the video's name for the player in every clip, unless the clip has its own", () => {
     const key = D.plays[2].playerKey, names = { [key]: 'Kenta Sato' }
     expect(captionData(D, D.plays[2], s, undefined, names).name).toBe('Kenta Sato')
@@ -92,5 +84,17 @@ describe('drawing helpers', () => {
     expect(mix('#000000', '#FFFFFF', 0.5)).toBe('#808080')
     expect(onColor('#C8102E')).toBe('#FFFFFF')
     expect(onColor('#FACC15')).toBe('#111111')
+  })
+})
+
+describe('the design of the overlays', () => {
+  it('keeps a design picked, and leaves the first one unsaved', () => {
+    expect(overlaySettings({ look: 'light' }).look).toBe('light')
+    expect('look' in overlaySettings({ look: 'slant' })).toBe(false)
+    expect('look' in overlaySettings(undefined)).toBe(false)
+  })
+  it('hands the drawing the colors with the design', () => {
+    expect(lookTheme(overlaySettings({ look: 'float' }))).toEqual({ ...DEFAULT_OVERLAY.theme, look: 'float' })
+    expect(lookTheme(DEFAULT_OVERLAY).look).toBe('slant')
   })
 })

@@ -19,10 +19,10 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
-import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
+import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
-import { ClipOverlayRow } from './components/ClipOverlayRow'
+import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
 import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
 import { assetImage, packAssetId } from './assets'
 import type { ImageLookup } from '../../shared/annotation'
@@ -72,6 +72,7 @@ import { ServeMarkBar } from './components/ServeMarkBar'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
+const SPEED_LIST_SEC = 4 // how long the serve speed plate stays after the touch on a play picked in the list
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
 const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
@@ -490,15 +491,21 @@ export function App() {
 
   // ---- annotations (design §3.6) --------------------------------------------------------------
   // Scoreboard and caption for a clip, from its play in the DVW.
-  const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData } | null => {
+  const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData; speed: SpeedData | null } | null => {
     const d = c ? dvws[c.matchId] : null, play = c && d ? d.plays[c.playId] : null
     if (!c || !d || !play) return null
     const tm = playTimes(serveMarkOf(matches[c.matchId], play), c)
     const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
-    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames, kmh)
-    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
+    const speed = kmh && tm.touchSec !== undefined ? { kmh, touchSec: tm.touchSec } : null
+    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches])
   const activeOverlay = overlayData(active)
+  // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
+  // seconds after it on a serve picked in the list.
+  const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match
+    ? { key: match.id, from: listServe.mark.touch, to: listServe.mark.touch + SPEED_LIST_SEC, kmh: listServe.measured }
+    : active && activeInfo?.range && activeOverlay?.speed ? { key: active.matchId, from: activeOverlay.speed.touchSec, to: activeInfo.range.out, kmh: activeOverlay.speed.kmh } : null
   const activeMarker = reel && active ? markerFor(reel, active.id, activeGroup) : null
   const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? {
     video: video?.annotations ?? [], scene: reel?.annotations ?? [],
@@ -686,7 +693,7 @@ export function App() {
                   <>
                     {!courtFitting && court}
                     <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
-                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
+                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} speed={speedPlate} />
                     {here && active && (
                       <AnnotationLayer onMade={() => setAnnTool('select')}
                         size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here} floor={match.court?.corners ?? null}
@@ -753,6 +760,9 @@ export function App() {
             )}
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
+              {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
+                <div className="ann-row clip-overlay"><span className="field-label">{t('自動表示')}</span><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /></div>
+              )}
               <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
               </div>

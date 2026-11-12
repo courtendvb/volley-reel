@@ -43,7 +43,7 @@ interface ShortcutHandlers {
 export const NUDGE_PX = 2, NUDGE_SHIFT = 5
 const NUDGE: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
 
-const TOOLS: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', g: 'triangle', l: 'polyline', p: 'polygon' }
+const TOOLS: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', b: 'curve', c: 'circle', r: 'rect', g: 'triangle', l: 'polyline', p: 'polygon' }
 
 export function useShortcuts(handlers: ShortcutHandlers) {
   const hRef = useRef(handlers)
@@ -120,7 +120,7 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(arrowSec()) }
       else if (e.key === 'Escape') { if (isMaximized()) void setMaximized(false); else playback.stopSequence() } // maximized: Esc only leaves it
       else if (/^m$/i.test(e.key) && !e.shiftKey) { e.preventDefault(); void toggleMaximized() }
-      else if ((latest.activeClipId || h.editingCard()) && /^[vtacrglp]$/i.test(e.key)) h.setAnnTool(TOOLS[e.key.toLowerCase()])
+      else if ((latest.activeClipId || h.editingCard()) && /^[vtabcrglp]$/i.test(e.key)) h.setAnnTool(TOOLS[e.key.toLowerCase()])
       else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.selectedAnn) {
         const sel = latest.selectedAnn, now = h.scopedNow()
         // The selected object, the other selected ones and their groups.

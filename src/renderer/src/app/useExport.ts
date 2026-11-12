@@ -2,7 +2,7 @@
 // handed to the main process, which encodes in the background; the app stays usable meanwhile.
 import { chartName } from '../../../shared/chart'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import type { Clip, Marker, Reel } from '../../../shared/reel'
+import type { Clip, Group, Marker, Reel } from '../../../shared/reel'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { flightTiming, playMarks, type GridStyle } from '../../../shared/court'
 import type { ExportEvent, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
@@ -183,7 +183,17 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     return startExport(outPath, { plan, name })
   }
 
-  return { exportState, setExportState, startExport, exportScenes, exportMarker, exportTargets, exportInfo, exportTarget }
+  // One clip of a scene alone as an MP4 (no title card), named after the scene and the play.
+  const exportClip = (sceneId: string, clipId: string, g: Group, outPath?: string) => {
+    const { reels: rs, infoFor: inf, video: v } = latest.current
+    const sc = rs.find(x => x.id === sceneId), c = sc?.clips[clipId]
+    if (!sc || !c) return Promise.resolve(null)
+    const r = inf(c, sc).ref
+    const play = r ? `S${r.play.setNum} ${r.play.score.home}-${r.play.score.away} #${r.play.jersey} ${r.name} ${r.play.skill}${r.play.effect}` : t('クリップ')
+    return startExport(outPath, { plan: [{ kind: 'clip', clip: c, sceneId, group: g }], name: `${v?.name ?? sc.name} - ${sc.name} - ${play}` })
+  }
+
+  return { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget }
 }
 
 function eta(ratio: number, elapsedSec: number): string {

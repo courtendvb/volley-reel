@@ -16,7 +16,7 @@ export const SET_COLORS: Record<SetTarget, string> = { left: '#2563EB', middle: 
 export type SetResult = 'kill' | 'play' | 'lost'
 // at: x across, y from the end line (0) to the net (1), as the chart shows it; click: as the scout
 // clicked it, seen by the team (for the court on the video); both null when the set was not clicked.
-export interface SetDot { at: { x: number; y: number } | null; click: ClickPoint | null; target: SetTarget; result: SetResult; jersey?: number } // jersey: the attacker's
+export interface SetDot { at: { x: number; y: number } | null; click: ClickPoint | null; target: SetTarget; result: SetResult; jersey?: number } // jersey: the attacker's, on slides made when the discs showed it (no longer drawn)
 export interface SetChart {
   title: string; rotation: number | null; dots: SetDot[]
   rotLabel: string // the rotations in the title: S2, S1/S4, or All
@@ -146,7 +146,7 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     // Where the set was given from (a set's first click); a setter's own attack: where it was hit.
     // A set known only by where it went has no point (it still counts in the shares).
     const click = p.skill === 'E' ? p.startClick ?? null : p.startClick ?? p.endClick ?? null, at = spot(click)
-    dots.push({ at, click: at ? click : null, target, result, jersey: attack.jersey })
+    dots.push({ at, click: at ? click : null, target, result })
   })
   const total = dots.length
   const rotLabel = !rots ? 'All' : rots.map(r => `S${r}`).join('/')
@@ -166,10 +166,10 @@ const pct = (n: number, of: number) => `${of ? Math.round((n / of) * 100) : 0}%`
 const TEXT = '#0F172A'
 export const setChartWidth = (h: number) => h * 0.78
 
-// The sets as discs with the attacker's jersey, in the colour of where the attack came from: filled
+// The sets as plain discs (no jersey: it crowded the plot), in the colour of where the attack came from: filled
 // for a kill, white for the ball staying in play, white with a dark mark at its corner for a point
 // lost. Discs that would cover each other are moved apart, kept on the court.
-function drawJerseyDots(ctx: Ctx, list: { x: number; y: number; d: SetDot }[], r: number, court: { x: number; y: number; w: number }): void {
+function drawSetDiscs(ctx: Ctx, list: { x: number; y: number; d: SetDot }[], r: number, court: { x: number; y: number; w: number }): void {
   const ps = list.map(p => ({ ...p }))
   for (let pass = 0; pass < 12; pass++) for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
     const a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, dist = Math.hypot(dx, dy), min = r * 1.9
@@ -184,8 +184,6 @@ function drawJerseyDots(ctx: Ctx, list: { x: number; y: number; d: SetDot }[], r
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2)
     ctx.fillStyle = kill ? color : '#FFFFFF'; ctx.fill()
     ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.22); ctx.stroke()
-    ctx.fillStyle = kill ? '#FFFFFF' : color; ctx.font = `bold ${r * 1.15}px Bahnschrift, "Segoe UI", sans-serif`
-    ctx.fillText(d.jersey !== undefined ? String(d.jersey) : '', x, y + r * 0.05, r * 1.8)
     if (d.result === 'lost') {
       const k = r * 0.38, cx = x + r * 0.75, cy = y - r * 0.75
       ctx.beginPath(); ctx.arc(cx, cy, k * 1.2, 0, Math.PI * 2); ctx.fillStyle = TEXT; ctx.fill()
@@ -195,7 +193,7 @@ function drawJerseyDots(ctx: Ctx, list: { x: number; y: number; d: SetDot }[], r
   }
 }
 
-// The key to the jersey discs: kill, in play, lost.
+// The key to the set discs: kill, in play, lost.
 function drawKey(ctx: Ctx, cx: number, cy: number, size: number, maxW: number): void {
   const items: [string, SetResult][] = [['Kill', 'kill'], ['In play', 'play'], ['Lost', 'lost']]
   ctx.font = `${size}px sans-serif`
@@ -242,7 +240,7 @@ export const setChartShows = (c: SetChart, view: SetChartView = 'auto'): 'points
 // The panel: the setter and rotation, K% and ERR% of the attacks after the sets, then their half court
 // with each place's share written on it away from the net, and the sets as points (or the places
 // painted). flip: the net at the top, seen from the setter's side. rich (a rotation slide, whose
-// heading is drawn apart): no title or totals; each set a disc with the attacker's jersey, the discs
+// heading is drawn apart): no title or totals; each set a disc, the discs
 // moved apart where they would cover each other, and a key to the marks under the court.
 export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y: number; h: number }, view: SetChartView = 'auto', flip = false, rich = false): void {
   const w = setChartWidth(h), f = h / 24
@@ -287,7 +285,7 @@ export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y:
   const across = (py: number, width: number, reach = 0) => { const a = at(0, py), b = at(1, py); ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(Math.min(a.x, b.x) - reach, a.y); ctx.lineTo(Math.max(a.x, b.x) + reach, a.y); ctx.stroke() }
   across(2 / 3, Math.max(1, f / 12))
   across(1, Math.max(2, f / 4), side * 0.05)
-  if (!zones && rich) drawJerseyDots(ctx, c.dots.flatMap(d => (d.at ? [{ ...at(d.at.x, d.at.y), d }] : [])), side / 19, { x: cl, y: ct, w: side })
+  if (!zones && rich) drawSetDiscs(ctx, c.dots.flatMap(d => (d.at ? [{ ...at(d.at.x, d.at.y), d }] : [])), side / 60, { x: cl, y: ct, w: side })
   if (rich) drawKey(ctx, x + w / 2, ct + side + (flip ? bh * 1.5 + gap : f * 0.6) + key / 2, f * 0.8, w * 0.96)
   if (!zones && !rich) {
     const r = Math.max(2.5, side / 45)

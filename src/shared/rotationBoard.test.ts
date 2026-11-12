@@ -75,6 +75,7 @@ describe('where the side-out team stands, and its attacks', () => {
     expect(f.filter(s => s.receives).map(s => s.jersey)).toEqual([1, 11, 18])
     expect(f.find(s => s.jersey === 18)?.libero).toBe(true)
     expect(f.find(s => s.setter)?.jersey).toBe(21)
+    expect(f.filter(s => s.front).map(s => s.jersey)).toEqual([1, 4, 22]) // zones 2, 3 and 4
     const at = Object.fromEntries(f.map(s => [s.jersey, s.at]))
     expect(at[21].u).toBeGreaterThan(0.75) // zone 1: the team's right, behind its zone 2
     expect(at[21].v).toBeLessThan(at[1].v)

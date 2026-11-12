@@ -52,6 +52,8 @@ export interface SmokeOpts {
   sceneTitle?: boolean // a scene card with a long name: its title's top-left stays, and dragging it saves a top-left
   cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
+  clipMenu?: boolean // a clip's right-click menu: copied and moved to another scene, exported alone (with exportTo)
+  presetBlock?: boolean // the block preset by middle split by the opposing setter, made with the newest matches first
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -69,6 +71,7 @@ export interface SmokeHost {
   currentPlan: (target: 'video' | 'scene') => PlanItem[]
   editCard: (sceneId: string | null, marker: Marker | null) => void
   exportMarker: (sceneId: string, m: Marker, outPath?: string) => Promise<ExportJob | null>
+  exportClip: (sceneId: string, clipId: string, g: Group, outPath?: string) => Promise<ExportJob | null>
   exportScenes: (dir?: string) => Promise<void>
   extraSelRef: RefObject<string[]>
   insertImage: (path?: string) => Promise<string | null>
@@ -128,7 +131,7 @@ function waitFor<T>(get: () => T | null, timeoutMs = 20000, label: string | (() 
 // Installs window.__smoke, which the main process calls with the run's options (VR_SMOKE_*).
 // Loaded with a dynamic import only on a self-check run, so normal use never runs or parses it.
 export function installSmoke(h: SmokeHost): void {
-  const { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
+  const { activateClip, currentPlan, editCard, exportClip, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS } = h
   // A failure's stack is logged here: only its message reaches the main process.
   window.__smoke = (opts: SmokeOpts) => run(opts).catch(e => { console.error(`[smoke stack] ${(e as Error).stack}`); throw e })
   const run = async (opts: SmokeOpts) => {
@@ -153,7 +156,8 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.sceneTitle) return smokeSceneTitle(res)
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
-    if (opts.presets || opts.presetServe) return smokePresets(!!opts.presetServe)
+    if (opts.clipMenu) return smokeClipMenu(opts.exportTo)
+    if (opts.presets || opts.presetServe || opts.presetBlock) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : 'all')
     if (opts.picker) return smokePicker()
     if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
@@ -451,6 +455,23 @@ export function installSmoke(h: SmokeHost): void {
       await stroke([[v[0], v[1]], [prev[0] + 0.01, v[1] + 0.02], [prev[0] + 0.012, v[1] + 0.03]], true)
       const after = tri()!.points[i]
       log.shiftSnap = { x: +after[0].toFixed(4), neighborX: +prev[0].toFixed(4) }
+    }
+
+    // Curved arrow (B): dragged from start to end it is an arc; its control point then dragged on its
+    // own, and the arrow made straight and curved again from the format panel.
+    {
+      await key('b'); await stroke([[0.8, 0.95], [0.88, 0.8], [0.95, 0.65]])
+      const curveId = latest.current.selectedAnn
+      const cv = () => anns().find(a => a.id === curveId) as Extract<Annotation, { kind: 'arrow' }> | undefined
+      log.curve = { made: !!cv()?.c1 }
+      const c2 = cv()?.c2
+      if (c2) await stroke([[c2[0], c2[1]], [0.96, c2[1] + 0.05], [0.97, c2[1] + 0.1]])
+      log.curveCtrl = cv()?.c2?.map(v => +v.toFixed(3))
+      button('まっすぐにする').click(); await sleep(120)
+      log.curveStraight = !cv()?.c1
+      button('曲線にする').click(); await sleep(120)
+      log.curveAgain = !!cv()?.c1
+      await api.smokeShot!('curve.png')
     }
 
     // Pictures: an image file and page 1 of a PDF, placed in the corners.
@@ -799,6 +820,34 @@ export function installSmoke(h: SmokeHost): void {
     setLibrary(await api.getLibrary())
     if (opts.home === 'home') { await sleep(300); return { library: latest.current.library?.matches.length } }
     if (opts.home === 'picker') { setPicker('create'); await sleep(400); return { library: latest.current.library?.matches.length } }
+    if (opts.home === 'open-match') {
+      // A library row's "<team> で開く": a one-match project made, the same one opened again from
+      // home, and the other team's its own.
+      const openAs = async (i: number) => {
+        const row = await waitFor(() => document.querySelector('.home .match-row'), 10000, 'library row')
+        const b = row.querySelectorAll<HTMLButtonElement>('.match-open button')[i]
+        b.click()
+        await waitFor(() => (!document.querySelector('.home') && latest.current.projectPath ? true : null), 30000, 'project opened')
+        await sleep(800)
+        const p = (await api.getProject())!
+        return { label: b.textContent, path: latest.current.projectPath!, name: p.name, matches: p.matchIds.length, codes: p.settings.ourTeamCodes }
+      }
+      const home = async () => {
+        [...document.querySelectorAll<HTMLButtonElement>('header button')].find(b => b.textContent === t('ホーム'))!.click()
+        await waitFor(() => document.querySelector('.home .match-row'), 10000, 'home')
+        await sleep(300)
+      }
+      const first = await openAs(0)
+      await api.smokeShot!('open-match-project.png')
+      await home()
+      await api.smokeShot!('open-match-home.png')
+      const again = await openAs(0)
+      await home()
+      const other = await openAs(1)
+      if (again.path !== first.path) throw new Error(`opened again as a new project: ${first.path} / ${again.path}`)
+      if (other.path === first.path || first.matches !== 1) throw new Error(`other team: ${JSON.stringify([first, other])}`)
+      return { first, reopenedSame: true, other }
+    }
     if (opts.home === 'auto-create') {
       // "作成" in the picker twice with the same name: two folders in <library>/projects, no dialog.
       const made: string[] = []
@@ -1697,7 +1746,88 @@ export function installSmoke(h: SmokeHost): void {
     return { setter, slotLabel, layout: slide.board!.config.setLayout, titles, counts: texts.filter(x => /^n \d+ · K/.test(x)), zone21: texts.filter(x => x === 'Zone2/1').length }
   }
 
-  const smokePresets = async (serveOnly = false) => {
+  // A clip's right-click menu through its real rows and buttons: the menu shot; a clip copied to
+  // another scene (the copy keeps its length, objects and markers; the source keeps it); another clip
+  // moved (gone from the source); undo puts both scenes back; with exportTo, one clip exported alone.
+  const smokeClipMenu = async (exportTo?: string) => {
+    const start = latest.current.reels.find(r => Object.keys(r.clips).length >= 2 && latest.current.video?.sceneIds.includes(r.id))
+    if (!start || latest.current.reels.length < 2) throw new Error('needs a scene with 2 clips in the video, and another scene')
+    setReelId(start.id); await sleep(500)
+    const rows = () => [...document.querySelectorAll<HTMLElement>('.reel-groups .clip-row:not(.slide-row)')]
+    const menu = () => document.querySelector<HTMLElement>('.slide-menu')
+    const item = (label: string) => [...menu()!.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.startsWith(label)) ?? null
+    // Opens the clip's menu on row i and returns that clip (a click makes it the open clip first).
+    const rightClick = async (i: number) => {
+      const el = (await waitFor(() => rows()[i] ?? null, 5000, `row ${i}`))
+      el.click(); await sleep(200)
+      const id = latest.current.activeClipId!
+      const b = el.getBoundingClientRect()
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 60, clientY: b.top + b.height / 2 }))
+      await waitFor(menu, 3000, 'menu')
+      return latest.current.reel!.clips[id]
+    }
+    const into = async (label: string): Promise<string> => {
+      item(label)!.click(); await sleep(200)
+      const first = await waitFor(() => menu()!.querySelector<HTMLButtonElement>('.menu-scenes button'), 3000, 'scene list')
+      await api.smokeShot!(`clip-menu-${label === t('別のシーンへ移動') ? 'move' : 'copy'}.png`)
+      const name = first.title
+      first.click(); await sleep(300)
+      return latest.current.reels.find(r => r.name === name && r.id !== start.id)!.id
+    }
+    const sameIn = (sceneId: string, c: Clip) => findClip(latest.current.reels.find(r => r.id === sceneId)!, c.matchId, c.playId)
+    // 0. With the real mouse: the menu closes on a click anywhere outside it (the video, the play
+    // list, the scene list) and on Esc.
+    const closes: Record<string, boolean> = {}
+    const center = (sel: string) => { const r = document.querySelector(sel)!.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] as [number, number] }
+    for (const [what, act] of [
+      ['video', () => api.smokeDrag!([center('video')])],
+      ['play list', () => api.smokeDrag!([center('.sidebar')])],
+      ['scene head', () => api.smokeDrag!([center('.reel-head')])],
+      ['another row', () => { const r = rows()[3].getBoundingClientRect(); return api.smokeDrag!([[r.left + 30, r.top + r.height / 2]]) }],
+      ['esc', () => api.smokeKey!('Escape')],
+    ] as [string, () => Promise<void>][]) {
+      const r = rows()[0].getBoundingClientRect()
+      await api.smokeRightClick!(r.left + 60, r.top + r.height / 2)
+      await waitFor(menu, 3000, `menu (real right click, before ${what})`)
+      await act(); await sleep(300)
+      closes[what] = !menu()
+    }
+    if (Object.values(closes).some(x => !x)) { await api.smokeShot!('clip-menu-stuck.png'); throw new Error(`menu stays open: ${JSON.stringify(closes)}`) }
+    // 1. The menu, then a copy.
+    const a = await rightClick(0)
+    const labels = [...menu()!.querySelectorAll('button')].map(b => b.textContent)
+    await api.smokeShot!('clip-menu.png')
+    const before = latest.current.reels.map(r => ({ id: r.id, n: Object.keys(r.clips).length }))
+    const toA = await into(t('別のシーンへコピー'))
+    const copy = sameIn(toA, a)
+    if (!copy || !latest.current.reel!.clips[a.id]) throw new Error('copy: not in the target, or gone from the source')
+    const fresh = before.find(x => x.id === toA)!.n < Object.keys(latest.current.reels.find(r => r.id === toA)!.clips).length
+    if (fresh && (copy.inSec !== a.inSec || copy.outSec !== a.outSec || copy.annotations.length !== a.annotations.length)) throw new Error(`copy lost its edits: ${JSON.stringify([copy.inSec, a.inSec, copy.annotations.length, a.annotations.length])}`)
+    const copyMarkers = markersOf(latest.current.reels.find(r => r.id === toA)!, copy.id)
+    // 2. A move.
+    const b = await rightClick(1)
+    const toB = await into(t('別のシーンへ移動'))
+    if (!sameIn(toB, b) || latest.current.reel!.clips[b.id]) throw new Error('move: not in the target, or still in the source')
+    const notice = latest.current.notice
+    // 3. Undo: the move, then the copy, each one step for both scenes.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(300)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(300)
+    const after = latest.current.reels.map(r => ({ id: r.id, n: Object.keys(r.clips).length }))
+    const undone = JSON.stringify(after) === JSON.stringify(before)
+    // 4. One clip alone.
+    let exported: unknown = null
+    if (exportTo) {
+      const sc = latest.current.reels.find(r => r.id === start.id)!
+      const g = groupOf(sc, a.id)!
+      const job = await exportClip(sc.id, a.id, g, exportTo)
+      await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'clip export')
+      exported = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind), message: latest.current.exportState?.message }
+    }
+    return { clipMenu: { closes, labels, copied: { fresh, markers: copyMarkers, annotations: copy.annotations.length, trimmed: copy.inSec !== null || copy.outSec !== null }, moved: true, notice, undone, exported } }
+  }
+
+  const smokePresets = async (only: 'all' | 'serve' | 'block') => {
+    const serveOnly = only === 'serve'
     const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
       for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
     }
@@ -1737,6 +1867,38 @@ export function installSmoke(h: SmokeHost): void {
         if (byTime.some(r => r.markers.length !== 1 || r.markers[0].n !== r.total)) throw new Error(`time markers: ${JSON.stringify(byTime.slice(0, 3))}`)
         await pick(t('マーカーの分け方'), t('ゾーン別'))
         return { byZone: byZone.slice(0, 4), timeRows: byTime.length, hint: dialog()!.querySelectorAll('.hint')[1]?.textContent }
+      }
+      if (only === 'block') {
+        // Middles by reception, then by the opposing setter: fewer attacks (good receptions only),
+        // markers back row / front row; made with the newest matches first.
+        await open()
+        await pick(t('ビデオ'), t('ブロック'))
+        await pick(t('作り方'), t('ミドル別'))
+        await pick(t('マーカーの分け方'), t('レセプション別'))
+        const byPhase = await waitFor(() => { const p = preview(); return p.length ? p : null }, 5000, 'preview rows')
+        await pick(t('マーカーの分け方'), t('相手セッター位置別'))
+        const bySetter = preview()
+        const names = new Set(bySetter.flatMap(r => r.markers.map(m => m.name)))
+        if ([...names].some(n => n !== t('相手セッター後衛') && n !== t('相手セッター前衛'))) throw new Error(`setter markers: ${[...names].join(', ')}`)
+        if (bySetter.some(r => r.markers.reduce((n, m) => n + m.n, 0) !== r.total)) throw new Error('unmarked attacks in a setter scene')
+        if (bySetter.some((r, i) => i && r.total > bySetter[i - 1].total)) throw new Error('middles not by count')
+        const good = new Map(byPhase.map(r => [r.title, r.markers.find(m => m.name === t('良いレセプション'))?.n ?? 0]))
+        await pick(t('試合の並び'), t('新しい試合から'))
+        await api.smokeShot!('preset-block-setter.png')
+        const hints = [...dialog()!.querySelectorAll('.hint')].map(h => h.textContent)
+        const before = new Set(latest.current.videos.map(v => v.id))
+        button(dialog()!, t('作る'))!.click()
+        const video = await waitFor(() => latest.current.videos.find(v => !before.has(v.id)) ?? null, 5000, 'new video')
+        if (video.preset?.how.blockMarks !== 'setter' || video.preset.how.order !== 'new') throw new Error(`preset not kept: ${JSON.stringify(video.preset)}`)
+        const rank = Object.keys(latest.current.matches) // oldest first
+        const orders = video.sceneIds.map(id => {
+          const s = latest.current.reels.find(r => r.id === id)!
+          const seq = s.groups[1].map(c => rank.indexOf(s.clips[c].matchId))
+          if (seq.some((x, i) => i && x > seq[i - 1])) throw new Error(`scene ${s.name}: matches not newest first ${seq.join(',')}`)
+          return [...new Set(seq)].join('>')
+        })
+        await sleep(600)
+        return { byPhase: byPhase.map(r => `${r.title} ${r.total} (good ${good.get(r.title)})`), bySetter: bySetter.map(r => `${r.title} ${r.total} (${r.markers.map(m => `${m.name} ${m.n}`).join(', ')})`), name: video.name, matchesInMarker1: orders, hints: hints.slice(0, 3) }
       }
       // 1. A block video by middle, for the target team.
       await open()

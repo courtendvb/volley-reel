@@ -47,6 +47,8 @@ interface Props {
   onEditSlide: (id: string) => void
   editingSlideId: string | null
   canFrame: boolean // a match's video is on screen (a slide can be made from its picture)
+  onClipToScene: (clipId: string, toSceneId: string, move: boolean) => void // a clip's right-click: into another scene
+  onExportClip: (clipId: string, g: Group) => void // a clip's right-click: that clip alone as an MP4
 }
 
 // blank: an empty page to draw on. file: PDF pages or pictures. frame: the picture on screen.
@@ -61,7 +63,10 @@ export function ReelPanel(p: Props) {
   const { reel } = p
   const [dragOver, setDragOver] = useState<{ key: string; after: boolean } | null>(null)
   const [slideDrag, setSlideDrag] = useState(false) // a slide is being dragged: the scene's head shows as a place to drop it
-  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number } | null>(null)
+  // The right-click menu: slides to put in, and on a clip row that clip's own actions first (pick:
+  // the list of scenes to move or copy it to, in place of the menu).
+  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number; clip?: { id: string; g: Group }; pick?: 'move' | 'copy' } | null>(null)
+  const [folded, setFolded] = useState<Set<string>>(() => new Set()) // "sceneId:group" whose rows are hidden
   useEffect(() => {
     if (!menu) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
@@ -137,9 +142,15 @@ export function ReelPanel(p: Props) {
     if (g !== 'none' && g !== 'head') onDropClip(e, g, rows.slice(0, at).filter(r => r.kind === 'clip').length)
   }
   // Slides go in by right-click: on a row, below it; on a group's header, at the top of the group.
-  const openMenu = (e: MouseEvent, spot: SlideSpot, where: string) => {
+  const openMenu = (e: MouseEvent, spot: SlideSpot, where: string, clip?: { id: string; g: Group }) => {
     e.preventDefault(); e.stopPropagation()
-    setMenu({ spot, where, x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 130) })
+    setMenu({ spot, where, clip, x: Math.min(e.clientX, window.innerWidth - 250), y: Math.max(8, Math.min(e.clientY, window.innerHeight - (clip ? 330 : 130))) })
+  }
+  // Scenes a clip can go to: the open video's first, in its order, then the rest.
+  const otherScenes = () => {
+    const inVideo = (p.videoSceneIds ?? []).filter((id, i, a) => a.indexOf(id) === i && id !== reel.id)
+    const byId = new Map(p.reels.map(r => [r.id, r]))
+    return [...inVideo.flatMap(id => byId.get(id) ?? []), ...p.reels.filter(r => r.id !== reel.id && !inVideo.includes(r.id))]
   }
   const BELOW = t('この行の下にスライドを入れる'), AT_TOP = t('マーカーの先頭にスライドを入れる'), AT_HEAD = t('シーンの頭にスライドを入れる')
   const rowsOf = (g: SlideGroup, ids: string[]) => {
@@ -148,6 +159,19 @@ export function ReelPanel(p: Props) {
     return rows.map((r, k) => (r.kind === 'clip' ? g !== 'head' && clipRow(reel.clips[r.id], g, clipNo++, rows, k) : slideRow(r.slide, g, rows, k)))
   }
   const headRows = groupRows(reel, 'head')
+
+  // A group's count doubles as its fold switch: a click hides or shows its rows (drops on the
+  // header still land at the group's end).
+  const isFolded = (g: Group) => folded.has(`${reel.id}:${g}`)
+  const foldButton = (g: Group, n: number) => {
+    const f = isFolded(g)
+    return (
+      <button className={`fold${f ? ' folded' : ''}`} aria-expanded={!f} title={f ? t('クリックで開く') : t('クリックで折りたたむ')}
+        onClick={() => setFolded(s => { const k = `${reel.id}:${g}`, x = new Set(s); if (!x.delete(k)) x.add(k); return x })}>
+        {n}<span className="fold-chev" aria-hidden>▾</span>
+      </button>
+    )
+  }
 
   const slideRow = (s: Slide, g: SlideGroup, rows: Row[], k: number) => (
     <div
@@ -189,7 +213,7 @@ export function ReelPanel(p: Props) {
           if (dragging(e, DT_SLIDE)) { dropOnRow(e, g, rows, k); return }
           if (g !== 'none') onDropClip(e, g, i + (dragOver?.key === c.id && dragOver.after ? 1 : 0))
         }}
-        onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW)}
+        onContextMenu={e => openMenu(e, spotAt(rows, g, k + 1), BELOW, { id: c.id, g })}
         onClick={() => p.onActivate(c, g)}
       >
         <span className="grip" aria-hidden title={t('ドラッグで並べ替え・マーカーへ移動')}>⠿</span>
@@ -292,7 +316,7 @@ export function ReelPanel(p: Props) {
               <InlineTitle className="group-title" value={reel.markerNames[m]} placeholder={t('マーカー {0}', m)} label={t('マーカー {0} の名前', m)}
                 onChange={v => change(renameMarker(reel, m, v))} />
               {reel.markerOff?.[m] && <span className="excluded-note" title={t('番号をクリックするとオンに戻ります')}>{t('オフ（使わない）')}</span>}
-              <span className="muted">{reel.groups[m].length}</span>
+              {foldButton(m, reel.groups[m].length)}
               {reel.groups[m].some(id => reel.clips[id]?.tag) && (
                 <button className="tag-sort" title={keyName(t('このマーカーのクリップをメモの順に並べる（メモなしは最後。Ctrl+Z で戻せる）'))}
                   onClick={() => change(sortByTag(reel, m))}>{t('メモ順')}</button>
@@ -308,7 +332,7 @@ export function ReelPanel(p: Props) {
               <button className="gear" aria-label={t('マーカー {0} のタイトルカードの見た目', m)} title={t('マーカーのタイトルカードの見た目（位置・大きさ）を動画の画面で編集')}
                 onClick={() => p.onEditCard(m)}>⚙</button>
             </header>
-            {rowsOf(m, reel.groups[m])}
+            {!isFolded(m) && rowsOf(m, reel.groups[m])}
           </section>
         ))}
         <section className={`group none${reel.scope === 'marked' ? ' excluded' : ''}${dragOver?.key === 'gnone' ? ' drop-into' : ''}`}
@@ -320,19 +344,51 @@ export function ReelPanel(p: Props) {
           <header className="group-head" onContextMenu={e => openMenu(e, spotAt(groupRows(reel, 'none', none.map(c => c.id)), 'none', 0), AT_TOP)}>
             <span className="swatch none">–</span>
             <span className="none-title">{t('マーカーなし')}<span className="excluded-note" title={t('上の「再生・書き出し」で切り替えます')}> {reel.scope === 'marked' ? t('再生・書き出しに入りません') : t('マーカーのあとに一覧の順で入ります')}</span></span>
-            <span className="muted">{none.length}</span>
+            {foldButton('none', none.length)}
             {none.some(c => c.tag) && (
               <button className={`tag-sort${reel.noneByTag ? ' on' : ''}`} aria-pressed={!!reel.noneByTag} title={t('マーカーなしのクリップをメモの順に並べる（数字、アルファベットの順。メモなしは最後）。もう一度押すと時間順に戻る')}
                 onClick={() => change({ ...reel, noneByTag: !reel.noneByTag })}>{t('メモ順')}</button>
             )}
           </header>
-          {rowsOf('none', none.map(c => c.id))}
+          {!isFolded('none') && rowsOf('none', none.map(c => c.id))}
         </section>
       </div>
       {menu && (
         <>
           <div className="menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
           <div className="slide-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+            {menu.clip && menu.pick ? (() => {
+              const scenes = otherScenes(), clipId = menu.clip.id, move = menu.pick === 'move'
+              return (
+                <>
+                  <button role="menuitem" className="menu-back" onClick={() => setMenu({ ...menu, pick: undefined })}>‹ {move ? t('別のシーンへ移動') : t('別のシーンへコピー')}</button>
+                  <div className="menu-scenes">
+                    {scenes.map(s => (
+                      <button key={s.id} role="menuitem" title={s.name} onClick={() => { setMenu(null); p.onClipToScene(clipId, s.id, move) }}>
+                        {s.name}{p.videoSceneIds && !p.videoSceneIds.includes(s.id) && <span className="muted"> {t('（動画の外）')}</span>}
+                      </button>
+                    ))}
+                    {!scenes.length && <span className="muted pad-x">{t('ほかのシーンがありません')}</span>}
+                  </div>
+                </>
+              )
+            })() : <>
+            {menu.clip && (() => {
+              const { id, g } = menu.clip, c = reel.clips[id]
+              if (!c) return null
+              const trimmed = c.inSec !== null || c.outSec !== null, lost = p.missing.has(id) || !p.info(c).range
+              return (
+                <>
+                  <div className="slide-menu-title">{t('このクリップ')}</div>
+                  <button role="menuitem" disabled={lost} title={t('タイトルカードなしで、このクリップ 1 本を MP4 に（オーバーレイ・図形は入る）')} onClick={() => { setMenu(null); p.onExportClip(id, g) }}>{t('このクリップだけ書き出す…')}</button>
+                  <button role="menuitem" title={t('長さ・図形・スロー・メモごと移す。マーカーはそのまま')} onClick={() => setMenu({ ...menu, pick: 'move', y: Math.max(8, Math.min(menu.y, window.innerHeight - 420)) })}>{t('別のシーンへ移動')} ›</button>
+                  <button role="menuitem" title={t('長さ・図形・スロー・メモごと写す。マーカーはそのまま')} onClick={() => setMenu({ ...menu, pick: 'copy', y: Math.max(8, Math.min(menu.y, window.innerHeight - 420)) })}>{t('別のシーンへコピー')} ›</button>
+                  <button role="menuitem" disabled={!trimmed} onClick={() => { setMenu(null); change({ ...reel, clips: { ...reel.clips, [id]: { ...c, inSec: null, outSec: null } } }) }}>{t('長さを初期値に戻す')}</button>
+                  <button role="menuitem" onClick={() => { setMenu(null); change(removeClip(reel, id)) }}>{t('シーンから外す')}</button>
+                  <hr className="menu-sep" />
+                </>
+              )
+            })()}
             <div className="slide-menu-title">{menu.where}</div>
             {([['blank', t('無地のスライド'), t('タイトルカードと同じ色の無地。文字や図形を置いて説明に使う')],
               ['file', t('PDF・画像を読み込む…'), t('PowerPoint から PDF で書き出したもの。全ページが 1 枚ずつ入る')],
@@ -340,6 +396,7 @@ export function ReelPanel(p: Props) {
               <button key={how} role="menuitem" title={hint} disabled={how === 'frame' && !p.canFrame}
                 onClick={() => { setMenu(null); p.onSlide(menu.spot, how) }}>{label}</button>
             ))}
+            </>}
           </div>
         </>
       )}

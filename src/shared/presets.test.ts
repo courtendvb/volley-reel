@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOW, buildPreset, cleanDialogState, cleanPreset, serveZoneMarker, lineupsMissing, makePreset, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
+import { DEFAULT_HOW, buildPreset, cleanDialogState, cleanPreset, serveZoneMarker, lineupsMissing, makePreset, orderByMatch, setterMarker, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
 import type { PlayRef } from './filter'
 import type { ParsedDVW, Play, PlayerRole } from './types'
 
@@ -39,6 +39,31 @@ describe('presets', () => {
     expect(s[0].counts).toEqual({ 1: 1, 2: 1, 3: 1 })
     expect(s[0].rest).toBe(1)
     expect(s[1].counts).toEqual({ 3: 1 })
+  })
+
+  it('splits a middle scene by the attacking setter after a good reception only', () => {
+    const m3 = { key: 'M3', label: '#3 N3' }, m5 = { key: 'M5', label: '#5 N5' }
+    const opp = (rot: number, phase: Play['phase'], recEffect?: string): PlayRef => ({ ...ref({ skill: 'A', jersey: 10, team: 'opp', phase, recEffect }), oppRot: rot })
+    const attacks = [opp(1, 'r', '#'), opp(4, 'r', '+'), opp(5, 'r', '!'), opp(2, 'r', '-'), opp(6, 't'), opp(3, 'r', '#')]
+    for (const a of attacks) facing[a.play.id] = [m5]
+    facing[attacks[3].play.id] = [m3]; facing[attacks[4].play.id] = [m3]
+    const s = buildPreset('block', { ...DEFAULT_HOW, block: 'middle', blockMarks: 'setter' }, attacks, look).scenes
+    expect(titles(s)).toEqual(['#5 N5']) // #3 faced only a poor reception and a transition
+    expect(s[0].names).toEqual({ 1: '相手セッター後衛', 2: '相手セッター前衛' })
+    expect(s[0].counts).toEqual({ 1: 2, 2: 2 })
+    expect(s[0].rest).toBe(0)
+    expect(setterMarker(opp(6, 'r', '/'))).toBe(null)
+  })
+
+  it('orders plays by match, oldest or newest first, keeping each match in play order', () => {
+    const at = (matchId: string, jersey: number): PlayRef => ({ ...ref({ jersey }), matchId })
+    const refs = [at('a', 1), at('b', 2), at('a', 3), at('c', 4), at('b', 5)]
+    const idx = (id: string) => ['c', 'a', 'b'].indexOf(id)
+    expect(orderByMatch(refs, 'old', idx).map(r => r.play.jersey)).toEqual([4, 1, 3, 2, 5])
+    expect(orderByMatch(refs, 'new', idx).map(r => r.play.jersey)).toEqual([2, 5, 1, 3, 4])
+    expect(orderByMatch(refs, 'new').map(r => r.play.jersey)).toEqual([4, 2, 5, 1, 3])
+    const s = buildPreset('serve', { ...DEFAULT_HOW, serve: 'count', serveMarks: 'time', order: 'new' }, [at('a', 9), at('b', 9)], { ...look, matchIndex: id => ['a', 'b'].indexOf(id) }).scenes
+    expect(s[0].items.map(i => i.ref.matchId)).toEqual(['b', 'a'])
   })
 
   it('marks an attack by where it came from, and a serve by its result', () => {

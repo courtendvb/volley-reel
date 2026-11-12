@@ -104,6 +104,11 @@ export function useProjectFlow(h: Host) {
     const p = await api.openProject(path)
     if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
   })
+  // A match alone from the home list, with one of its teams as ours (the project is found or made in main).
+  const openMatch = (matchId: string, code: string) => guard(async () => {
+    const p = await api.openMatchProject(matchId, code)
+    resetView(); await loadProject(p); setRecent(await api.recentProjects())
+  })
   const goHome = async () => {
     await flushAll() // nothing pending is lost on the way out
     playback.stopSequence()
@@ -156,6 +161,6 @@ export function useProjectFlow(h: Host) {
 
   return {
     library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
-    openProject, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
+    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
   }
 }

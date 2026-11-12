@@ -133,7 +133,12 @@ export function directionChart(play: Pick<Play, 'skill' | 'playerKey' | 'code' |
   const dots = mine.flatMap((p, i): ChartDot[] => {
     const c = playClicks(p), rough = c.startRough || c.endRough
     const start = c.startRough ? scattered(c.start!, i) : c.start, end = c.endRough ? scattered(c.end!, i) : c.end
-    return end ? [{ start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect, ...(rough ? { rough } : {}), ...(c.startRough ? { startRough: true } : {}) }] : []
+    // Each end spreads on its own, as on the court: a sub-zone's narrower than a whole zone's.
+    const spread = (isRough: boolean | undefined, sub: string | null) => (isRough ? (sub ? HEAT_SUB_SIGMA_M : HEAT_ZONE_SIGMA_M) : 0)
+    return end ? [{
+      start: on(start), end: on(end), result: chartResult(p.effect), effect: p.effect,
+      ...(rough ? { rough, endSpread: spread(c.endRough, p.endSub), ...(c.startRough ? { startSpread: spread(true, p.startSub) } : {}) } : {}), ...(c.startRough ? { startRough: true } : {}),
+    }] : []
   })
   return { name: source?.name ?? '', skill, dots, stats: chartStats(mine, skill), look: { lines: style.lines, stats: style.stats, name: style.name, colors: style.colors, points: style.points !== false, heat: !!style.heat, ...(style.starts ? { starts: true } : {}), lineOpacity: style.lineOpacity ?? LINE_OPACITY } }
 }

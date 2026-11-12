@@ -77,7 +77,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
     const r = it.r
     rows.push(
       <PlayRow
-        key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW}
+        key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW} odd={i % 2 === 1}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
         marks={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark}
@@ -96,14 +96,15 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
 
 const MARKERS: Marker[] = [1, 2, 3, 4, 5]
 
-const PlayRow = memo(function PlayRow({ r, top, videoTime, selected, now, onJump, marks, onMark }: {
-  r: PlayRef; top: number; videoTime: number; selected: boolean; now: boolean
+// odd: every other row is shaded a little (by its place in the list, so the stripes stay put while scrolling).
+const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark }: {
+  r: PlayRef; top: number; odd: boolean; videoTime: number; selected: boolean; now: boolean
   onJump: (r: PlayRef) => void; marks: string | null; onMark: (r: PlayRef, m: Marker) => void
 }) {
   const p = r.play
   return (
     <div role="listitem" style={{ top, height: ROW }}
-      className={`play-row${selected ? ' selected' : ''}${now ? ' now' : ''}${marks === '' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
+      className={`play-row${odd ? ' odd' : ''}${selected ? ' selected' : ''}${now ? ' now' : ''}${marks === '' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
       title={t('映像 {0}{1}', formatTime(videoTime), marks === '' ? t('・シーンに入っています（マーカーなし）') : '')}>
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>

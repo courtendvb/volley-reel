@@ -9,7 +9,7 @@ import { setChartWidth, setterCall } from './setChart'
 import { splitSets, type SetPlace, type SetSplit, type SetterSet, type SetView } from './setterBoard'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 import { homography, project, type CourtFit } from './courtGeometry'
-import { discOutline, discShapes } from './disc'
+import { discOutline } from './disc'
 import { mix } from './overlayDraw'
 
 export const ROTATIONS = [1, 6, 5, 4, 3, 2] // the order a team rotates
@@ -262,7 +262,7 @@ export const TEAM_COLOR = '#1D4ED8' // a team without a colour of its own
 export const NUMBER_FONT = 'Bahnschrift'
 // The five players' discs (not the libero's): their fill and outline.
 export interface DiscLook { fill: string; line: string }
-export const discLine = (fill: string) => mix(fill, '#000000', 0.45)
+export const discLine = (fill: string) => mix(fill, '#000000', 0.5)
 
 // The main colour of a picture (a team's logo), from its RGBA pixels: the most common strong colour,
 // leaving out see-through, white, black and grey pixels. Null when it has none.
@@ -332,20 +332,21 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
     tips.push(words(mid[0], mid[1] + 0.006, `#${list[0].attack.jersey}`, 13, '#FFFFFF', { align: 'center', groupId: cg, font: NUMBER_FONT, box: { fill: mix(color, '#000000', 0.2), fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 2, radius: 3 } }))
   }
   out.push(...tips)
-  // The players: a shadow on the floor, then the disc; the far ones first so nearer ones cover them.
+  // The players: a ball resting on the floor (lit from the top left), its soft shadow on the floor;
+  // the far ones first so nearer ones cover them. A ball is about 0.9 m wide where it stands.
   const corners = COURT, { fill: teamColor, line: rimColor } = look
-  const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string) => {
-    const gg = uid(), f = invert(H, p)
-    out.push({ id: uid(), kind: 'polygon', color: '#000000', width: 0, points: discOutline(corners, { u: f.u + 0.004, v: f.v + 0.006, r: 0.6, z: 0 }).top, fill: '#000000', fillOpacity: 0.28, groupId: gg })
-    const [side, top] = discShapes(corners, { u: f.u, v: f.v, r: 0.5, z: 0.3 }, { color: rim, fill, fillOpacity: 1, width: 1.5 }, { side: uid(), top: uid(), group: gg })
-    out.push(side, top)
-    if (!label) return
-    const pts = top.kind === 'polygon' ? top.points : [], cx = pts.reduce((a, q) => a + q[0], 0) / (pts.length || 1), cy = pts.reduce((a, q) => a + q[1], 0) / (pts.length || 1)
-    out.push(words(cx, cy - 11 / 720, label, 18, ink, { align: 'center', groupId: gg, font: NUMBER_FONT }))
+  const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string, rimWidth = 1) => {
+    const gg = uid(), f = invert(H, p), ring = discOutline(corners, { u: f.u, v: f.v, r: 0.45, z: 0 }).top
+    const xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * 1280 // its width in px at 720p
+    const cx = p[0], cy = p[1] * 720 - d * 0.42 // its centre over the floor point, in px
+    out.push({ id: uid(), kind: 'polygon', color: '#000000', width: 0, points: discOutline(corners, { u: f.u, v: f.v + 0.005, r: 0.47, z: 0 }).top, fill: '#2A1708', fillOpacity: 0.32, groupId: gg })
+    out.push({ id: uid(), kind: 'circle', color: rim, width: rimWidth, x: cx - d / 2 / 1280, y: (cy - d / 2) / 720, w: d / 1280, h: d / 720, fill, fillOpacity: 1, shade: 'ball', groupId: gg })
+    if (label) out.push(words(cx, (cy - d * 0.27) / 720, label, Math.round(d * 0.45), ink, { align: 'center', groupId: gg, font: NUMBER_FONT }))
   }
   for (const s of [...formation].sort((a, b) => a.at.v - b.at.v)) {
     const p = team({ u: Math.min(1, Math.max(0, s.at.u)), v: Math.min(0.49, Math.max(0.02, s.at.v)) })
-    if (s.libero) disc(p, '#FFFFFF', light(teamColor) ? rimColor : teamColor, String(s.jersey), light(teamColor) ? rimColor : teamColor)
+    const deep = light(teamColor) ? mix(teamColor, '#000000', 0.45) : teamColor // the libero: white, in the team's colour
+    if (s.libero) disc(p, '#FFFFFF', deep, String(s.jersey), deep, 2)
     else disc(p, teamColor, rimColor, String(s.jersey), light(teamColor) ? '#0F172A' : '#FFFFFF')
   }
   // The net: posts, a see-through mesh, the white tape along its top and the cable at its foot, and

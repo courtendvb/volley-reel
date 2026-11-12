@@ -303,11 +303,22 @@ export function drawCones(ctx: Ctx, w: number, h: number, cones: SlideCones): vo
 // (skillSec, in place of the DVW's), and on a serve its speed (speedKmh), which sets the time in the air.
 export interface Flight { startSec: number; sec: number }
 type FlightPlay = ClickPlay & Pick<Play, 'time' | 'code' | 'shotCode' | 'setTo'>
-export function flightTiming(play: FlightPlay, offsetSec: number, clip?: { skillSec?: number; speedKmh?: number } | null): Flight {
+// A serve with its reception's touch marked (touchSec) flies from the hit to the touch.
+export function flightTiming(play: FlightPlay, offsetSec: number, clip?: { skillSec?: number; speedKmh?: number; touchSec?: number } | null): Flight {
   const metres = play.skill === 'S' ? serveMetres(play) : null
-  const sec = metres && clip?.speedKmh ? metres / (clip.speedKmh / 3.6) : shotPath(play.shotCode ?? play.code, play.setTo).sec
   const t = clip?.skillSec ?? play.time + offsetSec
+  const touched = metres && clip?.touchSec !== undefined && clip.touchSec > t ? clip.touchSec - t : null
+  const sec = touched ?? (metres && clip?.speedKmh ? metres / (clip.speedKmh / 3.6) : shotPath(play.shotCode ?? play.code, play.setTo).sec)
   return { startSec: play.shotCode ? t - sec : t, sec }
+}
+
+// A serve's average speed from the hit to the reception's touch (video times marked by hand), in
+// km/h over the floor distance between the two clicks; null without both clicks or with the touch
+// not after the hit.
+export function measuredSpeed(play: ClickPlay, hitSec: number, touchSec: number | undefined | null): number | null {
+  const metres = play.skill === 'S' ? serveMetres(play) : null
+  if (!metres || touchSec === undefined || touchSec === null || touchSec <= hitSec) return null
+  return Math.round((metres / (touchSec - hitSec)) * 3.6)
 }
 
 // How far a serve goes along the floor, in metres, from its zones without clicks; null without both ends.

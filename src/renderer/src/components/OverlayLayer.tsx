@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { CaptionData, ClipOverlayOverride, OverlaySettings, ScoreboardData } from '../../../shared/overlay'
-import { drawCaption, drawCard, drawScoreboard } from '../../../shared/overlayDraw'
+import { lookTheme, type CaptionData, type ClipOverlayOverride, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
+import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../../shared/overlayDraw'
 import { drawAnnotation } from '../../../shared/annotation'
 import { drawFlights, drawSlideMarks, flightsProgress } from '../../../shared/court'
 import { assetImage, logoImage, packPhotoImage, subscribeAssets } from '../assets'
@@ -15,20 +15,27 @@ interface Props {
   caption: CaptionData | null
   override?: ClipOverlayOverride
   heatOpacity?: number // of a slide's heatmap
+  speed?: { key: string; from: number; to: number; kmh: number } | null // a serve's speed plate and when it shows (video times)
 }
 
 // Scoreboard and caption for the clip on screen, and title cards and slides during a through-play.
 // Drawn with the same functions the export will use. Sits under the annotation layer.
-export function OverlayLayer({ size, settings, clip, scoreboard, caption, override, heatOpacity }: Props) {
+export function OverlayLayer({ size, settings, clip, scoreboard, caption, override, heatOpacity, speed }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   // Redrawn when the playhead enters or leaves the clip or a card shows, not on every frame.
   const clipRef = useRef(clip)
   clipRef.current = clip
   const inClipAt = (t: number) => { const c = clipRef.current; return !!c && playback.attachedKey === c.key && t >= c.in - 0.05 && t <= c.out + 0.05 }
-  const [st, setSt] = useState<{ inClip: boolean; card: PlaybackState['card'] }>({ inClip: inClipAt(playback.current.time), card: playback.current.card })
+  const speedRef = useRef(speed)
+  speedRef.current = speed
+  const inSpeedAt = (t: number) => { const s = speedRef.current; return !!s && playback.attachedKey === s.key && t >= s.from - 0.01 && t <= s.to }
+  // Whether the plate is on the canvas now: it can come up on a render (a touch marked while paused),
+  // so leaving it has to redraw even when the state already said "out".
+  const speedShown = useRef(false)
+  const [st, setSt] = useState<{ inClip: boolean; inSpeed: boolean; card: PlaybackState['card'] }>({ inClip: inClipAt(playback.current.time), inSpeed: inSpeedAt(playback.current.time), card: playback.current.card })
   useEffect(() => playback.subscribe(s => {
-    const inClip = inClipAt(s.time)
-    setSt(p => (p.inClip === inClip && p.card === s.card ? p : { inClip, card: s.card }))
+    const inClip = inClipAt(s.time), inSpeed = inSpeedAt(s.time)
+    setSt(p => (p.inClip === inClip && p.inSpeed === inSpeed && inSpeed === speedShown.current && p.card === s.card ? p : { inClip, inSpeed, card: s.card }))
   }), [])
   const [logoTick, setLogoTick] = useState(0) // redraw when a logo finishes loading
   useEffect(() => subscribeAssets(() => setLogoTick(n => n + 1)), [])
@@ -50,6 +57,8 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
   }, [st.card])
 
   const inClip = inClipAt(playback.current.time) || st.inClip
+  const inSpeed = inSpeedAt(playback.current.time)
+  speedShown.current = inSpeed
   useEffect(() => {
     const c = canvas.current
     if (!c) return
@@ -61,10 +70,11 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
       if (flights) drawFlights(ctx, size.w, size.h, flights, progress)
       return
     }
+    if (speed && settings.serveSpeed.enabled && inSpeed) drawServeSpeed(ctx, size.w, size.h, speed.kmh, settings.serveSpeed, lookTheme(settings))
     if (!inClip) return
-    if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, settings.theme)
-    if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, settings.theme, packPhotoImage(caption.photo))
-  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, st.card, logoTick, flights, progress, heatOpacity])
+    if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, lookTheme(settings))
+    if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, lookTheme(settings), packPhotoImage(caption.photo))
+  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, inSpeed, speed, st.card, logoTick, flights, progress, heatOpacity])
 
   return <canvas ref={canvas} className="overlay-layer" data-testid="overlay-canvas" style={{ width: size.w, height: size.h }} />
 }

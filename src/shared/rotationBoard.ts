@@ -92,13 +92,14 @@ const PLACE_FILL: Partial<Record<SetPlace, string>> = { right: '#DC2626', middle
 
 // A table of where the sets went: its title, then N · Pipe · SD and Z2/1 · Quick · Z4, each a label
 // over its share; the largest of the three places in bold red. One group.
-function table(title: string, head: { fill: string; text: string }, sp: SetSplit, x: number, y: number, w: number): { out: Annotation[]; h: number } {
-  const groupId = uid(), cw = w / 3, rh = 0.03, out: Annotation[] = []
+// k: its size (1 = as on a slide with all six tables); the type grows with it.
+function table(title: string, head: { fill: string; text: string }, sp: SetSplit, x: number, y: number, w: number, k = 1): { out: Annotation[]; h: number } {
+  const groupId = uid(), cw = w / 3, rh = TABLE_ROW * k, out: Annotation[] = []
   const cell = (c: number, r: number, text: string, o: { fill?: string; color?: string; bold?: boolean; span?: number; size?: number } = {}) => {
     const cwid = cw * (o.span ?? 1)
-    out.push(words(x + c * cw + cwid / 2, y + r * rh, text, o.size ?? 13, o.color ?? '#0F172A', {
+    out.push(words(x + c * cw + cwid / 2, y + r * rh, text, Math.round((o.size ?? 13) * k), o.color ?? '#0F172A', {
       align: 'center', bold: o.bold ?? false, groupId,
-      box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#94A3B8', strokeWidth: 1, padding: 3, width: cwid, height: rh },
+      box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#94A3B8', strokeWidth: 1, padding: Math.round(3 * k), width: cwid, height: rh },
     }))
   }
   cell(0, 0, title, { fill: head.fill, color: head.text, bold: true, span: 3, size: 14 })
@@ -286,7 +287,7 @@ export function mainColor(px: ArrayLike<number>): string | null {
 // colour, the libero in white), the other team's three blockers at the net, a cone for each spiker's
 // usual course in this rotation, each place's share beyond the net over where it is hit from, and
 // the dumps by the setter.
-function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook): Annotation[] {
+function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, cones = true): Annotation[] {
   const H = homography(COURT), at = (u: number, v: number): [number, number] => { const q = project(H, u, v); return [q.x, q.y] }
   const team = onPicture(H), out: Annotation[] = [], g = uid()
   const poly = (pts: [number, number][], fill: string | null, o: Partial<Extract<Annotation, { kind: 'polygon' }>> = {}): Annotation =>
@@ -318,7 +319,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
     const place = [...places.entries()].sort((a, b) => b[1] - a[1])[0][0]
     if (list.length > (byPlace.get(place)?.length ?? 0)) byPlace.set(place, list)
   }
-  for (const [place, list] of [...byPlace.entries()].sort((a, b) => a[1].length - b[1].length)) {
+  for (const [place, list] of cones ? [...byPlace.entries()].sort((a, b) => a[1].length - b[1].length) : []) {
     const c = mainCourse(list.flatMap(s => { const l = attackLine(s.attack); return l ? [l] : [] }))
     if (!c) continue
     const color = PLACE_COLOR[place] ?? '#0F172A'
@@ -403,6 +404,28 @@ export interface RotationSlideData {
   rates?: SideOutRate // the team's serve receive in the rotation
   teamColor?: string // the side-out team's colour, its players' discs
   discLine?: string // and their outline (missing: a darker shade of it)
+  cones?: boolean // the spikers' cones on the court (missing: shown)
+  tables?: RotationTables // which of the tables at the bottom right (missing: all six)
+}
+
+// The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
+// pass, the # and + passes, the three passes, only the setter calls, or none. The fewer, the larger
+// they are drawn (tableGrid).
+export type RotationTables = 'all' | 'hash' | 'hashPlus' | 'passes' | 'calls' | 'none'
+export const ROTATION_TABLES: RotationTables[] = ['all', 'hash', 'hashPlus', 'passes', 'calls', 'none']
+const TABLE_ROW = 0.03, TABLE_W = 0.145, TABLE_H = TABLE_ROW * 5, TABLE_GAP = 0.01, TABLE_COL_GAP = 0.012
+const TABLE_AREA = { y: 0.5, h: 0.49 } // under the set chart, across the right-hand area
+
+// How n tables go in the area: the columns and rows that let them be largest, and that size (k = 1:
+// the size on a slide with all six). Filled column by column.
+export function tableGrid(n: number): { cols: number; rows: number; k: number } {
+  let best = { cols: 1, rows: Math.max(1, n), k: 0 }
+  for (let cols = 1; cols <= Math.max(1, n); cols++) {
+    const rows = Math.ceil(n / cols)
+    const k = Math.min((RIGHT.w - (cols - 1) * TABLE_COL_GAP) / cols / TABLE_W, (TABLE_AREA.h - (rows - 1) * TABLE_GAP) / rows / TABLE_H)
+    if (k > best.k + 1e-9) best = { cols, rows, k }
+  }
+  return best
 }
 
 // Where the set chart goes on the slide (top right), as a share of the picture's height.
@@ -447,23 +470,28 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
   out.push(words(x, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup, font: NUMBER_FONT }))
   out.push({ id: uid(), kind: 'polyline', color: fill, width: 6, points: [[x + 0.003, 0.15], [x + 0.003 + pw, 0.15]], groupId: headGroup })
   out.push(...rateTable(v.rates ?? { n: 0, won: 0, firstBall: 0 }, x + pw + 0.035, 0.03, fill))
-  out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }))
+  out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }, v.cones !== false))
   out.push(...setterHeading(v, fill))
-  // Bottom right: by reception, and by setter call (the chart is above them).
-  const colW = 0.145, gap = 0.01, x1 = RIGHT.x, x2 = x1 + colW + 0.012
-  let y = 0.5
+  // Bottom right: by reception, and by setter call (the chart is above them), as many as were chosen.
   const recs: [string, string, { fill: string; text: string }][] = [['#', '# pass', { fill: '#DBEAFE', text: '#0F172A' }], ['+', '+ pass', { fill: '#DCFCE7', text: '#0F172A' }], ['!', '! pass', { fill: '#FDE8D0', text: '#0F172A' }]]
-  for (const [e, title, head] of recs) {
-    const tb = table(title, head, splitSets(rot.filter(s => afterRec(s, e))), x1, y, colW)
-    out.push(...tb.out); y += tb.h + gap
-  }
-  y = 0.5
-  // The setter calls of this rotation, the most used first, as many as the pass tables beside them.
-  const head = { fill: '#334155', text: '#FFFFFF' }
-  topCalls(rot, 3).forEach(({ call, sets }, i) => {
-    const name = v.callNames?.[call]
-    const tb = table(`${i + 1}. CALL ${call}${name ? ` ${name}` : ''}`, head, splitSets(sets), x2, y, colW)
-    out.push(...tb.out); y += tb.h + gap
+  const which = v.tables ?? 'all'
+  const passes = recs.slice(0, which === 'hash' ? 1 : which === 'hashPlus' ? 2 : which === 'calls' || which === 'none' ? 0 : 3)
+    .map(([e, title, head]) => ({ title, head, sp: splitSets(rot.filter(s => afterRec(s, e))) }))
+  // The setter calls of this rotation, the most used first.
+  const callHead = { fill: '#334155', text: '#FFFFFF' }
+  const calls = which === 'all' || which === 'calls'
+    ? topCalls(rot, 3).map(({ call, sets }, i) => { const name = v.callNames?.[call]; return { title: `${i + 1}. CALL ${call}${name ? ` ${name}` : ''}`, head: callHead, sp: splitSets(sets) } })
+    : []
+  // All six: the passes in the left column, the calls in the right, as they always were. Else the
+  // chosen ones as large as the area lets them be, in the middle of it.
+  const list = [...passes, ...calls]
+  const grid = which === 'all' ? { cols: 2, rows: 3, k: 1 } : tableGrid(list.length)
+  const w = TABLE_W * grid.k, h = TABLE_H * grid.k, across = grid.cols * w + (grid.cols - 1) * TABLE_COL_GAP
+  const x0 = which === 'all' ? RIGHT.x : RIGHT.x + (RIGHT.w - across) / 2
+  list.forEach((tb, i) => {
+    const col = which === 'all' ? (i < passes.length ? 0 : 1) : Math.floor(i / grid.rows)
+    const row = which === 'all' ? (i < passes.length ? i : i - passes.length) : i % grid.rows
+    out.push(...table(tb.title, tb.head, tb.sp, x0 + col * (w + TABLE_COL_GAP), TABLE_AREA.y + row * (h + TABLE_GAP), w, grid.k).out)
   })
   return out
 }

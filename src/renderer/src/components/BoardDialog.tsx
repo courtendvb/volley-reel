@@ -4,7 +4,7 @@ import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardP
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
-import { ROTATIONS, TEAM_COLOR, discLine as darker } from '../../../shared/rotationBoard'
+import { ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
 import type { ParsedDVW, Play } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -24,7 +24,12 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string } // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables } // marker 'head': the scene's head, in no marker
+
+// The choices of tables on a rotation slide.
+const TABLE_NAMES: Record<RotationTables, string> = {
+  all: t('すべて表示'), hash: t('# のみ'), hashPlus: t('# と + のみ'), passes: t('パスのみ'), calls: t('セッターコールのみ'), none: t('表示しない'),
+}
 
 interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks
 
@@ -61,6 +66,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   // Their outline: chosen here, else a darker shade of the fill.
   const [pickedLine, setPickedLine] = useState<string | null>(initial?.discLine ?? null)
   const discLine = pickedLine ?? darker(teamColor)
+  // The spikers' cones on the court, and which tables go at the bottom right.
+  const [cones, setCones] = useState(initial?.cones !== false)
+  const [tables, setTables] = useState<RotationTables>(initial?.tables ?? 'all')
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
   const [notes, setNotes] = useState(initial?.notes ?? false)
@@ -135,6 +143,16 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             <span className="check" title={t('リベロ以外の 5 人の円の線の色。最初はチームカラーを暗くした色です')}>{t('線')} <PaletteColor value={discLine} label={t('選手の円の線の色')} onChange={setPickedLine} /></span>
           </div>
         )}
+        {skill === 'R' && (
+          <div className="filter-row">
+            <span className="field-label">{t('表示')}</span>
+            <label className="check" title={t('アタッカーごとのよく打つコースの扇形')}><input type="checkbox" checked={cones} onChange={e => setCones(e.target.checked)} /> {t('コーン')}</label>
+            <label className="check" title={t('右下の配分の表。数が少ないほど大きく出ます')}>{t('表')}{' '}
+              <select value={tables} onChange={e => setTables(e.target.value as RotationTables)} aria-label={t('右下の表')}>
+                {ROTATION_TABLES.map(v => <option key={v} value={v}>{TABLE_NAMES[v]}</option>)}
+              </select></label>
+          </div>
+        )}
         {skill === 'E' && (
           <div className="filter-row">
             <span className="field-label">{t('スライド')}</span>
@@ -172,7 +190,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos}
-          opts={{ setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+          opts={{ setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
         {!oneSetter && skill !== 'T' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
@@ -206,7 +224,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={!columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine, cones, tables })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

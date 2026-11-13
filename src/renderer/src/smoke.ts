@@ -1820,6 +1820,13 @@ export function installSmoke(h: SmokeHost): void {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
       button(dialog, t('ローテーション'))!.click(); await sleep(400)
       const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent
+      // The preview with each choice of tables (rot-tables-*.png), then without the cones; back to all and on.
+      const pick = dialog.querySelector<HTMLSelectElement>(`select[aria-label="${t('右下の表')}"]`)
+      const cone = [...dialog.querySelectorAll<HTMLLabelElement>('label.check')].find(l => l.textContent?.trim() === t('コーン'))?.querySelector('input')
+      if (!pick || !cone) throw new Error('no table or cone choice on the rotation slide')
+      const choose = async (v: string) => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(pick, v); pick.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700) }
+      for (const v of ['hash', 'hashPlus', 'passes', 'calls', 'none', 'all']) { await choose(v); await api.smokeShot!(`rot-tables-${v}.png`) }
+      cone.click(); await sleep(700); await api.smokeShot!('rot-nocones.png'); cone.click(); await sleep(300)
       button(dialog, t('作成'))!.click()
       const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')
       await sleep(600)

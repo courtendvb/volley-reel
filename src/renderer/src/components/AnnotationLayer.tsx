@@ -9,6 +9,7 @@ import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { t } from '../../../shared/i18n'
+import { keyName } from '../../../shared/keys'
 import { floorAt, floorRect, type CourtFit } from '../../../shared/court'
 import { discOutline, discShapes, type FloorDisc } from '../../../shared/disc'
 
@@ -421,7 +422,7 @@ export function AnnotationLayer(p: Props) {
       {path && <div className="ann-hint">{t('クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止')}</div>}
       {textEdit && (
         <textarea
-          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder={t('テキスト（Alt+Enter で改行）')}
+          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder={keyName(t('テキスト（Alt+Enter で改行）'))}
           rows={Math.max(1, textEdit.value.split('\n').length)}
           style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, ...editColors(editingText?.color ?? textStyle(p.style).color) }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}

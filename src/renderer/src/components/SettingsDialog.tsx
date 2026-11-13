@@ -11,7 +11,7 @@ import { AddonPacks } from './AddonPacks'
 import { TeamLogos } from './TeamLogos'
 import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
-import { IS_MAC } from '../../../shared/keys'
+import { IS_MAC, keyName } from '../../../shared/keys'
 import { FONTS } from '../fonts'
 import { arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec } from '../keys'
 
@@ -161,7 +161,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
             <label className="field-label" htmlFor="arrow-sec">{t('← →')}</label>
             <input id="arrow-sec" type="number" min={0.1} max={60} step={0.1} defaultValue={arrowSec()}
               onChange={e => { const n = +e.target.value; if (n > 0 && n <= 60) setArrowSec(n) }} />
-            <label className="field-label" htmlFor="ctrl-arrow-sec">{t('Ctrl + ← →')}</label>
+            <label className="field-label" htmlFor="ctrl-arrow-sec">{keyName(t('Ctrl + ← →'))}</label>
             <input id="ctrl-arrow-sec" type="number" min={0.1} max={60} step={0.5} defaultValue={ctrlArrowSec()}
               onChange={e => { const n = +e.target.value; if (n > 0 && n <= 60) setCtrlArrowSec(n) }} />
           </div>

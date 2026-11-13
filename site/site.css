@@ -1,0 +1,225 @@
+/* Layout: a broadcast rundown. The hero is a finished clip from the app, then the same moment
+   before and after, then what the data draws, what you add, and how little work it takes.
+   Reports and slides follow as what sits behind the video. */
+:root {
+  --page: #F1F5F9;
+  --surface: #FFFFFF;
+  --ink: #0F172A;
+  --sub: #475569;
+  --line: #E2E8F0;
+  --accent: #4B61D1;
+  --accent-ink: #FFFFFF;
+  --slate: #0F172A;
+  --slate-2: #1E293B;
+  --slate-line: #334155;
+  --on-slate: #F8FAFC;
+  --on-slate-sub: #B6C2D2;
+  --red: #E0103A;
+  --on-red: #FFFFFF;
+  --shadow: rgba(15, 23, 42, .18);
+  --body: "Barlow", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --head: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0B1220; --surface: #161F2E; --ink: #E8EDF4; --sub: #A3B1C4; --line: #2A3648;
+    --accent: #5C72E0; --slate: #060B16; --slate-2: #1A2433; --slate-line: #2A3648; --shadow: rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0B1220; --surface: #161F2E; --ink: #E8EDF4; --sub: #A3B1C4; --line: #2A3648;
+  --accent: #5C72E0; --slate: #060B16; --slate-2: #1A2433; --slate-line: #2A3648; --shadow: rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 400 18px/1.6 var(--body); }
+img { display: block; max-width: 100%; height: auto; }
+a { color: inherit; }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+h1, h2, h3, p, ul, dl, dd, figure { margin: 0; padding: 0; }
+ul { list-style: none; }
+.wrap { max-width: 1180px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* The telop: the red block and slanted dark band of the app's player caption. */
+.telop { display: inline-flex; align-items: stretch; justify-self: start; transform: skewX(-12deg); font: italic 700 15px/1 var(--head); letter-spacing: .08em; text-transform: uppercase; }
+.telop i { width: 12px; background: var(--red); }
+.telop span { display: block; padding: 7px 14px 7px 12px; background: var(--slate-2); color: var(--on-slate); }
+.telop span b { display: block; font-weight: 700; transform: skewX(12deg); }
+
+.btn { display: inline-block; padding: 13px 28px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-weight: 700; text-decoration: none; transition: transform .15s ease; }
+.btn:hover { transform: translateY(-2px); }
+
+/* Hero */
+.hero { background: var(--slate); color: var(--on-slate); padding-block: 20px 0; overflow: hidden; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; }
+.brand { font-weight: 700; font-size: 19px; }
+.brand small { font: inherit; font-weight: 500; color: var(--on-slate-sub); }
+.nav { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+.nav a { color: var(--on-slate); font-size: 15px; font-weight: 500; text-underline-offset: 4px; text-decoration: none; }
+.nav a:hover { text-decoration: underline; }
+.pitch { display: grid; gap: 20px; padding-block: 48px 40px; }
+h1 { font: italic 800 clamp(42px, 7.4vw, 88px)/1.04 var(--head); letter-spacing: .005em; text-transform: uppercase; text-wrap: balance; }
+/* The one loud spot: the last phrase sits on the telop's red band. */
+.mark { position: relative; z-index: 0; display: inline-block; padding-inline: .16em; color: var(--on-red); }
+.mark::before { content: ""; position: absolute; z-index: -1; inset: .04em 0 0; background: var(--red); transform: skewX(-12deg); }
+.lead { font-size: clamp(21px, 2.6vw, 28px); font-weight: 600; line-height: 1.3; }
+.pitch-side { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 40px; }
+.pitch-side p { flex: 1 1 22em; min-width: 0; color: var(--on-slate-sub); }
+.shot { border-radius: 6px 6px 0 0; overflow: hidden; box-shadow: 0 22px 60px var(--shadow); background: var(--slate-2); }
+
+/* Concept: the real order of the work. */
+.flow { background: var(--slate-2); color: var(--on-slate); padding-block: 40px; }
+.flow-head { margin-bottom: 24px; color: var(--on-slate-sub); }
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; counter-reset: step; }
+.steps li { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.steps b { font: italic 700 28px/1.15 var(--head); letter-spacing: .02em; text-transform: uppercase; }
+.steps b::before { counter-increment: step; content: counter(step) " "; color: var(--red); }
+.steps span { color: var(--on-slate-sub); font-size: 16.5px; line-height: 1.5; }
+
+/* Axis sections */
+.axis { padding-block: 80px; }
+.axis.alt { background: var(--surface); }
+.head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 16px 48px; align-items: end; margin-bottom: 32px; }
+.title { display: grid; gap: 14px; min-width: 0; }
+h2 { font: italic 700 clamp(32px, 4.6vw, 52px)/1.08 var(--head); text-transform: uppercase; text-wrap: balance; }
+.head p { min-width: 0; color: var(--sub); }
+
+/* One frame, switchable layers. The tabs run under it like chapters on a seek bar. */
+.stage { position: relative; aspect-ratio: 1651 / 929; max-width: 100%; border-radius: 6px 6px 0 0; overflow: hidden; background: var(--slate); box-shadow: 0 12px 34px var(--shadow); }
+.stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .28s ease; }
+.stage img.on { opacity: 1; }
+.tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; background: var(--line); border-radius: 0 0 6px 6px; overflow: hidden; }
+.tab { display: grid; gap: 2px; align-content: start; width: 100%; padding: 14px 16px 16px; border: 0; border-top: 4px solid transparent; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.tab b { font-size: 17px; font-weight: 700; }
+.tab span { color: var(--sub); font-size: 15px; line-height: 1.45; }
+.tab:hover { border-top-color: var(--line); }
+.tab[aria-selected="true"] { border-top-color: var(--red); }
+.tab:focus-visible { outline-offset: -3px; }
+.note { margin-top: 14px; color: var(--sub); font-size: 15px; }
+
+.cut { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 16px; align-items: end; }
+figure { display: grid; gap: 8px; min-width: 0; }
+figure img { border-radius: 6px; }
+figcaption { color: var(--sub); font-size: 15px; }
+.frame img { box-shadow: 0 10px 30px var(--shadow); border: 1px solid var(--line); }
+.source { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 48px; margin-top: 36px; }
+.source > div { display: grid; gap: 10px; align-content: start; padding-top: 14px; border-top: 2px solid var(--ink); min-width: 0; }
+.source h3 { font-size: 20px; font-weight: 700; }
+.source dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 20px; font-size: 16px; line-height: 1.5; }
+.source dt { font-weight: 600; }
+.source dd { color: var(--sub); }
+
+/* Numbers: the report with the play list it opens, then the analysis table. */
+.report { display: grid; grid-template-columns: minmax(0, 9fr) minmax(0, 3fr); gap: 16px; align-items: start; }
+.wide { margin-top: 28px; }
+
+/* Slides: one large, the rest in a grid. */
+.slides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
+.slides .lead-slide { grid-column: 1 / -1; }
+
+/* Presets: picture and list side by side. */
+.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 32px 56px; align-items: center; }
+.points { display: grid; gap: 14px; }
+.points li { display: grid; gap: 2px; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.points b { font-size: 17px; font-weight: 700; }
+.points span { color: var(--sub); font-size: 16px; line-height: 1.5; }
+
+/* Supporting features stay deliberately small. */
+.more { padding-block: 56px; }
+.more h2 { font-size: clamp(24px, 3vw, 32px); margin-bottom: 18px; }
+.small { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 40px; }
+.small li { display: grid; gap: 2px; align-content: start; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.small b { font-size: 17px; font-weight: 700; }
+.small span { color: var(--sub); font-size: 16px; line-height: 1.5; }
+
+/* Series: two products, one table. */
+.series { background: var(--slate); color: var(--on-slate); padding-block: 72px; }
+.series h2 { margin-top: 14px; }
+.table { margin-top: 32px; overflow-x: auto; }
+table { width: 100%; min-width: 520px; border-collapse: collapse; color: inherit; font-family: inherit; font-size: 16.5px; line-height: 1.45; }
+th, td { padding: 14px 20px 14px 0; border-top: 1px solid var(--slate-line); text-align: left; vertical-align: top; }
+thead th { border-top: 0; font-size: 20px; font-weight: 700; }
+tbody th { width: 7em; color: var(--on-slate-sub); font-weight: 500; }
+tr.one td { font-size: 19px; font-weight: 600; }
+.me { color: var(--on-slate); }
+thead .me { box-shadow: inset 0 -3px 0 var(--red); }
+
+.get { padding-block: 64px; }
+.get .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; }
+.get .wrap > div { min-width: 0; }
+.get h2 { font-size: clamp(28px, 3.8vw, 42px); }
+.get p { color: var(--sub); }
+footer { padding-block: 0 44px; font-size: 14px; line-height: 1.6; color: var(--sub); }
+footer p + p { margin-top: 6px; }
+
+@media (max-width: 960px) {
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .head, .cut, .source, .report, .split { grid-template-columns: minmax(0, 1fr); }
+  .report figure:last-child { max-width: 320px; }
+  .slides { grid-template-columns: minmax(0, 1fr); }
+  .small { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .axis { padding-block: 56px; }
+}
+@media (max-width: 560px) {
+  .steps { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tab:last-child { grid-column: 1 / -1; }
+  .source dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .source dd { margin-bottom: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn, .stage img { transition: none; }
+}
+
+/* Language switch: the other page, as a small outlined tag at the end of the nav. */
+.nav a.lang { padding: 0 10px; border: 1px solid var(--slate-line); border-radius: 4px; }
+.nav a.lang:hover { border-color: var(--on-slate-sub); text-decoration: none; }
+
+/* Japanese: Noto Sans JP after Barlow, so Latin keeps its face. Kana and kanji stay upright
+   (no real italic), lines break by phrase, and the big headings run a little smaller. */
+:lang(ja) {
+  --body: "Barlow", "Noto Sans JP", "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
+  --head: "Barlow Condensed", "Noto Sans JP", "Yu Gothic UI", "Hiragino Sans", sans-serif;
+  line-break: strict;
+  word-break: auto-phrase;
+}
+:lang(ja) h1 { font-style: normal; font-weight: 800; font-size: clamp(34px, 6vw, 72px); line-height: 1.22; letter-spacing: .02em; }
+:lang(ja) h2 { font-style: normal; font-weight: 800; font-size: clamp(28px, 3.8vw, 44px); line-height: 1.3; letter-spacing: .02em; }
+:lang(ja) .steps b { font-style: normal; font-weight: 800; font-size: 24px; }
+:lang(ja) .more h2 { font-size: clamp(22px, 2.6vw, 28px); }
+:lang(ja) .get h2 { font-size: clamp(24px, 3.2vw, 36px); }
+:lang(ja) .telop { letter-spacing: .04em; }
+:lang(ja) .lead { line-height: 1.45; }
+
+/* Hero video: the app's own export, looping, with a key to what drew what. */
+.shot { margin: 0; display: block; }
+.shot video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--slate-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 28px; padding: 12px 18px; color: var(--on-slate-sub); font-size: 15px; line-height: 1.4; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.dot { flex: none; width: 12px; height: 12px; border-radius: 2px; transform: skewX(-12deg); }
+.dot.data { background: var(--accent); }
+.dot.you { background: var(--red); }
+
+/* How it works carries a real heading now. */
+.flow .flow-head { margin-bottom: 28px; color: var(--on-slate); font-size: clamp(28px, 3.6vw, 40px); }
+
+/* Before and after: the same frame twice. */
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; align-items: start; }
+.pair figure { gap: 10px; }
+.pair img { box-shadow: 0 10px 30px var(--shadow); border: 1px solid var(--line); }
+.tag { justify-self: start; padding: 4px 12px; border-radius: 4px; background: var(--line); color: var(--ink); font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+.tag.on { background: var(--red); color: var(--on-red); }
+@media (max-width: 860px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+}
+:lang(ja) .flow .flow-head { font-size: clamp(24px, 3.2vw, 34px); }
+/* The red band may be longer than a phone is wide (the Japanese one is): it wraps inside the band
+   instead of pushing the hero's column wider than the screen. */
+.pitch { grid-template-columns: minmax(0, 1fr); }
+.mark { max-width: 100%; }

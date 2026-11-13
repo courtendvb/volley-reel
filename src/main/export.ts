@@ -8,9 +8,10 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
 import { chapterMetadata, chapterText } from '../shared/video'
-import { clipPlayedSec, pieces } from '../shared/timing'
+import { clipPlayedSec } from '../shared/timing'
 import { ffmpegBin } from './ffmpegPath'
 import { probe } from './media'
+import { fps, retime } from './retime'
 import { t } from '../shared/i18n'
 
 class ExportCancelled extends Error {
@@ -117,12 +118,6 @@ export class Exporter {
   }
 }
 
-// '30000/1001' or '30' as a number.
-function fps(fpsStr: string): number {
-  const [n, d] = fpsStr.split('/').map(Number)
-  return d ? n / d : n
-}
-
 // Same settings for every segment so the concat demuxer can join them without re-encoding.
 // libx264 veryfast at CRF 21 measured 5.5x realtime at 720p in M0.
 function encoderArgs(fpsStr: string): string[] {
@@ -179,21 +174,6 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
   const f = fades(job.fadeSec, dur)
   if (f) { fc += `;[${last}]${f.slice(1)}[vf]`; last = 'vf' }
   return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, join(dir, `seg${String(i).padStart(4, '0')}.mp4`)]
-}
-
-// The clip's slow stretches and holds as a filter chain on the trimmed clip (times from 0 at IN), or
-// null when it has none: each piece cut from a copy of the clip, slowed by stretching its timestamps
-// or held by cloning one frame, then joined and put back on the frame rate.
-function retime(it: Extract<ExportItem, { kind: 'clip' }>, fpsStr: string): string | null {
-  const ps = pieces(it.in, it.out, it.timing)
-  if (ps.length < 2 && !(ps[0]?.kind === 'play' && ps[0].rate !== 1)) return null
-  const frame = 1 / fps(fpsStr), last = Math.max(0, it.out - it.in - frame)
-  const parts = ps.map((p, k) => {
-    if (p.kind === 'play') return `[r${k}]trim=start=${(p.from - it.in).toFixed(4)}:end=${(p.to - it.in).toFixed(4)},setpts=(PTS-STARTPTS)/${p.rate}[q${k}]`
-    const at = Math.min(last, Math.max(0, p.at - it.in))
-    return `[r${k}]trim=start=${at.toFixed(4)}:end=${(at + frame).toFixed(4)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${Math.max(0, p.sec - frame).toFixed(4)}[q${k}]`
-  })
-  return `split=${ps.length}${ps.map((_, k) => `[r${k}]`).join('')};${parts.join(';')};${ps.map((_, k) => `[q${k}]`).join('')}concat=n=${ps.length}:v=1:a=0,fps=${fpsStr}`
 }
 
 // ",fade=in…,fade=out…" for an item of dur seconds (at most a third of it each), or ''.

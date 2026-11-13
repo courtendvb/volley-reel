@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SyncScout Video Editor</title>
+<meta name="description" content="選手がひと目で分かる映像を、スカウティングデータから。DataVolley や VolleyStation のデータを試合動画の上に描き、伝えたい一言を足すだけで仕上がるデスクトップアプリ。Windows でオフライン動作。">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="ja" href="ja.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="bar">
+      <span class="brand">SyncScout <small>Video Editor</small></span>
+      <nav class="nav" aria-label="このページの内容">
+        <a href="#difference">ビフォー・アフター</a>
+        <a href="#court">コート上のデータ</a>
+        <a href="#finish">伝えたい一言</a>
+        <a href="#how">使い方</a>
+        <a href="#numbers">レポート</a>
+        <a href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">ダウンロード</a>
+        <a class="lang" href="index.html" hreflang="en" lang="en">English</a>
+      </nav>
+    </div>
+    <div class="pitch">
+      <h1>選手に伝わる映像を、<span class="mark">スカウティングデータから。</span></h1>
+      <p class="lead">点数も、選手も、結果も、ボールの落ちた場所も、スカウトファイルにはもう入っています。それを試合動画の上に描くので、あとは伝えたい一言を足すだけです。</p>
+      <div class="pitch-side">
+        <p>バレーボールのスタッフのためのデスクトップアプリ。DataVolley や VolleyStation のファイルを試合動画と一緒に読み込み、見せたいプレーをミーティング用の映像に仕上げます。すべて自分のパソコンでオフラインで動きます。</p>
+        <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Windows 版をダウンロード</a>
+      </div>
+    </div>
+    <figure class="shot">
+      <video class="hero-video" autoplay muted loop playsinline preload="auto" poster="img/ja/hero.jpg" width="1280" height="720" aria-label="Croatia 対 Denmark のアタックを、アプリから書き出した映像。スコアボード、アタッカーのテロップ、その選手のアタックが落ちた場所のヒートマップはスカウトファイルから。見出し、ブロックを囲む円、メモは手で足したもの。">
+        <source src="media/hero-ja.mp4" type="video/mp4">
+      </video>
+      <figcaption class="legend">
+        <span><i class="dot data"></i>スカウトファイルから: 点数、選手テロップ、その選手のアタックの落下点</span>
+        <span><i class="dot you"></i>手で足したもの: 見出し、円、メモ</span>
+      </figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+  <section class="axis alt" id="difference">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>ビフォー・アフター</b></span></div>
+          <h2>クリップのままでは、まだ伝わらない。</h2>
+        </div>
+        <p>プレーを探してクリップを切り出すところまでは、スカウティングソフトでもできます。ただ、何も載っていないクリップでは、どこを見ればいいかは選手まかせです。同じ瞬間を、プレイリストのクリップと、このアプリで仕上げたものとで並べました。</p>
+      </div>
+      <div class="pair">
+        <figure>
+          <span class="tag">クリップのまま</span>
+          <img src="img/plain.jpg" width="1280" height="720" alt="何も載っていない、同じアタックのコマ。" loading="lazy">
+          <figcaption>どのラリーで、何を見ればいいのかは、選手が自分で考えるしかありません。</figcaption>
+        </figure>
+        <figure>
+          <span class="tag on">同じクリップを仕上げたもの</span>
+          <img src="img/ja/hero.jpg" width="1280" height="720" alt="点数、アタッカーのテロップ、手前コートにその選手のアタックのヒートマップ、見出し、ブロックを囲む円、空いた場所へのメモが入ったコマ。" loading="lazy">
+          <figcaption>点数、選手、いつも打ち込む場所。そこにコーチの伝えたい一言。</figcaption>
+        </figure>
+      </div>
+      <div class="source">
+        <div>
+          <h3>データが自動で入れるもの</h3>
+          <dl>
+            <dt>スコアボード</dt><dd>そのラリーの点数とセット。デザインは 4 種類。</dd>
+            <dt>選手テロップ</dt><dd>背番号・名前・スキル・評価。写真パックがあれば選手の写真も。</dd>
+            <dt>コート上の表示</dt><dd>落下点とヒートマップ、軌道、ゾーン、サーブのコース、コーンを、映像の床の上に。</dd>
+            <dt>サーブ速度</dt><dd>ヒットとタッチを打つと、サーブの速さをクリップに表示。</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>自分で足すもの（数クリック）</h3>
+          <dl>
+            <dt>伝えたい一言</dt><dd>テキスト、矢印と曲線の矢印、図形、フリーハンド、丸付き数字。それぞれに表示時間とフェード。</dd>
+            <dt>タイトルカード</dt><dd>動画・シーン・マーカーごとに。選手の写真やチームのロゴも入れられます。</dd>
+            <dt>スライド</dt><dd>静止画、PDF のページ、データスライドをクリップの間に。</dd>
+            <dt>タイミング</dt><dd>クリップごとに IN / OUT を詰め、スローや一時停止も。</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="axis" id="court">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>コート上のデータ</b></span></div>
+          <h2>コートの上は、データが描く。</h2>
+        </div>
+        <p>コートの四隅を合わせる（自動で探すこともできる）と、スカウトのデータが試合動画の床に乗ります。どの表示も、見えているとおりに書き出しに入ります。</p>
+      </div>
+      <div class="stage" id="stage" role="tabpanel" aria-label="コートに描いたデータ">
+        <img class="on" data-layer="landing" src="img/court-landing.jpg" alt="奥からのアタックと、同じ選手の落下点とヒートマップを手前のコートに表示。">
+        <img data-layer="flight" src="img/court-flight.jpg" alt="打点の高さから落ちた位置までのアタックの軌道。ディグの選手のそばに着地。">
+        <img data-layer="zone" src="img/court-zone.jpg" alt="コートのグリッドで、アタックの開始ゾーンを緑、終了ゾーンを赤で塗り、矢印で結んだ表示。">
+        <img data-layer="serve" src="img/court-serve.jpg" alt="奥のエンドラインの後ろから飛ぶ、1 人の選手のサーブ軌道と落下点のヒートマップ。">
+        <img data-layer="cones" src="img/court-cones.jpg" alt="アタッカーの打った位置から手前のコートへ広がる 5 つのコーンと、それぞれの割合。">
+      </div>
+      <div class="tabs" role="tablist" aria-label="コートに描くもの">
+        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>落下点とヒートマップ</b><span>同じコードのアタックが落ちた位置を、点と色で。</span></button>
+        <button class="tab" id="tab-flight" role="tab" aria-selected="false" aria-controls="stage" data-layer="flight"><b>座標と軌道</b><span>スカウトのクリック位置を打点の高さから結ぶ。矢印か放物線で。</span></button>
+        <button class="tab" id="tab-zone" role="tab" aria-selected="false" aria-controls="stage" data-layer="zone"><b>ゾーン</b><span>開始と終了のゾーン（サブゾーンも）をグリッドに。</span></button>
+        <button class="tab" id="tab-serve" role="tab" aria-selected="false" aria-controls="stage" data-layer="serve"><b>サーブ軌道</b><span>その選手のサーブを、プロジェクトの全試合から。</span></button>
+        <button class="tab" id="tab-cones" role="tab" aria-selected="false" aria-controls="stage" data-layer="cones"><b>コーン</b><span>アタックの向きを 5 つのコーンと割合で。</span></button>
+      </div>
+      <p class="note">ほかにも、隅に出すディレクションチャート、セッターのトス配分、ゾーンの塗り、床に立つ円柱をコートに置けます。軌道は説明用です。スカウトの時刻は秒単位なので、実際のボールとは少しずれます。</p>
+    </div>
+  </section>
+
+  <section class="axis alt" id="finish">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>伝えたい一言</b></span></div>
+          <h2>口で補うより、映像に書く。</h2>
+        </div>
+        <p>見出しを打ち、ブロックを丸で囲み、空いたコートを指す。次に何を見せるかはタイトルカードで伝えます。プレビューで見えているものが、そのまま MP4 になります。</p>
+      </div>
+      <div class="cut">
+        <figure>
+          <img src="img/ja/finish-card.jpg" width="1651" height="929" alt="「1 良いレセプションから」「VS DNK · 2022-05-28」と書かれたタイトルカード。" loading="lazy">
+          <figcaption>マーカーの頭にタイトルカード。</figcaption>
+        </figure>
+        <figure>
+          <img src="img/ja/finish-annotate.jpg" width="1651" height="929" alt="見出し・2枚ブロックを囲む円・空いたコートへの矢印・メモに、スコアボードと選手テロップが入ったアタック。" loading="lazy">
+          <figcaption>続いて、書き込みの入ったクリップ。</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="flow" id="how" aria-label="使い方の流れ">
+    <div class="wrap">
+      <h2 class="flow-head">毎週の準備でも続けられる手間で。</h2>
+      <ul class="steps">
+        <li><b>読み込む</b><span>試合動画と .dvw / .vsm を組にして倉庫へ。フォルダを選べば、日付とチームで自動で組にします。</span></li>
+        <li><b>探す</b><span>選手・スキル・ローテ・ゾーン・コンビ・セッターコールで、全試合のプレーを絞り込み。よく使う条件は保存できます。</span></li>
+        <li><b>組む</b><span>キー 1 つでプレーをシーンへ。プリセットなら動画まるごと 1 本。名前を付けたマーカーの下にドラッグで並べます。</span></li>
+        <li><b>見せる</b><span>オーバーレイ・注釈・スライドで仕上げ、MP4・PNG・PDF に書き出し。</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="axis" id="presets">
+    <div class="wrap split">
+      <figure class="frame">
+        <img src="img/ja/preset.jpg" width="1100" height="886" alt="「プリセットから作る」のダイアログ。CRO のサイドアウトの動画を、レセプションの質で分け、ローテごとの本数を表示。" loading="lazy">
+      </figure>
+      <div class="title">
+        <div class="telop"><i></i><span><b>プリセット</b></span></div>
+        <h2>動画 1 本を、ひと手間で。</h2>
+        <ul class="points">
+          <li><b>サイドアウト</b><span>ローテごとにシーン。中はレセプションの質・選手・ゾーン・結果で分けられます。</span></li>
+          <li><b>サーブ</b><span>サーブした選手ごとにシーン。マーカーはレセプション評価別・ゾーン別・時系列。</span></li>
+          <li><b>ブロックとアタック</b><span>ミドル別やローテ別、アタッカー別・ポジション別・アタックコード別。</span></li>
+          <li><b>作り直し</b><span>動画は作り方を覚えています。試合を選び直して、もう一度作れます。</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="axis alt" id="numbers">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>映像の裏付けに</b></span></div>
+          <h2>数字から、ワンクリックで映像へ。</h2>
+        </div>
+        <p>試合ごとの A4 1 枚のマッチレポートと、全試合を合わせたチームレポート。数字をクリックすると、プレー一覧がそのプレーだけになり、すぐに見たりシーンに入れたりできます。配る用に PDF にも書き出せます。</p>
+      </div>
+      <div class="report">
+        <figure class="frame">
+          <img src="img/ja/report-team.jpg" width="1600" height="1328" alt="4 試合を合わせたチームレポート。結果、選手ごとの得点・サーブ・レセプション・アタック、試合ごとの合計、レセプション後のアタック。" loading="lazy">
+          <figcaption>チームレポート：選手ごとの出場率・得点・サーブ・レセプション・アタック・ブロックと、サイドアウト、レセプションからの攻撃。</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/ja/report-filter.jpg" width="560" height="1069" alt="選手のアタック得点をクリックしたあとのプレー一覧。8 番の決定 54 本が試合ごとに並ぶ。" loading="lazy">
+          <figcaption>54 をクリックすると、その 54 本が一覧に。</figcaption>
+        </figure>
+      </div>
+      <figure class="frame wide">
+        <img src="img/ja/analysis-rotation.jpg" width="1600" height="480" alt="分析ウィンドウのローテーションのタブ。P1〜P6 ごとのサイドアウト、レセプションからの攻撃、ブレイク、切り返し、得失点。" loading="lazy">
+        <figcaption>分析ウィンドウ：得点率・ミス率、サイドアウト・ブレイク、レセプションと攻撃、連続得点・連続失点、ローテーション別。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="axis" id="slides">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>データスライド</b></span></div>
+          <h2>データから、スライドを。</h2>
+        </div>
+        <p>チームを選ぶと、アプリがスライドを描きます。文字や写真はあとから動かせ、矢印や図形も足せます。動画の中で流すことも、PNG や PDF に書き出すこともできます。</p>
+      </div>
+      <div class="slides">
+        <figure class="frame lead-slide">
+          <img src="img/slide-rotation.jpg" width="1651" height="922" alt="P1 のローテーションのスライド。遠近のコートにレセプションのフォーメーション、主なアタッカーのコーン、攻撃場所ごとの割合、パスとセッターコールごとのセッターの表。" loading="lazy">
+          <figcaption>ローテーション：ローテごとに 1 枚。フォーメーション、攻撃の行き先、パスとコールごとのセッターの選択。</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/slide-compare.jpg" width="1651" height="922" alt="2 チームのスキル比較。サイドアウト、1 本目のサイドアウト、ブレイク、アタック、サーブ、レセプション、ブロック、ミス。" loading="lazy">
+          <figcaption>チーム比較：自チームと次の相手。良い方の数字が赤。</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/slide-setter.jpg" width="1651" height="922" alt="セッターのスライド。レセプションの質とセッターコールごとの、Zone4・Zone3・Zone2/1・Pipe へのトス配分。" loading="lazy">
+          <figcaption>セッター：レセプション別・コール別、またはローテ別のトス配分。</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/slide-serve.jpg" width="1651" height="922" alt="3 人のサーブのカード。それぞれにブレイク率・ミス率とサーブのチャート。" loading="lazy">
+          <figcaption>サーブ・アタックのカード：1 枚に 6 人まで。数字とチャート付き。</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/slide-serve-target.jpg" width="1651" height="922" alt="サーブの狙いのスライド。受けた選手と狙ったゾーンごと、ジャンプとフローター別に、良いパスとレセプション後の決定率。" loading="lazy">
+          <figcaption>サーブの狙い：どのサーブが相手のパスとサイドアウトを下げるか。</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="more alt">
+    <div class="wrap">
+      <h2>そのほかの機能</h2>
+      <ul class="small">
+        <li><b>保存条件</b><span>絞り込みの条件に名前を付けて保存し、クリックで呼び出し。</span></li>
+        <li><b>試合を倉庫にまとめる</b><span>一度取り込めば、同じ試合からいくつでもプロジェクトを作れます。</span></li>
+        <li><b>選手写真パック</b><span>写真を一度入れれば、テロップ・タイトルカード・スライドで使えます。</span></li>
+        <li><b>作業はいつでも直せる</b><span>自動で保存。元に戻す・やり直すにも対応。</span></li>
+        <li><b>日本語と英語</b><span>設定で表示言語を切り替え。</span></li>
+        <li><b>自動アップデート</b><span>新しいバージョンを裏でダウンロードし、再起動で更新。</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="series" id="series">
+    <div class="wrap">
+      <div class="telop"><i></i><span><b>SyncScout シリーズ</b></span></div>
+      <h2>SyncScout で見つけ、Video Editor で伝える。</h2>
+      <div class="table">
+        <table>
+          <thead>
+            <tr><td></td><th scope="col">SyncScout</th><th scope="col" class="me">SyncScout Video Editor</th></tr>
+          </thead>
+          <tbody>
+            <tr class="one"><th scope="row">役割</th><td>映像を探して見る</td><td class="me">見せたい動画・スライド・レポートを仕上げる</td></tr>
+            <tr><th scope="row">動く場所</th><td>Web</td><td class="me">自分のパソコン（オフライン）</td></tr>
+            <tr><th scope="row">素材</th><td>YouTube の動画とスカウトファイル</td><td class="me">手元の動画ファイルと .dvw / .vsm</td></tr>
+            <tr><th scope="row">用途</th><td>チームでの共有と視聴</td><td class="me">ミーティングと、スタッフが見せたいもの</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="get">
+    <div class="wrap">
+      <div>
+        <h2>自分の動画とスカウトファイルで試す</h2>
+        <p>Windows 版を公開中。Mac 版は準備中です。</p>
+      </div>
+      <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Windows 版をダウンロード</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>ページ上部の映像は、アプリから書き出したものをそのまま、ウェブ用に軽くしただけです。動画の画面は Croatia 対 Denmark（2022 年 5 月 28 日）の映像を加工せずに使っています。チームコードは CRO・DNK に短くしています。</p>
+    <p>レポート・分析・スライドの画面は、架空のチームと架空のスカウトデータです。</p>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

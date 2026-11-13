@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { efficiency, errorTries, errors, percent, pointErrorReport, points, pointTries, recAttackReport, runReport, sideOutReport } from './analysis'
+import { efficiency, errorTries, errors, percent, pointErrorReport, points, pointTries, recAttackReport, rotationReport, runReport, sideOutReport } from './analysis'
 
 // Five rallies: a home serve received and killed by the away team; an away serve error; a home ace;
 // a reception error (=) by the away team; an away attack error; an away attack blocked by the home team.
@@ -135,5 +135,23 @@ describe('the runs report', () => {
     expect(rot(1)).toEqual({ rot: 1, for: { runs: 3, longest: 5, points: 10, by: [1, 1, 0, 1] }, against: { runs: 3, longest: 3, points: 8, by: [1, 2, 0, 0] } })
     expect(rot(2)).toEqual({ rot: 2, for: { runs: 1, longest: 3, points: 3, by: [0, 1, 0, 0] }, against: { runs: 0, longest: 0, points: 0, by: [0, 0, 0, 0] } })
     expect(rot(4).against).toEqual({ runs: 1, longest: 5, points: 5, by: [0, 0, 0, 1] })
+  })
+})
+
+describe('the rotation report', () => {
+  const d = parseDVW(DVW)
+  it('counts each rotation of the team: side-out, break point and the points', () => {
+    // The away team receives in P1 and sides out with a kill, then serves an error in P2 and loses the
+    // home team's four serves there: an ace, a reception error, an attack error and a blocked attack.
+    const r = rotationReport([{ d, side: 'a', label: '' }])
+    expect(r.rows.map(x => x.rot)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(r.rows[0]).toMatchObject({ oppServe: 1, soWon: 1, rec: 1, recPos: 1, firstKill: 1, recAttack: { att: 1, kill: 1, err: 0, blo: 0 }, serve: 0, won: 1, lost: 0 })
+    expect(r.rows[1]).toMatchObject({ oppServe: 4, soWon: 0, rec: 3, recPos: 2, firstKill: 0, recAttack: { att: 2, kill: 0, err: 1, blo: 1 }, serve: 1, bpWon: 0, serveErr: 1, won: 0, lost: 5 })
+    expect(r.rows.slice(2).every(x => x.won + x.lost === 0)).toBe(true)
+    expect(r.total).toMatchObject({ oppServe: 5, soWon: 1, rec: 4, serve: 1, won: 1, lost: 5 })
+  })
+  it('adds the matches up, the team on either side', () => {
+    const r = rotationReport([{ d, side: '*', label: '' }, { d, side: 'a', label: '' }])
+    expect(r.total).toMatchObject({ serve: 6, bpWon: 4, ace: 1, serveErr: 1, oppServe: 6, soWon: 2, won: 6, lost: 6 })
   })
 })

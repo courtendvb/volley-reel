@@ -3,7 +3,7 @@
 import { matchReport, type ReportMatch } from './report'
 import type { ParsedDVW, Play, Side } from './types'
 
-export const ANALYSIS_REPORTS = ['pointError', 'sideOut', 'recAttack', 'runs'] as const
+export const ANALYSIS_REPORTS = ['pointError', 'sideOut', 'recAttack', 'rotation', 'runs'] as const
 export type AnalysisReportId = typeof ANALYSIS_REPORTS[number]
 
 // ---- point % and error % ---------------------------------------------------------------------
@@ -62,7 +62,7 @@ export const percent = (n: number, of: number, places = 0) => (of ? `${((n / of)
 // ---- what the reports below share -------------------------------------------------------------
 // Each rally played to a point: who served, who won, both teams' rotations, each team's reception
 // and its first attack in the reception phase (the attack the reception was set for).
-interface RallyFact { set: number; server: Side | null; wonBy: Side; rot: Record<Side, number | null>; rec: Partial<Record<Side, Play>>; first: Partial<Record<Side, Play>> }
+interface RallyFact { set: number; server: Side | null; wonBy: Side; rot: Record<Side, number | null>; rec: Partial<Record<Side, Play>>; first: Partial<Record<Side, Play>>; plays: Play[] }
 function rallyFacts(d: ParsedDVW): RallyFact[] {
   const by = new Map<number, Play[]>()
   for (const p of d.plays) if (p.rallyId !== null) by.set(p.rallyId, [...(by.get(p.rallyId) ?? []), p])
@@ -73,7 +73,7 @@ function rallyFacts(d: ParsedDVW): RallyFact[] {
       if (p.skill === 'R' && !rec[p.side]) rec[p.side] = p
       if (p.skill === 'A' && p.phase === 'r' && !first[p.side]) first[p.side] = p
     }
-    return [{ set: r.setNum, server: ps.find(p => p.skill === 'S')?.side ?? null, wonBy: r.wonBy, rot: { '*': ps[0]?.homeRot ?? null, a: ps[0]?.awayRot ?? null }, rec, first }]
+    return [{ set: r.setNum, server: ps.find(p => p.skill === 'S')?.side ?? null, wonBy: r.wonBy, rot: { '*': ps[0]?.homeRot ?? null, a: ps[0]?.awayRot ?? null }, rec, first, plays: ps }]
   })
 }
 const other = (s: Side): Side => (s === '*' ? 'a' : '*')
@@ -227,4 +227,52 @@ export function runReport(list: ReportMatch[], totalLabel = 'TOTAL'): RunReport 
     addInto(total[k], r[k]); total[k].longest = longest
   }
   return { rows, total, rotations }
+}
+
+// ---- by rotation -------------------------------------------------------------------------------
+// The team in each of its six rotations (the DVW's number: where its setter stands) over all the
+// matches. Receiving (the other team serves): side-out, the reception, the first attack after it.
+// Serving: break point, aces and errors, and the counter-attacks in those rallies. And the points
+// won and lost there. The rotation is the team's at the serve.
+export interface RotationCounts {
+  oppServe: number; soWon: number // the other team's serves (its errors too), rallies won on them
+  rec: number; recPos: number; firstKill: number // receptions, # and +, the first attack after one a kill
+  recAttack: AttackCount // that first attack after the reception
+  serve: number; bpWon: number; ace: number; serveErr: number
+  trans: AttackCount // the team's counter-attacks (transition) in the rallies it served
+  won: number; lost: number
+}
+export interface RotationRow extends RotationCounts { rot: number }
+export interface RotationReport { rows: RotationRow[]; total: RotationCounts }
+const rotationZero = (): RotationCounts => ({ oppServe: 0, soWon: 0, rec: 0, recPos: 0, firstKill: 0, recAttack: attackZero(), serve: 0, bpWon: 0, ace: 0, serveErr: 0, trans: attackZero(), won: 0, lost: 0 })
+
+export function rotationReport(list: ReportMatch[]): RotationReport {
+  const rows: RotationRow[] = [1, 2, 3, 4, 5, 6].map(rot => ({ ...rotationZero(), rot }))
+  for (const m of list) {
+    const s = m.side
+    for (const f of rallyFacts(m.d)) {
+      const c = rows.find(r => r.rot === f.rot[s])
+      if (!c || !f.server) continue
+      const won = f.wonBy === s
+      if (won) c.won++; else c.lost++
+      if (f.server === s) {
+        c.serve++; if (won) c.bpWon++
+        const sv = f.plays.find(p => p.skill === 'S')
+        if (sv?.effect === '#') c.ace++
+        if (sv?.effect === '=') c.serveErr++
+        for (const p of f.plays) if (p.side === s && p.skill === 'A' && p.phase === 't') addAttack(c.trans, p)
+        continue
+      }
+      c.oppServe++; if (won) c.soWon++
+      const r = f.rec[s]
+      if (!r) continue
+      c.rec++
+      if (r.effect === '#' || r.effect === '+') c.recPos++
+      const a = f.first[s]
+      if (a) { addAttack(c.recAttack, a); if (a.effect === '#') c.firstKill++ }
+    }
+  }
+  const total = rotationZero()
+  for (const r of rows) { const { rot: _r, ...nums } = r; addInto(total, nums as RotationCounts) }
+  return { rows, total }
 }

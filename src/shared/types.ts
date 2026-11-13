@@ -202,6 +202,7 @@ export interface Api {
   recentProjects(): Promise<RecentProject[]>
   createProject(init: ProjectInit): Promise<ProjectInfo | null> // in <library>/projects/<name>, or a folder the user picks
   openProject(path?: string): Promise<ProjectInfo | null> // asks for a folder when no path
+  openMatchProject(matchId: string, code: string): Promise<ProjectInfo> // one match with that team as ours: its project made before, else a new one
   closeProject(): Promise<void>
   setProjectMatches(ids: string[]): Promise<ProjectInfo>
   parseMatch(id: string): Promise<ParsedDVW>
@@ -284,6 +285,7 @@ export interface Api {
   smokeClipboardImage?: (path: string) => Promise<void>
   smokeShot?: (path: string) => Promise<void>
   smokeDrag?: (points: [number, number][]) => Promise<void> // real mouse: press, move through, release
+  smokeRightClick?: (x: number, y: number) => Promise<void> // real mouse: a right click
   smokeKey?: (key: string) => Promise<void> // a real key press
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void

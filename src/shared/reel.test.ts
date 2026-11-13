@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
-  addClips, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
+  addClips, copyClipTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits,
 } from './reel'
@@ -410,5 +410,26 @@ describe('marks of what was done to a clip', () => {
       overlayOverride: { scoreboard: { hidden: true } },
     } as unknown as typeof clip
     expect(clipEdits(done)).toEqual({ headline: 'SIDE OUT', objects: 1, timing: true, overlay: true })
+  })
+})
+
+describe('a clip into another scene', () => {
+  it('copies the clip with its edits and markers, or only adds markers when the play is there', () => {
+    const { reel: from, c } = reelWith([0, 2])
+    let src = toggleMarker(toggleMarker({ ...from, clips: { ...from.clips, [c[0]]: { ...from.clips[c[0]], inSec: 99, outSec: 105 } } }, c[0], 2), c[0], 4)
+    src = setTag(src, c[0], 'A')
+    const { reel: to0, c: tc } = reelWith([2])
+    const { reel: to, existed } = copyClipTo(src.clips[c[0]], to0, markersOf(src, c[0]))
+    expect(existed).toBe(false)
+    const copy = Object.values(to.clips).find(x => x.playId === src.clips[c[0]].playId)!
+    expect(copy.id).not.toBe(c[0])
+    expect([copy.inSec, copy.outSec, copy.tag]).toEqual([99, 105, 'A'])
+    expect(markersOf(to, copy.id)).toEqual([2, 4])
+    expect(to.groups.none).toEqual([tc[0]])
+    const again = copyClipTo(src.clips[c[1]], toggleMarker(to0, tc[0], 1), [3])
+    expect(again.existed).toBe(true)
+    expect(markersOf(again.reel, tc[0])).toEqual([1, 3])
+    expect(Object.keys(again.reel.clips)).toHaveLength(1)
+    expect(copyClipTo(src.clips[c[1]], to0, []).reel.groups.none).toEqual([tc[0]])
   })
 })

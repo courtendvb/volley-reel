@@ -16,6 +16,7 @@ interface Host {
   dvws: Record<string, ParsedDVW>
   roles: Record<string, PlayerRole> | undefined // the project's positions
   team: string // the project's target team code
+  matchIds: string[] // the project's matches, oldest first
   scopeRefs: PlayRef[] // the matches searched now, and the search's results
   results: PlayRef[]
   addScenes: (rs: Reel[]) => void
@@ -32,7 +33,7 @@ interface Host {
 
 export function usePresetVideos(h: Host) {
   const [presetOpen, setPresetOpen] = useState(false)
-  const presetLook = useMemo(() => presetLookups(h.dvws, h.roles), [h.dvws, h.roles])
+  const presetLook = useMemo(() => presetLookups(h.dvws, h.roles, h.matchIds), [h.dvws, h.roles, h.matchIds])
 
   const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
     const scenes = presetReels(specs, prefix, preset.mode)

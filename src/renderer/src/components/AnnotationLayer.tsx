@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { composing } from '../keys'
 import {
-  applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
+  applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
@@ -25,7 +25,7 @@ function editColors(color: string): { color: string; background: string; caretCo
   return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
 }
 
-export type Tool = 'select' | AnnotationKind | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
+export type Tool = 'select' | AnnotationKind | 'curve' | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
 export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string; discHeight?: number } // discHeight: metres, for new discs on the court
@@ -153,6 +153,14 @@ export function AnnotationLayer(p: Props) {
         ctx.fillStyle = SCOPE_COLOR[scope]; ctx.fillRect(tx, ty, tw, 17)
         ctx.fillStyle = '#FFFFFF'; ctx.textBaseline = 'middle'; ctx.fillText(SCOPE_TAG[scope], tx + 5, ty + 9)
       }
+      // A curve's control points hang on thin lines from their ends, as in drawing programs.
+      if (selected.kind === 'arrow' && selected.c1 && selected.c2) {
+        ctx.save(); ctx.lineWidth = 1; ctx.strokeStyle = '#4B61D1'; ctx.setLineDash([4, 3])
+        for (const [e, c] of [[[selected.x1, selected.y1], selected.c1], [[selected.x2, selected.y2], selected.c2]]) {
+          ctx.beginPath(); ctx.moveTo(e[0] * p.size.w, e[1] * p.size.h); ctx.lineTo(c[0] * p.size.w, c[1] * p.size.h); ctx.stroke()
+        }
+        ctx.restore()
+      }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
   }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds, p.images])
@@ -275,6 +283,7 @@ export function AnnotationLayer(p: Props) {
     playback.pause()
     const base = { id: uid(), color: p.style.color }
     const draft: Annotation = p.tool === 'arrow' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width }
+      : p.tool === 'curve' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width, ...curveControls(pt[0], pt[1], pt[0], pt[1]) }
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
       : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
       : p.tool === 'floorRect' ? { ...base, kind: 'polygon', points: onFloor(pt, pt), width: p.style.width }
@@ -309,7 +318,7 @@ export function AnnotationLayer(p: Props) {
       const cur = annsRef.current.find(a => a.id === drag.id)
       if (!cur) return
       // Shift: box corners keep their proportions; vertices and arrow ends line up with a neighbor.
-      const snap = e.shiftKey && /^(p[12]|[vm]\d+)$/.test(drag.handle)
+      const snap = e.shiftKey && /^([pc][12]|[vm]\d+)$/.test(drag.handle)
       const [sx, sy] = snap ? snapToNeighbors(cur, drag.handle, x, y, p.size.w, p.size.h) : [x, y]
       const r = dragHandle(cur, drag.handle, sx, sy, { keepAspect: e.shiftKey && !snap })
       replace(r.a)
@@ -317,7 +326,7 @@ export function AnnotationLayer(p: Props) {
       return
     }
     const d = drag.draft
-    const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y }
+    const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y, ...(d.c1 ? curveControls(d.x1, d.y1, x, y) : {}) }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
       : d.kind === 'polygon' && p.tool === 'floorDisc' ? (() => { const dc = discAt(drag.from, [x, y]); return dc && p.floor ? { ...d, points: discOutline(p.floor, dc).side, disc: { ...dc, part: 'top' as const } } : d })()
@@ -422,15 +431,17 @@ export function AnnotationLayer(p: Props) {
   )
 }
 
-// Office-like handles: squares for corners / ends / vertices, small circles for midpoints.
+// Office-like handles: squares for corners / ends / vertices, small circles for midpoints, filled
+// dots for a curve's control points.
 function drawHandle(ctx: CanvasRenderingContext2D, h: Handle, W: number, H: number): void {
   const x = h.x * W, y = h.y * H
   ctx.save()
   ctx.lineWidth = 1.5
   ctx.strokeStyle = '#4B61D1'
-  ctx.fillStyle = h.kind === 'mid' ? 'rgba(255,255,255,0.75)' : '#FFFFFF'
+  ctx.fillStyle = h.kind === 'mid' ? 'rgba(255,255,255,0.75)' : h.kind === 'ctrl' ? '#4B61D1' : '#FFFFFF'
   ctx.beginPath()
   if (h.kind === 'mid') ctx.arc(x, y, 4, 0, Math.PI * 2)
+  else if (h.kind === 'ctrl') { ctx.strokeStyle = '#FFFFFF'; ctx.arc(x, y, 5, 0, Math.PI * 2) }
   else ctx.rect(x - 5, y - 5, 10, 10)
   ctx.fill(); ctx.stroke()
   ctx.restore()

@@ -7,7 +7,7 @@ import {
   COLORS, DEFAULT_TEXT_BOX, styleMany, boxQuad, hasFill, isPoints, withGroups, withQuad,
   type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
-import { MAX_EDIT_POINTS, fullRect, setClosed, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
+import { MAX_EDIT_POINTS, fullRect, setClosed, setCurved, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
 import { forgetColor, usePalette } from '../palette'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
@@ -44,7 +44,7 @@ interface Props {
 }
 
 const TOOLS: [Tool, string, string, string][] = [
-  ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')],
+  ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')], ['curve', '⤴', 'B', t('曲線の矢印（ベジェ曲線。ドラッグで始点から終点へ。青い点を動かして曲げる）')],
   ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['floorDisc', '⬭', '', t('コート上の円柱（中心から外へドラッグ。コートの遠近と厚みで立体に見える。厚みと半径は後から変えられる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
   ['number', '①', '', t('丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）')],
   ['polygon', '⬠', 'P', t('多角形（クリックで頂点）')], ['freehand', '✎', '', t('フリーハンド')], // no key: F and D step through the scene's clips
@@ -78,7 +78,7 @@ export function AnnotationTools(p: Props) {
 
   // What the controls show: the selection's values with the old-look defaults filled in.
   const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool === 'curve' ? 'arrow' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
@@ -278,6 +278,9 @@ export function AnnotationTools(p: Props) {
             <button onClick={() => update(setClosed(sel, true))} title={t('始点と終点をつないで多角形にする')}>{t('閉じる')}</button>
           )}
           {sel?.kind === 'polygon' && <button onClick={() => update(setClosed(sel, false))} title={t('多角形を折れ線に戻す')}>{t('開く')}</button>}
+          {sel?.kind === 'arrow' && (sel.c1
+            ? <button onClick={() => update(setCurved(sel, false))} title={t('曲線の矢印をまっすぐに戻す')}>{t('まっすぐにする')}</button>
+            : <button onClick={() => update(setCurved(sel, true))} title={t('矢印を曲線にする（青い点を動かして曲げる）')}>{t('曲線にする')}</button>)}
         </Group>
       </div>
 

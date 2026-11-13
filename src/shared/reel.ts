@@ -228,6 +228,22 @@ export function placeGroup(reel: Reel, m: Marker, before: Marker | null): Reel {
   return touch({ ...reel, groupOrder: order })
 }
 
+// A clip put into another scene with what was done to it (its length, objects, slow and hold, note),
+// in the marker groups `markers` (none: unmarked), each in time order with `when`. When that scene
+// already has the play, its own clip keeps its edits and only gets the markers it lacks.
+export function copyClipTo(clip: Clip, to: Reel, markers: Marker[], when?: (c: Clip) => [string, number]): { reel: Reel; existed: boolean } {
+  const had = findClip(to, clip.matchId, clip.playId)
+  if (had) {
+    let r = to
+    for (const m of markers) if (!r.groups[m].includes(had.id)) r = toggleMarker(r, had.id, m, when)
+    return { reel: r, existed: true }
+  }
+  const c: Clip = { ...structuredClone(clip), id: uid() }
+  let r: Reel = touch({ ...to, clips: { ...to.clips, [c.id]: c }, groups: { ...to.groups, none: [...to.groups.none, c.id] } })
+  for (const m of markers) r = toggleMarker(r, c.id, m, when)
+  return { reel: r, existed: false }
+}
+
 export function removeClip(reel: Reel, clipId: string): Reel {
   const clips = { ...reel.clips }
   delete clips[clipId]

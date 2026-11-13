@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_CHART, cleanLineColors, cleanPointScale, lineColor, pointColor, setChartColors, chartBox, chartName, chartResult, chartStats, cleanChart, drawChart, servedFrom } from './chart'
+import { DEFAULT_CHART, cleanLineColors, cleanPointScale, lineColor, pointColor, setChartColors, chartBox, chartName, chartResult, chartStats, cleanChart, dotSpread, drawChart, servedFrom } from './chart'
 import { DEFAULT_GRID_STYLE, playerMarks, type CourtFit, DEFAULT_CORNERS } from './court'
 import type { ParsedDVW, Play } from './types'
 
@@ -128,6 +128,13 @@ describe('the chart of a player', () => {
     expect(c.dots.filter(d => d.rough)).toHaveLength(1)
     expect(c.dots[0].result).toBe('kill')
     expect(c.dots[1].result).toBe('error')
+  })
+  it('spreads each end as the court heatmap does: a whole zone 1.4 m, a sub-zone 1 m, a click not at all', () => {
+    const list = [hit({ startClick: null }), hit({ startClick: null, endClick: null }), hit({ startClick: null, endClick: null, endSub: 'B' })]
+    const dots = playerMarks(list[0], fit, { ...DEFAULT_GRID_STYLE, chart: { ...DEFAULT_CHART, scope: 'player' } }, () => list)!.chart!.dots
+    expect(dots.map(d => [dotSpread(d, 'end'), dotSpread(d, 'start')])).toEqual([[0, 1.4], [1.4, 1.4], [1, 1.4]])
+    // A chart made before the spreads: any rough end 1 m.
+    expect(dotSpread({ start: null, end: null, result: 'kill', rough: true }, 'end')).toBe(1)
   })
   it('goes from the attacker at the top to the other end at the bottom', () => {
     const d = marks({})!.chart!.dots[0]

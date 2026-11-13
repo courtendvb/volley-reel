@@ -410,9 +410,10 @@ export interface RotationSlideData {
 
 // The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
 // pass, the # and + passes, the three passes, only the setter calls, or none. The fewer, the larger
-// they are drawn (tableGrid).
-export type RotationTables = 'all' | 'hash' | 'hashPlus' | 'passes' | 'calls' | 'none'
-export const ROTATION_TABLES: RotationTables[] = ['all', 'hash', 'hashPlus', 'passes', 'calls', 'none']
+// they are drawn (tableGrid). attackers: in their place, cards of the rotation's attackers with the
+// most attacks (attackerCards).
+export type RotationTables = 'all' | 'hash' | 'hashPlus' | 'passes' | 'calls' | 'attackers' | 'none'
+export const ROTATION_TABLES: RotationTables[] = ['all', 'hash', 'hashPlus', 'passes', 'calls', 'attackers', 'none']
 const TABLE_ROW = 0.03, TABLE_W = 0.145, TABLE_H = TABLE_ROW * 5, TABLE_GAP = 0.01, TABLE_COL_GAP = 0.012
 const TABLE_AREA = { y: 0.5, h: 0.49 } // under the set chart, across the right-hand area
 
@@ -475,7 +476,7 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
   // Bottom right: by reception, and by setter call (the chart is above them), as many as were chosen.
   const recs: [string, string, { fill: string; text: string }][] = [['#', '# pass', { fill: '#DBEAFE', text: '#0F172A' }], ['+', '+ pass', { fill: '#DCFCE7', text: '#0F172A' }], ['!', '! pass', { fill: '#FDE8D0', text: '#0F172A' }]]
   const which = v.tables ?? 'all'
-  const passes = recs.slice(0, which === 'hash' ? 1 : which === 'hashPlus' ? 2 : which === 'calls' || which === 'none' ? 0 : 3)
+  const passes = recs.slice(0, which === 'hash' ? 1 : which === 'hashPlus' ? 2 : which === 'calls' || which === 'none' || which === 'attackers' ? 0 : 3)
     .map(([e, title, head]) => ({ title, head, sp: splitSets(rot.filter(s => afterRec(s, e))) }))
   // The setter calls of this rotation, the most used first.
   const callHead = { fill: '#334155', text: '#FFFFFF' }
@@ -494,4 +495,69 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
     out.push(...table(tb.title, tb.head, tb.sp, x0 + col * (w + TABLE_COL_GAP), TABLE_AREA.y + row * (h + TABLE_GAP), w, grid.k).out)
   })
   return out
+}
+
+// ---- the rotation's attackers (a choice for the bottom right) --------------------------------------
+// The team's attacks in a rotation (every phase), by attacker, the most first: at most `most` of them.
+export interface RotationAttacker { key: string; jersey: number; team: string; player: Player | null; plays: Play[] }
+export function rotationAttackers(dvws: ParsedDVW[], team: string, r: number, keep?: (p: Play) => boolean, most = ATTACKER_CARDS): RotationAttacker[] {
+  const by = new Map<string, RotationAttacker>()
+  for (const d of dvws) {
+    const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
+    if (i < 0) continue
+    const side = i === 0 ? '*' : 'a'
+    for (const p of d.plays) {
+      if (p.side !== side || p.skill !== 'A' || rotationOf(p) !== r || (keep && !keep(p))) continue
+      const had = by.get(p.playerKey) ?? { key: p.playerKey, jersey: p.jersey, team: d.teams[i].code.toUpperCase(), player: d.players[`${side}${p.jersey}`] ?? null, plays: [] }
+      had.plays.push(p)
+      by.set(p.playerKey, had)
+    }
+  }
+  return [...by.values()].sort((a, b) => b.plays.length - a.plays.length || a.jersey - b.jersey).slice(0, most)
+}
+export const ATTACKER_CARDS = 3
+
+// An attacker's numbers: the shares of hard spikes, soft ones and tips (the hit type coded after the
+// zones: H / P / T), kills, errors, blocked and attempts, and the shares of kills, errors, + and -.
+export interface AttackerStats { hard: number; soft: number; tip: number; k: number; e: number; b: number; att: number; pos: number; neg: number }
+export const hitType = (p: Play) => p.code.charAt(12).toUpperCase()
+export function attackerStats(plays: Play[]): AttackerStats {
+  const n = (f: (p: Play) => boolean) => plays.filter(f).length
+  const typed = n(p => 'HPT'.includes(hitType(p)) && hitType(p) !== '')
+  const share = (t: string) => (typed ? n(p => hitType(p) === t) / typed : 0)
+  return { hard: share('H'), soft: share('P'), tip: share('T'), k: n(p => p.effect === '#'), e: n(p => p.effect === '='), b: n(p => p.effect === '/'), att: plays.length, pos: n(p => p.effect === '+'), neg: n(p => p.effect === '-') }
+}
+const two = (n: number, of = 1) => (of ? (n / of).toFixed(2) : '–')
+
+// The cards across the bottom right, side by side: the name in a grey head, H | P | T, a table of K E B
+// Att, K% and ERR%, Pos and Neg; under it, where to place the chart of the attacker's attacks (the
+// caller draws it: a direction chart). Each card is one group. chartWidth: a chart's width for a height
+// (shares of the picture).
+export function attackerCards(list: RotationAttacker[], chartWidth: (h: number) => number): { annotations: Annotation[]; charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] } {
+  const annotations: Annotation[] = [], charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] = []
+  const gap = 0.008, n = ATTACKER_CARDS, w = (RIGHT.w - gap * (n - 1)) / n, top = TABLE_AREA.y, bottom = TABLE_AREA.y + TABLE_AREA.h
+  const ink = '#0F172A', grid = '#94A3B8'
+  list.forEach((a, i) => {
+    const x = RIGHT.x + i * (w + gap), g = uid(), s = attackerStats(a.plays), out: Annotation[] = []
+    const cell = (cx: number, y: number, cw: number, h: number, text: string, size: number, o: { fill?: string; bold?: boolean; stroke?: string | null } = {}) =>
+      out.push(words(cx, y + Math.max(1, (h * 720 - size * 1.2) / 2) / 720, text, size, ink, { align: 'center', bold: o.bold ?? false, groupId: g,
+        box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: o.stroke === undefined ? grid : o.stroke, strokeWidth: o.stroke === null ? 0 : 1, padding: Math.max(1, (h * 720 - size * 1.2) / 2), width: cw, height: h } }))
+    const name = a.player ? `#${a.jersey} ${[a.player.firstName, a.player.lastName.toUpperCase()].filter(Boolean).join(' ')}` : `#${a.jersey}`
+    let y = top
+    cell(x + w / 2, y, w, 0.036, name, 13, { fill: '#E5E7EB', bold: true }); y += 0.036
+    cell(x + w / 2, y, w, 0.03, a.team, 12, { fill: '#E5E7EB', bold: true }); y += 0.036
+    cell(x + w / 2, y, w, 0.03, `H: ${s.hard.toFixed(2)} | P: ${s.soft.toFixed(2)} | T: ${s.tip.toFixed(2)}`, 11, { stroke: null }); y += 0.034
+    const cw = w / 4
+    ;(['K', 'E', 'B', 'Att'] as const).forEach((h, c) => cell(x + cw * (c + 0.5), y, cw, 0.03, h, 12, { stroke: null }))
+    y += 0.03
+    ;[s.k, s.e, s.b, s.att].forEach((v, c) => cell(x + cw * (c + 0.5), y, cw, 0.03, String(v), 12, { stroke: null }))
+    y += 0.03
+    cell(x + w / 2, y, w, 0.028, `K%: ${two(s.k, s.att)} | ERR%: ${two(s.e, s.att)}`, 11, { stroke: null }); y += 0.028
+    cell(x + w / 2, y, w, 0.028, `Pos: ${two(s.pos, s.att)} | Neg: ${two(s.neg, s.att)}`, 11, { stroke: null }); y += 0.03
+    // The frame round the numbers, then the chart in what is left, in the middle of the card.
+    annotations.push({ id: uid(), kind: 'rect', color: grid, x, y: top + 0.072, w, h: y - top - 0.072, width: 1, fill: null, groupId: g }, ...out)
+    const ch = bottom - y - 0.004, cwid = Math.min(w, chartWidth(ch)), chh = cwid < chartWidth(ch) ? ch * (cwid / chartWidth(ch)) : ch
+    charts.push({ attacker: a, x: x + (w - cwid) / 2, y: y + 0.004, h: chh })
+  })
+  return { annotations, charts }
 }

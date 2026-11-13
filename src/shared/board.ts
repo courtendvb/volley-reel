@@ -7,7 +7,7 @@ import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type Dir
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
-import { ROTATIONS, ROTATION_CHART, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationTables, type SideOutRate } from './rotationBoard'
+import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type RotationTables, type SideOutRate } from './rotationBoard'
 import { setChart, type SetChart } from './setChart'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
@@ -34,6 +34,7 @@ export interface BoardPlayer {
   formations?: Record<number, FormationSpot[]> // a rotation slide: where the team lines up to receive in each rotation
   sideOut?: Record<number, SideOutRate> // and its serve receive in each
   setCharts?: Record<number, SetChart | null> // and the setter's set chart in each, after a # + ! reception
+  attackers?: Record<number, RotationAttacker[]> // and the team's attackers with the most attacks in each
   receptions?: Received[] // a serve-target slide: all the team's receptions (the same list on each of its players)
 }
 
@@ -62,6 +63,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
         p.formations = Object.fromEntries(ROTATIONS.map(r => [r, rotationFormation(dvws, p.team, r, rotationLineup(dvws, p.team, r), p.key)]))
         p.sideOut = rotationSideOut(dvws, p.team, keep)
         const plays = dvws.flatMap(d => d.plays), set = p.plays[0], name = `#${p.player.jersey} ${p.player.lastName.toUpperCase()}`
+        p.attackers = Object.fromEntries(ROTATIONS.map(r => [r, rotationAttackers(dvws, p.team, r, keep)]))
         p.setCharts = Object.fromEntries(ROTATIONS.map(r => [r, set ? setChart(set, plays, () => name, { rot: [r], phases: ['r'], recs: ['#', '+', '!'] }) : null]))
       }
     }
@@ -335,7 +337,11 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   if (skill === 'R') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
     const sc = p?.setCharts?.[r]
-    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
+    // The attackers' cards in place of the tables: their numbers here, their charts placed on the slide.
+    const cards = p && opts.tables === 'attackers' ? attackerCards(p.attackers?.[r] ?? [], h => chartWidth(h) / ASPECT) : null
+    const look = { ...(opts.style ?? DEFAULT_CHART), points: true, lines: false, heat: false, scope: 'player' as const, name: false, stats: false }
+    const cardCharts: PlacedChart[] = (cards?.charts ?? []).map(c => ({ chart: directionChart(c.attacker.plays[0], look, () => c.attacker.plays), x: c.x, y: c.y, h: c.h }))
+    return { annotations: p ? [...rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink), ...(cards?.annotations ?? [])] : [], charts: cardCharts, noteIds: [],
       ...(sc ? { setCharts: [{ chart: sc, ...ROTATION_CHART }] } : {}) }
   }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }

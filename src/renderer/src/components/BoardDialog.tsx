@@ -28,7 +28,7 @@ export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations
 
 // The choices of tables on a rotation slide.
 const TABLE_NAMES: Record<RotationTables, string> = {
-  all: t('すべて表示'), hash: t('# のみ'), hashPlus: t('# と + のみ'), passes: t('パスのみ'), calls: t('セッターコールのみ'), none: t('表示しない'),
+  all: t('すべて表示'), hash: t('# のみ'), hashPlus: t('# と + のみ'), passes: t('パスのみ'), calls: t('セッターコールのみ'), attackers: t('アタッカー（打数上位 3 人）'), none: t('表示しない'),
 }
 
 interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks

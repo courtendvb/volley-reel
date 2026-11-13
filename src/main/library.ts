@@ -7,6 +7,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseScout } from '../shared/vsm'
+import { decodeScout } from '../shared/scoutText'
 
 import { rosterOf, type RosterPlayer } from '../shared/packMaker'
 import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
@@ -20,9 +21,9 @@ import { t } from '../shared/i18n'
 import { withServeMark } from '../shared/serveMark'
 import { playerIndex, unifyPlayers } from '../shared/players'
 
-// A scout file: a DataVolley .dvw (Windows-1252 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
+// A scout file: a DataVolley .dvw (Windows-1252 or UTF-8 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
-const readScout = async (path: string): Promise<ParsedDVW> => parseScout(await readFile(path, extname(path).toLowerCase() === '.vsm' ? 'utf8' : 'latin1'))
+const readScout = async (path: string): Promise<ParsedDVW> => parseScout(decodeScout(await readFile(path)).text)
 const scoutStem = (path: string) => basename(path, extname(path))
 
 const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']

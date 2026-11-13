@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { BrowserWindow, ClipboardItem, app, clipboard, ipcMain, nativeImage } from 'electron'
 import type { PhotoTarget } from '../shared/pack'
+import { decodeScout } from '../shared/scoutText'
 import type { PickedAsset, ProjectInit, SlideFile } from '../shared/types'
 import { ffmpegBin, ffprobeBin } from './ffmpegPath'
 import type { Library } from './library'
@@ -77,12 +78,13 @@ export function registerSmokeIpc(c: SmokeContext): void {
     // Only ever a copy in the temp folder: a smoke run must not change a real scout file.
     const tmp = resolve(tmpdir()) + sep
     if (!resolve(m.dvwPath).toLowerCase().startsWith(tmp.toLowerCase())) throw new Error(`smoke:editDvw edits DVW copies in ${tmp} only (got ${m.dvwPath})`)
-    const lines = readFileSync(m.dvwPath, 'latin1').split(/\r?\n/)
+    const { text, encoding } = decodeScout(readFileSync(m.dvwPath))
+    const lines = text.split(/\r?\n/)
     const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
     lines.splice(at + 1, 0, lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_s, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`))
     const del = lines.findIndex(l => l.startsWith(code + ';') && l.split(';')[12] === String(time))
     lines.splice(del, 1)
-    await writeFile(m.dvwPath, lines.join('\r\n'), 'latin1')
+    await writeFile(m.dvwPath, lines.join('\r\n'), encoding) // back in the copy's own encoding
     return `added a point after line ${at + 1}, deleted line ${del + 1} (${code} @ ${time})`
   })
 }

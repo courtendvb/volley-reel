@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PaletteColor } from './PaletteColor'
-import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type AttackBoard, type BoardConfig, type BoardPlayer, type BoardSkill, type SetLayout, type SetView } from '../../../shared/board'
+import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type AttackBoard, type AttackSplit, type BoardConfig, type BoardPlayer, type BoardSkill, type SetLayout, type SetView } from '../../../shared/board'
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
-import { ATTACK_CONDITIONS, type AttackCondition, type SetterRow } from '../../../shared/attackBoard'
+import { ATTACK_CONDITIONS, attackLayoutOf, defaultCodeGroups, type AttackCondition, type AttackLayout, type SetterRow } from '../../../shared/attackBoard'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import { ATTACKER_CARDS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
@@ -87,7 +87,11 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const [conditions, setConditions] = useState<AttackCondition[]>(initial?.attack?.conditions ?? ['good', 'poor'])
   const [setterRow, setSetterRow] = useState<SetterRow | ''>(initial?.attack?.setterRow ?? '')
   const [defense, setDefense] = useState(initial?.attack?.defense ?? true)
-  const attack: AttackBoard = { conditions, ...(setterRow ? { setterRow } : {}), defense }
+  // How the columns are split (null: by the pass, or by attack codes for a middle) and, by codes, each
+  // column's codes (null: the quicks by the setter, then the rest); how our defence stands ('': from the attacker).
+  const [attackSplit, setAttackSplit] = useState<AttackSplit | null>(initial?.attack?.split ?? null)
+  const [codeGroups, setCodeGroups] = useState<string[][] | null>(initial?.attack?.codeGroups ?? null)
+  const [attackLayout, setAttackLayout] = useState<AttackLayout | ''>(initial?.attack?.layout ?? '')
   // A rotation slide per rotation picked (all six by default; a slide made again: its own).
   const [rotations, setRotations] = useState<number[]>(initial?.rotation ? [initial.rotation] : ROTATIONS)
   // The team's colour on a rotation slide: chosen here, else the main colour of its logo in the library.
@@ -142,6 +146,14 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
     const p = inTeam.find(x => x.key === s.key), c = p ? boardColumn(p, s.code || null, names) : null
     return c ? [s.attention ? { ...c, attention: true } : c] : []
   })
+  // An attacker's slide: the player's codes, and what the columns are as chosen or by default.
+  const attacker = skill === 'D' ? columns[0] : undefined
+  const theirCodes = attacker ? attackCodes([attacker]).map(c => c.code) : []
+  const middle = !!attacker && (attackLayout || attackLayoutOf(attacker.player, attacker.plays)) === 'middle'
+  const splitBy: AttackSplit = attackSplit ?? (middle ? 'codes' : 'pass')
+  const groups = (codeGroups ?? defaultCodeGroups(theirCodes, names)).map(g => g.filter(c => theirCodes.includes(c)))
+  const attack: AttackBoard = { conditions, ...(setterRow ? { setterRow } : {}), defense, split: splitBy, ...(splitBy === 'codes' ? { codeGroups: groups } : {}), ...(attackLayout ? { layout: attackLayout } : {}) }
+  const pickCode = (i: number, code: string, on: boolean) => setCodeGroups([0, 1].map(k => (k === i ? (on ? [...(groups[k] ?? []), code] : (groups[k] ?? []).filter(c => c !== code)) : (groups[k] ?? []).filter(c => !(on && c === code)))))
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal board-dialog" role="dialog" aria-label={t('データスライド')} onClick={e => e.stopPropagation()}>
@@ -224,7 +236,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             return (
               <div key={i} className="board-slot">
                 <span className="board-slot-no">{skill === 'D' ? t('アタッカー') : oneSetter ? t('セッター') : t('{0} 番目', i + 1)}</span>
-                <select value={s.key} aria-label={t('{0} 番目', i + 1)} onChange={e => setSlot(i, { key: e.target.value, code: '' })}>
+                <select value={s.key} aria-label={t('{0} 番目', i + 1)} onChange={e => { setSlot(i, { key: e.target.value, code: '' }); setCodeGroups(null) }}>
                   <option value="">{t('（なし）')}</option>
                   {inTeam.map(x => <option key={x.key} value={x.key}>{`#${x.player.jersey} ${x.player.lastName}`}</option>)}
                 </select>
@@ -241,9 +253,32 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           })}
         </div>}
         {skill === 'D' && (
+          <div className="filter-row">
+            <span className="field-label">{t('配置')}</span>
+            <div className="segmented" role="radiogroup" aria-label={t('守備の配置')} title={t('サイド：2 枚ブロックとディガー 3 人（ゾーン 4 からは左右反転）。ミドル：3 枚ブロックとディガー 3 人。自動はポジション（なければ打った位置）で決めます')}>
+              {([['', t('自動')], ['side', t('サイド')], ['middle', t('ミドル')]] as [AttackLayout | '', string][]).map(([k, label]) => (
+                <button key={k} role="radio" aria-checked={attackLayout === k} className={attackLayout === k ? 'on' : ''} onClick={() => setAttackLayout(k)}>{label}</button>
+              ))}
+            </div>
+            <span className="field-label">{t('列の分け方')}</span>
+            <div className="segmented" role="radiogroup" aria-label={t('列の分け方')}>
+              <button role="radio" aria-checked={splitBy === 'pass'} className={splitBy === 'pass' ? 'on' : ''} onClick={() => setAttackSplit('pass')} title={t('パスの質（とトランジション）で列を分け、各列の上にトスの位置を出します')}>{t('パスの質')}</button>
+              <button role="radio" aria-checked={splitBy === 'codes'} className={splitBy === 'codes' ? 'on' : ''} onClick={() => setAttackSplit('codes')} title={t('アタックコードで列を分けます（ミドルの A・C クイックと、それ以外など）')}>{t('アタックコード')}</button>
+            </div>
+          </div>
+        )}
+        {skill === 'D' && splitBy === 'codes' && [0, 1].map(i => (
+          <div key={i} className="filter-row">
+            <span className="field-label">{t('{0} 列目', i + 1)}</span>
+            {theirCodes.map(c => (
+              <label key={c} className="check"><input type="checkbox" checked={(groups[i] ?? []).includes(c)} onChange={e => pickCode(i, c, e.target.checked)} /> {`${c}${names[c] ? ` ${names[c]}` : ''}`}</label>
+            ))}
+          </div>
+        ))}
+        {skill === 'D' && (
           <div className="filter-row" title={t('右に条件ごとの列を並べます。各列は、その条件でこの選手に上がったトスの位置と、打ち先のチャート（打ち方の割合、K・E・B・Att、K%・ERR%・Pos・Neg）です')}>
-            <span className="field-label">{t('列')}</span>
-            {ATTACK_CONDITIONS.map(c => (
+            {splitBy === 'pass' && <span className="field-label">{t('列')}</span>}
+            {splitBy === 'pass' && ATTACK_CONDITIONS.map(c => (
               <label key={c} className="check"><input type="checkbox" checked={conditions.includes(c)}
                 onChange={e => setConditions(ATTACK_CONDITIONS.filter(x => (x === c ? e.target.checked : conditions.includes(x))))} /> {conditionLabel(c)}</label>
             ))}
@@ -253,7 +288,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
               <option value="front">{t('前衛（Setter Front）')}</option>
               <option value="back">{t('後衛（Setter Back）')}</option>
             </select>
-            <label className="check" title={t('味方のブロッカー 2 人（黄）とディガー 3 人（緑）のコマを置きます。ドラッグで動かせます')}><input type="checkbox" checked={defense} onChange={e => setDefense(e.target.checked)} /> {t('守備のコマ')}</label>
+            <label className="check" title={t('味方のブロッカー（黄、サイドには 2 人、ミドルには 3 人）とディガー 3 人（緑）のコマを置きます。ドラッグで動かせます')}><input type="checkbox" checked={defense} onChange={e => setDefense(e.target.checked)} /> {t('守備のコマ')}</label>
           </div>
         )}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
@@ -292,7 +327,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={skill === 'C' ? !compare : !columns.length || (skill === 'R' && !rotations.length) || (skill === 'D' && !conditions.length)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine, cones, tables, attackers, attack })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare : !columns.length || (skill === 'R' && !rotations.length) || (skill === 'D' && (splitBy === 'pass' ? !conditions.length : !groups.some(g => g.length)))} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine, cones, tables, attackers, attack })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

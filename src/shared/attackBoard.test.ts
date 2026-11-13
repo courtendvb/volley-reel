@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackSlide, hotSpot, inCondition, setterRowOf } from './attackBoard'
+import { attackLayoutOf, attackSlide, codeColumn, conditionColumn, defaultCodeGroups, hotSpot, inCondition, setterRowOf, shortCodeName } from './attackBoard'
 import { boardPlayers, boardSlide } from './board'
 import { DEFAULT_CHART } from './chart'
 import { attackerSetChart } from './setChart'
@@ -86,14 +86,14 @@ describe('the attacker slide', () => {
   it('puts our five discs on only when asked', () => {
     const [k] = boardPlayers([d], 'D')
     const balls = (defense: boolean) => attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' },
-      { conditions: ['good'], defense, style: DEFAULT_CHART, ink: '#000000' }).annotations.filter(a => a.kind === 'circle' && a.shade === 'ball').length
+      { columns: [conditionColumn('good')], sets: true, layout: 'side', defense, style: DEFAULT_CHART, ink: '#000000' }).annotations.filter(a => a.kind === 'circle' && a.shade === 'ball').length
     expect(balls(false)).toBe(1) // the attacker
     expect(balls(true)).toBe(6)
   })
   it('shows the two cones most attacks went into, each with its share', () => {
     const spread = match([play({}), play({}), play({ endClick: { u: 0.5, v: 0.95 } }), play({ endClick: { u: 0.85, v: 0.7 } })])
     const [k] = boardPlayers([spread], 'D')
-    const made = attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { conditions: ['good'], defense: false, style: DEFAULT_CHART, ink: '#000000' }).annotations
+    const made = attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { columns: [conditionColumn('good')], sets: true, layout: 'side', defense: false, style: DEFAULT_CHART, ink: '#000000' }).annotations
     const shares = made.flatMap(a => (a.kind === 'text' && /%$/.test(a.text) ? [a.text] : []))
     expect(shares).toHaveLength(2)
     expect(shares[0]).toBe('50%') // the most first
@@ -101,10 +101,55 @@ describe('the attacker slide', () => {
   })
   it('puts the two blockers shoulder to shoulder', () => {
     const [k] = boardPlayers([match([play({})])], 'D')
-    const block = attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { conditions: ['good'], defense: true, style: DEFAULT_CHART, ink: '#000000' })
+    const block = attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { columns: [conditionColumn('good')], sets: true, layout: 'side', defense: true, style: DEFAULT_CHART, ink: '#000000' })
       .annotations.filter(a => a.kind === 'circle' && a.fill === '#FACC15')
     expect(block).toHaveLength(2)
     const [l, r] = block.map(a => (a.kind === 'circle' ? a : null)!).sort((a, b) => a.x - b.x)
     expect(Math.abs(r.x - (l.x + l.w))).toBeLessThan(0.004) // touching, neither apart nor overlapping
+  })
+  const discs = (plays: Play[], layout: 'side' | 'middle') => {
+    const [k] = boardPlayers([match(plays)], 'D')
+    return attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { columns: [conditionColumn('good')], sets: true, layout, defense: true, style: DEFAULT_CHART, ink: '#000000' })
+      .annotations.flatMap(a => (a.kind === 'circle' && a.shade === 'ball' ? [{ fill: a.fill, x: a.x + a.w / 2 }] : []))
+  }
+  it('turns the diggers round for an attack from the other side', () => {
+    // From the attacker's zone 2 (u 0.85) they hit on the picture's left; from zone 4 (u 0.15), its right.
+    const diggers = (u: number) => discs([play({ startClick: { u, v: 0.42 } })], 'side').filter(d => d.fill === '#34D399').map(d => d.x)
+    const z2 = diggers(0.85), z4 = diggers(0.15)
+    expect(z2).toHaveLength(3)
+    const mid = (z2[0] + z4[0]) / 2 // the court's middle on the picture
+    z2.forEach((x, i) => expect(x - mid).toBeCloseTo(mid - z4[i], 1))
+  })
+  it('puts three blockers against a middle', () => {
+    const d = discs([play({ startZone: 3, startClick: { u: 0.5, v: 0.45 } })], 'middle')
+    expect(d.filter(x => x.fill === '#FACC15')).toHaveLength(3)
+    expect(d.filter(x => x.fill === '#34D399')).toHaveLength(3)
+  })
+})
+
+describe('the columns of a middle', () => {
+  it('tells a middle by the position, else by where they hit from', () => {
+    expect(attackLayoutOf({ role: 'MB' }, [])).toBe('middle')
+    expect(attackLayoutOf({ role: 'OH' }, [{ startZone: 3 }])).toBe('side')
+    expect(attackLayoutOf({}, [{ startZone: 3 }, { startZone: 3 }, { startZone: 4 }])).toBe('middle')
+    expect(attackLayoutOf({}, [{ startZone: 4 }, { startZone: 3 }])).toBe('side')
+  })
+  const names = { PA: 'A Quick', PB: 'B Quick', PC: 'C Quick', X5: 'Right High' }
+  it('names a quick by its letter, anything else by its code', () => {
+    expect(shortCodeName('PA', names.PA)).toBe('A')
+    expect(shortCodeName('X5', names.X5)).toBe('X5')
+    expect(codeColumn(['PA', 'PC'], names, 0).label).toBe('A,C')
+    expect(codeColumn(['PA'], names, 0).keep(play({ code: 'a92AQ-PA~~~H' }))).toBe(true)
+    expect(codeColumn(['PA'], names, 0).keep(play({ code: 'a92AQ-PB~~~H' }))).toBe(false)
+  })
+  it('starts with the quicks by the setter, then the rest', () => {
+    expect(defaultCodeGroups(['PB', 'PA', 'X5', 'PC'], names)).toEqual([['PA', 'PC'], ['PB', 'X5']])
+    expect(defaultCodeGroups(['X5', 'PB'], names)).toEqual([['X5'], ['PB']])
+  })
+  it('makes a column per group with no set charts', () => {
+    const [k] = boardPlayers([match([play({ code: 'a92AQ-PA~~~H' }), play({ code: 'a92AQ-PB~~~H' }), play({ code: 'a92AQ-PC~~~H' })])], 'D')
+    const s = boardSlide([k], 'D', { split: false, attack: { conditions: [], defense: false, split: 'codes', codeGroups: [['PA', 'PC'], ['PB']] } }, {})
+    expect(s.charts.map(c => c.chart.stats.att)).toEqual([2, 1])
+    expect(s.setCharts).toEqual([])
   })
 })

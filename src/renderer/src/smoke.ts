@@ -1824,6 +1824,10 @@ export function installSmoke(h: SmokeHost): void {
       await sleep(600); await api.smokeShot!('attack-preview-2.png') // the two columns it starts with
       if (!box(t('トランジション')).checked) box(t('トランジション')).click()
       await sleep(600); await api.smokeShot!('attack-preview.png')
+      // The middle's look: three blockers, the columns by attack code (no set charts); then back to the side's.
+      button(dialog, t('ミドル'))!.click(); button(dialog, t('アタックコード'))!.click()
+      await sleep(600); await api.smokeShot!('attack-middle.png')
+      button(dialog, t('自動'))!.click(); button(dialog, t('パスの質'))!.click(); await sleep(300)
       button(dialog, t('作成'))!.click()
       const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'D') ?? null, 10000, 'attack slide')
       await sleep(800)

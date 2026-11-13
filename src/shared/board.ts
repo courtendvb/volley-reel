@@ -9,7 +9,7 @@ import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
 import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type RotationTables, type SideOutRate } from './rotationBoard'
 import { setBefore, setChart, type SetChart } from './setChart'
-import { SETTER_ROW_NAMES, attackSlide, setterRowOf, type AttackCondition, type SetterRow } from './attackBoard'
+import { SETTER_ROW_NAMES, attackLayoutOf, attackSlide, codeColumn, conditionColumn, setterRowOf, type AttackCondition, type AttackLayout, type SetterRow } from './attackBoard'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
 import { compareSlide, type CompareSide } from './compare'
@@ -33,7 +33,7 @@ export interface BoardPlayer {
   follow?: (Play | null)[] // a setter's sets: the same team's attack right after each, if there was one
   attention?: boolean // marked "Attention" on the card: the one to watch
   sets?: SetterSet[] // a setter's sets and dumps with the attack each led to (setterBoard.ts)
-  callNames?: Record<string, string> // the setter calls' names in the DVWs
+  callNames?: Record<string, string> // the setter calls' names in the DVWs (an attacker's slide: the attack codes')
   formations?: Record<number, FormationSpot[]> // a rotation slide: where the team lines up to receive in each rotation
   sideOut?: Record<number, SideOutRate> // and its serve receive in each
   setCharts?: Record<number, SetChart | null> // and the setter's set chart in each, after a # + ! reception
@@ -73,6 +73,10 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
         p.setCharts = Object.fromEntries(ROTATIONS.map(r => [r, set ? setChart(set, plays, () => name, { rot: [r], phases: ['r'], recs: ['#', '+', '!'] }) : null]))
       }
     }
+  }
+  if (skill0 === 'D') {
+    const codeNames = Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>
+    for (const p of out.values()) p.callNames = codeNames // the attack codes' names
   }
   if (skill0 === 'T') {
     const byTeam = new Map<string, Received[]>()
@@ -227,7 +231,10 @@ export interface BoardConfig {
 }
 // An attacker's slide (attackBoard.ts): a column per condition, the attacks kept to when the setter was in
 // the front or back row (missing: both), and our blockers and diggers put on to move into place.
-export interface AttackBoard { conditions: AttackCondition[]; setterRow?: SetterRow; defense: boolean }
+// split: columns by the pass before the attack (conditions; missing: so) or by attack codes (codeGroups,
+// each column's codes); layout: how our defence stands (missing: from the attacker's position).
+export interface AttackBoard { conditions: AttackCondition[]; setterRow?: SetterRow; defense: boolean; split?: AttackSplit; codeGroups?: string[][]; layout?: AttackLayout }
+export type AttackSplit = 'pass' | 'codes'
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
 export interface BoardOptions {
@@ -353,7 +360,8 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const team = /^\d+$/.test(p.team) ? p.teamName : p.team // some DVWs code the teams by number
     const label = [team, ...(kept.length ? kept : ['All attacks'])].join(' · ')
     const made = attackSlide({ player: p.player, team: p.team, attacks, setOf: p.setOf ?? new Map(), label },
-      { conditions: a.conditions, defense: a.defense, style: { ...(opts.style ?? DEFAULT_CHART), ...opts.display }, ink })
+      { columns: a.split === 'codes' ? (a.codeGroups ?? []).filter(g => g.length).map((g, i) => codeColumn(g, p.callNames ?? {}, i)) : a.conditions.map(conditionColumn),
+        sets: a.split !== 'codes', layout: a.layout ?? attackLayoutOf(p.player, attacks), defense: a.defense, style: { ...(opts.style ?? DEFAULT_CHART), ...opts.display }, ink })
     return { annotations: made.annotations, charts: made.charts, noteIds: [], setCharts: made.setCharts }
   }
   if (skill === 'C') {

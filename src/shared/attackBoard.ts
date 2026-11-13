@@ -28,6 +28,32 @@ export function inCondition(p: Pick<Play, 'phase' | 'recEffect'>, c: AttackCondi
   return p.phase === 'r' && !!p.recEffect && (c === 'good' ? '#+' : '!-').includes(p.recEffect)
 }
 
+// A column of the slide: its name and colour, and the attacks it keeps.
+export interface AttackColumn { label: string; color: string; keep: (p: Play) => boolean }
+export const conditionColumn = (c: AttackCondition): AttackColumn => ({ label: CONDITION_NAMES[c], color: CONDITION_COLORS[c], keep: p => inCondition(p, c) })
+// Or the attacks of some attack codes (a middle's quicks, say), named short: "A Quick" by its letter, else the code.
+export const attackCode = (p: Pick<Play, 'code'>) => p.code.slice(6, 8).toUpperCase()
+export const shortCodeName = (code: string, name = '') => /^\s*(\S+)\s+quick\s*$/i.exec(name)?.[1] ?? code
+const CODE_COLORS = ['#2563EB', '#D97706', '#475569']
+export const codeColumn = (codes: string[], names: Record<string, string>, i: number): AttackColumn =>
+  ({ label: codes.map(c => shortCodeName(c, names[c])).join(','), color: CODE_COLORS[i % CODE_COLORS.length], keep: p => codes.includes(attackCode(p)) })
+
+// A middle's columns to start with: the quicks by the setter (A and C, in front and behind), then the
+// rest of their codes; without those, their most used code, then the rest. codes: most used first.
+export function defaultCodeGroups(codes: string[], names: Record<string, string>): string[][] {
+  const near = codes.filter(c => /^[AC]$/i.test(shortCodeName(c, names[c])))
+  const first = near.length ? near : codes.slice(0, 1)
+  return [first, codes.filter(c => !first.includes(c))].filter(g => g.length)
+}
+
+// A middle hits by the setter, and is defended with three blockers: a middle blocker, or a player
+// most of whose attacks come from zone 3.
+export type AttackLayout = 'side' | 'middle'
+export function attackLayoutOf(player: Pick<Player, 'role'>, attacks: Pick<Play, 'startZone'>[]): AttackLayout {
+  if (player.role) return player.role === 'MB' ? 'middle' : 'side'
+  return attacks.filter(a => a.startZone === 3).length * 2 > attacks.length ? 'middle' : 'side'
+}
+
 // Where the attacking team's setter was: in the front row in rotations 2, 3 and 4 (the setter's zone).
 export type SetterRow = 'front' | 'back'
 export const SETTER_ROW_NAMES: Record<SetterRow, string> = { front: 'Setter Front', back: 'Setter Back' }
@@ -56,7 +82,9 @@ export interface AttackSlideData {
   label: string // under the name: what the attacks are kept to
 }
 export interface AttackSlideOptions {
-  conditions: AttackCondition[]
+  columns: AttackColumn[]
+  sets: boolean // where the sets were given, over each column's chart
+  layout: AttackLayout // how our defence stands
   defense: boolean // our blockers and diggers as discs to move
   style: ChartStyle
   ink: string // the heading's colour, to show on the background
@@ -80,9 +108,13 @@ const ATTACKER = '#1E3A8A', BLOCKER = '#FACC15', DIGGER = '#34D399', CONE = '#DC
 const BEYOND = 0.4 // how far the drawing goes past the net, as v
 const TOP_CONES = 2, DISC_R = 0.45 // the cones shown; a player's disc, its radius in metres
 const COURT_SCALE = 0.93 // the court's size against its corners above
+// The diggers (u across the picture, v along) against an attack on the picture's left (zone 2 or 1),
+// and against a middle.
+const SIDE_DIGGERS: [number, number][] = [[0.1, 0.915], [0.82, 0.89], [0.485, 0.945]]
+const MIDDLE_DIGGERS: [number, number][] = [[0.17, 0.78], [0.85, 0.8], [0.5, 0.93]]
 
 // The court, the net, the attacker and what their attacks did, as objects on the slide.
-function courtSide(v: AttackSlideData, defense: boolean, corners: CourtFit['corners']): Annotation[] {
+function courtSide(v: AttackSlideData, defense: boolean, layout: AttackLayout, corners: CourtFit['corners']): Annotation[] {
   const H = homography(corners), out: Annotation[] = [], g = uid()
   const at = (u: number, w: number): [number, number] => { const q = project(H, u, w); return [q.x, q.y] }
   const poly = (pts: [number, number][], fill: string | null, o: Partial<Extract<Annotation, { kind: 'polygon' }>> = {}): Annotation =>
@@ -110,7 +142,7 @@ function courtSide(v: AttackSlideData, defense: boolean, corners: CourtFit['corn
       const spans = Array.from({ length: steps + 1 }, (_, k) => coneSpan(cones, from + ((to - from) * k) / steps)).filter(x => !!x)
       if (spans.length < 2) continue
       const cg = uid(), show = (p: { x: number; y: number }) => at(p.x, p.y)
-      out.push({ id: uid(), kind: 'polygon', color: CONE, width: 2.5, points: [...spans.map(x => show(x[0])), ...spans.map(x => show(x[1])).reverse()], fill: CONE, fillOpacity: 0.2 + 0.4 * (share / top[0].share), groupId: cg })
+      out.push({ id: uid(), kind: 'polygon', color: CONE, width: 2.5, points: [...spans.map(x => show(x[0])), ...spans.map(x => show(x[1])).reverse()], fill: CONE, fillOpacity: 0.08 + 0.2 * (share / top[0].share), groupId: cg })
       const mid = coneSpan(cones, (from + to) / 2)
       if (mid) {
         const [x, y] = show({ x: mid[0].x + (mid[1].x - mid[0].x) * 0.62, y: mid[0].y + (mid[1].y - mid[0].y) * 0.62 })
@@ -139,12 +171,20 @@ function courtSide(v: AttackSlideData, defense: boolean, corners: CourtFit['corn
   // The attacker over the net, where they mostly hit from, on top of it.
   const apexU = cones ? cones.apex.x : 0.8
   if (cones) disc(apexU, Math.min(0.48, cones.apex.y), ATTACKER, String(v.player.jersey))
-  // Ours in front of the net, nearer ones over farther ones: a two-player block shoulder to shoulder
-  // (the discs touching) in front of the attacker, then the diggers.
+  // Ours in front of the net, nearer ones over farther ones. Against a side attacker a two-player
+  // block shoulder to shoulder (the discs touching) in front of them, the diggers as set out for an
+  // attack from zone 2 or 1 (on the picture's left), turned round for one from zone 4. Against a
+  // middle three blockers spread along the net, the middle one in front of them, and three diggers.
   if (defense) {
-    const half = DISC_R / 9, mid = Math.min(1 - half, Math.max(half, apexU))
-    for (const du of [-half, half]) disc(mid + du, 0.5 + (DISC_R + 0.15) / 18, BLOCKER, '')
-    for (const [u, w] of [[0.12, 0.78], [0.88, 0.78], [0.5, 0.93]]) disc(u, w, DIGGER, '')
+    const blockV = 0.5 + (DISC_R + 0.15) / 18
+    if (layout === 'middle') {
+      for (const u of [0.2, Math.min(0.67, Math.max(0.33, apexU)), 0.8]) disc(u, blockV, BLOCKER, '')
+      for (const [u, w] of MIDDLE_DIGGERS) disc(u, w, DIGGER, '')
+    } else {
+      const half = DISC_R / 9, mid = Math.min(1 - half, Math.max(half, apexU)), left = apexU < 0.5
+      for (const du of [-half, half]) disc(mid + du, blockV, BLOCKER, '')
+      for (const [u, w] of [...SIDE_DIGGERS].sort((a, b) => a[1] - b[1])) disc(left ? u : 1 - u, w, DIGGER, '')
+    }
   }
   return out
 }
@@ -155,29 +195,31 @@ const END = 0.988, GAP = 0.012, COL_MAX = 0.165, TAG_Y = 0.012, SET_Y = 0.058, S
 
 export function attackSlide(v: AttackSlideData, o: AttackSlideOptions): { annotations: Annotation[]; charts: PlacedChart[]; setCharts: PlacedSetChart[] } {
   const out: Annotation[] = [], charts: PlacedChart[] = [], setCharts: PlacedSetChart[] = []
-  const conditions = o.conditions.length ? o.conditions : ATTACK_CONDITIONS.slice(0, 2), n = conditions.length
+  const columns = o.columns.length ? o.columns : ATTACK_CONDITIONS.slice(0, 2).map(conditionColumn), n = columns.length
   const scale = COURT_SCALE * (n >= 3 ? 0.8 : 1), corners = courtAt(scale), right = Math.max(...corners.map(c => c.x)) + 0.02
-  out.push(...courtSide(v, o.defense, corners))
+  out.push(...courtSide(v, o.defense, o.layout, corners))
   // The heading: the number and name large, underlined; what the attacks are kept to under it.
   const hg = uid(), name = `#${v.player.jersey} ${v.player.lastName.toUpperCase()}`, size = Math.min(60, Math.floor((0.55 * PW) / (name.length * 0.68)))
   out.push(words(0.02, 0.012, name, size, o.ink, { groupId: hg }))
   out.push({ id: uid(), kind: 'polyline', color: o.ink, width: 4, points: [[0.022, 0.012 + (size * 1.22) / PH], [0.022 + (name.length * size * 0.66) / PW, 0.012 + (size * 1.22) / PH]], groupId: hg })
   out.push(words(0.022, 0.03 + (size * 1.3) / PH, v.label, Math.min(30, Math.floor(((right - 0.05) * PW) / (v.label.length * 0.62))), o.ink, { groupId: hg }))
 
-  const colW = Math.min(COL_MAX, (END - right - GAP * (n - 1)) / n)
+  // Under set charts a column is at most COL_MAX wide; without them, as wide as a chart the slide's height.
+  const most = o.sets ? COL_MAX : chartWidth((0.985 - SET_Y) * PH, true) / PW
+  const colW = Math.min(most, (END - right - GAP * (n - 1)) / n)
   const x0 = END - n * colW - GAP * (n - 1)
   const chartName = `#${v.player.jersey} ${[v.player.firstName, v.player.lastName.toUpperCase()].filter(Boolean).join(' ')}`
   const style = { ...o.style, scope: 'player' as const, name: true, stats: true }
-  conditions.forEach((c, i) => {
-    const x = x0 + i * (colW + GAP), plays = v.attacks.filter(a => inCondition(a, c))
-    out.push(words(x + colW / 2, TAG_Y, `${CONDITION_NAMES[c]}  n ${plays.length}`, 16, '#FFFFFF', { align: 'center', box: { fill: CONDITION_COLORS[c], fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 4, radius: 4, width: colW } }))
+  columns.forEach((c, i) => {
+    const x = x0 + i * (colW + GAP), plays = v.attacks.filter(c.keep)
+    out.push(words(x + colW / 2, TAG_Y, `${c.label}  n ${plays.length}`, 16, '#FFFFFF', { align: 'center', box: { fill: c.color, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 4, radius: 4, width: colW } }))
     // Where their sets were given (set chart, as the rotation slide draws it: discs and a key).
-    const setH = Math.min(SET_MAX, (colW * PW) / setChartWidth(PH)), setW = (setChartWidth(setH * PH)) / PW
-    const sc = attackerSetChart(plays.map(attack => ({ attack, set: v.setOf.get(attack) ?? null })))
+    const setH = o.sets ? Math.min(SET_MAX, (colW * PW) / setChartWidth(PH)) : 0, setW = (setChartWidth(setH * PH)) / PW
+    const sc = o.sets ? attackerSetChart(plays.map(attack => ({ attack, set: v.setOf.get(attack) ?? null }))) : null
     if (sc) setCharts.push({ chart: sc, x: x + (colW - setW) / 2, y: SET_Y, h: setH, rich: true })
-    else out.push(words(x + colW / 2, SET_Y + setH / 2 - 0.015, 'No sets', 14, '#94A3B8', { align: 'center', bold: false }))
+    else if (o.sets) out.push(words(x + colW / 2, SET_Y + setH / 2 - 0.015, 'No sets', 14, '#94A3B8', { align: 'center', bold: false }))
     // The direction chart with its name and numbers, as large as the column takes.
-    const y = SET_Y + setH + 0.012, h = Math.min(0.985 - y, (colW * PW) / (chartWidth(PH, true)))
+    const y = SET_Y + setH + (o.sets ? 0.012 : 0), h = Math.min(0.985 - y, (colW * PW) / (chartWidth(PH, true)))
     const w = (chartWidth(h * PH, true)) / PW, cx = x + (colW - w) / 2
     if (!plays.length) { out.push(words(x + colW / 2, y + h / 2, 'No attacks', 14, '#94A3B8', { align: 'center', bold: false })); return }
     const chart = directionChart(plays[0], style, () => plays, { name: chartName })

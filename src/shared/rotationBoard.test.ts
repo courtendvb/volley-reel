@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCone, attackLine, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, sideOut, topCalls } from './rotationBoard'
+import { attackCone, attackLine, tableGrid, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, sideOut, topCalls } from './rotationBoard'
 import { setterSets } from './setterBoard'
 import type { ParsedDVW, Play } from './types'
 
@@ -56,6 +56,27 @@ describe('a rotation', () => {
     expect(texts).toEqual(expect.arrayContaining(['2', '10', '19', '92', '6', '7'])) // the players' discs
     for (const a of anns) if (a.kind === 'rect' || a.kind === 'circle') { expect(a.x + a.w).toBeLessThanOrEqual(1); expect(a.y + a.h).toBeLessThanOrEqual(1) }
     for (const a of anns) if (a.kind === 'text' && a.box?.width) expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1)
+  })
+  it('shows the tables chosen, larger the fewer, and the cones only when asked', () => {
+    const make = (o: object) => rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation: [], callNames: d.codeNames, ...o }, 'both', '#0F172A')
+    const titles = (anns: ReturnType<typeof make>) => anns.flatMap(a => (a.kind === 'text' && /pass$|^[0-9]\. CALL/.test(a.text) ? [a] : []))
+    const names = (o: object) => titles(make(o)).map(a => (a.kind === 'text' ? a.text : ''))
+    expect(names({ tables: 'hash' })).toEqual(['# pass'])
+    expect(names({ tables: 'hashPlus' })).toEqual(['# pass', '+ pass'])
+    expect(names({ tables: 'passes' })).toEqual(['# pass', '+ pass', '! pass'])
+    expect(names({ tables: 'calls' }).every(x => x.includes('CALL'))).toBe(true)
+    expect(names({ tables: 'none' })).toEqual([])
+    const width = (o: object) => { const a = titles(make(o))[0]; return a?.kind === 'text' ? a.box!.width! : 0 }
+    expect(width({ tables: 'hash' })).toBeGreaterThan(width({ tables: 'hashPlus' }))
+    expect(width({ tables: 'hashPlus' })).toBeGreaterThan(width({})) // all six: the usual size
+    for (const o of [{ tables: 'hash' }, { tables: 'passes' }, { tables: 'calls' }]) for (const a of make(o)) if (a.kind === 'text' && a.box?.width) {
+      expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1); expect(a.y + (a.box.height ?? 0)).toBeLessThanOrEqual(1)
+    }
+    // The cones need where the attacks went: the same sets, landing in zone 5.
+    const landed = sets.map(x => ({ ...x, attack: { ...x.attack, endZone: 5 } }))
+    const tip = (o: object) => make({ sets: landed, ...o }).some(a => a.kind === 'text' && a.text === '#9')
+    expect(tip({})).toBe(true)
+    expect(tip({ cones: false })).toBe(false)
   })
 })
 
@@ -143,5 +164,15 @@ describe("a rotation's serve receive", () => {
     expect(texts.some(x => x.startsWith('HTH  #'))).toBe(false) // the setter's name only over the chart
     const logo = anns.find(a => a.kind === 'image' && a.assetId === 'lg'), p = anns.find(a => a.kind === 'text' && a.text === 'P3')
     expect(logo?.kind === 'image' && p?.kind === 'text' && logo.x + logo.w < p.x).toBe(true) // the logo first, at the top left
+  })
+})
+
+describe('the tables at the bottom right', () => {
+  it('puts the chosen number in the columns and rows that let them be largest', () => {
+    expect(tableGrid(1)).toMatchObject({ cols: 1, rows: 1 })
+    expect(tableGrid(2)).toMatchObject({ cols: 1, rows: 2 })
+    expect(tableGrid(6)).toMatchObject({ cols: 2, rows: 3 })
+    expect(tableGrid(1).k).toBeGreaterThan(tableGrid(2).k)
+    expect(tableGrid(2).k).toBeGreaterThan(tableGrid(3).k)
   })
 })

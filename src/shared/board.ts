@@ -7,7 +7,7 @@ import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type Dir
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
-import { ROTATIONS, ROTATION_CHART, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type SideOutRate } from './rotationBoard'
+import { ROTATIONS, ROTATION_CHART, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationTables, type SideOutRate } from './rotationBoard'
 import { setChart, type SetChart } from './setChart'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
@@ -211,6 +211,8 @@ export interface BoardConfig {
   rotation?: number // a rotation slide: which (1–6)
   teamColor?: string // a rotation slide: the side-out team's colour
   discLine?: string // and the outline of its players' discs
+  cones?: boolean // a rotation slide: the spikers' cones (missing: shown)
+  tables?: RotationTables // and its tables at the bottom right (missing: all six)
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -228,6 +230,8 @@ export interface BoardOptions {
   rotation?: number // a rotation slide's rotation
   teamColor?: string // and the team's colour, its players' discs
   discLine?: string // and their outline
+  cones?: boolean // and the spikers' cones (missing: shown)
+  tables?: RotationTables // and which tables (missing: all six)
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -331,7 +335,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   if (skill === 'R') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
     const sc = p?.setCharts?.[r]
-    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
+    return { annotations: p ? rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink) : [], charts: [], noteIds: [],
       ...(sc ? { setCharts: [{ chart: sc, ...ROTATION_CHART }] } : {}) }
   }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }

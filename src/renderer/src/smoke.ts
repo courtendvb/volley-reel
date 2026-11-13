@@ -54,6 +54,7 @@ export interface SmokeOpts {
   sceneTitle?: boolean // a scene card with a long name: its title's top-left stays, and dragging it saves a top-left
   cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
+  analysis?: boolean // the 分析 button: the point % and error % tables, each table's rows read back
   clipMenu?: boolean // a clip's right-click menu: copied and moved to another scene, exported alone (with exportTo)
   presetBlock?: boolean // the block preset by middle split by the opposing setter, made with the newest matches first
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
@@ -161,6 +162,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.clipMenu) return smokeClipMenu(opts.exportTo)
     if (opts.presets || opts.presetServe || opts.presetBlock) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : 'all')
     if (opts.picker) return smokePicker()
+    if (opts.analysis) return smokeAnalysis()
     if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
@@ -1726,6 +1728,22 @@ export function installSmoke(h: SmokeHost): void {
   // The player picker in the left column, through its real buttons: its list inside the window,
   // a player ticked (which adds the saved-filter row above and moves the column: the list must
   // follow and leave the field uncovered), then closed by 閉じる, by Esc and by a click outside it.
+  const smokeAnalysis = async () => {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('header button')].find(b => b.textContent === t('分析'))
+    if (!button) throw new Error('no 分析 button')
+    button.click()
+    // Each report's tab in turn: a screenshot (analysis-1.png, …) and its tables read back.
+    const tabs = await waitFor(() => { const x = document.querySelectorAll<HTMLButtonElement>('.analysis-tabs button'); return x.length ? [...x] : null }, 10000, 'analysis tabs')
+    const out: Record<string, unknown> = {}
+    for (const [i, tab] of tabs.entries()) {
+      tab.click()
+      const tables = await waitFor(() => { const x = document.querySelectorAll<HTMLTableElement>('.analysis-table'); return tab.getAttribute('aria-selected') === 'true' && x.length ? [...x] : null }, 10000, 'analysis tables')
+      await sleep(300)
+      await api.smokeShot!(`analysis-${i + 1}.png`)
+      out[tab.textContent ?? String(i)] = tables.map(tb => ({ title: tb.caption?.textContent, head: [...tb.tHead!.rows[tb.tHead!.rows.length - 1].cells].map(c => c.textContent), rows: [...tb.tBodies[0].rows].map(r => [...r.cells].map(c => c.textContent).join(' | ')) }))
+    }
+    return { analysis: out }
+  }
   const smokePicker = async () => {
     const trigger = await waitFor(() => document.querySelector<HTMLButtonElement>(`button.check-picker[aria-label="${t('選手')}"]`), 10000, 'player picker')
     const list = () => document.querySelector<HTMLElement>(`.check-picker-list[aria-label="${t('選手')}"]`)

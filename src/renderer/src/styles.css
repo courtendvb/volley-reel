@@ -793,6 +793,25 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .report-bar h2 { margin: 0; }
 .report-page { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--border); border-radius: 4px; background: #FFFFFF; }
 
+/* 分析: a tab per report, its tables as in the scouting sheet (percent green, sums grey, the key
+   percent red on light blue, each side's points purple). */
+.analysis-tabs { display: inline-flex; gap: 4px; }
+.analysis-tabs button.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+.analysis-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 18px; padding-bottom: 8px; }
+.analysis-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; align-self: flex-start; }
+.analysis-table caption { text-align: center; font-weight: 600; padding: 4px; border: 1px solid var(--border-strong); border-bottom: 0; }
+.analysis-table th, .analysis-table td { border: 1px solid var(--border); padding: 3px 10px; text-align: right; white-space: nowrap; }
+.analysis-table thead th { color: var(--sub); font-weight: 500; text-align: center; }
+.analysis-table tbody th { text-align: left; font-weight: 500; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+.analysis-table tr.total th, .analysis-table tr.total td { border-top: 2px solid var(--border-strong); font-weight: 600; }
+.analysis-table .pct { color: var(--skill-r); }
+.analysis-table .sum { background: color-mix(in srgb, var(--faint) 22%, transparent); }
+.analysis-table .key { background: color-mix(in srgb, #38BDF8 18%, transparent); color: var(--danger-strong); font-weight: 700; text-align: center; }
+.analysis-table thead .key { color: var(--danger-strong); font-weight: 700; }
+.analysis-table .side { color: var(--skill-b); }
+.analysis-table thead th.group { color: var(--text); font-weight: 600; border-bottom-color: var(--border-strong); }
+.analysis-pair { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+
 /* The design of the scoreboard, caption and serve speed (OverlayDialog LookButton): a thumbnail each. */
 .ov-looks { display: grid; grid-template-columns: repeat(2, max-content); gap: 8px; margin-top: 6px; }
 .ov-look { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; border: 2px solid var(--line); border-radius: 6px; background: var(--panel, transparent); }

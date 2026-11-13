@@ -17,3 +17,12 @@
     })
   })
 })()
+
+// The hero loop stays still for people who ask for less motion; they get the controls instead.
+;(() => {
+  const v = document.querySelector('.hero-video')
+  if (!v || !window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  v.removeAttribute('autoplay')
+  v.pause()
+  v.controls = true
+})()

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SyncScout Video Editor</title>
-<meta name="description" content="A desktop app that turns volleyball scout files and match video into meeting video, data slides and match reports. DataVolley .dvw and VolleyStation .vsm, offline on Windows.">
+<meta name="description" content="Make match video your players understand at a glance. A desktop app that draws your DataVolley or VolleyStation scout data onto the match video, so you only add the message. Offline on Windows.">
 <link rel="alternate" hreflang="en" href="index.html">
 <link rel="alternate" hreflang="ja" href="ja.html">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,42 +19,77 @@
     <div class="bar">
       <span class="brand">SyncScout <small>Video Editor</small></span>
       <nav class="nav" aria-label="On this page">
+        <a href="#difference">Before and after</a>
         <a href="#court">On the court</a>
-        <a href="#finish">Video</a>
+        <a href="#finish">Your message</a>
+        <a href="#how">How it works</a>
         <a href="#numbers">Reports</a>
-        <a href="#slides">Slides</a>
-        <a href="#series">Series</a>
         <a href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download</a>
         <a class="lang" href="ja.html" hreflang="ja" lang="ja">日本語</a>
       </nav>
     </div>
     <div class="pitch">
-      <h1>Build like a pro analysis suite. Edit with ease. <span class="mark">In one workflow.</span></h1>
-      <p class="lead">Meeting video, data slides and match reports, from your scout file and your match video.</p>
+      <h1>Video your players get at a glance. <span class="mark">Built from your scout file.</span></h1>
+      <p class="lead">Your scout file already knows the score, the player, the result and where every ball landed. The app draws it onto the match video, so all you add is the message.</p>
       <div class="pitch-side">
-        <p>A desktop app for volleyball staff. Load DataVolley or VolleyStation files with the match video, find the plays, and finish what you show the team, all offline on your own computer.</p>
+        <p>A desktop app for volleyball staff. Load your DataVolley or VolleyStation files with the match video and turn the plays you care about into meeting-ready video, offline on your own computer.</p>
         <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download for Windows</a>
       </div>
     </div>
-    <div class="shot">
-      <picture>
-        <source media="(max-width: 640px)" srcset="img/finish-annotate.jpg" width="1651" height="929">
-        <img src="img/app-workspace.jpg" width="2000" height="1000" alt="The editor: the play list on the left, an attack clip with a headline, a circle around the double block, an arrow, a scoreboard and a player caption, and the scene's markers on the right.">
-      </picture>
-    </div>
+    <figure class="shot">
+      <video class="hero-video" autoplay muted loop playsinline preload="auto" poster="img/hero.jpg" width="1280" height="720" aria-label="An attack from Croatia vs Denmark, exported from the app. The scoreboard, the attacker's caption and a heatmap of where his attacks landed come from the scout file; a headline, a circle around the block and a note were added by hand.">
+        <source src="media/hero-en.mp4" type="video/mp4">
+      </video>
+      <figcaption class="legend">
+        <span><i class="dot data"></i>From the scout file: score, player caption, where his attacks landed</span>
+        <span><i class="dot you"></i>Added by hand: headline, circle, note</span>
+      </figcaption>
+    </figure>
   </div>
 </header>
 
 <main>
-  <section class="flow" aria-label="How it works">
+  <section class="axis alt" id="difference">
     <div class="wrap">
-      <p class="flow-head">From the scout file to the meeting room.</p>
-      <ul class="steps">
-        <li><b>Load</b><span>Pair each match video with its .dvw or .vsm. Point a folder at it and the app pairs them by date and team.</span></li>
-        <li><b>Find</b><span>Filter every play by player, skill, rotation, zone, combination or setter call, across all your matches. Save the searches you use.</span></li>
-        <li><b>Build</b><span>Send plays to scenes with one key, or make a whole video from a preset. Drag them into order under named markers.</span></li>
-        <li><b>Show</b><span>Finish with overlays, annotations and slides, then export MP4, PNG or PDF.</span></li>
-      </ul>
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>Before and after</b></span></div>
+          <h2>A clip is not yet a message.</h2>
+        </div>
+        <p>Scouting software can already find the play and cut the clip. But a bare clip leaves players to work out where to look. Here is the same moment as it comes out of a play list, and as it comes out of this app.</p>
+      </div>
+      <div class="pair">
+        <figure>
+          <span class="tag">The clip</span>
+          <img src="img/plain.jpg" width="1280" height="720" alt="The same frame of the attack with nothing on it." loading="lazy">
+          <figcaption>Players see a rally. Which one it is, and what to watch, is up to them.</figcaption>
+        </figure>
+        <figure>
+          <span class="tag on">The same clip, finished</span>
+          <img src="img/hero.jpg" width="1280" height="720" alt="The frame with the score, the attacker's caption, a heatmap of his attacks on the near court, a headline, a circle around the block and a note at the open spot." loading="lazy">
+          <figcaption>The score, the player and where his attacks usually land, with the point the coach wants made.</figcaption>
+        </figure>
+      </div>
+      <div class="source">
+        <div>
+          <h3>The data adds, on its own</h3>
+          <dl>
+            <dt>Scoreboard</dt><dd>The score and sets of that rally, in one of four designs.</dd>
+            <dt>Captions</dt><dd>Number, name, skill and evaluation, with the player's photo from a photo pack.</dd>
+            <dt>On the court</dt><dd>Landings and heatmaps, flight, zones, serve paths and cones, drawn on the floor of the video.</dd>
+            <dt>Serve speed</dt><dd>Mark the hit and the touch, and the clip shows the serve's speed.</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>You add, in a few clicks</h3>
+          <dl>
+            <dt>Your point</dt><dd>Text, arrows and curved arrows, shapes, freehand and numbered circles, each with its own timing and fade.</dd>
+            <dt>Title cards</dt><dd>For the video, each scene and each marker, with a player photo or a team logo if you have them.</dd>
+            <dt>Slides</dt><dd>A still frame, a page from a PDF, or a data slide, between the clips.</dd>
+            <dt>Timing</dt><dd>Trim IN and OUT clip by clip, and add slow motion or a freeze.</dd>
+          </dl>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -63,7 +98,7 @@
       <div class="head">
         <div class="title">
           <div class="telop"><i></i><span><b>Data on the court</b></span></div>
-          <h2>See the data on the court.</h2>
+          <h2>Let the data draw on the court.</h2>
         </div>
         <p>Fit the court's four corners, or let the app find them, and your scout data sits on the floor of the match video. Every layer goes into the export just as you see it.</p>
       </div>
@@ -89,10 +124,10 @@
     <div class="wrap">
       <div class="head">
         <div class="title">
-          <div class="telop"><i></i><span><b>Meeting-ready video</b></span></div>
-          <h2>The plays you want to show, the way you want to show them.</h2>
+          <div class="telop"><i></i><span><b>Your message</b></span></div>
+          <h2>Say it on the video, not after it.</h2>
         </div>
-        <p>Write your message on the video and make the game situation clear at a glance. What you see in the preview is what you get in the MP4.</p>
+        <p>Type a headline, circle the block, point at the open court. A title card tells the room what comes next. What you see in the preview is what you get in the MP4.</p>
       </div>
       <div class="cut">
         <figure>
@@ -101,37 +136,47 @@
         </figure>
         <figure>
           <img src="img/finish-annotate.jpg" width="1651" height="929" alt="An attack with a headline, a circle around the double block, an arrow to the open court and a note, plus a scoreboard and a player caption." loading="lazy">
-          <figcaption>Then the annotated clip plays.</figcaption>
+          <figcaption>Then the clip plays with your notes on it.</figcaption>
         </figure>
-      </div>
-      <div class="source">
-        <div>
-          <h3>You add</h3>
-          <dl>
-            <dt>Annotations</dt><dd>Text, arrows and curved arrows, shapes, freehand, numbered circles, images and PDFs, each with its own timing and fade.</dd>
-            <dt>Title cards</dt><dd>For the video, each scene and each marker, with a player photo or a team logo if you have them.</dd>
-            <dt>Slides</dt><dd>A still frame, a page from a PDF, or a data slide, between the clips.</dd>
-            <dt>Timing</dt><dd>Trim IN and OUT clip by clip, and add slow motion or a freeze.</dd>
-          </dl>
-        </div>
-        <div>
-          <h3>The data adds</h3>
-          <dl>
-            <dt>Captions</dt><dd>Number, name, skill and evaluation, with the player's photo from a photo pack.</dd>
-            <dt>Scoreboard</dt><dd>The score and sets of that rally, in one of four designs.</dd>
-            <dt>Serve speed</dt><dd>Mark the hit and the touch, and the clip shows the serve's speed.</dd>
-            <dt>Chapters</dt><dd>The MP4 gets a chapter for each scene or marker; YouTube chapters too if you want them.</dd>
-          </dl>
-        </div>
       </div>
     </div>
   </section>
 
-  <section class="axis" id="numbers">
+  <section class="flow" id="how" aria-label="How it works">
+    <div class="wrap">
+      <h2 class="flow-head">Easy enough to do every week.</h2>
+      <ul class="steps">
+        <li><b>Load</b><span>Pair each match video with its .dvw or .vsm. Point a folder at it and the app pairs them by date and team.</span></li>
+        <li><b>Find</b><span>Filter every play by player, skill, rotation, zone, combination or setter call, across all your matches. Save the searches you use.</span></li>
+        <li><b>Build</b><span>Send plays to scenes with one key, or make a whole video from a preset. Drag them into order under named markers.</span></li>
+        <li><b>Show</b><span>Finish with overlays, annotations and slides, then export MP4, PNG or PDF.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="axis" id="presets">
+    <div class="wrap split">
+      <figure class="frame">
+        <img src="img/preset.jpg" width="1100" height="880" alt="The Make from a preset dialog: a side-out video for CRO, split by reception quality, with the shots for each rotation." loading="lazy">
+      </figure>
+      <div class="title">
+        <div class="telop"><i></i><span><b>Presets</b></span></div>
+        <h2>A whole video in one step.</h2>
+        <ul class="points">
+          <li><b>Side-out</b><span>A scene per rotation, split by reception quality, player, zone or result.</span></li>
+          <li><b>Serve</b><span>A scene per server, with markers by reception, by target zone or in time order.</span></li>
+          <li><b>Block and attack</b><span>Per middle blocker or rotation, and per attacker, position or attack code.</span></li>
+          <li><b>Remake it</b><span>The video remembers how it was made. Pick new matches and make it again.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="axis alt" id="numbers">
     <div class="wrap">
       <div class="head">
         <div class="title">
-          <div class="telop"><i></i><span><b>Reports and analysis</b></span></div>
+          <div class="telop"><i></i><span><b>Behind the video</b></span></div>
           <h2>The numbers, one click from the video.</h2>
         </div>
         <p>A one-page A4 match report for any match, or a team report that adds up all of them. Click a number and the play list shows just those plays, ready to watch or to put in a scene. Save it as a PDF to hand out.</p>
@@ -153,7 +198,7 @@
     </div>
   </section>
 
-  <section class="axis alt" id="slides">
+  <section class="axis" id="slides">
     <div class="wrap">
       <div class="head">
         <div class="title">
@@ -183,24 +228,6 @@
           <img src="img/slide-serve-target.jpg" width="1651" height="922" alt="A serve target slide: a team's receptions by receiver and by target zone, jump and float apart, with good pass and first-attack kill rates." loading="lazy">
           <figcaption>Serve targets: which serves bring the opponent's pass and side-out down.</figcaption>
         </figure>
-      </div>
-    </div>
-  </section>
-
-  <section class="axis" id="presets">
-    <div class="wrap split">
-      <figure class="frame">
-        <img src="img/preset.jpg" width="1100" height="880" alt="The Make from a preset dialog: a side-out video for CRO, split by reception quality, with the shots for each rotation." loading="lazy">
-      </figure>
-      <div class="title">
-        <div class="telop"><i></i><span><b>Presets</b></span></div>
-        <h2>A whole video in one step.</h2>
-        <ul class="points">
-          <li><b>Side-out</b><span>A scene per rotation, split by reception quality, player, zone or result.</span></li>
-          <li><b>Serve</b><span>A scene per server, with markers by reception, by target zone or in time order.</span></li>
-          <li><b>Block and attack</b><span>Per middle blocker or rotation, and per attacker, position or attack code.</span></li>
-          <li><b>Remake it</b><span>The video remembers how it was made. Pick new matches and make it again.</span></li>
-        </ul>
       </div>
     </div>
   </section>
@@ -252,7 +279,7 @@
 
 <footer>
   <div class="wrap">
-    <p>Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK.</p>
+    <p>The video at the top was exported from the app as it is, then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK.</p>
     <p>Report, analysis and slide screens use a made-up team and made-up scout data.</p>
   </div>
 </footer>

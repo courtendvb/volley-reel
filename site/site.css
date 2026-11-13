@@ -1,6 +1,6 @@
-/* Layout: a broadcast rundown. The hero is the app's one screen, then the order of the work,
-   then the selling axes at full size: the court, the finished video, the numbers, the slides.
-   Everything else stays small, and the series closes it. */
+/* Layout: a broadcast rundown. The hero is a finished clip from the app, then the same moment
+   before and after, then what the data draws, what you add, and how little work it takes.
+   Reports and slides follow as what sits behind the video. */
 :root {
   --page: #F1F5F9;
   --surface: #FFFFFF;
@@ -196,3 +196,30 @@ footer p + p { margin-top: 6px; }
 :lang(ja) .get h2 { font-size: clamp(24px, 3.2vw, 36px); }
 :lang(ja) .telop { letter-spacing: .04em; }
 :lang(ja) .lead { line-height: 1.45; }
+
+/* Hero video: the app's own export, looping, with a key to what drew what. */
+.shot { margin: 0; display: block; }
+.shot video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--slate-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 28px; padding: 12px 18px; color: var(--on-slate-sub); font-size: 15px; line-height: 1.4; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.dot { flex: none; width: 12px; height: 12px; border-radius: 2px; transform: skewX(-12deg); }
+.dot.data { background: var(--accent); }
+.dot.you { background: var(--red); }
+
+/* How it works carries a real heading now. */
+.flow .flow-head { margin-bottom: 28px; color: var(--on-slate); font-size: clamp(28px, 3.6vw, 40px); }
+
+/* Before and after: the same frame twice. */
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; align-items: start; }
+.pair figure { gap: 10px; }
+.pair img { box-shadow: 0 10px 30px var(--shadow); border: 1px solid var(--line); }
+.tag { justify-self: start; padding: 4px 12px; border-radius: 4px; background: var(--line); color: var(--ink); font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+.tag.on { background: var(--red); color: var(--on-red); }
+@media (max-width: 860px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+}
+:lang(ja) .flow .flow-head { font-size: clamp(24px, 3.2vw, 34px); }
+/* The red band may be longer than a phone is wide (the Japanese one is): it wraps inside the band
+   instead of pushing the hero's column wider than the screen. */
+.pitch { grid-template-columns: minmax(0, 1fr); }
+.mark { max-width: 100%; }

@@ -263,3 +263,9 @@ footer p + p { margin-top: 6px; }
 @media (max-width: 860px) {
   .gain ul, .plan { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Slides: the lead slide, then three across. */
+.slides.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 860px) {
+  .slides.three { grid-template-columns: minmax(0, 1fr); }
+}

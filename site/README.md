@@ -13,7 +13,7 @@ Both share `site.css` and `site.js` (the court layer tabs). Open either file in 
 
 ## Taking screenshots again
 
-The court tab shots are frames of the source video, paused at a chosen time rather than at a scout time (those are to the second): landings and cones at 873.25 s (S1 09-09, #7 attack X5), flight and zones at 457.5 s (S1 01-02, #11 attack V6), serve paths at 1011.0 s (S1 12-09, #11 serve). Shoot them with only the real match in the project, so the made-up hero matches stay out of the heatmaps.
+The court tab shots are frames of the source video, paused at a chosen time rather than at a scout time (those are to the second): landings and cones at 873.25 s (S1 09-09, #7 attack X5), flight and zones at 455.5 s (S1 01-02, #11 attack V6), serve paths at 1013.0 s (S1 12-09, #11 serve). Shoot them with only the real match in the project, so the made-up hero matches stay out of the heatmaps.
 
 `source/shoot-2026-11/` holds the scripts. Start the built app with its own library and profile so your own settings stay untouched:
 

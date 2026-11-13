@@ -909,7 +909,8 @@ export function App() {
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {reportOpen && project && (
-        <MatchReportDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} initial={match?.id ?? null} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setReportOpen(false)} />
+        <MatchReportDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} initial={match?.id ?? null} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setReportOpen(false)}
+          onPick={p => { setMatchIds(p.m); if (!p.m.includes(matchId ?? '')) setMatchId(p.m[0] ?? null); setFilter({ ...EMPTY_FILTER, ...p.f }); setFocusEdit(false); setReportOpen(false) }} />
       )}
       {analysisOpen && project && (
         <AnalysisDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setAnalysisOpen(false)} />

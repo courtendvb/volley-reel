@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import { matchReport, per, pct, seasonReport } from './report'
-import { reportHtml } from './reportHtml'
+import { matchLinks, reportHtml, seasonLinks, type ReportPick } from './reportHtml'
+import { applyFilter, buildRefs, EMPTY_FILTER } from './filter'
 
 // Three rallies: the home team's serve received by the away team, who kill it (side-out); the away
 // serve into the net (a home point from an error); a home ace (a break point).
@@ -98,3 +99,32 @@ describe('the match report', () => {
   })
 })
 
+
+// Each clickable number with its search; the plays that search finds in the play list.
+const picks = (html: string) => [...html.matchAll(/data-f="([^"]*)"[^>]*>([^<]*)</g)]
+  .map(([, raw, text]) => ({ pick: JSON.parse(raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&')) as ReportPick, text }))
+const found = (dvws: Record<string, ReturnType<typeof parseDVW>>, p: ReportPick) =>
+  applyFilter(p.m.flatMap(id => buildRefs(id, dvws[id], { ourTeamCodes: ['HTH'] })), { ...EMPTY_FILTER, ...p.f }).length
+
+describe('the report\'s numbers as searches', () => {
+  const d = parseDVW(DVW)
+  it('finds as many plays as each count says, for players, teams, sets and the first attacks', () => {
+    const html = reportHtml(matchReport(d), matchLinks('M', d, ['HTH']))
+    const counts = picks(html).filter(x => /^\d+$/.test(x.text))
+    expect(counts.length).toBeGreaterThan(10)
+    for (const { pick, text } of counts) expect([found({ M: d }, pick), pick]).toEqual([Number(text), pick])
+  })
+  it('leaves the PDF plain, and a match with no target team only its players and rotations', () => {
+    expect(reportHtml(matchReport(d))).not.toContain('data-f=')
+    const html = reportHtml(matchReport(d), matchLinks('M', d, ['XXX']))
+    expect(picks(html).every(x => x.pick.f.persons || x.pick.f.rots || x.pick.f.oppRots)).toBe(true)
+    expect(html).toContain('&quot;rots&quot;:[1]')
+  })
+  it('in a report of several matches, searches each match\'s row in that match', () => {
+    const r = seasonReport([{ d, side: '*', label: 'vs AWAY' }, { d, side: '*', label: 'vs AWAY' }])!
+    const html = reportHtml(r, seasonLinks(['M1', 'M2']))
+    const counts = picks(html).filter(x => /^\d+$/.test(x.text))
+    expect(counts.some(x => x.pick.m.length === 1 && x.pick.m[0] === 'M2')).toBe(true)
+    for (const { pick, text } of counts) expect([found({ M1: d, M2: d }, pick), pick]).toEqual([Number(text), pick])
+  })
+})

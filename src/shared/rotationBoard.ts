@@ -411,7 +411,7 @@ export interface RotationSlideData {
 // The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
 // pass, the # and + passes, the three passes, only the setter calls, or none. The fewer, the larger
 // they are drawn (tableGrid). attackers: in their place, cards of the rotation's attackers with the
-// most attacks (attackerCards).
+// most side-out attacks (attackerCards), 1 to 3 of them (RotationSlideData.attackers).
 export type RotationTables = 'all' | 'hash' | 'hashPlus' | 'passes' | 'calls' | 'attackers' | 'none'
 export const ROTATION_TABLES: RotationTables[] = ['all', 'hash', 'hashPlus', 'passes', 'calls', 'attackers', 'none']
 const TABLE_ROW = 0.03, TABLE_W = 0.145, TABLE_H = TABLE_ROW * 5, TABLE_GAP = 0.01, TABLE_COL_GAP = 0.012
@@ -498,7 +498,8 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
 }
 
 // ---- the rotation's attackers (a choice for the bottom right) --------------------------------------
-// The team's attacks in a rotation (every phase), by attacker, the most first: at most `most` of them.
+// The team's side-out attacks in a rotation (in the reception phase), by attacker, the most first: at
+// most `most` of them.
 export interface RotationAttacker { key: string; jersey: number; team: string; player: Player | null; plays: Play[] }
 export function rotationAttackers(dvws: ParsedDVW[], team: string, r: number, keep?: (p: Play) => boolean, most = ATTACKER_CARDS): RotationAttacker[] {
   const by = new Map<string, RotationAttacker>()
@@ -507,7 +508,7 @@ export function rotationAttackers(dvws: ParsedDVW[], team: string, r: number, ke
     if (i < 0) continue
     const side = i === 0 ? '*' : 'a'
     for (const p of d.plays) {
-      if (p.side !== side || p.skill !== 'A' || rotationOf(p) !== r || (keep && !keep(p))) continue
+      if (p.side !== side || p.skill !== 'A' || p.phase !== 'r' || rotationOf(p) !== r || (keep && !keep(p))) continue
       const had = by.get(p.playerKey) ?? { key: p.playerKey, jersey: p.jersey, team: d.teams[i].code.toUpperCase(), player: d.players[`${side}${p.jersey}`] ?? null, plays: [] }
       had.plays.push(p)
       by.set(p.playerKey, had)
@@ -515,7 +516,7 @@ export function rotationAttackers(dvws: ParsedDVW[], team: string, r: number, ke
   }
   return [...by.values()].sort((a, b) => b.plays.length - a.plays.length || a.jersey - b.jersey).slice(0, most)
 }
-export const ATTACKER_CARDS = 3
+export const ATTACKER_CARDS = 3 // at most; the slide shows 1 to 3 (attackerCards)
 
 // An attacker's numbers: the shares of hard spikes, soft ones and tips (the hit type coded after the
 // zones: H / P / T), kills, errors, blocked and attempts, and the shares of kills, errors, + and -.
@@ -529,35 +530,44 @@ export function attackerStats(plays: Play[]): AttackerStats {
 }
 const two = (n: number, of = 1) => (of ? (n / of).toFixed(2) : '–')
 
-// The cards across the bottom right, side by side: the name in a grey head, H | P | T, a table of K E B
+// The cards across the bottom right, side by side (count of them, 1 to 3): the name in a grey head, H | P | T, a table of K E B
 // Att, K% and ERR%, Pos and Neg; under it, where to place the chart of the attacker's attacks (the
 // caller draws it: a direction chart). Each card is one group. chartWidth: a chart's width for a height
 // (shares of the picture).
-export function attackerCards(list: RotationAttacker[], chartWidth: (h: number) => number): { annotations: Annotation[]; charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] } {
+export function attackerCards(list: RotationAttacker[], chartWidth: (h: number) => number, count = ATTACKER_CARDS): { annotations: Annotation[]; charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] } {
   const annotations: Annotation[] = [], charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] = []
-  const gap = 0.008, n = ATTACKER_CARDS, w = (RIGHT.w - gap * (n - 1)) / n, top = TABLE_AREA.y, bottom = TABLE_AREA.y + TABLE_AREA.h
-  const ink = '#0F172A', grid = '#94A3B8'
-  list.forEach((a, i) => {
+  const n = Math.min(ATTACKER_CARDS, Math.max(1, Math.round(count)))
+  // Fewer cards are wider and their type larger; a single card puts its chart beside the numbers.
+  const gap = 0.008, w = (RIGHT.w - gap * (n - 1)) / n, k = n === 1 ? 1.35 : n === 2 ? 1.2 : 1, beside = n === 1
+  const top = TABLE_AREA.y, bottom = TABLE_AREA.y + TABLE_AREA.h, ink = '#0F172A', grid = '#94A3B8'
+  list.slice(0, n).forEach((a, i) => {
     const x = RIGHT.x + i * (w + gap), g = uid(), s = attackerStats(a.plays), out: Annotation[] = []
-    const cell = (cx: number, y: number, cw: number, h: number, text: string, size: number, o: { fill?: string; bold?: boolean; stroke?: string | null } = {}) =>
-      out.push(words(cx, y + Math.max(1, (h * 720 - size * 1.2) / 2) / 720, text, size, ink, { align: 'center', bold: o.bold ?? false, groupId: g,
-        box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: o.stroke === undefined ? grid : o.stroke, strokeWidth: o.stroke === null ? 0 : 1, padding: Math.max(1, (h * 720 - size * 1.2) / 2), width: cw, height: h } }))
+    const nw = beside ? w * 0.56 : w // the numbers' width
+    const cell = (cx: number, y: number, cw: number, h0: number, text: string, size0: number, o: { fill?: string; bold?: boolean; stroke?: string | null } = {}) => {
+      const h = h0 * k, size = Math.round(size0 * k), pad = Math.max(1, (h * 720 - size * 1.2) / 2)
+      out.push(words(cx, y + pad / 720, text, size, ink, { align: 'center', bold: o.bold ?? false, groupId: g,
+        box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: o.stroke === undefined ? grid : o.stroke, strokeWidth: o.stroke === null ? 0 : 1, padding: pad, width: cw, height: h } }))
+      return h
+    }
     const name = a.player ? `#${a.jersey} ${[a.player.firstName, a.player.lastName.toUpperCase()].filter(Boolean).join(' ')}` : `#${a.jersey}`
     let y = top
-    cell(x + w / 2, y, w, 0.036, name, 13, { fill: '#E5E7EB', bold: true }); y += 0.036
-    cell(x + w / 2, y, w, 0.03, a.team, 12, { fill: '#E5E7EB', bold: true }); y += 0.036
-    cell(x + w / 2, y, w, 0.03, `H: ${s.hard.toFixed(2)} | P: ${s.soft.toFixed(2)} | T: ${s.tip.toFixed(2)}`, 11, { stroke: null }); y += 0.034
-    const cw = w / 4
+    y += cell(x + nw / 2, y, nw, 0.036, name, 13, { fill: '#E5E7EB', bold: true })
+    y += cell(x + nw / 2, y, nw, 0.03, a.team, 12, { fill: '#E5E7EB', bold: true })
+    const box = y
+    y += 0.006 * k
+    y += cell(x + nw / 2, y, nw, 0.03, `H: ${s.hard.toFixed(2)} | P: ${s.soft.toFixed(2)} | T: ${s.tip.toFixed(2)}`, 11, { stroke: null }) + 0.004 * k
+    const cw = nw / 4
     ;(['K', 'E', 'B', 'Att'] as const).forEach((h, c) => cell(x + cw * (c + 0.5), y, cw, 0.03, h, 12, { stroke: null }))
-    y += 0.03
+    y += 0.03 * k
     ;[s.k, s.e, s.b, s.att].forEach((v, c) => cell(x + cw * (c + 0.5), y, cw, 0.03, String(v), 12, { stroke: null }))
-    y += 0.03
-    cell(x + w / 2, y, w, 0.028, `K%: ${two(s.k, s.att)} | ERR%: ${two(s.e, s.att)}`, 11, { stroke: null }); y += 0.028
-    cell(x + w / 2, y, w, 0.028, `Pos: ${two(s.pos, s.att)} | Neg: ${two(s.neg, s.att)}`, 11, { stroke: null }); y += 0.03
-    // The frame round the numbers, then the chart in what is left, in the middle of the card.
-    annotations.push({ id: uid(), kind: 'rect', color: grid, x, y: top + 0.072, w, h: y - top - 0.072, width: 1, fill: null, groupId: g }, ...out)
-    const ch = bottom - y - 0.004, cwid = Math.min(w, chartWidth(ch)), chh = cwid < chartWidth(ch) ? ch * (cwid / chartWidth(ch)) : ch
-    charts.push({ attacker: a, x: x + (w - cwid) / 2, y: y + 0.004, h: chh })
+    y += 0.03 * k
+    y += cell(x + nw / 2, y, nw, 0.028, `K%: ${two(s.k, s.att)} | ERR%: ${two(s.e, s.att)}`, 11, { stroke: null })
+    y += cell(x + nw / 2, y, nw, 0.028, `Pos: ${two(s.pos, s.att)} | Neg: ${two(s.neg, s.att)}`, 11, { stroke: null }) + 0.002
+    // The frame round the numbers, then the chart: under them, or beside them on a single card.
+    annotations.push({ id: uid(), kind: 'rect', color: grid, x, y: box, w: nw, h: y - box, width: 1, fill: null, groupId: g }, ...out)
+    const room = beside ? { x: x + nw + gap, y: top, w: w - nw - gap } : { x, y: y + 0.004, w }
+    const ch = bottom - room.y - 0.004, fit = Math.min(1, room.w / chartWidth(ch)), chh = ch * fit
+    charts.push({ attacker: a, x: room.x + (room.w - chartWidth(chh)) / 2, y: room.y, h: chh })
   })
   return { annotations, charts }
 }

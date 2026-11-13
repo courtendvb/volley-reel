@@ -215,6 +215,7 @@ export interface BoardConfig {
   discLine?: string // and the outline of its players' discs
   cones?: boolean // a rotation slide: the spikers' cones (missing: shown)
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
+  attackers?: number // and with the attackers there, how many (missing: three)
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -234,6 +235,7 @@ export interface BoardOptions {
   discLine?: string // and their outline
   cones?: boolean // and the spikers' cones (missing: shown)
   tables?: RotationTables // and which tables (missing: all six)
+  attackers?: number // and with the attackers' cards, how many (missing: three)
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -338,7 +340,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', r = opts.rotation ?? 1
     const sc = p?.setCharts?.[r]
     // The attackers' cards in place of the tables: their numbers here, their charts placed on the slide.
-    const cards = p && opts.tables === 'attackers' ? attackerCards(p.attackers?.[r] ?? [], h => chartWidth(h) / ASPECT) : null
+    const cards = p && opts.tables === 'attackers' ? attackerCards(p.attackers?.[r] ?? [], h => chartWidth(h) / ASPECT, opts.attackers) : null
     const look = { ...(opts.style ?? DEFAULT_CHART), points: true, lines: false, heat: false, scope: 'player' as const, name: false, stats: false }
     const cardCharts: PlacedChart[] = (cards?.charts ?? []).map(c => ({ chart: directionChart(c.attacker.plays[0], look, () => c.attacker.plays), x: c.x, y: c.y, h: c.h }))
     return { annotations: p ? [...rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink), ...(cards?.annotations ?? [])] : [], charts: cardCharts, noteIds: [],

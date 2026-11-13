@@ -1380,5 +1380,7 @@ export const EN: Record<string, string> = {
   "まっすぐにする": "Make straight",
   "矢印を曲線にする（青い点を動かして曲げる）": "Bend the arrow into a curve (move the blue dots to shape it)",
   "曲線にする": "Make curved",
-  "アタッカー（打数上位 3 人）": "Attackers (top 3 by attempts)",
+  "アタッカー（サイドアウトの打数上位）": "Attackers (most side-out attacks)",
+  "サイドアウト（レセプションからの攻撃）の打数が多い順に、何人まで出すか": "How many attackers to show, the most side-out (reception) attacks first",
+  "アタッカーの人数": "Number of attackers",
 }

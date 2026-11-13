@@ -1,6 +1,6 @@
 {
   "name": "volley-reel",
-  "version": "0.2.35",
+  "version": "0.2.36",
   "private": true,
   "description": "SyncScout Video Editor: DataVolley (.dvw) + match video -> MP4 video editor",
   "main": "out/main/index.js",

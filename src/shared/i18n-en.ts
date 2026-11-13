@@ -952,6 +952,7 @@ export const EN: Record<string, string> = {
   "マッチレポートを PDF に書き出す": "Save the match report as a PDF",
   "書き出しています…": "Saving…",
   "DVW を読み込んだ試合がありません": "No match with its DVW read",
+  "数字をクリックすると、そのプレーだけをプレー一覧に出します": "Click a number to show just those plays in the play list",
   "数字は DVW から計算します。Vote（評点）は入りません。会場・観客数・審判は DVW に入っているときだけ出ます": "The numbers come from the DVW. No Vote (rating). Hall, spectators and referees show only when the DVW has them",
   "全試合（{0} の合計）": "All matches ({0} added up)",
   "全試合（設定で対象チームを決めると選べます）": "All matches (set the target team in Settings)",

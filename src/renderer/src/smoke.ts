@@ -55,6 +55,7 @@ export interface SmokeOpts {
   cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
   analysis?: boolean // the 分析 button: the point % and error % tables, each table's rows read back
+  matchReport?: boolean // the match report: its numbers clicked, the play list's count checked against each
   clipMenu?: boolean // a clip's right-click menu: copied and moved to another scene, exported alone (with exportTo)
   presetBlock?: boolean // the block preset by middle split by the opposing setter, made with the newest matches first
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
@@ -163,6 +164,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.presets || opts.presetServe || opts.presetBlock) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : 'all')
     if (opts.picker) return smokePicker()
     if (opts.analysis) return smokeAnalysis()
+    if (opts.matchReport) return smokeMatchReport()
     if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
@@ -1743,6 +1745,45 @@ export function installSmoke(h: SmokeHost): void {
       out[tab.textContent ?? String(i)] = tables.map(tb => ({ title: tb.caption?.textContent, head: [...tb.tHead!.rows[tb.tHead!.rows.length - 1].cells].map(c => c.textContent), rows: [...tb.tBodies[0].rows].map(r => [...r.cells].map(c => c.textContent).join(' | ')) }))
     }
     return { analysis: out }
+  }
+  // The match report: numbers of each kind clicked in its page; each closes the report and leaves
+  // the play list with as many plays as the number said.
+  const smokeMatchReport = async () => {
+    const openReport = async () => {
+      const button = [...document.querySelectorAll<HTMLButtonElement>('header button')].find(b => b.textContent === t('マッチレポート'))
+      if (!button) throw new Error('no マッチレポート button')
+      button.click()
+      return waitFor(() => { const f = document.querySelector<HTMLIFrameElement>('iframe.report-page'); return f?.contentDocument?.querySelector('[data-f]') ? f : null }, 10000, 'report page')
+    }
+    let frame = await openReport()
+    await sleep(300)
+    await api.smokeShot!('report.png')
+    const all = () => [...frame.contentDocument!.querySelectorAll<HTMLElement>('[data-f]')]
+    const cells = all()
+    // One of each kind: a player's attacks, a team total, a set's row, a first attack after reception, a rotation.
+    const kinds: [string, (el: HTMLElement) => boolean][] = [
+      ['player', el => !!el.closest('tr:not(.total):not(.set)') && !!el.closest('table.team') && /^\d+$/.test(el.textContent ?? '') && Number(el.textContent) > 3],
+      ['total', el => !!el.closest('tr.total') && /^\d+$/.test(el.textContent ?? '')],
+      ['set', el => !!el.closest('tr.set') && el.tagName === 'TD' && /^\d+$/.test(el.textContent ?? '')],
+      ['won', el => el.tagName === 'SPAN' && !!el.closest('td.won')],
+      ['kill', el => !!el.closest('td.kill') && /^\d+$/.test(el.textContent ?? '') && Number(el.textContent) > 0],
+      ['rotation', el => !!el.closest('td.rot')],
+    ]
+    const out: Record<string, unknown> = { clickable: cells.length }
+    for (const [kind, test] of kinds) {
+      const i = all().findIndex(test)
+      if (i < 0) { out[kind] = 'none'; continue }
+      const el = all()[i], text = el.textContent ?? '', pick = JSON.parse(el.getAttribute('data-f')!)
+      el.click()
+      await waitFor(() => (document.querySelector('iframe.report-page') ? null : true), 5000, 'report closed')
+      await sleep(400)
+      const shown = latest.current.results.length
+      out[kind] = { text, pick, shown, ok: /^\d+$/.test(text) ? shown === Number(text) : shown > 0 }
+      if (kind === 'player') await api.smokeShot!('report-pick.png')
+      frame = await openReport()
+      await sleep(200)
+    }
+    return { matchReport: out }
   }
   const smokePicker = async () => {
     const trigger = await waitFor(() => document.querySelector<HTMLButtonElement>(`button.check-picker[aria-label="${t('選手')}"]`), 10000, 'player picker')

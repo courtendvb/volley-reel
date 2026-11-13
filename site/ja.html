@@ -109,11 +109,22 @@
         <img data-layer="cones" src="img/court-cones.jpg" alt="アタッカーの打った位置から手前のコートへ広がる 5 つのコーンと、それぞれの割合。">
       </div>
       <div class="tabs" role="tablist" aria-label="コートに描くもの">
-        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>落下点とヒートマップ</b><span>同じコードのアタックが落ちた位置を、点と色で。</span></button>
+        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>落下点とヒートマップ</b><span>同じコードのアタックが落ちた位置を、全試合分、点と色で。</span></button>
         <button class="tab" id="tab-flight" role="tab" aria-selected="false" aria-controls="stage" data-layer="flight"><b>座標と軌道</b><span>スカウトのクリック位置を打点の高さから結ぶ。矢印か放物線で。</span></button>
         <button class="tab" id="tab-zone" role="tab" aria-selected="false" aria-controls="stage" data-layer="zone"><b>ゾーン</b><span>開始と終了のゾーン（サブゾーンも）をグリッドに。</span></button>
         <button class="tab" id="tab-serve" role="tab" aria-selected="false" aria-controls="stage" data-layer="serve"><b>サーブ軌道</b><span>その選手のサーブを、プロジェクトの全試合から。</span></button>
         <button class="tab" id="tab-cones" role="tab" aria-selected="false" aria-controls="stage" data-layer="cones"><b>コーン</b><span>アタックの向きを 5 つのコーンと割合で。</span></button>
+      </div>
+      <div class="align">
+        <div class="align-head">
+          <h3>なぜ何試合分も 1 つのコートに重なるのか</h3>
+          <p>アプリは映像の中のコートを認識します。そのためスカウトのクリックは図の上の点ではなく、9 &times; 18 m の実際の床の上の位置になります。床はどの試合でも同じなので、別の試合、別の会場、別のカメラ位置のプレーも、いま見せているクリップのコートに重ねられます。</p>
+        </div>
+        <ol class="align-steps">
+          <li><b>コートを見つける</b><span>映像の中のコートの四隅を、アプリが探すか手で合わせます。</span></li>
+          <li><b>クリックを床に置く</b><span>開始と終了のクリックが、コート上のメートル単位の位置になります。</span></li>
+          <li><b>全試合を重ねる</b><span>プロジェクトの全試合の位置をこの映像の床に描くので、ヒートマップは 1 試合ではなくシーズン全体を表します。</span></li>
+        </ol>
       </div>
       <p class="note">ほかにも、隅に出すディレクションチャート、セッターのトス配分、ゾーンの塗り、床に立つ円柱をコートに置けます。軌道は説明用です。スカウトの時刻は秒単位なので、実際のボールとは少しずれます。</p>
     </div>
@@ -278,7 +289,7 @@
 
 <footer>
   <div class="wrap">
-    <p>ページ上部の映像は、アプリから書き出したものをそのまま、ウェブ用に軽くしただけです。動画の画面は Croatia 対 Denmark（2022 年 5 月 28 日）の映像を加工せずに使っています。チームコードは CRO・DNK に短くしています。</p>
+    <p>ページ上部の映像は、アプリから書き出したものをそのまま、ウェブ用に軽くしただけです。動画の画面は Croatia 対 Denmark（2022 年 5 月 28 日）の映像を加工せずに使っています。チームコードは CRO・DNK に短くしています。シーズン分のデータがあるときの見え方を示すため、ヒートマップには同じ選手の架空のアタックも含めています。</p>
     <p>レポート・分析・スライドの画面は、架空のチームと架空のスカウトデータです。</p>
   </div>
 </footer>

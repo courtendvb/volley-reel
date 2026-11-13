@@ -66,7 +66,7 @@
         </figure>
         <figure>
           <span class="tag on">The same clip, finished</span>
-          <img src="img/hero.jpg" width="1280" height="720" alt="The frame with the score, the attacker's caption, a heatmap of his attacks on the near court, a headline, a circle around the block and a note at the open spot." loading="lazy">
+          <img src="img/hero.jpg" width="1280" height="720" alt="The frame with the score, the attacker's caption, a heatmap of his attacks on the near court, a headline, a circle around the block and a note at the open lane." loading="lazy">
           <figcaption>The score, the player and where his attacks usually land, with the point the coach wants made.</figcaption>
         </figure>
       </div>
@@ -110,11 +110,22 @@
         <img data-layer="cones" src="img/court-cones.jpg" alt="Five cones fanning out from the attacker's spot over the near court, each with its share of attacks.">
       </div>
       <div class="tabs" role="tablist" aria-label="What to draw on the court">
-        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>Landings and heatmap</b><span>Where a player's attacks with the same code landed, as dots and colour.</span></button>
+        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>Landings and heatmap</b><span>Where a player's attacks with the same code landed, across all your matches, as dots and colour.</span></button>
         <button class="tab" id="tab-flight" role="tab" aria-selected="false" aria-controls="stage" data-layer="flight"><b>Points and flight</b><span>The scout's clicks joined from contact height, as an arrow or a curve.</span></button>
         <button class="tab" id="tab-zone" role="tab" aria-selected="false" aria-controls="stage" data-layer="zone"><b>Zones</b><span>Start and end zones, or sub-zones, on the court grid.</span></button>
         <button class="tab" id="tab-serve" role="tab" aria-selected="false" aria-controls="stage" data-layer="serve"><b>Serve paths</b><span>A player's serves from every match in the project.</span></button>
         <button class="tab" id="tab-cones" role="tab" aria-selected="false" aria-controls="stage" data-layer="cones"><b>Cones</b><span>Five cones with the share of attacks that went each way.</span></button>
+      </div>
+      <div class="align">
+        <div class="align-head">
+          <h3>Why many matches fit on one court</h3>
+          <p>The app reads the court in the picture, so a scout click is no longer a spot on a diagram but a place on a real 9 &times; 18 m floor. That floor is the same in every match, so plays from other matches, other halls and other camera angles all land on the court of the clip you are showing.</p>
+        </div>
+        <ol class="align-steps">
+          <li><b>Find the court</b><span>The four corners of the court in the video, found by the app or set by hand.</span></li>
+          <li><b>Put the clicks on the floor</b><span>Each start and end click becomes a point in metres on the court.</span></li>
+          <li><b>Stack every match</b><span>The points of every match in the project are drawn on this video's floor, so a heatmap shows a whole season, not one game.</span></li>
+        </ol>
       </div>
       <p class="note">Also on the court: a direction chart in the corner, the setter's set distribution, painted zones, and cylinders that stand on the floor. Flight curves explain the play; scout times are to the second, so they won't follow the real ball exactly.</p>
     </div>
@@ -279,7 +290,7 @@
 
 <footer>
   <div class="wrap">
-    <p>The video at the top was exported from the app as it is, then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK.</p>
+    <p>The video at the top was exported from the app as it is, then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK. To show what a season looks like, its heatmap also holds made-up attacks for the same player.</p>
     <p>Report, analysis and slide screens use a made-up team and made-up scout data.</p>
   </div>
 </footer>

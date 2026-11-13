@@ -1840,7 +1840,13 @@ export function installSmoke(h: SmokeHost): void {
       const cone = [...dialog.querySelectorAll<HTMLLabelElement>('label.check')].find(l => l.textContent?.trim() === t('コーン'))?.querySelector('input')
       if (!pick || !cone) throw new Error('no table or cone choice on the rotation slide')
       const choose = async (v: string) => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(pick, v); pick.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700) }
-      for (const v of ['hash', 'hashPlus', 'passes', 'calls', 'none', 'all']) { await choose(v); await api.smokeShot!(`rot-tables-${v}.png`) }
+      for (const v of ['hash', 'hashPlus', 'passes', 'calls', 'attackers', 'none', 'all']) { await choose(v); await api.smokeShot!(`rot-tables-${v}.png`) }
+      // The attackers' cards: one and two of them too (rot-attackers-1.png, -2.png), then back to three.
+      await choose('attackers')
+      const count = dialog.querySelector<HTMLSelectElement>(`select[aria-label="${t('アタッカーの人数')}"]`)
+      if (!count) throw new Error('no attacker count on the rotation slide')
+      for (const n of ['1', '2', '3']) { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(count, n); count.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700); await api.smokeShot!(`rot-attackers-${n}.png`) }
+      await choose('all')
       cone.click(); await sleep(700); await api.smokeShot!('rot-nocones.png'); cone.click(); await sleep(300)
       button(dialog, t('作成'))!.click()
       const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')

@@ -72,7 +72,7 @@ describe('the attacker slide', () => {
     expect(s.charts.every(c => c.chart.look.name && c.chart.look.stats && c.chart.name === '#92 Jonas KVALEN')).toBe(true)
     // Side by side, inside the slide, right of the court.
     const right = s.charts.map(c => c.x)
-    expect(right[0]).toBeGreaterThan(0.5) // three columns: the court made smaller
+    expect(right[0]).toBeGreaterThan(0.45) // three columns: the court made smaller
     expect(right[1]).toBeGreaterThan(right[0])
     expect(s.annotations.some(a => a.kind === 'text' && a.text === '#92 KVALEN')).toBe(true)
     expect(s.annotations.some(a => a.kind === 'text' && a.text === 'NOR · All attacks')).toBe(true)
@@ -89,5 +89,22 @@ describe('the attacker slide', () => {
       { conditions: ['good'], defense, style: DEFAULT_CHART, ink: '#000000' }).annotations.filter(a => a.kind === 'circle' && a.shade === 'ball').length
     expect(balls(false)).toBe(1) // the attacker
     expect(balls(true)).toBe(6)
+  })
+  it('shows the two cones most attacks went into, each with its share', () => {
+    const spread = match([play({}), play({}), play({ endClick: { u: 0.5, v: 0.95 } }), play({ endClick: { u: 0.85, v: 0.7 } })])
+    const [k] = boardPlayers([spread], 'D')
+    const made = attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { conditions: ['good'], defense: false, style: DEFAULT_CHART, ink: '#000000' }).annotations
+    const shares = made.flatMap(a => (a.kind === 'text' && /%$/.test(a.text) ? [a.text] : []))
+    expect(shares).toHaveLength(2)
+    expect(shares[0]).toBe('50%') // the most first
+    expect(made.filter(a => a.kind === 'polygon' && a.color === '#DC2626' && a.fill === '#DC2626')).toHaveLength(2)
+  })
+  it('puts the two blockers shoulder to shoulder', () => {
+    const [k] = boardPlayers([match([play({})])], 'D')
+    const block = attackSlide({ player: k.player, team: 'NOR', attacks: k.plays, setOf: k.setOf!, label: '' }, { conditions: ['good'], defense: true, style: DEFAULT_CHART, ink: '#000000' })
+      .annotations.filter(a => a.kind === 'circle' && a.fill === '#FACC15')
+    expect(block).toHaveLength(2)
+    const [l, r] = block.map(a => (a.kind === 'circle' ? a : null)!).sort((a, b) => a.x - b.x)
+    expect(Math.abs(r.x - (l.x + l.w))).toBeLessThan(0.004) // touching, neither apart nor overlapping
   })
 })

@@ -236,7 +236,7 @@ const coneMark = (fit: CourtFit, color: string | undefined, shots: { start: Pt; 
 }
 
 // Where a ray from the apex goes through the other half: into it and out of it, in court units.
-function coneSpan({ apex }: SlideCones, angle: number): [Pt, Pt] | null {
+export function coneSpan({ apex }: Pick<SlideCones, 'apex'>, angle: number): [Pt, Pt] | null {
   const away = apex.y > 0.5 ? 1 : -1, ax = apex.x * COURT_W_M, ay = apex.y * COURT_L_M
   const dx = Math.sin(angle), dy = -Math.cos(angle) * away
   const [y0, y1] = away > 0 ? [0, COURT_L_M / 2] : [COURT_L_M / 2, COURT_L_M]

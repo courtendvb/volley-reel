@@ -1,6 +1,6 @@
 // An attacker's slide, to set the defence against them: their name large at the top left; on the left a
 // half court in perspective, seen from behind our own end line, with the attacker over the net where
-// they mostly hit from, the spread of their attacks as a cone, where most of them landed in orange,
+// they mostly hit from, the two cones (of five) most of their attacks went into, where most landed in orange,
 // and (if asked) our blockers and diggers as discs to move into place; on the right, a column per
 // condition (the pass before the attack, or transition): where the sets to them were given, then
 // their direction chart with its numbers (hard / soft / tip, K E B Att, K% ERR%, Pos Neg), where most
@@ -8,11 +8,11 @@
 // arrows and notes are drawn on by hand. Pure: no files, no DOM.
 import type { Annotation } from './annotation'
 import { chartCourt, chartWidth, type ChartStyle } from './chart'
-import { directionChart, type PlacedSetChart } from './court'
+import { attackCones, coneSpan, directionChart, type PlacedSetChart } from './court'
 import { homography, project, type CourtFit } from './courtGeometry'
 import { discOutline } from './disc'
 import { mix } from './overlayDraw'
-import { NUMBER_FONT, attackCone, attackLine, type TeamPt } from './rotationBoard'
+import { NUMBER_FONT, attackLine, type TeamPt } from './rotationBoard'
 import { attackerSetChart, setChartWidth } from './setChart'
 import type { PlacedChart } from './board'
 import type { Play, Player } from './types'
@@ -78,13 +78,13 @@ const courtAt = (scale: number): CourtFit['corners'] =>
 const FLOOR = '#2B4A6F', COURT_FILL = '#E7C89C', FRONT_FILL = '#DDB784', LINE = '#FFFFFF'
 const ATTACKER = '#1E3A8A', BLOCKER = '#FACC15', DIGGER = '#34D399', CONE = '#DC2626', HOT = '#F97316', RING = '#EF4444'
 const BEYOND = 0.4 // how far the drawing goes past the net, as v
+const TOP_CONES = 2, DISC_R = 0.45 // the cones shown; a player's disc, its radius in metres
+const COURT_SCALE = 0.93 // the court's size against its corners above
 
 // The court, the net, the attacker and what their attacks did, as objects on the slide.
 function courtSide(v: AttackSlideData, defense: boolean, corners: CourtFit['corners']): Annotation[] {
   const H = homography(corners), out: Annotation[] = [], g = uid()
   const at = (u: number, w: number): [number, number] => { const q = project(H, u, w); return [q.x, q.y] }
-  // The team's frame (u from the attacker's left) on the picture: turned round across.
-  const team = (p: TeamPt) => at(1 - p.u, p.v)
   const poly = (pts: [number, number][], fill: string | null, o: Partial<Extract<Annotation, { kind: 'polygon' }>> = {}): Annotation =>
     ({ id: uid(), kind: 'polygon', color: LINE, width: 0, points: pts, fill, fillOpacity: 1, groupId: g, locked: true, ...o })
   const line = (a: [number, number], b: [number, number], width: number, color = LINE, o: { opacity?: number; dash?: 'dash' } = {}): Annotation =>
@@ -100,30 +100,32 @@ function courtSide(v: AttackSlideData, defense: boolean, corners: CourtFit['corn
   // Where most attacks landed: an ellipse on the floor.
   const hot = hotSpot(lines.map(l => l.to), 2)
   if (hot) out.push({ id: uid(), kind: 'polygon', color: HOT, width: 0, points: discOutline(corners, { u: 1 - hot.u, v: hot.v, r: 1.6, z: 0 }).top, fill: HOT, fillOpacity: 0.55 })
-  // The spread of the attacks (the middle 80% of their directions), from where they were hit.
-  const cone = attackCone(lines)
-  if (cone) {
-    const rim: [number, number][] = []
-    for (let i = 0; i <= 14; i++) {
-      const a = cone.from + ((cone.to - cone.from) * i) / 14
-      rim.push(team({ u: cone.apex.u + (Math.sin(a) * cone.reach) / 9, v: cone.apex.v + (Math.cos(a) * cone.reach) / 18 }))
+  // The court tab's cones (court.ts attackCones): five equal angles from where they hit, sideline to
+  // sideline; the two most hit, each over our half with its share, the stronger the more.
+  const cones = attackCones({ corners } as CourtFit, lines.map(l => ({ start: { x: 1 - l.from.u, y: l.from.v }, end: { x: 1 - l.to.u, y: l.to.v } })))
+  if (cones) {
+    const top = cones.shares.map((share, i) => ({ share, i })).filter(c => c.share > 0).sort((a, b) => b.share - a.share).slice(0, TOP_CONES)
+    for (const { share, i } of top) {
+      const from = cones.rays[i], to = cones.rays[i + 1], steps = 16
+      const spans = Array.from({ length: steps + 1 }, (_, k) => coneSpan(cones, from + ((to - from) * k) / steps)).filter(x => !!x)
+      if (spans.length < 2) continue
+      const cg = uid(), show = (p: { x: number; y: number }) => at(p.x, p.y)
+      out.push({ id: uid(), kind: 'polygon', color: CONE, width: 2.5, points: [...spans.map(x => show(x[0])), ...spans.map(x => show(x[1])).reverse()], fill: CONE, fillOpacity: 0.2 + 0.4 * (share / top[0].share), groupId: cg })
+      const mid = coneSpan(cones, (from + to) / 2)
+      if (mid) {
+        const [x, y] = show({ x: mid[0].x + (mid[1].x - mid[0].x) * 0.62, y: mid[0].y + (mid[1].y - mid[0].y) * 0.62 })
+        out.push(words(x, y - 0.02, `${Math.round(share * 100)}%`, 24, '#FFFFFF', { align: 'center', groupId: cg, font: NUMBER_FONT, box: { fill: CONE, fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 3, radius: 4 } }))
+      }
     }
-    out.push({ id: uid(), kind: 'polygon', color: CONE, width: 3, points: [team(cone.apex), ...rim], fill: CONE, fillOpacity: 0.12 })
   }
 
   // A player as a ball on the floor, lit from the top left, its shadow under it.
   const disc = (u: number, w: number, fill: string, label: string) => {
-    const gg = uid(), ring = discOutline(corners, { u, v: w, r: 0.45, z: 0 }).top, [cx, fy] = at(u, w)
+    const gg = uid(), ring = discOutline(corners, { u, v: w, r: DISC_R, z: 0 }).top, [cx, fy] = at(u, w)
     const xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * PW, cy = fy * PH - d * 0.42
     out.push({ id: uid(), kind: 'polygon', color: '#000000', width: 0, points: discOutline(corners, { u, v: w + 0.005, r: 0.47, z: 0 }).top, fill: '#2A1708', fillOpacity: 0.32, groupId: gg })
     out.push({ id: uid(), kind: 'circle', color: mix(fill, '#000000', 0.45), width: 1.5, x: cx - d / 2 / PW, y: (cy - d / 2) / PH, w: d / PW, h: d / PH, fill, fillOpacity: 1, shade: 'ball', groupId: gg })
     if (label) out.push(words(cx, (cy - d * 0.27) / PH, label, Math.round(d * 0.45), light(fill) ? '#0F172A' : '#FFFFFF', { align: 'center', groupId: gg, font: NUMBER_FONT }))
-  }
-  // Ours, behind the net from the picture's view: the diggers, then the blockers at the net.
-  const apexU = cone ? 1 - cone.apex.u : 0.8
-  if (defense) {
-    for (const [u, w] of [[0.5, 0.93], [0.12, 0.78], [0.88, 0.78]]) disc(u, w, DIGGER, '')
-    for (const du of [-0.07, 0.07]) disc(Math.min(0.95, Math.max(0.05, apexU + du)), 0.55, BLOCKER, '')
   }
   // The net: a see-through mesh with the white tape along its top, the antennas over the sidelines.
   const [nl, nr] = [at(-0.05, 0.5), at(1.05, 0.5)], up = 0.11, low = 0.025, netTop = nl[1] - up
@@ -135,7 +137,15 @@ function courtSide(v: AttackSlideData, defense: boolean, corners: CourtFit['corn
     for (let i = 0; i < 5; i++) out.push(line([x, y - up - i * 0.014], [x, y - up - (i + 1) * 0.014], 3, i % 2 ? '#FFFFFF' : '#DC2626'))
   }
   // The attacker over the net, where they mostly hit from, on top of it.
-  if (cone) disc(apexU, Math.min(0.48, cone.apex.v), ATTACKER, String(v.player.jersey))
+  const apexU = cones ? cones.apex.x : 0.8
+  if (cones) disc(apexU, Math.min(0.48, cones.apex.y), ATTACKER, String(v.player.jersey))
+  // Ours in front of the net, nearer ones over farther ones: a two-player block shoulder to shoulder
+  // (the discs touching) in front of the attacker, then the diggers.
+  if (defense) {
+    const half = DISC_R / 9, mid = Math.min(1 - half, Math.max(half, apexU))
+    for (const du of [-half, half]) disc(mid + du, 0.5 + (DISC_R + 0.15) / 18, BLOCKER, '')
+    for (const [u, w] of [[0.12, 0.78], [0.88, 0.78], [0.5, 0.93]]) disc(u, w, DIGGER, '')
+  }
   return out
 }
 const light = (hex: string) => { const n = parseInt(hex.slice(1, 7), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 160 }
@@ -146,7 +156,7 @@ const END = 0.988, GAP = 0.012, COL_MAX = 0.165, TAG_Y = 0.012, SET_Y = 0.058, S
 export function attackSlide(v: AttackSlideData, o: AttackSlideOptions): { annotations: Annotation[]; charts: PlacedChart[]; setCharts: PlacedSetChart[] } {
   const out: Annotation[] = [], charts: PlacedChart[] = [], setCharts: PlacedSetChart[] = []
   const conditions = o.conditions.length ? o.conditions : ATTACK_CONDITIONS.slice(0, 2), n = conditions.length
-  const scale = n >= 3 ? 0.8 : 1, corners = courtAt(scale), right = Math.max(...corners.map(c => c.x)) + 0.02
+  const scale = COURT_SCALE * (n >= 3 ? 0.8 : 1), corners = courtAt(scale), right = Math.max(...corners.map(c => c.x)) + 0.02
   out.push(...courtSide(v, o.defense, corners))
   // The heading: the number and name large, underlined; what the attacks are kept to under it.
   const hg = uid(), name = `#${v.player.jersey} ${v.player.lastName.toUpperCase()}`, size = Math.min(60, Math.floor((0.55 * PW) / (name.length * 0.68)))

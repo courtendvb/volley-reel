@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { ANALYSIS_REPORTS, efficiency, errors, errorTries, GRADES, percent, pointErrorReport, points, pointTries, recAttackReport, RUN_MIN, RUN_TOP, runReport, sideOutReport, type AnalysisReportId, type AttackCount, type Grade, type PointErrorRow, type PointErrorSide, type RecGradeLine, type RunCounts, type RunRow, type SideOutRow } from '../../../shared/analysis'
+import { ANALYSIS_REPORTS, efficiency, errors, errorTries, GRADES, percent, pointErrorReport, points, pointTries, recAttackReport, RUN_MIN, RUN_TOP, rotationReport, runReport, sideOutReport, type AnalysisReportId, type AttackCount, type Grade, type PointErrorRow, type PointErrorSide, type RecGradeLine, type RotationCounts, type RunCounts, type RunRow, type SideOutRow } from '../../../shared/analysis'
 import type { ReportMatch } from '../../../shared/report'
 import type { Match, ParsedDVW } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 
 // 分析: reports on what the target team (設定の対象チーム) is really like over the project's
 // matches. A tab per report (ANALYSIS_REPORTS); the numbers come from shared/analysis.ts.
-const TITLES: Record<AnalysisReportId, string> = { pointError: '得点率・ミス率', sideOut: 'サイドアウト・ブレイク', recAttack: 'レセプションと攻撃', runs: '連続得点・連続失点' }
+const TITLES: Record<AnalysisReportId, string> = { pointError: '得点率・ミス率', sideOut: 'サイドアウト・ブレイク', recAttack: 'レセプションと攻撃', rotation: 'ローテーション', runs: '連続得点・連続失点' }
 
 export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
   matches: Match[]; dvws: Record<string, ParsedDVW>; onClose: () => void
@@ -39,6 +39,7 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
             : report === 'pointError' ? <PointError list={ours} team={team} />
             : report === 'sideOut' ? <SideOut list={ours} team={team} />
             : report === 'recAttack' ? <RecAttack list={ours} team={team} />
+            : report === 'rotation' ? <Rotations list={ours} team={team} />
             : <Runs list={ours} team={team} />}
         </div>
       </div>
@@ -198,6 +199,38 @@ function RecAttack({ list, team }: { list: ReportMatch[]; team: string }) {
       <Table caption={t('アタッカー別（レセプションからの最初の攻撃）— {0}', team)} groups={groups} cols={atkCols}
         rows={r.attackers.map(x => ({ label: x.name, cells: [...ATTACK_GRADES.flatMap(g => three(x.grades[g])), ...three(x.all)] }))} />
       <p className="hint">{t('攻撃は、レセプションのあと自チームが最初に打ったアタック（ツーアタックを含む）。効果率は（決定 − ミス − 被ブロック）÷ 打数。SO% は相手のサーブをレセプションしたラリーのうち取った割合。選手の表は対象チームだけ（全試合の合計）。アタッカー別はレセプションの評価ごと（/ と = のあとはレセプションからの攻撃がない）')}</p>
+    </>
+  )
+}
+
+// ---- by rotation -------------------------------------------------------------------------------
+function Rotations({ list, team }: { list: ReportMatch[]; team: string }) {
+  const r = useMemo(() => rotationReport(list), [list])
+  const so: Col[] = [
+    { head: t('相手サーブ') }, { head: t('SO 得点') }, { head: 'SO%', cls: 'key' },
+    { head: '#+%', cls: 'pct', title: t('レセプションの # と + の割合') },
+    { head: t('1 本目 SO%'), cls: 'pct', title: t('レセプションからの最初の攻撃で決めた割合') },
+    { head: t('打数') }, { head: t('決定率'), cls: 'pct' }, { head: t('効果率'), cls: 'pct', title: t('レセプションからの最初の攻撃の（決定 − ミス − 被ブロック）÷ 打数') },
+  ]
+  const bp: Col[] = [
+    { head: t('サーブ') }, { head: t('BP 得点') }, { head: 'BP%', cls: 'key' },
+    { head: 'ACE%', cls: 'pct' }, { head: 'ERR%', cls: 'pct' },
+    { head: t('打数') }, { head: t('決定率'), cls: 'pct' }, { head: t('効果率'), cls: 'pct', title: t('自分のサーブのラリーでの切り返しのアタックの（決定 − ミス − 被ブロック）÷ 打数') },
+  ]
+  const sum: Col[] = [{ head: t('得点'), cls: 'side' }, { head: t('失点'), cls: 'side' }, { head: '+/−', cls: 'key', title: t('得点 − 失点') }]
+  const cells = (x: RotationCounts): Cell[] => [
+    x.oppServe, x.soWon, percent(x.soWon, x.oppServe), percent(x.recPos, x.rec), percent(x.firstKill, x.rec),
+    x.recAttack.att, percent(x.recAttack.kill, x.recAttack.att), efficiency(x.recAttack),
+    x.serve, x.bpWon, percent(x.bpWon, x.serve), percent(x.ace, x.serve), percent(x.serveErr, x.serve),
+    x.trans.att, percent(x.trans.kill, x.trans.att), efficiency(x.trans),
+    x.won, x.lost, x.won - x.lost > 0 ? `+${x.won - x.lost}` : x.won - x.lost,
+  ]
+  const groups = [{ head: t('サイドアウト（相手サーブ）'), span: 5 }, { head: t('レセプションからの攻撃'), span: 3 }, { head: t('ブレイク（自サーブ）'), span: 5 }, { head: t('切り返し（自サーブ時）'), span: 3 }, { head: t('得失点'), span: 3 }]
+  return (
+    <>
+      <Table caption={t('ローテーション別 — {0}', team)} rowHead={t('ローテ')} groups={groups} cols={[...so, ...bp, ...sum]}
+        rows={r.rows.map(x => ({ label: `P${x.rot}`, title: t('ローテーション {0}（DVW の番号。セッターのいる位置）', x.rot), cells: cells(x) }))} total={{ label: 'TOTAL', cells: cells(r.total) }} />
+      <p className="hint">{t('ローテーションはサーブの時点の対象チームのもの（DVW の番号。P1 はセッターが 1 の位置）。全試合の合計。SO%: 相手のサーブで取ったラリーの割合（相手のサーブミスを含む）。1 本目 SO%: レセプションからの最初の攻撃で決めた割合。BP%: 自分のサーブで取ったラリーの割合。切り返しは自分のサーブのラリーでのディグ・チャンスボールからのアタック。効果率は（決定 − ミス − 被ブロック）÷ 打数')}</p>
     </>
   )
 }

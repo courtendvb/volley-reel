@@ -1398,4 +1398,6 @@ export const EN: Record<string, string> = {
   "自チームの数字を取るプロジェクト（その対象チームの全試合）": "The project our team's figures come from (its target team over all its matches)",
   "左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます": "Our team (the chosen project's target team) goes left, the team chosen above (this project's matches) right; the better figure is in red. Each is the total over its matches. SERVE INDEX is the average weight of a serve (# 1, / 0.752, + 0.455, ! 0.344, - 0.281, = 0). Hover here for each row's formula",
   "倉庫にあるチームのロゴを入れます": "Puts in the teams' logos from the library",
+  "レセプションからの最初の攻撃で決めた本数 ÷ レセプションしたラリー": "Rallies won by the first attack after the reception ÷ rallies received",
+  "自チームのミスで相手に入った点 ÷ セット数（相手が得点のプレーなしで取ったラリー。サーブ・アタック・ブロック・セットのミスや反則。レセプションミスと被ブロックは相手のエース・ブロック得点なので入れない）": "Points our errors gave the other team ÷ sets (rallies it won with no point of its own: serve, attack, block and set errors and faults; reception errors and blocked attacks are its aces and block points, so they are left out)",
 }

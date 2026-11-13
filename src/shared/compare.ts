@@ -14,14 +14,16 @@ export interface SkillCounts {
   ace: number; serveErr: number; serveWeight: number // serve # / =, and every serve's SERVE_WEIGHTS added up
   rec: number; recPos: number // receptions, # and +
   blockPts: number
+  fbRec: number; fbKill: number // rallies received, and won by the first attack after the reception
+  errPts: number // rallies the other team won with no point of its own: our errors and faults
 }
 
-const zero = (): SkillCounts => ({ matches: 0, sets: 0, oppServe: 0, soWon: 0, serve: 0, bpWon: 0, attack: 0, kill: 0, attackErr: 0, blocked: 0, ace: 0, serveErr: 0, serveWeight: 0, rec: 0, recPos: 0, blockPts: 0 })
+const zero = (): SkillCounts => ({ matches: 0, sets: 0, oppServe: 0, soWon: 0, serve: 0, bpWon: 0, attack: 0, kill: 0, attackErr: 0, blocked: 0, ace: 0, serveErr: 0, serveWeight: 0, rec: 0, recPos: 0, blockPts: 0, fbRec: 0, fbKill: 0, errPts: 0 })
 
 export function skillCounts(list: ReportMatch[]): SkillCounts {
   const c = zero()
   for (const m of list) {
-    const r = matchReport(m.d), t = r.teams[m.side === '*' ? 0 : 1].total
+    const i = m.side === '*' ? 0 : 1, r = matchReport(m.d), t = r.teams[i].total
     c.matches++
     c.sets += m.d.info?.sets.length || Math.max(0, ...m.d.plays.map(p => p.setNum))
     c.attack += t.att.tot; c.kill += t.att.pts; c.attackErr += t.att.err; c.blocked += t.att.blo
@@ -29,9 +31,10 @@ export function skillCounts(list: ReportMatch[]): SkillCounts {
     for (const p of m.d.plays) if (p.side === m.side && p.skill === 'S') c.serveWeight += SERVE_WEIGHTS[p.effect] ?? 0
     c.rec += t.rec.tot; c.recPos += t.rec.pos
     c.blockPts += t.blk
+    for (const s of r.teams[1 - i].sets) c.errPts += s.won.opErr
   }
   const so = sideOutReport(list).team.total
-  c.oppServe = so.oppServe; c.soWon = so.soWon; c.serve = so.serve; c.bpWon = so.bpWon
+  c.oppServe = so.oppServe; c.soWon = so.soWon; c.serve = so.serve; c.bpWon = so.bpWon; c.fbRec = so.rec; c.fbKill = so.firstKill
   return c
 }
 
@@ -46,6 +49,7 @@ const ratio = (n: number, of: number) => (of ? n / of : null)
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 export const SKILL_ROWS: SkillRow[] = [
   { id: 'so', label: 'SO%', value: c => ratio(c.soWon, c.oppServe), format: pct, higher: true, title: 'SO 得点 ÷ 相手サーブ（相手のサーブミスを含む）' },
+  { id: 'fbso', label: '1ST BALL SO%', value: c => ratio(c.fbKill, c.fbRec), format: pct, higher: true, title: 'レセプションからの最初の攻撃で決めた本数 ÷ レセプションしたラリー' },
   { id: 'bp', label: 'BP%', value: c => ratio(c.bpWon, c.serve), format: pct, higher: true, title: 'BP 得点 ÷ サーブ' },
   { id: 'kill', label: 'ATTACK KILL%', value: c => ratio(c.kill, c.attack), format: pct, higher: true, title: 'アタック決定（#）÷ 打数' },
   { id: 'eff', label: 'ATTACK EFF', value: c => ratio(c.kill - c.attackErr - c.blocked, c.attack), format: pct, higher: true, title: '（決定 − ミス − 被ブロック）÷ 打数' },
@@ -55,6 +59,7 @@ export const SKILL_ROWS: SkillRow[] = [
   { id: 'err', label: 'ERR%', value: c => ratio(c.serveErr, c.serve), format: pct, higher: false, title: 'サーブミス（=）÷ サーブ' },
   { id: 'rec', label: 'RECEPTION#+%', value: c => ratio(c.recPos, c.rec), format: pct, higher: true, title: 'レセプションの # と + ÷ レセプション' },
   { id: 'block', label: 'BLOCK PTS/SET', value: c => ratio(c.blockPts, c.sets), format: v => v.toFixed(2), higher: true, title: 'ブロック得点（#）÷ セット数' },
+  { id: 'errPts', label: 'ERR PTS/SET', value: c => ratio(c.errPts, c.sets), format: v => v.toFixed(2), higher: false, title: '自チームのミスで相手に入った点 ÷ セット数（相手が得点のプレーなしで取ったラリー。サーブ・アタック・ブロック・セットのミスや反則。レセプションミスと被ブロックは相手のエース・ブロック得点なので入れない）' },
 ]
 
 // Which side is better on a row: 'a', 'b', or null (a tie, or a side with nothing to count).

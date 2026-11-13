@@ -46,7 +46,7 @@ export function BoardPreview({ columns, skill, opts, photos: withPhotos }: { col
     ctx.fillStyle = opts.background ?? '#FFFFFF'; ctx.fillRect(0, 0, W, H)
     if (!slide) return
     for (const ch of slide.charts) drawChart(ctx, ch.chart, { x: ch.x * W, y: ch.y * H, h: ch.h * H })
-    for (const ch of slide.setCharts ?? []) drawSetChart(ctx, ch.chart, { x: ch.x * W, y: ch.y * H, h: ch.h * H })
+    for (const ch of slide.setCharts ?? []) drawSetChart(ctx, ch.chart, { x: ch.x * W, y: ch.y * H, h: ch.h * H }, 'auto', false, !!ch.rich)
     for (const a of slide.annotations) drawAnnotation(ctx, a, W, H, id => images.get(id) ?? null)
   }, [slide, images, opts.background])
   return (

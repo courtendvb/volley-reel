@@ -176,6 +176,9 @@ export interface RecentProject {
   openedAt: string
 }
 
+// Another project, for comparing its target team with this one's (分析 → 相手との比較).
+export interface ProjectSummary { path: string; name: string; code: string; matches: number }
+
 export interface ProjectInit {
   name: string
   ourTeamCodes: string[]
@@ -206,6 +209,8 @@ export interface Api {
   closeProject(): Promise<void>
   setProjectMatches(ids: string[]): Promise<ProjectInfo>
   parseMatch(id: string): Promise<ParsedDVW>
+  otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
+  projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
   setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>

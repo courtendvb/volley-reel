@@ -1816,6 +1816,21 @@ export function installSmoke(h: SmokeHost): void {
       if (logoFile && !logoAbove) throw new Error('no logo above the team column')
       return { team: slide.board!.config.team, heading: texts[0], receivers: names, pictures: images.length, logoAbove }
     }
+    if (layout === 'compare') {
+      // チーム比較: the first other project as our own team; the slide's rows read back.
+      button(dialog, t('チーム比較'))!.click(); await sleep(400)
+      const own = await waitFor(() => dialog.querySelector<HTMLSelectElement>('#board-own'), 5000, 'own team select')
+      const first = await waitFor(() => [...own.options].find(o => o.value) ?? null, 10000, 'another project')
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(own, first.value)
+      own.dispatchEvent(new Event('change', { bubbles: true }))
+      const make = await waitFor(() => { const b = button(dialog, t('作成')); return b && !b.disabled ? b : null }, 15000, 'own team loaded')
+      await sleep(600); await api.smokeShot!('compare-preview.png')
+      make.click()
+      const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'C') ?? null, 10000, 'comparison slide')
+      const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !slide.board?.config.compareProject) throw new Error(`comparison: ${texts.join(' | ')}`)
+      return { project: slide.board.config.compareProject, texts }
+    }
     if (layout === 'rot') {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
       button(dialog, t('ローテーション'))!.click(); await sleep(400)

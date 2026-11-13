@@ -11,11 +11,13 @@ import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFo
 import { setChart, type SetChart } from './setChart'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
+import { compareSlide, type CompareSide } from './compare'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
 // E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets;
-// T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns
-export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T'
+// T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns;
+// C: the team's skills against our own team's, from another project (compare.ts), no columns
+export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C'
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -40,7 +42,8 @@ export interface BoardPlayer {
 
 // Everyone who served or attacked, most plays first. keep: only these plays (the search).
 export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
-  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 // a rotation is read from its setter's sets, a serve target from the receptions
+  // A rotation is read from its setter's sets, a serve target from the receptions; a comparison only needs the teams (who attacked).
+  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' ? 'A' : skill0
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
     for (const [i, p] of d.plays.entries()) {
@@ -216,6 +219,7 @@ export interface BoardConfig {
   cones?: boolean // a rotation slide: the spikers' cones (missing: shown)
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
   attackers?: number // and with the attackers there, how many (missing: three)
+  compareProject?: string // a comparison: our own team's project (its folder), whose figures go left
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -236,6 +240,7 @@ export interface BoardOptions {
   cones?: boolean // and the spikers' cones (missing: shown)
   tables?: RotationTables // and which tables (missing: all six)
   attackers?: number // and with the attackers' cards, how many (missing: three)
+  compare?: { left: CompareSide; right: CompareSide } // a comparison: our team, and the team of this project
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -332,6 +337,10 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 
 // One slide's columns, side by side; for a setter with a layout, their slide of six courts.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[]; setCharts?: PlacedSetChart[] } {
+  if (skill === 'C') {
+    const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
+    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink) : [], charts: [], noteIds: [] }
+  }
   if (skill === 'T') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
     return { annotations: p ? serveTargetSlide({ team: p.team, teamName: p.teamName, receptions: p.receptions ?? [], players: Object.fromEntries(columns.map(c => [c.key, c.player])), photos }, ink) : [], charts: [], noteIds: [] }

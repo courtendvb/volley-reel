@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react'
-import { playLabel } from '../../../shared/labels'
+import { effectName, playLabel, skillName, TEMPOS } from '../../../shared/labels'
 import {
   MARKERS, MARKER_COLORS, chronological, clipEdits, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, setTag, sortByTag, spotAt, TAG_MAX,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideGroup, type SlideSpot,
@@ -223,8 +223,10 @@ export function ReelPanel(p: Props) {
           <span className="clip-main">
             {multiMatch && <span className="muted">{inf.matchLabel} </span>}
             <span className="muted">S{r.play.setNum} {pad2(r.play.score.home)}-{pad2(r.play.score.away)} </span>
-            {/* The skill letter and evaluation sign (A#) to keep rows short; the full name on hover. */}
-            <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill} skill-short`} title={playLabel(r.play.skill, r.play.effect)}>{r.play.skill}{r.play.effect}</span>
+            {/* Skill, type and evaluation as scouted (AQ#) to keep rows short; the full names on hover. */}
+            <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill} skill-short`}
+              title={r.tempo ? `${skillName(r.play.skill)} · ${TEMPOS[r.tempo] ?? r.tempo} · ${effectName(r.play.skill, r.play.effect)}` : playLabel(r.play.skill, r.play.effect)}>
+              {r.play.skill}{r.tempo ?? ''}{r.play.effect}</span>
             {r.play.skill === 'A' && r.combo && <span className="combo" title={r.comboName ?? undefined}> {r.combo}</span>}
           </span>
         )}

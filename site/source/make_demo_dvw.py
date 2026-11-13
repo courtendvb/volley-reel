@@ -83,6 +83,7 @@ def mirror(side, u, v):
 
 def build(home, away, date, seed, spectators, hall):
     rng = random.Random(seed)
+    deep_rng = random.Random(seed * 7919)
     H, A = Team(home, rng), Team(away, rng)
     team = {'*': H, 'a': A}
     out = []
@@ -115,10 +116,16 @@ def build(home, away, date, seed, spectators, hall):
             sj = S.lineup[0]
             stype, szone, aim = S.serve[sj]
             su = {1: .84, 6: .5, 5: .16}[szone]
+            # Serves land mostly deep, in zones 1, 6 and 5 (v over .83). The draws from rng stay as
+            # they were so the rest of the match comes out the same; deep() reshapes them, and a
+            # separate stream (deep_rng) decides which of the old short serves stay short.
+            deep = lambda v: .84 + (v - .62) / .30 * .11  # the old aim, .62-.92, onto .84-.95
             tu = min(.95, max(.05, rng.gauss(aim[0], .14)))
-            tv = min(.97, max(.53, rng.gauss(aim[1], .08)))
-            if rng.random() < .25:  # short serves
-                tu, tv = rng.uniform(.1, .9), rng.uniform(.53, .64)
+            tv = min(.98, max(.53, deep(aim[1]) + (rng.gauss(aim[1], .08) - aim[1]) * .5))
+            if rng.random() < .25:  # short serves: about one in three of these stays short
+                su_, sv_ = rng.uniform(.1, .9), rng.uniform(.53, .64)
+                if deep_rng.random() < .3:
+                    tu, tv = su_, sv_
             (a0, b0), (a1, b1) = mirror(srv, su, -.04), mirror(srv, tu, tv)
             ez, es = zone(a1, b1), sub(a1, b1)
             ace = rng.random() < .06 * S.power

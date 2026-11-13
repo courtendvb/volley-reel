@@ -1857,10 +1857,38 @@ export function installSmoke(h: SmokeHost): void {
       if (logoFile && !logoAbove) throw new Error('no logo above the team column')
       return { team: slide.board!.config.team, heading: texts[0], receivers: names, pictures: images.length, logoAbove }
     }
+    if (layout === 'compare') {
+      // チーム比較: the first other project as our own team; the slide's rows read back.
+      button(dialog, t('チーム比較'))!.click(); await sleep(400)
+      const own = await waitFor(() => dialog.querySelector<HTMLSelectElement>('#board-own'), 5000, 'own team select')
+      const first = await waitFor(() => [...own.options].find(o => o.value) ?? null, 10000, 'another project')
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(own, first.value)
+      own.dispatchEvent(new Event('change', { bubbles: true }))
+      const make = await waitFor(() => { const b = button(dialog, t('作成')); return b && !b.disabled ? b : null }, 15000, 'own team loaded')
+      await sleep(600); await api.smokeShot!('compare-preview.png')
+      make.click()
+      const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'C') ?? null, 10000, 'comparison slide')
+      const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !slide.board?.config.compareProject) throw new Error(`comparison: ${texts.join(' | ')}`)
+      return { project: slide.board.config.compareProject, texts }
+    }
     if (layout === 'rot') {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
       button(dialog, t('ローテーション'))!.click(); await sleep(400)
       const setter = dialog.querySelector<HTMLSelectElement>('.board-slot select')?.selectedOptions[0]?.textContent
+      // The preview with each choice of tables (rot-tables-*.png), then without the cones; back to all and on.
+      const pick = dialog.querySelector<HTMLSelectElement>(`select[aria-label="${t('右下の表')}"]`)
+      const cone = [...dialog.querySelectorAll<HTMLLabelElement>('label.check')].find(l => l.textContent?.trim() === t('コーン'))?.querySelector('input')
+      if (!pick || !cone) throw new Error('no table or cone choice on the rotation slide')
+      const choose = async (v: string) => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(pick, v); pick.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700) }
+      for (const v of ['hash', 'hashPlus', 'passes', 'calls', 'attackers', 'none', 'all']) { await choose(v); await api.smokeShot!(`rot-tables-${v}.png`) }
+      // The attackers' cards: one and two of them too (rot-attackers-1.png, -2.png), then back to three.
+      await choose('attackers')
+      const count = dialog.querySelector<HTMLSelectElement>(`select[aria-label="${t('アタッカーの人数')}"]`)
+      if (!count) throw new Error('no attacker count on the rotation slide')
+      for (const n of ['1', '2', '3']) { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(count, n); count.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700); await api.smokeShot!(`rot-attackers-${n}.png`) }
+      await choose('all')
+      cone.click(); await sleep(700); await api.smokeShot!('rot-nocones.png'); cone.click(); await sleep(300)
       button(dialog, t('作成'))!.click()
       const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')
       await sleep(600)

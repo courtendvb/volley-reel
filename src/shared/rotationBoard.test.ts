@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attackCone, attackLine, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, sideOut, topCalls } from './rotationBoard'
+import { ATTACKER_CARDS, attackCone, attackLine, attackerCards, attackerStats, rotationAttackers, tableGrid, inRotation, mainColor, mainCourse, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, sideOut, topCalls } from './rotationBoard'
 import { setterSets } from './setterBoard'
 import type { ParsedDVW, Play } from './types'
 
@@ -56,6 +56,27 @@ describe('a rotation', () => {
     expect(texts).toEqual(expect.arrayContaining(['2', '10', '19', '92', '6', '7'])) // the players' discs
     for (const a of anns) if (a.kind === 'rect' || a.kind === 'circle') { expect(a.x + a.w).toBeLessThanOrEqual(1); expect(a.y + a.h).toBeLessThanOrEqual(1) }
     for (const a of anns) if (a.kind === 'text' && a.box?.width) expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1)
+  })
+  it('shows the tables chosen, larger the fewer, and the cones only when asked', () => {
+    const make = (o: object) => rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation: [], callNames: d.codeNames, ...o }, 'both', '#0F172A')
+    const titles = (anns: ReturnType<typeof make>) => anns.flatMap(a => (a.kind === 'text' && /pass$|^[0-9]\. CALL/.test(a.text) ? [a] : []))
+    const names = (o: object) => titles(make(o)).map(a => (a.kind === 'text' ? a.text : ''))
+    expect(names({ tables: 'hash' })).toEqual(['# pass'])
+    expect(names({ tables: 'hashPlus' })).toEqual(['# pass', '+ pass'])
+    expect(names({ tables: 'passes' })).toEqual(['# pass', '+ pass', '! pass'])
+    expect(names({ tables: 'calls' }).every(x => x.includes('CALL'))).toBe(true)
+    expect(names({ tables: 'none' })).toEqual([])
+    const width = (o: object) => { const a = titles(make(o))[0]; return a?.kind === 'text' ? a.box!.width! : 0 }
+    expect(width({ tables: 'hash' })).toBeGreaterThan(width({ tables: 'hashPlus' }))
+    expect(width({ tables: 'hashPlus' })).toBeGreaterThan(width({})) // all six: the usual size
+    for (const o of [{ tables: 'hash' }, { tables: 'passes' }, { tables: 'calls' }]) for (const a of make(o)) if (a.kind === 'text' && a.box?.width) {
+      expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1); expect(a.y + (a.box.height ?? 0)).toBeLessThanOrEqual(1)
+    }
+    // The cones need where the attacks went: the same sets, landing in zone 5.
+    const landed = sets.map(x => ({ ...x, attack: { ...x.attack, endZone: 5 } }))
+    const tip = (o: object) => make({ sets: landed, ...o }).some(a => a.kind === 'text' && a.text === '#9')
+    expect(tip({})).toBe(true)
+    expect(tip({ cones: false })).toBe(false)
   })
 })
 
@@ -143,5 +164,55 @@ describe("a rotation's serve receive", () => {
     expect(texts.some(x => x.startsWith('HTH  #'))).toBe(false) // the setter's name only over the chart
     const logo = anns.find(a => a.kind === 'image' && a.assetId === 'lg'), p = anns.find(a => a.kind === 'text' && a.text === 'P3')
     expect(logo?.kind === 'image' && p?.kind === 'text' && logo.x + logo.w < p.x).toBe(true) // the logo first, at the top left
+  })
+})
+
+describe('the tables at the bottom right', () => {
+  it('puts the chosen number in the columns and rows that let them be largest', () => {
+    expect(tableGrid(1)).toMatchObject({ cols: 1, rows: 1 })
+    expect(tableGrid(2)).toMatchObject({ cols: 1, rows: 2 })
+    expect(tableGrid(6)).toMatchObject({ cols: 2, rows: 3 })
+    expect(tableGrid(1).k).toBeGreaterThan(tableGrid(2).k)
+    expect(tableGrid(2).k).toBeGreaterThan(tableGrid(3).k)
+  })
+})
+
+describe("the rotation's attackers", () => {
+  // Home side-out attacks in rotation 2 (hit type after the zones: H hard, P soft, T tip), one in
+  // rotation 3, and counter-attacks (transition), left out.
+  const atk = (jersey: number, effect: string, type: string, rot = 2, phase = 'r') =>
+    ({ side: '*', skill: 'A', playerKey: `*${jersey}`, jersey, effect, homeRot: rot, awayRot: 1, rallyId: 0, phase, code: `*${String(jersey).padStart(2, '0')}AH${effect}V5~46A${type}2` }) as unknown as Play
+  const plays = [atk(12, '#', 'H'), atk(12, '#', 'H'), atk(12, '=', 'T'), atk(12, '+', 'H'), atk(12, '-', 'P'),
+    atk(9, '#', 'H'), atk(9, '/', 'H'), atk(7, '#', 'H'), atk(4, '#', 'T'), atk(12, '#', 'H', 3), atk(7, '#', 'H', 2, 't'), atk(7, '#', 'H', 2, 't')]
+  const d = { teams: [{ code: 'nya', name: 'N' }, { code: 'okb', name: 'O' }], players: { '*12': { key: '*12', side: '*', jersey: 12, lastName: 'Yamada', firstName: 'Daiki' } }, plays, rallies: {} } as unknown as ParsedDVW
+  it("takes the team's side-out attackers in the rotation, the most attacks first, three of them", () => {
+    const list = rotationAttackers([d], 'NYA', 2)
+    expect(list.map(a => [a.jersey, a.plays.length])).toEqual([[12, 5], [9, 2], [4, 1]])
+    expect(list).toHaveLength(ATTACKER_CARDS)
+    expect(list[0]).toMatchObject({ team: 'NYA', player: { lastName: 'Yamada' } })
+  })
+  it('counts the hit types, kills, errors, blocked, + and -', () => {
+    expect(attackerStats(rotationAttackers([d], 'NYA', 2)[0].plays)).toEqual({ hard: 0.6, soft: 0.2, tip: 0.2, k: 2, e: 1, b: 0, att: 5, pos: 1, neg: 1 })
+  })
+  it('makes a card each with its numbers, and room for its chart under them', () => {
+    const list = rotationAttackers([d], 'NYA', 2), { annotations, charts } = attackerCards(list, h => h * 0.5)
+    const texts = annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+    expect(texts).toContain('#12 Daiki YAMADA')
+    expect(texts).toContain('H: 0.60 | P: 0.20 | T: 0.20')
+    expect(texts).toContain('K%: 0.40 | ERR%: 0.20')
+    expect(texts).toContain('Pos: 0.20 | Neg: 0.20')
+    expect(charts).toHaveLength(3)
+    for (const c of charts) expect(c.y + c.h).toBeLessThanOrEqual(1)
+    expect(charts[1].x).toBeGreaterThan(charts[0].x)
+  })
+  it('shows as many as chosen, one to three: the fewer, the wider; one card has its chart beside the numbers', () => {
+    const list = rotationAttackers([d], 'NYA', 2), cw = (h: number) => h * 0.5
+    const names = (n: number) => attackerCards(list, cw, n).annotations.filter(a => a.kind === 'text' && a.text.startsWith('#')).length
+    expect([1, 2, 3].map(names)).toEqual([1, 2, 3])
+    expect(attackerCards(list, cw, 9).charts).toHaveLength(3)
+    const one = attackerCards(list, cw, 1), two = attackerCards(list, cw, 2), three = attackerCards(list, cw, 3)
+    expect(two.charts[0].h).toBeGreaterThan(three.charts[0].h)
+    const frame = one.annotations.find(a => a.kind === 'rect')!
+    expect(frame.kind === 'rect' && one.charts[0].x).toBeGreaterThanOrEqual(frame.kind === 'rect' ? frame.x + frame.w : 0)
   })
 })

@@ -461,7 +461,6 @@ const textLines = (t: string): string[] => t.split('\n')
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
   let px = a.size * s, lh = px * 1.2
   setTextFont(ctx, px, a.bold !== false, a.font)
-  ctx.textBaseline = 'top'
   const lines = textLines(a.text)
   let widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
   const cell = a.box?.height ? a.box : null
@@ -503,20 +502,21 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
       ctx.strokeRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
     }
   }
-  // A number alone in a box (a jersey number) sits in its middle by the ink of its digits: the font's
-  // line box leaves digits high in some fonts.
-  let ty = cell ? y + (cell.height! * H - 2 * cell.padding * s - lh * lines.length) / 2 : y
-  if (a.box && !cell && lines.length === 1 && /^\d+$/.test(lines[0])) {
-    const m = ctx.measureText(lines[0])
-    ty = y + lh / 2 - (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2
-  }
+  // Each line sits in the middle of its line box by the ink of capitals and kanji ('H漢'), drawn on
+  // the alphabetic baseline: where a font puts its glyphs in its own box differs a lot from font to
+  // font, and drawing from the top of that box left the text high (like a superscript) in some.
+  // A number alone in a box (a jersey number) goes by the ink of its own digits.
+  ctx.textBaseline = 'alphabetic'
+  const top = cell ? y + (cell.height! * H - 2 * cell.padding * s - lh * lines.length) / 2 : y
+  const ink = ctx.measureText(a.box && !cell && lines.length === 1 && /^\d+$/.test(lines[0]) ? lines[0] : 'H漢')
+  const base = top + lh / 2 + (ink.actualBoundingBoxAscent - ink.actualBoundingBoxDescent) / 2
   // A black outline keeps light text readable on a bright court (on by default).
   if (a.outline !== false && a.color.toUpperCase() !== '#0F172A') {
     ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'
-    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), ty + i * lh)); ctx.restore()
+    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), base + i * lh)); ctx.restore()
   }
   ctx.fillStyle = a.color
-  lines.forEach((l, i) => ctx.fillText(l, lineX(i), ty + i * lh))
+  lines.forEach((l, i) => ctx.fillText(l, lineX(i), base + i * lh))
 }
 
 function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash; lineOpacity?: number }, lw: number, box?: { x: number; y: number; w: number; h: number }): void {

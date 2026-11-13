@@ -269,3 +269,16 @@ footer p + p { margin-top: 6px; }
 @media (max-width: 860px) {
   .slides.three { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Drawing on the floor: a short lead, then two shots. */
+.floor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 16px; margin-top: 36px; padding-top: 14px; border-top: 2px solid var(--ink); }
+.floor-head { grid-column: 1 / -1; display: grid; gap: 6px; }
+.floor h3 { font-size: 20px; font-weight: 700; }
+.floor-head p { color: var(--sub); font-size: 16px; line-height: 1.55; max-width: 62ch; }
+.floor figure { gap: 8px; }
+.floor img { box-shadow: 0 10px 30px var(--shadow); border: 1px solid var(--line); }
+.floor figcaption { color: var(--sub); font-size: 15px; line-height: 1.5; }
+.floor figcaption b { color: var(--ink); font-weight: 700; }
+@media (max-width: 860px) {
+  .floor { grid-template-columns: minmax(0, 1fr); }
+}

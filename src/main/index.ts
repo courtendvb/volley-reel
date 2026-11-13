@@ -12,7 +12,7 @@ import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pac
 import { strToU8, zipSync } from 'fflate'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
-import type { ExportJob, ImportProgress, Match, PickedAsset, ProjectInit, ProjectSettings, SlideFile } from '../shared/types'
+import type { ExportJob, ImportProgress, Match, ParsedDVW, PickedAsset, ProjectInit, ProjectSettings, ProjectSummary, SlideFile } from '../shared/types'
 import { Exporter } from './export'
 import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './updater'
 import { Library } from './library'
@@ -169,9 +169,7 @@ function registerIpc(): void {
     const m = l.info().matches.find(x => x.id === matchId)
     if (!m) throw new Error(t('試合が見つかりません: {0}', matchId))
     const root = join(l.dir, 'projects')
-    const inRoot = existsSync(root) ? (await readdir(root, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => join(root, d.name)) : []
-    const dirs = [...new Set([...inRoot, ...recentProjects().map(r => r.path)])]
-    for (const dir of dirs) {
+    for (const dir of await projectDirs(l)) {
       try {
         const f = JSON.parse(await readFile(join(dir, 'project.json'), 'utf8')) as { matchIds?: string[]; ourTeamCodes?: string[] }
         if (f.matchIds?.length !== 1 || f.matchIds[0] !== matchId || f.ourTeamCodes?.[0]?.toUpperCase() !== code.toUpperCase()) continue
@@ -203,6 +201,29 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('project:close', () => { project = null })
+
+  // Other projects, for comparing their target team with this one's: the name, the team, how many matches.
+  ipcMain.handle('project:others', async () => {
+    const l = lib(), here = project?.dir.toLowerCase()
+    const out: ProjectSummary[] = []
+    for (const dir of await projectDirs(l)) {
+      if (dir.toLowerCase() === here) continue
+      const f = await projectFile(dir)
+      if (f) out.push({ path: dir, name: f.name || basename(dir), code: f.ourTeamCodes?.[0] ?? '', matches: (f.matchIds ?? []).filter(id => l.getMatch(id)).length })
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
+  })
+  // That project's matches parsed from the library (only read: the project stays as it is).
+  ipcMain.handle('project:dvws', async (_e, dir: string) => {
+    const l = lib(), f = await projectFile(dir)
+    if (!f) throw new Error(t('プロジェクトが見つかりません（project.json がありません）'))
+    const dvws: ParsedDVW[] = [], failed: string[] = []
+    for (const id of f.matchIds ?? []) {
+      if (!l.getMatch(id)) continue
+      try { dvws.push(await l.parse(id)) } catch (e) { failed.push((e as Error).message) }
+    }
+    return { name: f.name || basename(dir), code: f.ourTeamCodes?.[0] ?? '', dvws, failed }
+  })
 
   ipcMain.handle('project:setMatches', async (_e, ids: string[]) => {
     const p = proj()
@@ -459,6 +480,18 @@ function registerIpc(): void {
   ipcMain.handle('reel:delete', (_e, id: string) => project?.deleteReel(id))
 
   ipcMain.handle('match:parse', (_e, id: string) => proj().parse(id))
+}
+
+// The project folders this computer knows: those in <library>/projects and the recent ones.
+async function projectDirs(l: Library): Promise<string[]> {
+  const root = join(l.dir, 'projects')
+  const inRoot = existsSync(root) ? (await readdir(root, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => join(root, d.name)) : []
+  const seen = new Set<string>()
+  return [...inRoot, ...recentProjects().map(r => r.path)].filter(d => { const k = d.toLowerCase(); return seen.has(k) ? false : (seen.add(k), true) })
+}
+// A project's project.json as saved, or null when there is none (or it can't be read).
+async function projectFile(dir: string): Promise<{ name?: string; ourTeamCodes?: string[]; matchIds?: string[] } | null> {
+  try { return JSON.parse(await readFile(join(dir, 'project.json'), 'utf8')) } catch { return null }
 }
 
 const videoFilter = () => ({ name: t('動画'), extensions: ['mp4', 'MP4', 'mov', 'MOV', 'mts', 'MTS', 'm4v'] })

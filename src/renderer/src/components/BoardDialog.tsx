@@ -199,7 +199,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           {ownTeam.error && <p className="muted small">{ownTeam.error}</p>}
           {ownTeam.own && !ownTeam.own.side.counts.matches && <p className="muted small">{t('そのプロジェクトに {0} の試合の DVW がありません', ownTeam.own.side.code || '?')}</p>}
           {ownTeam.own && ownTeam.own.failed.length > 0 && <p className="muted small">{t('読めなかった試合: {0}', ownTeam.own.failed.join(' / '))}</p>}
-          <p className="hint" title={SKILL_ROWS.map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX は（エース × 100 ＋ 効果 × 25 − ミス × 25）÷ サーブ（効果は + と / のサーブ）。ここに重ねると各項目の計算式が出ます')}</p>
+          <p className="hint" title={SKILL_ROWS.map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます')}</p>
         </>}
         {skill === 'T' && <p className="hint">{t('このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。チーム全体より 10 ポイント以上良い数字を青、悪い数字を赤で示します')}</p>}
         {skill !== 'T' && skill !== 'C' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>

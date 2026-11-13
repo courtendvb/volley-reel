@@ -11,12 +11,12 @@ export interface SkillCounts {
   oppServe: number; soWon: number // the other team's serves (its errors too), rallies won on them
   serve: number; bpWon: number // own serves, rallies won on them
   attack: number; kill: number; attackErr: number; blocked: number
-  ace: number; serveErr: number; serveGood: number // serve # / = / the ones that broke the reception (+ and /)
+  ace: number; serveErr: number; serveWeight: number // serve # / =, and every serve's SERVE_WEIGHTS added up
   rec: number; recPos: number // receptions, # and +
   blockPts: number
 }
 
-const zero = (): SkillCounts => ({ matches: 0, sets: 0, oppServe: 0, soWon: 0, serve: 0, bpWon: 0, attack: 0, kill: 0, attackErr: 0, blocked: 0, ace: 0, serveErr: 0, serveGood: 0, rec: 0, recPos: 0, blockPts: 0 })
+const zero = (): SkillCounts => ({ matches: 0, sets: 0, oppServe: 0, soWon: 0, serve: 0, bpWon: 0, attack: 0, kill: 0, attackErr: 0, blocked: 0, ace: 0, serveErr: 0, serveWeight: 0, rec: 0, recPos: 0, blockPts: 0 })
 
 export function skillCounts(list: ReportMatch[]): SkillCounts {
   const c = zero()
@@ -26,7 +26,7 @@ export function skillCounts(list: ReportMatch[]): SkillCounts {
     c.sets += m.d.info?.sets.length || Math.max(0, ...m.d.plays.map(p => p.setNum))
     c.attack += t.att.tot; c.kill += t.att.pts; c.attackErr += t.att.err; c.blocked += t.att.blo
     c.ace += t.serve.pts; c.serveErr += t.serve.err
-    c.serveGood += m.d.plays.filter(p => p.side === m.side && p.skill === 'S' && (p.effect === '+' || p.effect === '/')).length
+    for (const p of m.d.plays) if (p.side === m.side && p.skill === 'S') c.serveWeight += SERVE_WEIGHTS[p.effect] ?? 0
     c.rec += t.rec.tot; c.recPos += t.rec.pos
     c.blockPts += t.blk
   }
@@ -34,6 +34,10 @@ export function skillCounts(list: ReportMatch[]): SkillCounts {
   c.oppServe = so.oppServe; c.soWon = so.soWon; c.serve = so.serve; c.bpWon = so.bpWon
   return c
 }
+
+// SERVE INDEX: what a serve of each evaluation is worth (an ace 1, an error nothing), as the team's
+// VolleyStation sheet weighs them.
+export const SERVE_WEIGHTS: Record<string, number> = { '#': 1, '/': 0.752, '+': 0.455, '!': 0.344, '-': 0.281, '=': 0 }
 
 // The rows of the table, in order: the label, the figure ('' when there is nothing to count) and
 // whether a higher figure is the better one (for marking the better team).
@@ -45,8 +49,8 @@ export const SKILL_ROWS: SkillRow[] = [
   { id: 'bp', label: 'BP%', value: c => ratio(c.bpWon, c.serve), format: pct, higher: true, title: 'BP 得点 ÷ サーブ' },
   { id: 'kill', label: 'ATTACK KILL%', value: c => ratio(c.kill, c.attack), format: pct, higher: true, title: 'アタック決定（#）÷ 打数' },
   { id: 'eff', label: 'ATTACK EFF', value: c => ratio(c.kill - c.attackErr - c.blocked, c.attack), format: pct, higher: true, title: '（決定 − ミス − 被ブロック）÷ 打数' },
-  // V.League's サーブ効果率: an ace 100, a serve that broke the reception (+ and /) 25, an error −25, per serve.
-  { id: 'serveIndex', label: 'SERVE INDEX', value: c => ratio(c.ace * 100 + c.serveGood * 25 - c.serveErr * 25, c.serve), format: v => v.toFixed(1), higher: true, title: '（エース × 100 ＋ 効果（+ と /）× 25 − ミス × 25）÷ サーブ' },
+  // The team's serve index: each serve weighed by its evaluation (SERVE_WEIGHTS), per serve.
+  { id: 'serveIndex', label: 'SERVE INDEX', value: c => ratio(c.serveWeight, c.serve), format: v => v.toFixed(3), higher: true, title: '（# × 1 ＋ / × 0.752 ＋ + × 0.455 ＋ ! × 0.344 ＋ - × 0.281）÷ サーブ' },
   { id: 'ace', label: 'ACE%', value: c => ratio(c.ace, c.serve), format: pct, higher: true, title: 'サーブエース（#）÷ サーブ' },
   { id: 'err', label: 'ERR%', value: c => ratio(c.serveErr, c.serve), format: pct, higher: false, title: 'サーブミス（=）÷ サーブ' },
   { id: 'rec', label: 'RECEPTION#+%', value: c => ratio(c.recPos, c.rec), format: pct, higher: true, title: 'レセプションの # と + ÷ レセプション' },

@@ -1388,7 +1388,7 @@ export const EN: Record<string, string> = {
   "SO 得点 ÷ 相手サーブ（相手のサーブミスを含む）": "Side-out points ÷ opponent serves (their serve errors included)",
   "BP 得点 ÷ サーブ": "Break points ÷ serves",
   "アタック決定（#）÷ 打数": "Attack kills (#) ÷ attempts",
-  "（エース × 100 ＋ 効果（+ と /）× 25 − ミス × 25）÷ サーブ": "(Aces × 100 + effective (+ and /) × 25 − errors × 25) ÷ serves",
+  "（# × 1 ＋ / × 0.752 ＋ + × 0.455 ＋ ! × 0.344 ＋ - × 0.281）÷ サーブ": "(# × 1 + / × 0.752 + + × 0.455 + ! × 0.344 + - × 0.281) ÷ serves",
   "サーブエース（#）÷ サーブ": "Aces (#) ÷ serves",
   "サーブミス（=）÷ サーブ": "Serve errors (=) ÷ serves",
   "レセプションの # と + ÷ レセプション": "Receptions # and + ÷ receptions",
@@ -1396,6 +1396,6 @@ export const EN: Record<string, string> = {
   "チーム比較": "Team comparison",
   "自チーム": "Our team",
   "自チームの数字を取るプロジェクト（その対象チームの全試合）": "The project our team's figures come from (its target team over all its matches)",
-  "左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX は（エース × 100 ＋ 効果 × 25 − ミス × 25）÷ サーブ（効果は + と / のサーブ）。ここに重ねると各項目の計算式が出ます": "Our team (the chosen project's target team) goes left, the team chosen above (this project's matches) right; the better figure is in red. Each is the total over its matches. SERVE INDEX is (aces × 100 + effective × 25 − errors × 25) ÷ serves (effective: serves graded + or /). Hover here for each row's formula",
+  "左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます": "Our team (the chosen project's target team) goes left, the team chosen above (this project's matches) right; the better figure is in red. Each is the total over its matches. SERVE INDEX is the average weight of a serve (# 1, / 0.752, + 0.455, ! 0.344, - 0.281, = 0). Hover here for each row's formula",
   "倉庫にあるチームのロゴを入れます": "Puts in the teams' logos from the library",
 }

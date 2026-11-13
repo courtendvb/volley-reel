@@ -42,9 +42,14 @@ describe('the skill comparison', () => {
   const home = skillCounts([{ d, side: '*', label: '' }]), away = skillCounts([{ d, side: 'a', label: '' }])
   const show = (c: typeof home) => Object.fromEntries(SKILL_ROWS.map(r => { const v = r.value(c); return [r.label, v === null ? '' : r.format(v)] }))
   it('counts each team over its own matches', () => {
-    expect(home).toMatchObject({ matches: 1, sets: 1, oppServe: 1, soWon: 1, serve: 5, bpWon: 4, ace: 1, serveErr: 0, serveGood: 3, blockPts: 1, attack: 0, rec: 0 })
-    expect(show(home)).toEqual({ 'SO%': '100.0%', 'BP%': '80.0%', 'ATTACK KILL%': '', 'ATTACK EFF': '', 'SERVE INDEX': '35.0', 'ACE%': '20.0%', 'ERR%': '0.0%', 'RECEPTION#+%': '', 'BLOCK PTS/SET': '1.00' })
-    expect(show(away)).toEqual({ 'SO%': '20.0%', 'BP%': '0.0%', 'ATTACK KILL%': '33.3%', 'ATTACK EFF': '-33.3%', 'SERVE INDEX': '-25.0', 'ACE%': '0.0%', 'ERR%': '100.0%', 'RECEPTION#+%': '75.0%', 'BLOCK PTS/SET': '0.00' })
+    expect(home).toMatchObject({ matches: 1, sets: 1, oppServe: 1, soWon: 1, serve: 5, bpWon: 4, ace: 1, serveErr: 0, blockPts: 1, attack: 0, rec: 0 })
+    expect(show(home)).toEqual({ 'SO%': '100.0%', 'BP%': '80.0%', 'ATTACK KILL%': '', 'ATTACK EFF': '', 'SERVE INDEX': '0.529', 'ACE%': '20.0%', 'ERR%': '0.0%', 'RECEPTION#+%': '', 'BLOCK PTS/SET': '1.00' })
+    expect(show(away)).toEqual({ 'SO%': '20.0%', 'BP%': '0.0%', 'ATTACK KILL%': '33.3%', 'ATTACK EFF': '-33.3%', 'SERVE INDEX': '0.000', 'ACE%': '0.0%', 'ERR%': '100.0%', 'RECEPTION#+%': '75.0%', 'BLOCK PTS/SET': '0.00' })
+  })
+  it('weighs each serve by its evaluation for the serve index', () => {
+    // - 0.281, # 1, + 0.455 three times: 2.646 over five serves.
+    expect(home.serveWeight).toBeCloseTo(2.646, 6)
+    expect(away.serveWeight).toBe(0)
   })
   it('adds up several matches', () => {
     const two = skillCounts([{ d, side: '*', label: '' }, { d, side: 'a', label: '' }])

@@ -3,7 +3,7 @@
 // scout fix in the DVW shows up on the next read. Projects pick matches from here by id.
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseScout } from '../shared/vsm'
@@ -18,6 +18,7 @@ import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 import { t } from '../shared/i18n'
 import { withServeMark } from '../shared/serveMark'
+import { playerIndex, unifyPlayers } from '../shared/players'
 
 // A scout file: a DataVolley .dvw (Windows-1252 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
@@ -33,6 +34,7 @@ const cleanCode = (code: string) => {
 
 export class Library {
   private matches = new Map<string, Match>()
+  private scouts = new Map<string, { mtime: number; dvw: ParsedDVW }>() // by DVW path, read again when the file changes
   notices: string[] = []
 
   private constructor(readonly dir: string) {}
@@ -376,12 +378,24 @@ export class Library {
     return rosterOf(dvws.filter(d => d !== null))
   }
 
-  // Parsed every time from the DVW; plays are never saved (design §6).
+  // Read from the DVW (plays are never saved, design §6), with each player under one key for the whole
+  // library: the same team and jersey is the same person in every match (players.ts).
   async parse(id: string): Promise<ParsedDVW> {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
-    return readScout(m.dvwPath)
+    const dvw = await this.scout(m.dvwPath)
+    const all = await Promise.all(this.list().map(o => o.id === id ? dvw : this.scout(o.dvwPath).catch(() => null)))
+    return unifyPlayers(dvw, playerIndex(all.filter(d => d !== null)))
+  }
+
+  private async scout(path: string): Promise<ParsedDVW> {
+    const mtime = (await stat(path)).mtimeMs
+    const had = this.scouts.get(path)
+    if (had?.mtime === mtime) return had.dvw
+    const dvw = await readScout(path)
+    this.scouts.set(path, { mtime, dvw })
+    return dvw
   }
 
   // Takes over a match from a pre-v3 project. Returns the library id to use: the same id, or the

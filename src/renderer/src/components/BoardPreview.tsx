@@ -30,11 +30,15 @@ export function BoardPreview({ columns, skill, opts, photos: withPhotos }: { col
       images.set(id, img)
     }
     // A serve target or a rotation: the team's logo, from the library.
-    const team = (skill === 'T' || skill === 'R') && withPhotos ? columns[0]?.team : undefined, logo = team ? logoImage(team) : null
-    if (team && logo) { photos[logoKey(team)] = { assetId: 'preview:logo', width: logo.width, height: logo.height }; images.set('preview:logo', logo) }
+    // A comparison: both teams' logos.
+    const teams = !withPhotos ? [] : skill === 'C' ? [opts.compare?.left.code, opts.compare?.right.code] : skill === 'T' || skill === 'R' ? [columns[0]?.team] : []
+    for (const team of teams) {
+      const logo = team ? logoImage(team) : null
+      if (team && logo) { photos[logoKey(team)] = { assetId: `preview:logo:${team}`, width: logo.width, height: logo.height }; images.set(`preview:logo:${team}`, logo) }
+    }
     return { photos, images }
-  }, [columns, packs, withPhotos, tick, skill])
-  const slide = useMemo(() => (columns.length ? boardSlide(columns, skill, opts, photos) : null), [columns, skill, opts, photos])
+  }, [columns, packs, withPhotos, tick, skill, opts.compare])
+  const slide = useMemo(() => (columns.length || (skill === 'C' && opts.compare) ? boardSlide(columns, skill, opts, photos) : null), [columns, skill, opts, photos])
   useEffect(() => {
     const c = canvas.current
     if (!c) return

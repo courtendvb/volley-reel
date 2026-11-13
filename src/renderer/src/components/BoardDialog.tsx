@@ -6,7 +6,8 @@ import { BoardPreview } from './BoardPreview'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import { ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
-import type { ParsedDVW, Play } from '../../../shared/types'
+import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
+import { compareSide, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
 import { t } from '../../../shared/i18n'
 
 // What a chart shows: points, lines and a heatmap, any of them together, and how strong the lines are;
@@ -24,14 +25,34 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables } // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string } // marker 'head': the scene's head, in no marker
 
 // The choices of tables on a rotation slide.
 const TABLE_NAMES: Record<RotationTables, string> = {
   all: t('すべて表示'), hash: t('# のみ'), hashPlus: t('# と + のみ'), passes: t('パスのみ'), calls: t('セッターコールのみ'), none: t('表示しない'),
 }
 
-interface Slot { key: string; code: string; attention?: boolean } // '': no one, or all their attacks
+interface Slot { key: string; code: string; attention?: boolean }
+
+// A comparison's own team: another project (its target team over its matches), remembered for the next slide.
+const loadOwnProject = () => { try { return localStorage.getItem('vr.compareProject') ?? '' } catch { return '' } }
+const saveOwnProject = (p: string) => { try { localStorage.setItem('vr.compareProject', p) } catch { /* not kept */ } }
+function useOwnTeam(on: boolean, initial: string | undefined) {
+  const [path, setPath0] = useState(initial ?? loadOwnProject)
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
+  const [own, setOwn] = useState<{ path: string; side: CompareSide; failed: string[] } | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => { if (on && !projects) void window.api.otherProjects().then(setProjects, e => setError((e as Error).message)) }, [on, projects])
+  useEffect(() => {
+    if (!on || !path || !projects?.some(p => p.path === path)) return
+    let live = true
+    setError('')
+    window.api.projectDvws(path).then(r => { if (live) setOwn({ path, side: compareSide(r.dvws, r.code), failed: r.failed }) }, e => { if (live) setError((e as Error).message) })
+    return () => { live = false }
+  }, [on, path, projects])
+  const setPath = (p: string) => { setPath0(p); saveOwnProject(p) }
+  return { path: projects?.some(p => p.path === path) ? path : '', setPath, projects, own: own?.path === path ? own : null, error }
+} // '': no one, or all their attacks
 
 // Sets out a comparison card: how many players, then who goes in each place, from left to right.
 export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle, onCreate, onImport, onClose }: {
@@ -81,6 +102,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const marker: Marker | 'head' = asCard ? 'head' : inMarker
   const setView: SetView = initial?.setView ?? 'zones' // set slides paint the zones only (no arrows); kept for cards made before
   const [setLayout, setSetLayout] = useState<SetLayout>(initial?.setLayout ?? 'reception')
+  const ownTeam = useOwnTeam(skill === 'C', initial?.compareProject)
+  const right = useMemo(() => (skill === 'C' && open ? compareSide(dvws, open) : null), [skill, open, dvws])
+  const compare = ownTeam.own && right ? { left: ownTeam.own.side, right } : undefined
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, starts: true, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
   // no place yet. A change of team or skill starts again.
@@ -103,7 +127,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const shown = fill(slots, count)
   const setSlot = (i: number, s: Slot) => setSlots(shown.map((x, k) => (k === i ? s : x)))
   // A serve target: the team's receivers, all of them (the slide keeps those who received enough).
-  const columns = skill === 'T' ? inTeam : shown.flatMap(s => {
+  const columns = skill === 'C' ? [] : skill === 'T' ? inTeam : shown.flatMap(s => {
     const p = inTeam.find(x => x.key === s.key), c = p ? boardColumn(p, s.code || null, names) : null
     return c ? [s.attention ? { ...c, attention: true } : c] : []
   })
@@ -114,7 +138,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <div className="filter-row">
           <span className="field-label">{t('プレー')}</span>
           <div className="segmented" role="radiogroup">
-            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')], ['T', t('サーブの狙い')]] as [BoardSkill, string][]).map(([k, label]) => (
+            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')], ['T', t('サーブの狙い')], ['C', t('チーム比較')]] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}
           </div>
@@ -125,7 +149,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           <select id="board-team" value={open} onChange={e => { setTeam(e.target.value); setPickedColor(null); setPickedLine(null) }}>
             {teams.map(([code, name]) => <option key={code} value={code}>{`${code} — ${name}`}</option>)}
           </select>
-          {!oneSetter && skill !== 'T' && <>
+          {!oneSetter && skill !== 'T' && skill !== 'C' && <>
             <label className="field-label" htmlFor="board-count">{t('人数')}</label>
             <select id="board-count" value={count} onChange={e => { setSlots(shown); setCount(+e.target.value) }}>
               {Array.from({ length: MOST_PER_SLIDE }, (_, i) => i + 1).map(n => <option key={n} value={n}>{t('{0} 人', n)}</option>)}
@@ -164,8 +188,21 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             </div>
           </div>
         )}
+        {skill === 'C' && <>
+          <div className="filter-row">
+            <label className="field-label" htmlFor="board-own">{t('自チーム')}</label>
+            <select id="board-own" value={ownTeam.path} onChange={e => ownTeam.setPath(e.target.value)} title={t('自チームの数字を取るプロジェクト（その対象チームの全試合）')}>
+              <option value="" disabled>{ownTeam.projects === null ? t('読み込んでいます…') : ownTeam.projects.length ? t('プロジェクトを選ぶ') : t('ほかのプロジェクトがありません')}</option>
+              {ownTeam.projects?.map(p => <option key={p.path} value={p.path} title={p.path}>{`${p.name}${p.code ? ` — ${p.code}` : ''}（${t('{0} 試合', p.matches)}）`}</option>)}
+            </select>
+          </div>
+          {ownTeam.error && <p className="muted small">{ownTeam.error}</p>}
+          {ownTeam.own && !ownTeam.own.side.counts.matches && <p className="muted small">{t('そのプロジェクトに {0} の試合の DVW がありません', ownTeam.own.side.code || '?')}</p>}
+          {ownTeam.own && ownTeam.own.failed.length > 0 && <p className="muted small">{t('読めなかった試合: {0}', ownTeam.own.failed.join(' / '))}</p>}
+          <p className="hint" title={SKILL_ROWS.map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX は（エース × 100 ＋ 効果 × 25 − ミス × 25）÷ サーブ（効果は + と / のサーブ）。ここに重ねると各項目の計算式が出ます')}</p>
+        </>}
         {skill === 'T' && <p className="hint">{t('このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。チーム全体より 10 ポイント以上良い数字を青、悪い数字を赤で示します')}</p>}
-        {skill !== 'T' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
+        {skill !== 'T' && skill !== 'C' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
           {shown.map((s, i) => {
             const p = inTeam.find(x => x.key === s.key)
             const codes = skill === 'A' && p ? attackCodes([p]) : []
@@ -190,12 +227,12 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos}
-          opts={{ setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
-        {!oneSetter && skill !== 'T' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
+          opts={{ ...(compare ? { compare } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+        {!oneSetter && skill !== 'T' && skill !== 'C' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
-          <label className="check" title={t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {t('写真')}</label>
-          {!oneSetter && skill !== 'T' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
-          {notes && !oneSetter && skill !== 'T' && <>
+          <label className="check" title={skill === 'C' ? t('倉庫にあるチームのロゴを入れます') : t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {skill === 'C' ? t('ロゴ') : t('写真')}</label>
+          {!oneSetter && skill !== 'T' && skill !== 'C' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
+          {notes && !oneSetter && skill !== 'T' && skill !== 'C' && <>
             <label className="check" title={t('ノート欄の高さ。文字の大きさも一緒に変わります')}>{t('高さ')}
               <input type="number" min={NOTE_SIZE.min * 100} max={NOTE_SIZE.max * 100} step={NOTE_SIZE.step * 100} value={Math.round(noteSize * 100)} style={{ width: 60 }} aria-label={t('ノート欄の高さ（%）')}
                 onChange={e => { const n = +e.target.value / 100; if (n >= NOTE_SIZE.min && n <= NOTE_SIZE.max) setNoteSize(n) }} />%</label>
@@ -224,7 +261,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine, cones, tables })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare : !columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter, noteSize, noteFills, photos, background, marker, team: open, searched, teamColor, discLine, cones, tables })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

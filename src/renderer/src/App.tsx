@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, findOverlaps, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
@@ -126,13 +126,13 @@ export function App() {
   const {
     reels, setReels, reelId, setReelId, videos, setVideos, videoId, setVideoId, reel, video,
     saveState, flushAll, markSaved, record, undoRedo, clearHistory,
-    putVideo, addScenes, addVideo, showScene, removeScenes, sceneSnap, videoSnap,
+    putScene, putVideo, addScenes, addVideo, showScene, removeScenes, sceneSnap, videoSnap,
     updateReel, updateVideo, updateScene, withReel, makeScene, deleteReel, createVideo, scenesOnlyIn, selectVideo, deleteVideo,
   } = useSceneStore({ latest, setActiveClipId, setProject, setError })
   const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
   const {
     library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
-    openProject, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
+    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
   } = useProjectFlow({
     latest, project, setProject, setDvws, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
     setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
@@ -154,6 +154,7 @@ export function App() {
   gridStyleRef.current = gridStyle
 
   const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
+  const projectMatchIds = useMemo(() => (project?.matches ?? []).map(m => m.id), [project]) // oldest first
   const match = matchId ? matches[matchId] ?? null : null
   useEffect(() => setCourtFitting(false), [matchId])
   // Shown at once, then saved to the match in the library.
@@ -224,6 +225,19 @@ export function App() {
   // per scene object (and dropped with it) until the DVWs or the matches change.
   // A clip's [match in list order, IN time] in a scene: where a newly marked clip goes in its group.
   const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }
+  // A clip's right-click: the clip into another scene with its markers and edits, moved (out of this
+  // one) or copied. One undo step covers both scenes.
+  const clipToScene = (clipId: string, toId: string, move: boolean) => {
+    const { reel: from, reels: rs } = latest.current
+    const to = rs.find(r => r.id === toId), c = from?.clips[clipId]
+    if (!from || !to || !c) return
+    const { reel: next, existed } = copyClipTo(c, to, markersOf(from, clipId), whenIn(to))
+    record([sceneSnap(from.id), sceneSnap(to.id)], false)
+    putScene(next)
+    if (move) { putScene(removeClip(from, clipId)); if (latest.current.activeClipId === clipId) setActiveClipId(null) }
+    setNotice(existed ? (move ? t('「{0}」には同じプレーがあるため、そのクリップにマーカーを付け、ここからは外しました', to.name) : t('「{0}」には同じプレーがあるため、そのクリップにマーカーだけ付けました', to.name))
+      : move ? t('「{0}」へ移動しました', to.name) : t('「{0}」へコピーしました', to.name))
+  }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
     const hit = orderMemo.get(s)
@@ -340,7 +354,7 @@ export function App() {
   }, [video?.overlay, project?.settings.theme])
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, library, activeGroup }
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
-    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', scopeRefs, results,
+    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
   })
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
@@ -516,7 +530,7 @@ export function App() {
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
-  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportTargets, exportInfo, exportTarget } = useExport(
+  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget } = useExport(
     { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef, cardFramePhoto)
   latest.current.exportState = exportState
   const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
@@ -599,7 +613,7 @@ export function App() {
   // ---- dev self-check (VR_SMOKE): only loaded when the main process runs one (see smoke.ts)
   useEffect(() => {
     if (!SMOKE) return
-    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
+    const host: SmokeHost = { activateClip, currentPlan, editCard, exportClip, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
     void import('./smoke').then(m => m.installSmoke(host))
   }, [jump, loadProject, playThrough, activateClip, updateReel, updateVideo, overlayData, setOverlay, startExport, currentPlan])
 
@@ -613,6 +627,7 @@ export function App() {
         {project && <button onClick={() => setPicker('edit')} title={t('倉庫から試合を足す・外す')}>{t('試合')} {project.matches.length}</button>}
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
+        {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         {project && <button onClick={() => setAnalysisOpen(true)} title={t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る')}>{t('分析')}</button>}
@@ -634,7 +649,7 @@ export function App() {
       )}
       {!project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
-          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)}
+          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
           onRelocate={(id, part) => void relocate(id, part)} />
       ) : !project.matches.length ? (
         <div className="empty"><h2>{t('試合を選びましょう')}</h2>
@@ -658,7 +673,7 @@ export function App() {
               filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
-              onAddAll={() => addPlays(results)} onPreset={() => setPresetOpen(true)}
+              onAddAll={() => addPlays(results)}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
@@ -863,6 +878,7 @@ export function App() {
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
               onSlide={(spot, how) => void putSlide(spot, how)} onEditSlide={id => reel && editCard(reel.id, null, id)}
               editingSlideId={cardEdit?.slideId ?? null} canFrame={!!match}
+              onClipToScene={clipToScene} onExportClip={(id, g) => { if (reel) void exportClip(reel.id, id, g) }}
             />
             <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem}
               clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} />

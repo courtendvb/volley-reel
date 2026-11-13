@@ -152,7 +152,8 @@ const mean = (ps: TeamPt[]): TeamPt => ({ u: ps.reduce((a, p) => a + p.u, 0) / p
 
 // One of the side-out team's players as it lines up to receive in a rotation. libero: not in the
 // lineup (a libero); setter: the setter, who doesn't pass.
-export interface FormationSpot { jersey: number; role?: PlayerRole; libero?: boolean; setter?: boolean; at: TeamPt; receives: boolean }
+const FRONT_RING = '#DC2626' // the ring on the floor round a front-row player
+export interface FormationSpot { jersey: number; role?: PlayerRole; libero?: boolean; setter?: boolean; front?: boolean; at: TeamPt; receives: boolean } // front: in the front row (zones 2–4)
 
 // The serve receive almost every team plays in a 5-1: three passers (the two outside hitters and the
 // libero) across the court about 6–7 m from the net, the setter by the net or behind a front
@@ -163,11 +164,11 @@ export interface FormationSpot { jersey: number; role?: PlayerRole; libero?: boo
 // Tuned by hand on real slides: the front players a step off the net, and in rotation 4 the outside
 // hitter in zone 2 swinging over to pass on the left.
 const RECEIVE: Record<number, [number, number][]> = {
-  1: [[0.9, 0.1], [0.79, 0.19], [0.45, 0.35], [0.08, 0.35], [0.2, 0.17], [0.5, 0.15]],
-  6: [[0.65, 0.28], [0.82, 0.15], [0.88, 0.3], [0.63, 0.37], [0.18, 0.2], [0.45, 0.14]],
+  1: [[0.9, 0.1], [0.79, 0.19], [0.36, 0.36], [0.08, 0.35], [0.2, 0.17], [0.5, 0.15]],
+  6: [[0.7, 0.3], [0.82, 0.15], [0.88, 0.3], [0.63, 0.37], [0.18, 0.2], [0.45, 0.14]],
   5: [[0.3, 0.3], [0.5, 0.14], [0.82, 0.15], [0.88, 0.32], [0.17, 0.18], [0.11, 0.35]],
   4: [[0.08, 0.44], [0.53, 0.16], [0.79, 0.18], [0.92, 0.07], [0.26, 0.18], [0.16, 0.35]],
-  3: [[0.6, 0.45], [0.18, 0.2], [0.45, 0.14], [0.66, 0.05], [0.84, 0.14], [0.82, 0.33]],
+  3: [[0.63, 0.45], [0.18, 0.2], [0.45, 0.14], [0.66, 0.05], [0.84, 0.14], [0.82, 0.33]],
   2: [[0.67, 0.45], [0.25, 0.2], [0.1, 0.35], [0.37, 0.05], [0.5, 0.14], [0.82, 0.15]],
 }
 
@@ -202,7 +203,7 @@ export function rotationFormation(dvws: ParsedDVW[], team: string, r: number, li
     const spot = { u, v }
     if ((d === 2 || d === 5) && (zone === 1 || zone >= 5)) // the back row's middle: the libero comes on
       return libero !== null ? { jersey: libero, libero: true, at: spot, receives: true } : { jersey, ...(role ? { role } : {}), at: spot, receives: false }
-    return { jersey, ...(role ? { role } : {}), ...(d === 0 ? { setter: true } : {}), at: spot, receives: d === 1 || d === 4 }
+    return { jersey, ...(role ? { role } : {}), ...(d === 0 ? { setter: true } : {}), ...(zone >= 2 && zone <= 4 ? { front: true } : {}), at: spot, receives: d === 1 || d === 4 }
   })
 }
 
@@ -333,10 +334,12 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
   }
   out.push(...tips)
   // The players: a ball resting on the floor (lit from the top left), its soft shadow on the floor;
-  // the far ones first so nearer ones cover them. A ball is about 0.9 m wide where it stands.
+  // the far ones first so nearer ones cover them. A ball is about 0.9 m wide where it stands. A
+  // front-row player stands in a red ring on the floor, round their shadow.
   const corners = COURT, { fill: teamColor, line: rimColor } = look
-  const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string, rimWidth = 1) => {
+  const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string, rimWidth = 1, front = false) => {
     const gg = uid(), f = invert(H, p), ring = discOutline(corners, { u: f.u, v: f.v, r: 0.45, z: 0 }).top
+    if (front) out.push({ id: uid(), kind: 'polygon', color: FRONT_RING, width: 3, points: discOutline(corners, { u: f.u, v: f.v + 0.005, r: 0.72, z: 0 }).top, fill: FRONT_RING, fillOpacity: 0.14, groupId: gg })
     const xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * 1280 // its width in px at 720p
     const cx = p[0], cy = p[1] * 720 - d * 0.42 // its centre over the floor point, in px
     out.push({ id: uid(), kind: 'polygon', color: '#000000', width: 0, points: discOutline(corners, { u: f.u, v: f.v + 0.005, r: 0.47, z: 0 }).top, fill: '#2A1708', fillOpacity: 0.32, groupId: gg })
@@ -347,7 +350,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook):
     const p = team({ u: Math.min(1, Math.max(0, s.at.u)), v: Math.min(0.49, Math.max(0.02, s.at.v)) })
     const deep = light(teamColor) ? mix(teamColor, '#000000', 0.45) : teamColor // the libero: white, in the team's colour
     if (s.libero) disc(p, '#FFFFFF', deep, String(s.jersey), deep, 2)
-    else disc(p, teamColor, rimColor, String(s.jersey), light(teamColor) ? '#0F172A' : '#FFFFFF')
+    else disc(p, teamColor, rimColor, String(s.jersey), light(teamColor) ? '#0F172A' : '#FFFFFF', 1, !!s.front)
   }
   // The net: posts, a see-through mesh, the white tape along its top and the cable at its foot, and
   // the antennas over the sidelines.

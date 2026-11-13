@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, bounds, fadeAlpha, hitTest, pointInPolygon, roundCoords, translate, type Annotation } from './annotation'
-import { snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
+import { applyStyle, arrowPath, bounds, cubicAt, fadeAlpha, hitTest, pointInPolygon, roundCoords, subCubic, translate, type Annotation } from './annotation'
+import { snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, setCurved, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -162,5 +162,51 @@ describe('formats and polygons', () => {
     expect(hitTest(ctx, [poly], 0.3, 0.2, 1280, 720)).toBeNull()
     expect(hitTest(ctx, [{ ...poly, fill: '#000' } as Annotation], 0.3, 0.2, 1280, 720)?.id).toBe('p')
     expect(hitTest(ctx, [poly], 0.3, 0.1, 1280, 720)?.id).toBe('p') // on the top edge
+  })
+})
+
+describe('curved arrows', () => {
+  const straight: Annotation = { id: 'a', kind: 'arrow', color: '#FFF', x1: 0.1, y1: 0.5, x2: 0.7, y2: 0.5, width: 4 }
+  const curve = setCurved(straight, true) as Extract<Annotation, { kind: 'arrow' }>
+
+  it('bends a straight arrow into an arc and back', () => {
+    expect(curve.c1![1]).toBeLessThan(0.5) // bulges up, to the left of the way it goes
+    expect(curve.c2![1]).toBeCloseTo(curve.c1![1])
+    expect(setCurved(curve, false)).toEqual(straight)
+    expect(handlesOf(curve).map(h => h.id)).toEqual(['p1', 'p2', 'c1', 'c2'])
+  })
+
+  it('follows the curve, not the straight line, for its bounds and clicks', () => {
+    const path = arrowPath(curve)
+    expect(path[0]).toEqual([0.1, 0.5])
+    expect(path[path.length - 1]).toEqual([0.7, 0.5])
+    const ctx = { measureText: () => ({ width: 0 }) } as unknown as Parameters<typeof bounds>[0]
+    const b = bounds(ctx, curve, 1280, 720)
+    expect(b.y).toBeLessThan(0.45)
+    expect(b.y + b.h).toBeCloseTo(0.5)
+    const top = path[16] // the middle of the curve
+    expect(hitTest(ctx, [curve], top[0], top[1], 1280, 720)?.id).toBe('a')
+    expect(hitTest(ctx, [curve], 0.4, 0.5, 1280, 720)).toBeNull() // the straight line it no longer is
+  })
+
+  it('moves a control point alone, and an end with its control point', () => {
+    const c = dragHandle(curve, 'c2', 0.6, 0.9).a as typeof curve
+    expect(c.c2).toEqual([0.6, 0.9])
+    expect(c.c1).toEqual(curve.c1)
+    const e = dragHandle(curve, 'p2', 0.8, 0.6).a as typeof curve
+    expect(e.c2![0]).toBeCloseTo(curve.c2![0] + 0.1)
+    expect(e.c2![1]).toBeCloseTo(curve.c2![1] + 0.1)
+    const m = translate(curve, 0.1, 0) as typeof curve
+    expect(m.c1![0]).toBeCloseTo(curve.c1![0] + 0.1)
+  })
+
+  it('cuts a piece out of a cubic that lies on it', () => {
+    const q: [[number, number], [number, number], [number, number], [number, number]] = [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]
+    const part = subCubic(q, 0.25, 0.75)
+    for (const s of [0, 0.3, 0.6, 1]) {
+      const a = cubicAt(part, s), b = cubicAt(q, 0.25 + s * 0.5)
+      expect(a[0]).toBeCloseTo(b[0]); expect(a[1]).toBeCloseTo(b[1])
+    }
+    expect(roundCoords(curve)).toMatchObject({ c1: curve.c1!.map(v => Math.round(v * 10000) / 10000) })
   })
 })

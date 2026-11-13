@@ -10,6 +10,7 @@ on:
       - electron-builder.yml
       - scripts/fetch-ffmpeg-mac.mjs
       - src/main/ffmpegPath.ts
+      - src/main/macMenu.ts
 jobs:
   build:
     runs-on: macos-latest

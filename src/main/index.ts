@@ -1,6 +1,6 @@
 import { createReadStream, existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
@@ -21,6 +21,7 @@ import { readSettings, recentProjects, rememberProject, saveSettings } from './a
 import { lastFolder, rememberFolder, type ExportKind } from '../shared/exportFolders'
 import { corruptFirstReel, registerSmokeIpc, runSmoke, type SmokeContext } from './smokeRun'
 import { grabFrame, rawFrame } from './media'
+import { setMacMenu } from './macMenu'
 import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
 
@@ -67,6 +68,7 @@ app.whenReady().then(async () => {
   // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
   setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
   protocol.handle('media', serveMedia)
+  if (process.platform === 'darwin') setMacMenu()
   registerIpc()
 
   const libPath = process.env.VR_LIBRARY || (process.env.VR_PROJECT ? join(dirname(process.env.VR_PROJECT), 'vr-smoke-library') : readSettings().libraryPath)
@@ -156,6 +158,33 @@ function registerIpc(): void {
       await mkdir(dir, { recursive: true })
     }
     project = await Project.create(dir, l, { ...init, name })
+    rememberProject(project)
+    return project.info()
+  })
+
+  // One match on its own, from the library's list: the project made for that match and team before
+  // (one match, that team ours; in <library>/projects or among the recent ones), else a new one there.
+  ipcMain.handle('project:openMatch', async (_e, matchId: string, code: string) => {
+    const l = lib()
+    const m = l.info().matches.find(x => x.id === matchId)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', matchId))
+    const root = join(l.dir, 'projects')
+    const inRoot = existsSync(root) ? (await readdir(root, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => join(root, d.name)) : []
+    const dirs = [...new Set([...inRoot, ...recentProjects().map(r => r.path)])]
+    for (const dir of dirs) {
+      try {
+        const f = JSON.parse(await readFile(join(dir, 'project.json'), 'utf8')) as { matchIds?: string[]; ourTeamCodes?: string[] }
+        if (f.matchIds?.length !== 1 || f.matchIds[0] !== matchId || f.ourTeamCodes?.[0]?.toUpperCase() !== code.toUpperCase()) continue
+        project = await Project.open(dir, l)
+        rememberProject(project)
+        return project.info()
+      } catch { /* not a project, or unreadable: look on */ }
+    }
+    const opp = m.teams.find(x => x.code.toUpperCase() !== code.toUpperCase())?.code ?? ''
+    const name = [code, m.date, opp && `vs ${opp}`].filter(Boolean).join(' ')
+    const dir = join(root, uniqueName(folderName(name), n => existsSync(join(root, n))))
+    await mkdir(dir, { recursive: true })
+    project = await Project.create(dir, l, { name, ourTeamCodes: [code], matchIds: [matchId] })
     rememberProject(project)
     return project.info()
   })

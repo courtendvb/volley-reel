@@ -20,7 +20,9 @@ export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
 //           the most serves first, 'jersey' by jersey number; marked as serveMarks says
 //  block    'middle' a scene per middle blocker with every attack of the other team while that
 //           middle was in the front row (touched or not), the most first, marked 1 after the
-//           attacking team's good reception, 2 after its poor one, 3 in transition;
+//           attacking team's good reception, 2 after its poor one, 3 in transition (blockMarks
+//           'phase'), or only the attacks after its good reception (# + !), marked 1 with its setter
+//           in the back row (S1 S6 S5) and 2 in the front row (S4 S3 S2) (blockMarks 'setter');
 //           'rotation' a scene per rotation with the blocks, a marker per blocker
 //  attack   'count' a scene per attacker, the most attacks first; 'position' a scene per
 //           position (outside, opposite, middle, setter, the rest) with a marker per player;
@@ -30,9 +32,11 @@ export interface PresetHow {
   serve: 'rotation' | 'count' | 'jersey'
   serveMarks: ServeMarks // inside each server's scene
   block: 'middle' | 'rotation'
+  blockMarks: 'phase' | 'setter' // inside each middle's scene
   attack: 'count' | 'position' | 'combo'
+  order: 'old' | 'new' // every preset: the plays of the oldest matches first, or of the newest
 }
-export const DEFAULT_HOW: PresetHow = { sideout: 'none', serve: 'rotation', serveMarks: 'reception', block: 'middle', attack: 'count' }
+export const DEFAULT_HOW: PresetHow = { sideout: 'none', serve: 'rotation', serveMarks: 'reception', block: 'middle', blockMarks: 'phase', attack: 'count', order: 'old' }
 // A server's serves in markers: 'reception' by the reception they drew (serveMarker), 'zone' by where
 // they landed (serveZoneMarker), 'time' all in one marker as they came.
 export type ServeMarks = 'reception' | 'zone' | 'time'
@@ -46,6 +50,7 @@ export interface PresetLookups {
   wonBy: WonBy
   roleOf: (r: PlayRef) => PlayerRole | undefined // the project's position for the player, else the DVW roster's
   middlesFacing: (r: PlayRef) => Facing[] // an attack: the other team's middle blockers in the front row
+  matchIndex?: (matchId: string) => number // the match's place, oldest first; without it, as the plays come
 }
 
 // An attack by where it came from: the attacking team's reception phase after a good or a poor
@@ -56,6 +61,25 @@ export function phaseMarker(attack: Play): Marker | null {
   return e === '#' || e === '+' ? 1 : e === '-' || e === '!' || e === '/' ? 2 : null
 }
 const PHASE_NAMES = (): Partial<Record<Marker, string>> => ({ 1: t('良いレセプション'), 2: t('悪いレセプション'), 3: t('トランジション') })
+
+// An attack after the attacking team's good reception (# + !) by where its setter was: 1 in the back
+// row (rotations 1, 6, 5), 2 in the front row (4, 3, 2). Any other attack has none.
+export function setterMarker(r: PlayRef): Marker | null {
+  const e = r.play.phase === 'r' ? r.play.recEffect : undefined
+  if (e !== '#' && e !== '+' && e !== '!') return null
+  const rot = rotationOf(r)
+  return rot === 1 || rot === 6 || rot === 5 ? 1 : rot === 4 || rot === 3 || rot === 2 ? 2 : null
+}
+const SETTER_NAMES = (): Partial<Record<Marker, string>> => ({ 1: t('相手セッター後衛'), 2: t('相手セッター前衛') })
+
+// The plays with their matches oldest or newest first; inside a match they stay in the order played.
+export function orderByMatch(refs: PlayRef[], order: 'old' | 'new', matchIndex?: (matchId: string) => number): PlayRef[] {
+  const seen = new Map<string, number>()
+  const rank = (id: string) => { const i = matchIndex?.(id); if (i !== undefined && i >= 0) return i; if (!seen.has(id)) seen.set(id, 1e6 + seen.size); return seen.get(id)! }
+  for (const r of refs) rank(r.matchId) // fixes the fallback places in the order the plays come
+  const sign = order === 'new' ? -1 : 1
+  return [...refs].sort((a, b) => sign * (rank(a.matchId) - rank(b.matchId)))
+}
 
 // A serve by its result: an ace, an out-of-system pass (+ /), an in-system pass (! -), an error.
 export function serveMarker(serve: Play): Marker | null {
@@ -115,7 +139,8 @@ export function presetRefs(kind: PresetKind, how: PresetHow, source: 'our' | 'op
 // An attack code as a marker names it: the code, and its name from the DVW's table when there is one.
 const comboLabel = (r: PlayRef): string => (r.comboName ? `${r.combo} ${r.comboName}` : r.combo ?? '')
 
-export function buildPreset(kind: PresetKind, how: PresetHow, refs: PlayRef[], look: PresetLookups): { scenes: SceneSpec[]; skipped: number } {
+export function buildPreset(kind: PresetKind, how: PresetHow, plays: PlayRef[], look: PresetLookups): { scenes: SceneSpec[]; skipped: number } {
+  const refs = orderByMatch(plays, how.order, look.matchIndex)
   if (kind === 'sideout' || (kind === 'block' && how.block === 'rotation')) {
     const by = kind === 'sideout' ? how.sideout : 'player'
     const { groups, skipped } = splitByRotation(refs, by, look.wonBy)
@@ -124,13 +149,14 @@ export function buildPreset(kind: PresetKind, how: PresetHow, refs: PlayRef[], l
   if (kind === 'block') {
     // An attack goes in the scene of each middle facing it (usually one).
     const byMiddle = new Map<string, { label: string; refs: PlayRef[] }>()
-    for (const r of refs) for (const m of look.middlesFacing(r)) {
+    const bySetter = how.blockMarks === 'setter'
+    for (const r of refs) for (const m of bySetter && setterMarker(r) === null ? [] : look.middlesFacing(r)) {
       const g = byMiddle.get(m.key) ?? { label: m.label, refs: [] }
       g.refs.push(r)
       byMiddle.set(m.key, g)
     }
     const scenes = [...byMiddle.values()].sort((a, b) => b.refs.length - a.refs.length)
-      .map(g => ({ title: g.label, ...marked(g.refs, r => phaseMarker(r.play), PHASE_NAMES()) }))
+      .map(g => ({ title: g.label, ...(bySetter ? marked(g.refs, setterMarker, SETTER_NAMES()) : marked(g.refs, r => phaseMarker(r.play), PHASE_NAMES())) }))
     return { scenes, skipped: 0 }
   }
   const people = byCount(refs, personOf)
@@ -160,7 +186,9 @@ export const HOW_OPTIONS = (): { [K in keyof PresetHow]: [PresetHow[K], string][
   serve: [['rotation', t('ローテ順')], ['count', t('打数順')], ['jersey', t('背番号順')]],
   serveMarks: [['reception', t('レセプション評価別')], ['zone', t('ゾーン別')], ['time', t('時系列')]],
   block: [['middle', t('ミドル別')], ['rotation', t('ローテ別')]],
+  blockMarks: [['phase', t('レセプション別')], ['setter', t('相手セッター位置別')]],
   attack: [['count', t('打数順')], ['position', t('ポジション別')], ['combo', t('アタックコード別')]],
+  order: [['old', t('古い試合から')], ['new', t('新しい試合から')]],
 })
 
 // What a video was made from, kept on the video (Video.preset) so it can be made again, for
@@ -179,7 +207,8 @@ export function presetLabels(p: VideoPreset, team: string): { name: string; pref
   const who = p.source === 'our' ? team || t('対象チーム') : p.source === 'opp' ? t('相手') : null
   const how = (HOW_OPTIONS()[p.kind] as [string, string][]).find(([v]) => v === p.how[p.kind])?.[1] ?? ''
   const dir = p.dir === 'up' ? '↑' : p.dir === 'down' ? '↓' : ''
-  const marks = p.kind === 'serve' ? HOW_OPTIONS().serveMarks.find(([v]) => v === p.how.serveMarks)?.[1] ?? '' : ''
+  const marks = p.kind === 'serve' ? HOW_OPTIONS().serveMarks.find(([v]) => v === p.how.serveMarks)?.[1] ?? ''
+    : p.kind === 'block' && p.how.block === 'middle' && p.how.blockMarks === 'setter' ? HOW_OPTIONS().blockMarks.find(([v]) => v === 'setter')?.[1] ?? '' : ''
   const name = [who, presetName(p.kind), p.kind === 'sideout' ? t('ローテーション別') : how, marks, dir].filter(Boolean).join(' ')
   return { name, prefix: [who, presetName(p.kind)].filter(Boolean).join(' ') }
 }
@@ -195,7 +224,7 @@ export function cleanPreset(v: unknown): VideoPreset | null {
   if (!PRESET_KINDS.includes(o.kind as PresetKind)) return null
   const how = { ...DEFAULT_HOW }
   const opts = HOW_OPTIONS()
-  for (const k of [...PRESET_KINDS, 'serveMarks'] as (keyof PresetHow)[]) {
+  for (const k of [...PRESET_KINDS, 'serveMarks', 'blockMarks', 'order'] as (keyof PresetHow)[]) {
     const x = (o.how as Record<string, unknown> | undefined)?.[k]
     if ((opts[k] as [string, string][]).some(([val]) => val === x)) (how as Record<string, unknown>)[k] = x
   }
@@ -209,9 +238,12 @@ export function cleanPreset(v: unknown): VideoPreset | null {
 
 // What the presets look up in the matches: who won a play's rally, a player's position (the
 // project's, else the DVW roster's) and the other team's middle blockers in the front row.
-export function presetLookups(dvws: Record<string, ParsedDVW>, roles: Record<string, PlayerRole> | undefined): PresetLookups {
+// `matchIds`: the project's matches, oldest first.
+export function presetLookups(dvws: Record<string, ParsedDVW>, roles: Record<string, PlayerRole> | undefined, matchIds?: string[]): PresetLookups {
   const role = (p: Player) => roles?.[p.key] ?? p.role
+  const index = new Map(matchIds?.map((id, i) => [id, i]))
   return {
+    ...(matchIds ? { matchIndex: (id: string) => index.get(id) ?? -1 } : {}),
     wonBy: r => (r.play.rallyId === null ? null : dvws[r.matchId]?.rallies[r.play.rallyId]?.wonBy ?? null),
     roleOf: r => roles?.[r.personKey] ?? dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role,
     middlesFacing: r => {

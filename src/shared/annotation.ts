@@ -65,7 +65,8 @@ export function nextNumber(list: Annotation[]): number {
 export type Annotation = Base & (
   // align center: x is the middle of the text. quick: the clip's headline from the text field in the tools.
   | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean; font?: string }
-  | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads }
+  // c1 / c2: a curved arrow, a cubic Bézier from (x1, y1) to (x2, y2) pulled toward these two points.
+  | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads; c1?: [number, number]; c2?: [number, number] }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number; cell?: ZoneCell; disc?: DiscPart } & Fillable) // cell: a court zone painted from the zone panel; disc: part of a disc on the court
@@ -78,6 +79,42 @@ export type Annotation = Base & (
 // Corners of a picture laid with perspective: top-left, top-right, bottom-left, bottom-right of the picture.
 export type Quad = [[number, number], [number, number], [number, number], [number, number]]
 export type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
+export type ArrowAnnotation = Extract<Annotation, { kind: 'arrow' }>
+type Pt = [number, number]
+type Cubic = [Pt, Pt, Pt, Pt]
+
+// A curve's two control points when it is first drawn from one point to another: a gentle arc
+// bulging to the left of the way it goes, so it can be seen to be a curve and its handles grabbed.
+export function curveControls(x1: number, y1: number, x2: number, y2: number, bend = 0.25): { c1: Pt; c2: Pt } {
+  const dx = x2 - x1, dy = y2 - y1, nx = dy * bend, ny = -dx * bend
+  return { c1: [x1 + dx / 3 + nx, y1 + dy / 3 + ny], c2: [x1 + (dx * 2) / 3 + nx, y1 + (dy * 2) / 3 + ny] }
+}
+
+// A point on a cubic Bézier at t (0..1).
+export function cubicAt(p: Cubic, t: number): Pt {
+  const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t
+  return [a * p[0][0] + b * p[1][0] + c * p[2][0] + d * p[3][0], a * p[0][1] + b * p[1][1] + c * p[2][1] + d * p[3][1]]
+}
+
+// The arrow's line as points: its two ends, or a curve cut into n straight pieces.
+export function arrowPath(a: ArrowAnnotation, n = 32): Pt[] {
+  if (!a.c1 || !a.c2) return [[a.x1, a.y1], [a.x2, a.y2]]
+  const q: Cubic = [[a.x1, a.y1], a.c1, a.c2, [a.x2, a.y2]]
+  return Array.from({ length: n + 1 }, (_, i) => cubicAt(q, i / n))
+}
+
+// The part of a cubic Bézier between t0 and t1, as its own four points (de Casteljau).
+export function subCubic(p: Cubic, t0: number, t1: number): Cubic {
+  const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+  const left = (q: Cubic, t: number): Cubic => { // the first part, up to t
+    const a = lerp(q[0], q[1], t), b = lerp(q[1], q[2], t), c = lerp(q[2], q[3], t), d = lerp(a, b, t), e = lerp(b, c, t)
+    return [q[0], a, d, lerp(d, e, t)]
+  }
+  const head = left(p, t1)
+  if (t0 <= 0 || t1 <= 0) return head
+  const rev = left([head[3], head[2], head[1], head[0]], 1 - t0 / t1) // the last part of head, from t0
+  return [rev[3], rev[2], rev[1], rev[0]]
+}
 
 export type ImageLookup = (assetId: string) => CanvasImageSource | null
 export interface Crop { x: number; y: number; w: number; h: number }
@@ -148,7 +185,8 @@ export function coverCrop(iw: number, ih: number, bw: number, bh: number): Crop 
 export function translate(a: Annotation, dx: number, dy: number): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: a.x + dx, y: a.y + dy }
-    case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy }
+    case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy,
+      ...(a.c1 && a.c2 ? { c1: [a.c1[0] + dx, a.c1[1] + dy] as Pt, c2: [a.c2[0] + dx, a.c2[1] + dy] as Pt } : {}) }
     case 'image': return a.quad ? withQuad(a, a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad) : { ...a, x: a.x + dx, y: a.y + dy }
     case 'circle': case 'rect': return { ...a, x: a.x + dx, y: a.y + dy }
     default: return { ...a, points: a.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }
@@ -264,7 +302,7 @@ export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
       }
       return { x: left - pad * (H / W), y: a.y - pad, w: w + 2 * pad * (H / W), h: a.box?.height ?? (a.size * 1.2 * lines.length) / REF_HEIGHT + 2 * pad }
     }
-    case 'arrow': return pointsBox([[a.x1, a.y1], [a.x2, a.y2]])
+    case 'arrow': return pointsBox(arrowPath(a))
     case 'circle': case 'rect': case 'image': return { x: a.x, y: a.y, w: a.w, h: a.h }
     default: return pointsBox(a.points)
   }
@@ -285,7 +323,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   for (let i = list.length - 1; i >= 0; i--) {
     const a = list[i]
     if (a.locked) continue
-    if (a.kind === 'arrow') { if (nearPath([[a.x1, a.y1], [a.x2, a.y2]], false, a.width)) return a; continue }
+    if (a.kind === 'arrow') { if (nearPath(arrowPath(a), false, a.width)) return a; continue }
     if (a.kind === 'freehand' || a.kind === 'polyline') { if (nearPath(a.points, false, a.width)) return a; continue }
     if (a.kind === 'polygon') { if (nearPath(a.points, true, a.width) || (a.fill && pointInPolygon(x, y, a.points))) return a; continue }
     if (a.kind === 'image' && a.quad) { if (nearPath(quadRing(a.quad), true, 0) || pointInPolygon(x, y, quadRing(a.quad))) return a; continue }
@@ -329,6 +367,7 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       break
     }
     case 'arrow': {
+      if (a.c1 && a.c2) { drawCurve(ctx, a, W, H, s); break }
       const x1 = a.x1 * W, y1 = a.y1 * H, x2 = a.x2 * W, y2 = a.y2 * H, lw = a.width * s
       const ang = Math.atan2(y2 - y1, x2 - x1), head = Math.max(lw * 3.2, 10 * s)
       const heads = a.heads ?? 'end'
@@ -501,6 +540,37 @@ function tint(a: string, b: string, t: number): string {
   return '#' + [0, 1, 2].map(i => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, '0')).join('')
 }
 
+// A curved arrow: the curve stops short of each head (so the line's end doesn't poke out past its
+// tip), and each head points the way the curve runs into its end.
+function drawCurve(ctx: Ctx, a: ArrowAnnotation, W: number, H: number, s: number): void {
+  const px = (q: Pt): Pt => [q[0] * W, q[1] * H]
+  const pts: Cubic = [px([a.x1, a.y1]), px(a.c1!), px(a.c2!), px([a.x2, a.y2])]
+  const lw = a.width * s, head = Math.max(lw * 3.2, 10 * s), pull = head * 0.8, heads = a.heads ?? 'end'
+  // How far along the curve it is pull away from an end, found on the curve cut into small pieces.
+  const n = 64
+  const tFrom = (fromEnd: boolean) => {
+    const end = fromEnd ? pts[3] : pts[0]
+    for (let i = 1; i <= n; i++) {
+      const t = fromEnd ? 1 - i / n : i / n, q = cubicAt(pts, t)
+      if (Math.hypot(q[0] - end[0], q[1] - end[1]) >= pull) return t
+    }
+    return fromEnd ? 0 : 1
+  }
+  const t1 = heads === 'none' ? 1 : tFrom(true), t0 = heads === 'both' ? tFrom(false) : 0
+  ctx.globalAlpha *= a.lineOpacity ?? 1
+  ctx.lineWidth = lw
+  setDash(ctx, a.dash, lw)
+  if (t1 > t0) {
+    const q = subCubic(pts, t0, t1)
+    ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]); ctx.bezierCurveTo(q[1][0], q[1][1], q[2][0], q[2][1], q[3][0], q[3][1]); ctx.stroke()
+  }
+  ctx.setLineDash([])
+  // A head points from where the curve was cut toward its end: steady however the handles sit.
+  const angTo = (end: Pt, from: Pt) => Math.atan2(end[1] - from[1], end[0] - from[0])
+  if (heads !== 'none') arrowHead(ctx, pts[3][0], pts[3][1], angTo(pts[3], cubicAt(pts, t1)), head)
+  if (heads === 'both') arrowHead(ctx, pts[0][0], pts[0][1], angTo(pts[0], cubicAt(pts, t0)), head)
+}
+
 function arrowHead(ctx: Ctx, x: number, y: number, ang: number, head: number): void {
   ctx.beginPath(); ctx.moveTo(x, y)
   ctx.lineTo(x - head * Math.cos(ang - 0.45), y - head * Math.sin(ang - 0.45))
@@ -523,7 +593,7 @@ export function roundCoords(a: Annotation): Annotation {
   const r = (v: number) => Math.round(v * 10000) / 10000
   switch (a.kind) {
     case 'text': return { ...a, x: r(a.x), y: r(a.y) }
-    case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2) }
+    case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2), ...(a.c1 && a.c2 ? { c1: [r(a.c1[0]), r(a.c1[1])] as Pt, c2: [r(a.c2[0]), r(a.c2[1])] as Pt } : {}) }
     case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}) }
     case 'circle': case 'rect': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
     default: return { ...a, points: a.points.map(([x, y]) => [r(x), r(y)] as [number, number]) }

@@ -97,7 +97,7 @@ const MIN_N = 3 // fewer receptions than this: no colour, too few to tell
 
 // A cell of a table, as a text in a fixed box.
 function cell(out: Annotation[], g: string, x: number, y: number, w: number, h: number, text: string, o: { fill?: string; color?: string; bold?: boolean; size?: number } = {}) {
-  out.push(words(x + w / 2, y, text, o.size ?? 13, o.color ?? INK, { align: 'center', bold: o.bold ?? false, groupId: g,
+  out.push(words(x + w / 2, y, text, o.size ?? 15, o.color ?? INK, { align: 'center', bold: o.bold ?? false, groupId: g,
     box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: LINE, strokeWidth: 1, padding: 3, width: w, height: h } }))
 }
 
@@ -116,7 +116,7 @@ function statColumn(out: Annotation[], g: string, x: number, y: number, w: numbe
   const half = w / 2
   SERVE_KINDS.forEach((k, i) => {
     const s = receiveStats(list.filter(r => r.kind === k)), cx = x + i * half
-    cell(out, g, cx, y, half, rh, k === 'jump' ? 'Jump' : 'Float', { fill: '#F1F5F9', color: k === 'jump' ? JUMP : FLOAT, bold: true, size: 12 })
+    cell(out, g, cx, y, half, rh, k === 'jump' ? 'Jump' : 'Float', { fill: '#F1F5F9', color: k === 'jump' ? JUMP : FLOAT, bold: true, size: 14 })
     cell(out, g, cx, y + rh, half, rh, String(s.n))
     cell(out, g, cx, y + 2 * rh, half, rh, String(s.attacks)) // the team's attacks after these receptions
     cell(out, g, cx, y + 3 * rh, half, rh, pct(s.good, s.n), colored(rateFill(s.good, s.n, team.good, team.n)))
@@ -125,7 +125,7 @@ function statColumn(out: Annotation[], g: string, x: number, y: number, w: numbe
 }
 function rowLabels(out: Annotation[], g: string, x: number, y: number, w: number, rh: number) {
   const labels = ['Serve', 'Receptions', 'Team RA', 'Good pass (AB%)', '1st attack K%']
-  labels.forEach((l, i) => cell(out, g, x, y + i * rh, w, rh, l, { fill: '#F1F5F9', bold: true, size: 11 }))
+  labels.forEach((l, i) => cell(out, g, x, y + i * rh, w, rh, l, { fill: '#F1F5F9', bold: true, size: 13 }))
 }
 
 export interface ServeTargetData {
@@ -144,7 +144,7 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
   out.push(words(0.015, 0.012, `${v.team} reception vs serve`, 26, ink, { groupId: hg }))
   out.push(words(0.015, 0.058, `${team.n} receptions · good pass ${pct(team.good, team.n)}   blue: 10 points or more over the team's (good for the receivers), red: 10 or more under (bad)`, 13, ink, { groupId: hg, bold: false }))
   // The receivers: photo, number and name, then the stats; the team's at the end.
-  const top = 0.1, photoH = 0.13, nameH = 0.032, rh = 0.034, labelW = 0.11
+  const top = 0.1, photoH = 0.13, nameH = 0.04, rh = 0.048, labelW = 0.13
   const cols = rs.length + 1, colW = Math.min(0.13, (0.985 - 0.015 - labelW) / cols)
   const statY = top + photoH + nameH + 0.006
   const lg = uid()
@@ -157,7 +157,7 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
       out.push({ id: uid(), kind: 'image', color: '#FFFFFF', x: x + (colW - w) / 2, y: top, w, h, assetId: ph.assetId, groupId: g })
     }
     const fill = (p?.role && ROLE_FILL[p.role]) || '#E2E8F0', dark = !p?.role || p.role === 'S'
-    cell(out, g, x, top + photoH, colW, nameH, `#${r.jersey} ${(p?.lastName ?? '').toUpperCase()}`, { fill, color: dark ? INK : '#FFFFFF', bold: true, size: 13 })
+    cell(out, g, x, top + photoH, colW, nameH, `#${r.jersey} ${(p?.lastName ?? '').toUpperCase()}`, { fill, color: dark ? INK : '#FFFFFF', bold: true, size: 15 })
     statColumn(out, g, x, statY, colW, rh, all.filter(x => x.receiver === r.key), team)
   })
   const tx = 0.015 + labelW + rs.length * colW, tg = uid()
@@ -167,14 +167,14 @@ export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
     const h = Math.min(photoH, (colW * 0.9 * ASPECT * logo.height) / logo.width), w = (h * logo.width) / logo.height / ASPECT
     out.push({ id: uid(), kind: 'image', color: '#FFFFFF', x: tx + (colW - w) / 2, y: top + photoH - h, w, h, assetId: logo.assetId, groupId: tg })
   }
-  cell(out, tg, tx, top + photoH, colW, nameH, v.team, { fill: HEAD, color: '#FFFFFF', bold: true, size: 13 })
+  cell(out, tg, tx, top + photoH, colW, nameH, v.team, { fill: HEAD, color: '#FFFFFF', bold: true, size: 15 })
   statColumn(out, tg, tx, statY, colW, rh, all, team)
   // Below: by where the serve went.
-  const zy = statY + 5 * rh + 0.04, zg = uid(), zw = colW
+  const zy = statY + 5 * rh + 0.035, zg = uid(), zw = colW
   rowLabels(out, zg, 0.015, zy + nameH, labelW, rh)
   TARGET_ZONES.forEach((z, i) => {
     const x = 0.015 + labelW + i * zw
-    cell(out, zg, x, zy, zw, nameH, ZONE_NAMES[z], { fill: HEAD, color: '#FFFFFF', bold: true, size: 13 })
+    cell(out, zg, x, zy, zw, nameH, ZONE_NAMES[z], { fill: HEAD, color: '#FFFFFF', bold: true, size: 15 })
     statColumn(out, zg, x, zy + nameH, zw, rh, all.filter(r => r.zone === z), team)
   })
   return out

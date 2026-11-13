@@ -1,9 +1,9 @@
 // Editing annotation geometry with handles (v3 step 3): arrow ends, 8-way box resize, and
 // Office-style "edit points" for polylines, polygons and freehand — drag a vertex, drag a midpoint
 // to insert one, delete one. Pure functions on normalized coordinates, so they are unit-tested.
-import { isPoints, normalizeBox, pointsBox, withQuad, type Annotation, type ImageAnnotation, type PointsAnnotation, type Rect, type Quad } from './annotation'
+import { curveControls, isPoints, normalizeBox, pointsBox, withQuad, type Annotation, type ImageAnnotation, type PointsAnnotation, type Rect, type Quad } from './annotation'
 
-type HandleKind = 'end' | 'resize' | 'vertex' | 'mid'
+type HandleKind = 'end' | 'resize' | 'vertex' | 'mid' | 'ctrl' // ctrl: a curve's control point
 export interface Handle { id: string; kind: HandleKind; x: number; y: number }
 
 const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
@@ -17,7 +17,8 @@ const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
 // as in Office's "Edit Points" mode.
 export function handlesOf(a: Annotation, editPoints = false): Handle[] {
   switch (a.kind) {
-    case 'arrow': return [{ id: 'p1', kind: 'end', x: a.x1, y: a.y1 }, { id: 'p2', kind: 'end', x: a.x2, y: a.y2 }]
+    case 'arrow': return [{ id: 'p1', kind: 'end', x: a.x1, y: a.y1 }, { id: 'p2', kind: 'end', x: a.x2, y: a.y2 },
+      ...(a.c1 && a.c2 ? [{ id: 'c1', kind: 'ctrl' as const, x: a.c1[0], y: a.c1[1] }, { id: 'c2', kind: 'ctrl' as const, x: a.c2[0], y: a.c2[1] }] : [])]
     case 'image': return a.quad ? a.quad.map(([x, y], i) => ({ id: `q${i}`, kind: 'vertex' as const, x, y })) : boxHandles(a)
     case 'rect': case 'circle': return boxHandles(a)
     case 'text': return []
@@ -44,6 +45,13 @@ function boxHandles({ x, y, w, h }: { x: number; y: number; w: number; h: number
   return BOX_HANDLES.map(id => ({ id, kind: 'resize' as const, x: at[id][0], y: at[id][1] }))
 }
 
+// A straight arrow bent into a curve, or a curve made straight again.
+export function setCurved(a: Annotation, curved: boolean): Annotation {
+  if (a.kind !== 'arrow') return a
+  if (!curved) { const { c1: _a, c2: _b, ...rest } = a; return rest }
+  return a.c1 && a.c2 ? a : { ...a, ...curveControls(a.x1, a.y1, a.x2, a.y2) }
+}
+
 // An isosceles triangle in the box dragged from `from` to `to` (apex at the top middle).
 export function trianglePoints(from: [number, number], to: [number, number]): [number, number][] {
   const b = normalizeBox({ x: from[0], y: from[1], w: to[0] - from[0], h: to[1] - from[1] })
@@ -66,7 +74,13 @@ export function toPolygon(a: Annotation): Annotation {
 // Drags a handle to (x, y). Dragging a midpoint inserts a vertex there; the result says which
 // handle to keep dragging (the new vertex). keepAspect (Shift) holds a box's proportions.
 export function dragHandle(a: Annotation, id: string, x: number, y: number, opts: { keepAspect?: boolean } = {}): { a: Annotation; id: string } {
-  if (a.kind === 'arrow') return { a: id === 'p1' ? { ...a, x1: x, y1: y } : { ...a, x2: x, y2: y }, id }
+  if (a.kind === 'arrow') {
+    // On a curve, an end takes its control point along, so the curve keeps its shape there (as in Office).
+    if (id === 'c1' || id === 'c2') return { a: a.c1 && a.c2 ? { ...a, [id]: [x, y] } : a, id }
+    const curved = !!(a.c1 && a.c2)
+    if (id === 'p1') return { a: { ...a, x1: x, y1: y, ...(curved ? { c1: [a.c1![0] + x - a.x1, a.c1![1] + y - a.y1] as [number, number] } : {}) }, id }
+    return { a: { ...a, x2: x, y2: y, ...(curved ? { c2: [a.c2![0] + x - a.x2, a.c2![1] + y - a.y2] as [number, number] } : {}) }, id }
+  }
   if (a.kind === 'rect' || a.kind === 'circle') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !!opts.keepAspect) }, id }
   // A picture laid with perspective: each corner moves on its own.
   if (a.kind === 'image' && a.quad) {
@@ -92,7 +106,7 @@ export function dragHandle(a: Annotation, id: string, x: number, y: number, opts
 // within tolPx. Neighbors are the vertices on either side (for a midpoint, the edge's two ends).
 export function snapToNeighbors(a: Annotation, id: string, x: number, y: number, W: number, H: number, tolPx = 10): [number, number] {
   let nbrs: [number, number][] = []
-  if (a.kind === 'arrow') nbrs = id === 'p1' ? [[a.x2, a.y2]] : id === 'p2' ? [[a.x1, a.y1]] : []
+  if (a.kind === 'arrow') nbrs = id === 'p1' ? [[a.x2, a.y2]] : id === 'p2' ? [[a.x1, a.y1]] : id === 'c1' ? [[a.x1, a.y1]] : id === 'c2' ? [[a.x2, a.y2]] : []
   else if (isPoints(a)) {
     const pts = a.points, n = pts.length, i = Number(id.slice(1)), closed = a.kind === 'polygon'
     const at = (j: number) => (closed ? pts[(j + n) % n] : pts[j])

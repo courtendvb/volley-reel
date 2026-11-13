@@ -101,7 +101,13 @@ export function chartStats(plays: Pick<Play, 'effect' | 'code'>[], skill: 'A' | 
 }
 
 // x across, y from the attacker's end line (0) to the other one (1), as court units.
-export interface ChartDot { start: Pt | null; end: Pt | null; result: ChartResult; effect?: string; rough?: boolean; startRough?: boolean } // startRough: the start is only its zone's // no effect: made before lines had their own colours
+// rough: the start or the end is only its zone's (the line dashed); startRough: the start is. endSpread /
+// startSpread: how wide a heatmap spreads that end, in metres as the court's heatmap does (0: clicked);
+// missing on charts made before them, which spread any rough end 1 m. No effect: made before lines had their own colours.
+export interface ChartDot { start: Pt | null; end: Pt | null; result: ChartResult; effect?: string; rough?: boolean; startRough?: boolean; endSpread?: number; startSpread?: number }
+// How wide a heatmap spreads a dot's end or start (0: a click); charts made before the spreads guess from `rough`.
+export const dotSpread = (d: ChartDot, which: 'start' | 'end'): number =>
+  which === 'end' ? d.endSpread ?? (d.rough ? 1 : 0) : d.startSpread ?? (d.startRough ? 1 : 0)
 export interface DirectionChart { name: string; skill?: 'A' | 'S'; dots: ChartDot[]; stats: ChartStats; look: ChartLook } // no skill: an attack
 
 export function chartName(dvw: ParsedDVW | undefined, play: Pick<Play, 'side' | 'jersey'>): string {
@@ -131,10 +137,10 @@ function heatImage(dots: ChartDot[], which: HeatEnd = 'end'): OffscreenCanvas | 
   if (kept.has(dots)) return kept.get(dots)!
   const ends = dots.flatMap(d => {
     const p = which === 'end' ? d.end : d.start && servedFrom(d.start)
-    return p ? [{ p, rough: which === 'end' ? !!d.rough : !!d.startRough }] : []
+    return p ? [{ p, spread: dotSpread(d, which) }] : []
   })
   if (!ends.length || typeof OffscreenCanvas === 'undefined') return null
-  const { cols, rows, data } = heatGrid(ends.map(e => e.p), ends.map(e => (e.rough ? 1 : 0)))
+  const { cols, rows, data } = heatGrid(ends.map(e => e.p), ends.map(e => e.spread))
   const canvas = new OffscreenCanvas(cols, rows), c = canvas.getContext('2d')!, image = c.createImageData(cols, rows)
   data.forEach((v, i) => {
     if (v < 0.04) return
@@ -207,7 +213,7 @@ export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox
     if (!inView(d.end)) continue
     const p = at(d.end), color = pointColor(look, d.effect, d.result, skill)
     ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-    if (d.rough) { ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.55); ctx.stroke() } else { ctx.fillStyle = color; ctx.fill() }
+    if (dotSpread(d, 'end')) { ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.2, r * 0.55); ctx.stroke() } else { ctx.fillStyle = color; ctx.fill() }
   }
 
   // Last, on a pale ground: a serve's lines start behind the end line, right through the numbers.

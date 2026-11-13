@@ -320,6 +320,9 @@ export interface ExportLayer {
   to?: number
   fadeIn?: number // seconds the layer fades in from `from` (0 / missing: none)
   fadeOut?: number // seconds the layer fades out before `to`
+  // Shown only part of each period inside its window (a pulsing object: one layer per moment of a
+  // swell): from `at` for `len` seconds of every `period`, counted from `from`.
+  every?: { period: number; at: number; len: number }
 }
 
 export type ExportItem =

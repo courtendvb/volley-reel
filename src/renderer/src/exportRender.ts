@@ -1,6 +1,6 @@
 // Turns a video plan (scenes → marker groups → clips, with title cards) into an ExportJob, with
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
-import { drawAnnotation, type Annotation } from '../../shared/annotation'
+import { PULSE_SEC, drawAnnotation, isAnimated, type Anim, type Annotation } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
 import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
@@ -15,6 +15,9 @@ import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhot
 export const EXPORT_HEIGHT = 720
 const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
+const DRAW_STEPS_PER_SEC = 15 // an object being drawn in: steps a second (at most DRAW_STEPS)
+const DRAW_STEPS = 15
+const PULSE_STEPS = 12 // moments of one swell, each its own layer shown at that moment of every swell
 
 interface Deps {
   range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
@@ -136,7 +139,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   }
   const fades = (a: Annotation) => !!(a.fadeIn || a.fadeOut)
   // Objects shown for the whole clip without a fade share one layer; the rest go by window (and fade).
-  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && w.from <= 0.001 && w.to >= played - 0.001 }
+  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && !isAnimated(a) && w.from <= 0.001 && w.to >= played - 0.001 }
 
   // The video's objects at the bottom, then the scene's, the marker group's, the clip's (as in the editor).
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
@@ -176,19 +179,46 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
     const from = playedAt(ps, Math.max(r.in, sp.touchSec), 'start')
     if (played - from > 0.001) layers.push({ from, to: played, png: await png(ctx => drawServeSpeed(ctx, W, H, sp.kmh, overlay.serveSpeed, lookTheme(overlay))) })
   }
+  // Objects with the same window, fades and motion share their layers (and move together).
   const timed = new Map<string, Annotation[]>()
   for (const a of anns) {
     if (whole(a)) continue
     const w = window(a)
     if (w.to <= w.from) continue // window falls outside the trimmed clip
-    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.fadeIn ?? 0}|${a.fadeOut ?? 0}`
+    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.drawIn ? 0 : a.fadeIn ?? 0}|${a.fadeOut ?? 0}|${a.drawIn ?? 0}|${a.pulse ? 1 : 0}`
     timed.set(k, [...(timed.get(k) ?? []), a])
   }
   for (const [k, list] of timed) {
-    const [from, to, fadeIn, fadeOut] = k.split('|').map(Number)
-    layers.push({ from, to, ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}), png: await png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage))) })
+    const [from, to, fadeIn, fadeOut, drawIn, pulse] = k.split('|').map(Number)
+    layers.push(...await movingLayers(list, { from, to, fadeIn, fadeOut, drawIn, pulse: !!pulse }, W, H, png, assetImage))
   }
   return layers
+}
+
+// The layers of objects shown in one window: drawn in step by step (each step its own layer), then
+// still, or swelling (one layer per moment of a swell, each shown at that moment of every swell).
+// Fading in is left to objects not drawn in; fading out goes on what shows at the end.
+async function movingLayers(list: Annotation[], w: { from: number; to: number; fadeIn: number; fadeOut: number; drawIn: number; pulse: boolean },
+  W: number, H: number, png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
+  const draw = (anim?: Anim) => png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage, anim)))
+  const out: ExportLayer[] = []
+  let start = w.from
+  if (w.drawIn > 0) {
+    const n = Math.max(3, Math.min(DRAW_STEPS, Math.ceil(w.drawIn * DRAW_STEPS_PER_SEC)))
+    for (let i = 0; i < n; i++) {
+      const a = w.from + (w.drawIn * i) / n, b = Math.min(w.to, w.from + (w.drawIn * (i + 1)) / n)
+      if (b - a > 0.001) out.push({ from: a, to: b, png: await draw({ reveal: (i + 1) / n }) })
+    }
+    start = w.from + w.drawIn
+  }
+  if (w.to - start <= 0.001) return out
+  const fades = { ...(w.fadeIn && !w.drawIn ? { fadeIn: w.fadeIn } : {}), ...(w.fadeOut ? { fadeOut: w.fadeOut } : {}) }
+  if (!w.pulse) return [...out, { from: start, to: w.to, ...fades, png: await draw() }]
+  const len = PULSE_SEC / PULSE_STEPS
+  for (let i = 0; i < PULSE_STEPS; i++) {
+    out.push({ from: start, to: w.to, ...fades, every: { period: PULSE_SEC, at: i * len, len }, png: await draw({ pulse: (i + 0.5) / PULSE_STEPS }) })
+  }
+  return out
 }
 
 type Png = (draw: (ctx: OffscreenCanvasRenderingContext2D) => void) => Promise<Uint8Array>

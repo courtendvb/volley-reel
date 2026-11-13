@@ -1,0 +1,65 @@
+import { describe, expect, it, vi } from 'vitest'
+import { PULSE_SEC, animAfter, animAt, cutPoints, fadeAlpha, isAnimated, type Annotation } from './annotation'
+
+vi.mock('electron', () => ({ app: { isPackaged: false, getAppPath: () => '' } }))
+const { layerEnable } = await import('../main/export')
+
+const arrow: Annotation = { id: 'a', kind: 'arrow', color: '#FFF', x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.5, width: 6 }
+
+describe('motion', () => {
+  const clip = { in: 100, out: 110 }
+  it('is none for an object that does not move', () => {
+    expect(isAnimated(arrow)).toBe(false)
+    expect(animAt(arrow, 101, clip)).toBeUndefined()
+  })
+  it('draws in over drawIn seconds from its show time, then stands still', () => {
+    const a = { ...arrow, showFrom: 102, drawIn: 2 }
+    expect(animAt(a, 102, clip)).toEqual({ reveal: 0 })
+    expect(animAt(a, 103, clip)).toEqual({ reveal: 0.5 })
+    expect(animAt(a, 104, clip)).toBeUndefined()
+  })
+  it('counts from the clip IN when it has no show time', () => {
+    expect(animAt({ ...arrow, drawIn: 1 }, 100.25, clip)).toEqual({ reveal: 0.25 })
+  })
+  it('swells once drawn, again every PULSE_SEC', () => {
+    const a = { ...arrow, drawIn: 1, pulse: true }
+    expect(animAfter(a, 0.5)).toEqual({ reveal: 0.5 })
+    expect(animAfter(a, 1)!.pulse).toBeCloseTo(0)
+    expect(animAfter(a, 1 + PULSE_SEC / 2)!.pulse).toBeCloseTo(0.5)
+    expect(animAfter(a, 1 + PULSE_SEC * 3.25)!.pulse).toBeCloseTo(0.25)
+  })
+  it('drawing in replaces the fade-in, but keeps the fade-out', () => {
+    const a = { ...arrow, fadeIn: 2, fadeOut: 2, drawIn: 1 }
+    expect(fadeAlpha(a, 100.5, clip)).toBe(1)
+    expect(fadeAlpha(a, 109, clip)).toBeCloseTo(0.5)
+    expect(fadeAlpha({ ...a, drawIn: undefined }, 101, clip)).toBeCloseTo(0.5)
+  })
+})
+
+describe('cutPoints', () => {
+  const l: [number, number][] = [[0, 0], [0.5, 0], [0.5, 0.5]] // two pieces of equal length on a square frame
+  it('cuts a line at a share of its length', () => {
+    expect(cutPoints(l, 0.25, 100, 100)).toEqual([[0, 0], [0.25, 0]])
+    expect(cutPoints(l, 0.75, 100, 100)).toEqual([[0, 0], [0.5, 0], [0.5, 0.25]])
+    expect(cutPoints(l, 1, 100, 100)).toEqual(l)
+  })
+  it('measures length on the frame, not in shares', () => {
+    // On a frame twice as wide as tall, the first piece is twice as long as the second.
+    const p = cutPoints(l, 0.5, 200, 100)
+    expect(p).toHaveLength(2)
+    expect(p[1][0]).toBeCloseTo(0.375)
+  })
+})
+
+describe('layerEnable', () => {
+  it('is nothing for a layer over the whole clip', () => {
+    expect(layerEnable({}, 0, 5)).toBe('')
+  })
+  it('switches a layer on in its window', () => {
+    expect(layerEnable({ from: 1, to: 2 }, 1, 2)).toBe(":enable='between(t,1.000,2.000)'")
+  })
+  it('switches a pulse layer on at its moment of every period', () => {
+    expect(layerEnable({ from: 1, to: 4, every: { period: 1.2, at: 0.3, len: 0.1 } }, 1, 4))
+      .toBe(":enable='between(t,1.000,4.000)*gte(mod(t-1.000,1.200),0.300)*lt(mod(t-1.000,1.200),0.400)'")
+  })
+})

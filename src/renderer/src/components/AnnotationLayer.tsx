@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { composing } from '../keys'
 import {
-  applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
+  animAt, applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, isAnimated, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
@@ -94,13 +94,18 @@ export function AnnotationLayer(p: Props) {
   // every frame of the video.
   // A title card covers the frame during a through-play: the clip's objects are not on it.
   const [onCard, setOnCard] = useState(!!playback.current.card)
-  // Fading objects add their opacity in twentieths, so the layer redraws as they fade.
+  // Fading objects add their opacity in twentieths, and moving ones how far they are drawn and where
+  // they are in a swell, so the layer redraws as they fade and move.
+  const motionKey = (a: Annotation, t: number) => {
+    const m = animAt(a, t, clipRef.current)
+    return m ? `:${m.reveal !== undefined ? `r${Math.round(m.reveal * 60)}` : ''}${m.pulse !== undefined ? `p${Math.round(m.pulse * 30)}` : ''}` : ''
+  }
   const visibleKey = (t: number) => `${playback.attachedKey}|${annsRef.current.filter(a => visibleAt(a, t, clipRef.current))
-    .map(a => (a.fadeIn || a.fadeOut ? `${a.id}:${Math.round(fadeAlpha(a, t, clipRef.current) * 20)}` : a.id)).join(',')}`
+    .map(a => (a.fadeIn || a.fadeOut ? `${a.id}:${Math.round(fadeAlpha(a, t, clipRef.current) * 20)}` : a.id) + (isAnimated(a) ? motionKey(a, t) : '')).join(',')}`
   const [visKey, setVisKey] = useState('')
   const clipRef = useRef(p.clip)
   clipRef.current = p.clip
-  useEffect(() => playback.subscribe(s => { setVisKey(visibleKey(s.time)); setOnCard(!!s.card) }), [])
+  useEffect(() => playback.subscribe(s => { setVisKey(visibleKey(s.time) + (s.paused ? '|paused' : '')); setOnCard(!!s.card) }), [])
 
   const onScreen = p.always || playback.attachedKey === p.clip.key
   const pathDraft: Annotation | null = path && path.points.length
@@ -127,7 +132,9 @@ export function AnnotationLayer(p: Props) {
         const img = assetImage(cropImg.assetId), f = fullRect(cropImg)
         if (img) { ctx.save(); ctx.globalAlpha = 0.35; ctx.drawImage(img, f.x * p.size.w, f.y * p.size.h, f.w * p.size.w, f.h * p.size.h); ctx.restore() }
       }
-      drawAnnotation(ctx, a, p.size.w, p.size.h, p.images ?? assetImage)
+      // Moving objects move as the video goes; paused, the one selected for editing shows whole, as its handles do.
+      const still = p.always || !vis || (p.editable && a.id === p.selectedId && playback.current.paused)
+      drawAnnotation(ctx, a, p.size.w, p.size.h, p.images ?? assetImage, still ? undefined : animAt(a, time, p.clip))
     }
     ctx.globalAlpha = 1
     // The other selected objects and the selected one's group: a thin frame each.

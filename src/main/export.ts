@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
+import type { ExportEvent, ExportItem, ExportJob, ExportLayer } from '../shared/types'
 import { chapterMetadata, chapterText } from '../shared/video'
 import { clipPlayedSec } from '../shared/timing'
 import { ffmpegBin } from './ffmpegPath'
@@ -158,7 +158,7 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
     const png = join(dir, `clip${i}-layer${j}.png`)
     await writeFile(png, l.png)
     const from = l.from ?? 0, to = l.to ?? dur
-    const enable = l.from !== undefined || l.to !== undefined ? `:enable='between(t,${from.toFixed(3)},${to.toFixed(3)})'` : ''
+    const enable = layerEnable(l, from, to)
     if (l.fadeIn || l.fadeOut) {
       // A fading layer is the picture looped over the clip, its alpha faded at its window's ends.
       args.push('-loop', '1', '-framerate', job.fpsStr, '-t', dur.toFixed(3), '-i', png)
@@ -174,6 +174,17 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
   const f = fades(job.fadeSec, dur)
   if (f) { fc += `;[${last}]${f.slice(1)}[vf]`; last = 'vf' }
   return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, join(dir, `seg${String(i).padStart(4, '0')}.mp4`)]
+}
+
+// ":enable='…'" for a layer with a window (and a share of each period in it), or ''.
+export function layerEnable(l: Pick<ExportLayer, 'from' | 'to' | 'every'>, from: number, to: number): string {
+  const f = (n: number) => n.toFixed(3)
+  const parts = [...(l.from !== undefined || l.to !== undefined || l.every ? [`between(t,${f(from)},${f(to)})`] : [])]
+  if (l.every) {
+    const m = `mod(t-${f(from)},${f(l.every.period)})`
+    parts.push(`gte(${m},${f(l.every.at)})`, `lt(${m},${f(l.every.at + l.every.len)})`)
+  }
+  return parts.length ? `:enable='${parts.join('*')}'` : ''
 }
 
 // ",fade=in…,fade=out…" for an item of dur seconds (at most a third of it each), or ''.

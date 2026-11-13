@@ -29,6 +29,8 @@ interface Base {
   groupId?: string // objects with the same group id are selected and moved together
   fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
+  drawIn?: number // seconds it takes to be drawn when it appears: a line grows from its start, an outline goes round (fade-in is then not used)
+  pulse?: boolean // once drawn, it swells and settles again and again while it shows
   locked?: boolean // part of the background (a data slide's court): drawn, but not picked by a click
 }
 
@@ -163,12 +165,32 @@ export function withGroups(list: Annotation[], ids: string[]): string[] {
 }
 
 // How opaque an object is at time t from its own fades (1 when it has none or is past them).
+// Drawing it in replaces the fade-in.
 export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: number }): number {
-  if (!a.fadeIn && !a.fadeOut) return 1
+  const fadeIn = a.drawIn ? 0 : a.fadeIn
+  if (!fadeIn && !a.fadeOut) return 1
   const from = a.showFrom ?? clip.in, to = a.showTo ?? clip.out
-  const fin = a.fadeIn ? Math.min(1, Math.max(0, (t - from) / a.fadeIn)) : 1
+  const fin = fadeIn ? Math.min(1, Math.max(0, (t - from) / fadeIn)) : 1
   const fout = a.fadeOut ? Math.min(1, Math.max(0, (to - t) / a.fadeOut)) : 1
   return Math.min(fin, fout)
+}
+
+// How an object moves at a moment. reveal: how much of it is drawn (0..1), while it is being drawn
+// in; pulse: where it is in a swell (0..1), once drawn. Undefined: still, as it is.
+export interface Anim { reveal?: number; pulse?: number }
+export const PULSE_SEC = 1.2 // one swell and settle
+const PULSE_GROW = 0.12 // at the top of a swell, this much larger
+export const isAnimated = (a: Annotation): boolean => !!(a.drawIn || a.pulse)
+
+// The motion at time t, seconds into the object's showing (from its show time, else the clip's IN).
+export function animAt(a: Annotation, t: number, clip: { in: number; out: number }): Anim | undefined {
+  return animAfter(a, t - (a.showFrom ?? clip.in))
+}
+export function animAfter(a: Annotation, since: number): Anim | undefined {
+  const d = a.drawIn ?? 0
+  if (d > 0 && since < d) return { reveal: Math.max(0, since / d) }
+  if (a.pulse) { const k = (since - d) / PULSE_SEC; return { pulse: k - Math.floor(k) } }
+  return undefined
 }
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {
@@ -333,10 +355,26 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   return null
 }
 
-export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup): void {
+export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup, anim?: Anim): void {
   const s = H / REF_HEIGHT
   ctx.save()
   ctx.globalAlpha *= a.opacity ?? 1
+  if (anim?.pulse !== undefined) {
+    // A swell about the object's middle: up and back down, eased at both ends.
+    const k = 1 + (PULSE_GROW * (1 - Math.cos(2 * Math.PI * anim.pulse))) / 2
+    const b = bounds(ctx, a, W, H), cx = (b.x + b.w / 2) * W, cy = (b.y + b.h / 2) * H
+    ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy)
+  }
+  const reveal = anim?.reveal
+  if (reveal !== undefined && reveal < 1) {
+    if (reveal <= 0) { ctx.restore(); return }
+    if (a.kind === 'arrow' || a.kind === 'freehand' || a.kind === 'polyline') a = partOf(a, reveal, W, H)
+    else if (a.kind === 'rect' || a.kind === 'circle' || a.kind === 'polygon') {
+      drawOutlineIn(ctx, a, reveal, W, H, s)
+      ctx.restore()
+      return
+    } else ctx.globalAlpha *= reveal // text and pictures have no line to draw along: they fade in
+  }
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   ctx.strokeStyle = a.color
@@ -400,6 +438,73 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
     }
   }
   ctx.restore()
+}
+
+// The first share of a line's length (0..1): an arrow up to a tip that has come that far along it,
+// head and all; a freehand line or polyline cut there.
+function partOf<T extends ArrowAnnotation | PointsAnnotation>(a: T, share: number, W: number, H: number): T {
+  if (a.kind === 'arrow') {
+    if (!(a.c1 && a.c2)) return { ...a, x2: a.x1 + (a.x2 - a.x1) * share, y2: a.y1 + (a.y2 - a.y1) * share }
+    // The curve's t at that share of its length, found on the curve cut into small pieces.
+    const q: Cubic = [[a.x1, a.y1], a.c1, a.c2, [a.x2, a.y2]], n = 64
+    const pts = Array.from({ length: n + 1 }, (_, i) => cubicAt(q, i / n))
+    const at = cutAt(pts, share, W, H), t = (at.i + at.f) / n
+    const p = subCubic(q, 0, t)
+    return { ...a, c1: p[1], c2: p[2], x2: p[3][0], y2: p[3][1] }
+  }
+  const pa = a as PointsAnnotation
+  return { ...pa, points: cutPoints(pa.points, share, W, H) } as T
+}
+
+// Where a share of a polyline's length falls: in piece i (from point i to i + 1), f of the way along it.
+function cutAt(pts: Pt[], share: number, W: number, H: number): { i: number; f: number } {
+  const lens = pts.slice(1).map((q, i) => Math.hypot((q[0] - pts[i][0]) * W, (q[1] - pts[i][1]) * H))
+  let left = lens.reduce((x, y) => x + y, 0) * Math.min(1, share)
+  for (let i = 0; i < lens.length; i++) {
+    if (left <= lens[i] || i === lens.length - 1) return { i, f: lens[i] ? Math.min(1, left / lens[i]) : 1 }
+    left -= lens[i]
+  }
+  return { i: 0, f: 0 }
+}
+
+export function cutPoints(pts: Pt[], share: number, W: number, H: number): Pt[] {
+  if (pts.length < 2) return pts
+  const { i, f } = cutAt(pts, share, W, H), p = pts[i], q = pts[i + 1]
+  return [...pts.slice(0, i + 1), [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]]
+}
+
+// A closed shape's outline as points, back to where it starts: a box from its top left, an ellipse
+// from its top, both clockwise.
+function ringOf(a: Extract<Annotation, { kind: 'rect' | 'circle' | 'polygon' }>): Pt[] {
+  if (a.kind === 'polygon') return a.points.length ? [...a.points, a.points[0]] : []
+  if (a.kind === 'rect') return [[a.x, a.y], [a.x + a.w, a.y], [a.x + a.w, a.y + a.h], [a.x, a.y + a.h], [a.x, a.y]]
+  return Array.from({ length: 73 }, (_, i) => {
+    const ang = -Math.PI / 2 + (i / 72) * Math.PI * 2
+    return [a.x + a.w / 2 + (a.w / 2) * Math.cos(ang), a.y + a.h / 2 + (a.h / 2) * Math.sin(ang)] as Pt
+  })
+}
+
+// A closed shape being drawn in: its outline goes round from the top (clockwise), and its fill comes
+// up as the outline does.
+function drawOutlineIn(ctx: Ctx, a: Extract<Annotation, { kind: 'rect' | 'circle' | 'polygon' }>, share: number, W: number, H: number, s: number): void {
+  const ring = ringOf(a)
+  if (ring.length < 2) return
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+  ctx.strokeStyle = a.color
+  if (a.fill) {
+    ctx.save(); ctx.globalAlpha *= share
+    ctx.beginPath()
+    if (a.kind === 'circle') ctx.ellipse((a.x + a.w / 2) * W, (a.y + a.h / 2) * H, (a.w / 2) * W, (a.h / 2) * H, 0, 0, Math.PI * 2)
+    else { for (const [x, y] of ring) ctx.lineTo(x * W, y * H); ctx.closePath() }
+    fillAndStroke(ctx, a, 0, a.kind === 'polygon' ? undefined : { x: a.x * W, y: a.y * H, w: a.w * W, h: a.h * H })
+    ctx.restore()
+  }
+  const lw = a.width * s
+  if (lw <= 0) return
+  const part = cutPoints(ring, share, W, H)
+  ctx.beginPath()
+  for (const [x, y] of part) ctx.lineTo(x * W, y * H)
+  ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = lw; setDash(ctx, a.dash, lw); ctx.stroke()
 }
 
 // Canvas has no perspective transform, so the picture is cut into a mesh of small triangles, each

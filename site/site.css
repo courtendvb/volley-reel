@@ -240,3 +240,26 @@ footer p + p { margin-top: 6px; }
 @media (max-width: 560px) {
   .align-steps { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }
+
+/* Why the data goes on the video: two gains, under the before and after pair. */
+.gain { margin-top: 36px; padding: 22px 24px; border-left: 4px solid var(--red); background: var(--page); border-radius: 0 6px 6px 0; }
+.gain h3 { font-size: 20px; font-weight: 700; }
+.gain ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 40px; margin-top: 12px; padding: 0; list-style: none; }
+.gain li { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.gain b { font-size: 17px; font-weight: 700; }
+.gain span { color: var(--sub); font-size: 16px; line-height: 1.55; }
+
+/* Pricing, under the series table. */
+.plan { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 8px 48px; align-items: center; margin-top: 32px; padding: 26px 28px; border: 1px solid var(--slate-line); border-radius: 6px; background: var(--slate-2); scroll-margin-top: 16px; }
+.plan h3 { grid-column: 1 / -1; font-size: 20px; font-weight: 700; color: var(--on-slate-sub); }
+.price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.price b { font: italic 800 clamp(40px, 5vw, 56px)/1 var(--head); color: var(--on-slate); }
+.price span { color: var(--on-slate-sub); font-size: 17px; }
+.price i { margin-inline: 8px; color: var(--on-slate-sub); font-style: normal; font-size: 15px; }
+.plan ul { display: grid; gap: 10px; padding: 0; list-style: none; }
+.plan li { padding-left: 18px; position: relative; color: var(--on-slate); font-size: 16px; line-height: 1.5; }
+.plan li::before { content: ""; position: absolute; left: 0; top: .6em; width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+:lang(ja) .price b { font-style: normal; font-weight: 800; font-family: var(--body); font-size: clamp(32px, 4vw, 44px); }
+@media (max-width: 860px) {
+  .gain ul, .plan { grid-template-columns: minmax(0, 1fr); }
+}

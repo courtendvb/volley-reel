@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>動画のしくみ</title>
+<meta name="description" content="SyncScout Video Editor の動画のしくみ。動画・シーン・マーカーの 3 層、スカウトファイルから MP4 までの流れ、DataVolley・VolleyStation との役割の違い。">
+<link rel="alternate" hreflang="en" href="guide.html">
+<link rel="alternate" hreflang="ja" href="guide-ja.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="hero guide-hero">
+  <div class="wrap">
+    <div class="bar">
+      <a class="brand" href="ja.html">SyncScout <small>Video Editor</small></a>
+      <nav class="nav" aria-label="このページの内容">
+        <a href="#layers">動画・シーン・マーカー</a>
+        <a href="#path">MP4 までの流れ</a>
+        <a href="#example">例</a>
+        <a href="#alongside">DataVolley・VolleyStation との違い</a>
+        <a href="ja.html">製品ページ</a>
+        <a class="lang" href="guide.html" hreflang="en" lang="en">English</a>
+      </nav>
+    </div>
+    <div class="pitch">
+      <div class="telop"><i></i><span><b>ガイド</b></span></div>
+      <h1>動画は 3 層でできている。<span class="mark">動画・シーン・マーカー。</span></h1>
+      <p class="lead">動画はシーンを並べたもの。シーンはクリップを最大 5 つのマーカーに分けたもの。この 3 つが分かれば、アプリの動画はすべて同じ形で組み立てられます。</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="axis" id="layers">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>3 つの層</b></span></div>
+          <h2>動画・シーン・マーカー。</h2>
+        </div>
+        <p>層ごとに答える問いが 1 つあります。動画は「今日は何を見せるか」。シーンは「どのテーマか」。マーカーは「そのテーマの中の、どんなプレーか」。クリップはプレーそのものです。</p>
+      </div>
+
+      <div class="tree" role="img" aria-label="「CRO サイドアウト」という動画に、ローテごとに 6 つのシーン。開いているシーン「ローテ 1」には、マーカー 1「良いレセプションから」にクリップ 4 本、マーカー 2「悪いレセプションから」にクリップ 3 本。マーカーなしのクリップは下にあり、入れると決めない限り書き出されない。">
+        <div class="tree-video">
+          <div class="tree-label"><span class="kind">動画</span><b>CRO サイドアウト</b><span class="card-chip">タイトルカード</span></div>
+          <div class="tree-scenes">
+            <div class="tree-scene open">
+              <div class="tree-label"><span class="kind">シーン</span><b>ローテ 1</b><span class="card-chip">タイトルカード</span></div>
+              <div class="tree-marker m1">
+                <div class="tree-label"><span class="num">1</span><b>良いレセプションから</b><span class="card-chip">タイトルカード</span></div>
+                <div class="clips"><i></i><i></i><i class="slide"></i><i></i><i></i></div>
+              </div>
+              <div class="tree-marker m2">
+                <div class="tree-label"><span class="num">2</span><b>悪いレセプションから</b><span class="card-chip">タイトルカード</span></div>
+                <div class="clips"><i></i><i></i><i></i></div>
+              </div>
+              <div class="tree-marker none">
+                <div class="tree-label"><span class="num">–</span><b>マーカーなし</b><span class="muted">入れると決めない限り書き出さない</span></div>
+                <div class="clips"><i></i><i></i></div>
+              </div>
+            </div>
+            <div class="tree-scene"><div class="tree-label"><span class="kind">シーン</span><b>ローテ 2</b></div></div>
+            <div class="tree-scene"><div class="tree-label"><span class="kind">シーン</span><b>ローテ 3</b></div></div>
+            <div class="tree-scene more"><div class="tree-label"><b>… ローテ 6</b></div></div>
+          </div>
+        </div>
+        <p class="tree-key"><span><i class="clip-key"></i>クリップ: 1 つのプレー</span><span><i class="clip-key slide"></i>スライド: クリップの間に入る止まった 1 枚</span></p>
+      </div>
+
+      <ul class="layers">
+        <li>
+          <b>動画</b>
+          <p>書き出して、ミーティングで流すもの。シーンを決めた順に並べます。配色・スコアボード・テロップ・タイトルカードは動画ごとの設定です。1 つのプロジェクトに動画はいくつでも作れます。選手向けと、スタッフ向けの短いものを分けることもできます。</p>
+        </li>
+        <li>
+          <b>シーン</b>
+          <p>1 つのテーマ。ローテ、選手、相手セッターなど。同じシーンを複数の動画に入れられ、クリップを 1 回直せば、そのシーンを使うすべての動画に反映されます。</p>
+        </li>
+        <li>
+          <b>マーカー</b>
+          <p>シーンの中の、色分けされた最大 5 つのグループ。名前と、それぞれのタイトルカードを付けられます。プレーの行で 1〜5 を押すと、そのマーカーに入ります。1 本のクリップに 2 つのマーカーを付けることも、クリップを残したままマーカーをオフにすることもできます。</p>
+        </li>
+        <li>
+          <b>クリップ</b>
+          <p>スカウトファイルの 1 つのプレーを、その前後で切り出したもの。トリム、スロー、止め、図形を入れられます。クリップの間には、止まった 1 枚の画面としてスライド（コマ・PDF のページ・データスライド）を入れられます。</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="axis alt" id="path">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>流れ</b></span></div>
+          <h2>スカウトファイルから MP4 まで。</h2>
+        </div>
+        <p>試合は倉庫に 1 回入れるだけ。あとはすべてそこから使うので、来週の動画も同じファイルから始められます。</p>
+      </div>
+      <ol class="chain">
+        <li><b>倉庫</b><span>試合ごとに、動画と .dvw / .vsm を 1 回だけ取り込む。</span></li>
+        <li><b>プロジェクト</b><span>自チームと使う試合を選ぶ。シーズンが進んだら試合を足す。</span></li>
+        <li><b>検索</b><span>その試合のすべてのプレーを、選手・スキル・ローテ・ゾーン・コールで絞り込む。</span></li>
+        <li><b>シーン</b><span>プレーの行で 1〜5 を押してそのマーカーに入れる。結果をまとめて入れることも。</span></li>
+        <li><b>動画</b><span>シーンを並べ、マーカーに名前を付け、タイトルカードを出し、スライドを入れる。</span></li>
+        <li><b>書き出し</b><span>動画全体・シーンごと・1 シーン・1 マーカーを、チャプター付きの MP4 に。</span></li>
+      </ol>
+      <p class="note">時間がないときは「プリセットから作る」で、ローテ別・選手別・ミドル別のシーンと、レセプション別・結果別のマーカーを持つ動画を 1 回で作れます。あとから何でも直せます。</p>
+    </div>
+  </section>
+
+  <section class="axis" id="example">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>例</b></span></div>
+          <h2>サイドアウトの動画を、層ごとに。</h2>
+        </div>
+        <p>コーチは、ローテごとのサイドアウトと、パスが乱れたときに何が変わるかを見せたい。</p>
+      </div>
+      <div class="example">
+        <figure>
+          <img src="img/ja/preset.jpg" width="1100" height="880" alt="「プリセットから作る」のダイアログ。CRO のサイドアウトの動画を、レセプションの質で分けて、ローテごとの本数を出したところ。" loading="lazy">
+        </figure>
+        <ol class="example-steps">
+          <li><b>動画 1 本</b><span>「CRO サイドアウト」。最初にタイトルカード。</span></li>
+          <li><b>シーン 6 つ</b><span>ローテごとに 1 つ。選手は 1 ローテずつ見られます。</span></li>
+          <li><b>各シーンにマーカー 2 つ</b><span>マーカー 1 は「良いレセプションから」、マーカー 2 は「悪いレセプションから」。それぞれタイトルカードから始まります。</span></li>
+          <li><b>クリップ</b><span>アタックそのもの。スコアボード、アタッカーのテロップ、落ちた場所が描かれます。</span></li>
+        </ol>
+      </div>
+      <figure class="example-card">
+        <img src="img/ja/finish-card.jpg" width="1651" height="929" alt="「1 良いレセプションから」と書かれたタイトルカード。" loading="lazy">
+        <figcaption>マーカー 1 のタイトルカードが、そのクリップの直前に入ります。選手はいつも、今どの部分を見ているかが分かります。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="series" id="alongside">
+    <div class="wrap">
+      <div class="telop"><i></i><span><b>スカウトソフトと一緒に</b></span></div>
+      <h2>DataVolley・VolleyStation が記録し、このアプリが伝える。</h2>
+      <p class="series-lead">スカウトはいつもどおりに。アプリは DataVolley や VolleyStation が書き出す .dvw / .vsm を読み、その先の「記録したプレーを、選手のための動画にする」ところを受け持ちます。</p>
+      <div class="vs">
+        <div>
+          <h3>プレイリスト</h3>
+          <p>試合の順に、プレーが 1 本ずつ続く。机の前で何かを探すアナリストに向いています。</p>
+        </div>
+        <div class="me">
+          <h3>動画</h3>
+          <p>テーマごとにまとまり、タイトルが付き、伝えたいことが描かれている。1 回見て分かる必要がある、ミーティングの選手に向いています。</p>
+        </div>
+      </div>
+      <div class="table">
+        <table>
+          <thead>
+            <tr><td></td><th scope="col">DataVolley / VolleyStation</th><th scope="col" class="me">SyncScout Video Editor</th></tr>
+          </thead>
+          <tbody>
+            <tr class="one"><th scope="row">役割</th><td>試合をスカウトし、分析する</td><td class="me">記録したプレーを、選手のための動画にする</td></tr>
+            <tr><th scope="row">使う時</th><td>試合中と試合直後</td><td class="me">ミーティングの前</td></tr>
+            <tr><th scope="row">スカウトファイル</th><td>.dvw / .vsm を書き出す</td><td class="me">それを読む（入力し直しは不要）</td></tr>
+            <tr><th scope="row">映像</th><td>記録したプレーを探して再生する</td><td class="me">シーン・マーカー・タイトルカード・スライドで動画を組み、データをコートに描く</td></tr>
+            <tr><th scope="row">出てくるもの</th><td>集計、レポート、プレイリスト</td><td class="me">チャプター付きの MP4、PNG / PDF のスライド</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note on-dark">このアプリはスカウトをせず、両者の代わりにもなりません。動かすには両者のファイルが必要です。DataVolley と VolleyStation は、それぞれの所有者の商標です。</p>
+    </div>
+  </section>
+
+  <section class="get">
+    <div class="wrap">
+      <div>
+        <h2>最初の動画を作ってみる</h2>
+        <p>Windows 版を公開中。Mac 版は準備中です。</p>
+      </div>
+      <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Windows 版をダウンロード</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>画面は Croatia 対 Denmark（2022 年 5 月 28 日）の映像を加工せずに使っています。チームコードは CRO・DNK に短くしています。<a href="ja.html">製品ページに戻る</a></p>
+  </div>
+</footer>
+</body>
+</html>

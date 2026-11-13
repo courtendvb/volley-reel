@@ -282,3 +282,83 @@ footer p + p { margin-top: 6px; }
 @media (max-width: 860px) {
   .floor { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Guide page */
+ol.chain, ol.example-steps { margin: 0; padding: 0; list-style: none; }
+a.brand { text-decoration: none; }
+.guide-hero .pitch { padding-block: 40px 56px; }
+.guide-hero .telop { margin-bottom: -4px; }
+.guide-hero .lead { max-width: 46em; color: var(--on-slate-sub); font-weight: 500; }
+
+/* The three layers as nested boxes: video > scenes > markers > clips. */
+.tree { display: grid; gap: 12px; }
+.tree-video { display: grid; gap: 14px; padding: 18px; border: 2px solid var(--ink); border-radius: 8px; background: var(--surface); }
+.tree-scenes { display: grid; grid-template-columns: minmax(0, 3fr) repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.tree-scene { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--page); min-width: 0; }
+.tree-scene.open { border: 2px solid var(--accent); }
+.tree-scene.more { border-style: dashed; background: transparent; }
+.tree-label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; font-size: 16px; line-height: 1.3; }
+.tree-label b { font-weight: 700; }
+.kind { font: italic 700 13px/1 var(--head); letter-spacing: .08em; text-transform: uppercase; color: var(--sub); }
+.card-chip { padding: 2px 8px; border-radius: 4px; background: var(--slate-2); color: var(--on-slate); font-size: 12px; font-weight: 600; }
+.muted { color: var(--sub); font-size: 13px; }
+.tree-marker { display: grid; gap: 8px; padding: 10px 12px; border-left: 5px solid var(--mk, var(--line)); border-radius: 4px; background: var(--surface); }
+.tree-marker.m1 { --mk: #2563EB; }
+.tree-marker.m2 { --mk: #DC2626; }
+.tree-marker.none { --mk: var(--line); opacity: .75; }
+.num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; background: var(--mk, var(--line)); color: #fff; font-size: 13px; font-weight: 700; }
+.tree-marker.none .num { color: var(--ink); }
+.clips { display: flex; flex-wrap: wrap; gap: 6px; }
+.clips i, .clip-key { display: block; width: 46px; height: 26px; border-radius: 3px; background: linear-gradient(135deg, #E35A3A, #F08A5D); }
+.clips i.slide, .clip-key.slide { background: var(--surface); border: 2px solid var(--sub); }
+.tree-key { display: flex; flex-wrap: wrap; gap: 6px 24px; color: var(--sub); font-size: 14px; }
+.tree-key span { display: inline-flex; align-items: center; gap: 8px; }
+.clip-key { width: 28px; height: 16px; }
+.layers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 32px; margin-top: 36px; }
+.layers li { display: grid; gap: 6px; align-content: start; padding-top: 12px; border-top: 2px solid var(--ink); min-width: 0; }
+.layers b { font: italic 700 24px/1.1 var(--head); text-transform: uppercase; }
+.layers p { color: var(--sub); font-size: 16px; line-height: 1.55; }
+
+/* The path, as one row of numbered steps. */
+.chain { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; counter-reset: chain; }
+.chain li { position: relative; display: grid; gap: 6px; align-content: start; padding: 16px 14px; border-radius: 6px; background: var(--page); min-width: 0; }
+.chain b { font-size: 17px; font-weight: 700; }
+.chain b::before { counter-increment: chain; content: counter(chain); display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border-radius: 50%; background: var(--red); color: var(--on-red); font-size: 13px; }
+.chain span { color: var(--sub); font-size: 15px; line-height: 1.5; }
+
+/* The worked example. */
+.example { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 24px 40px; align-items: center; }
+.example img, .example-card img { box-shadow: 0 10px 30px var(--shadow); border: 1px solid var(--line); border-radius: 4px; }
+.example-steps { display: grid; gap: 16px; counter-reset: ex; }
+.example-steps li { display: grid; gap: 2px; padding-left: 40px; position: relative; }
+.example-steps li::before { counter-increment: ex; content: counter(ex); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 4px; background: var(--slate-2); color: var(--on-slate); font-size: 14px; font-weight: 700; }
+.example-steps b { font-size: 18px; font-weight: 700; }
+.example-steps span { color: var(--sub); font-size: 16px; line-height: 1.5; }
+.example-card { display: grid; gap: 10px; margin-top: 32px; max-width: 760px; }
+.example-card figcaption { color: var(--sub); font-size: 15px; }
+
+/* Alongside the scouting software. */
+.series-lead { margin-top: 16px; max-width: 46em; color: var(--on-slate-sub); }
+.vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
+.vs > div { display: grid; gap: 6px; padding: 20px 22px; border: 1px solid var(--slate-line); border-radius: 6px; background: var(--slate-2); }
+.vs > div.me { border-color: var(--red); }
+.vs h3 { font-size: 20px; font-weight: 700; }
+.vs p { color: var(--on-slate-sub); font-size: 16px; line-height: 1.55; }
+.note.on-dark { color: var(--on-slate-sub); }
+
+@media (max-width: 960px) {
+  .chain { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .layers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .tree-scenes { grid-template-columns: minmax(0, 1fr); }
+  .tree-scene:not(.open) { padding: 8px 12px; }
+  .example, .vs { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .chain, .layers { grid-template-columns: minmax(0, 1fr); }
+  .tree-video { padding: 12px; }
+}
+.flow .flow-more { margin: -16px 0 24px; }
+.flow .flow-more a { color: var(--on-slate); font-weight: 600; text-underline-offset: 4px; }
+:lang(ja) .layers b { font-style: normal; font-weight: 800; font-size: 22px; }

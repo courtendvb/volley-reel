@@ -2,6 +2,7 @@
 
 A static page in two languages: `index.html` (English) and `ja.html` (Japanese), with a switch in the nav.
 Both share `site.css` and `site.js` (the court layer tabs). Open either file in a browser; nothing to build.
+`guide.html` and `guide-ja.html` explain how a video is built (video, scene, marker, clip), the path from scout file to MP4, and how the app sits alongside DataVolley and VolleyStation. They share `site.css` and link from the nav and the How it works band.
 
 ## Images
 

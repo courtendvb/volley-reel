@@ -1,7 +1,9 @@
 // A PowerPoint file (.pptx) with one picture filling each slide: the cards and slides as they look
-// in the video, to drop into a deck. Only the parts PowerPoint needs: a blank master and layout, a
+// in the video, to drop into a deck; on top of it, if given, the slide's objects as shapes of their
+// own (pptxShapes.ts), so they can still be moved and edited there. Only the parts PowerPoint needs: a blank master and layout, a
 // plain theme, and the slides; the slide is the pictures' shape (16:9 for the cards).
 import { strToU8, zipSync, type Zippable } from 'fflate'
+import type { SlideShapes } from './pptxShapes'
 
 export interface PptxPicture {
   data: Uint8Array
@@ -22,8 +24,19 @@ const rels = (list: [string, string, string][]) =>
 const emptyTree = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
+export interface PptxSlide {
+  picture: PptxPicture // fills the slide, under everything
+  shapes?: SlideShapes // made with firstRid SHAPES_FIRST_RID
+}
+export const SHAPES_FIRST_RID = 3 // a slide's rId1 is its layout, rId2 its picture
+
 export function pptxFromPictures(pictures: PptxPicture[], title = ''): Uint8Array {
-  if (!pictures.length) throw new Error('no pictures')
+  return pptxFromSlides(pictures.map(picture => ({ picture })), title)
+}
+
+export function pptxFromSlides(slides: PptxSlide[], title = ''): Uint8Array {
+  if (!slides.length) throw new Error('no slides')
+  const pictures = slides.map(s => s.picture)
   const cx = SLIDE_W, cy = Math.round((SLIDE_W * pictures[0].height) / pictures[0].width)
   const n = pictures.length
   const ext = (p: PptxPicture) => (p.type === 'png' ? 'png' : 'jpeg')
@@ -72,14 +85,19 @@ export function pptxFromPictures(pictures: PptxPicture[], title = ''): Uint8Arra
   put('ppt/theme/theme1.xml', THEME)
 
   pictures.forEach((p, i) => {
-    const k = i + 1, media = `image${k}.${ext(p)}`
+    const k = i + 1, media = `image${k}.${ext(p)}`, shapes = slides[i].shapes
     files[`ppt/media/${media}`] = [p.data, { level: 0 }] // already compressed
+    const extra = (shapes?.media ?? []).map((m, j) => {
+      const name = `image${k}_${j + 1}.${ext(m)}`
+      files[`ppt/media/${name}`] = [m.data, { level: 0 }]
+      return [`rId${SHAPES_FIRST_RID + j}`, 'image', `../media/${name}`] as [string, string, string]
+    })
     put(`ppt/slides/slide${k}.xml`, `${XML}<p:sld ${NS}><p:cSld><p:spTree>${emptyTree}`
       + `<p:pic><p:nvPicPr><p:cNvPr id="2" name="Slide ${k}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>`
       + '<p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>'
       + `<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
-      + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>')
-    put(`ppt/slides/_rels/slide${k}.xml.rels`, rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'], ['rId2', 'image', `../media/${media}`]]))
+      + (shapes?.xml ?? '') + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>')
+    put(`ppt/slides/_rels/slide${k}.xml.rels`, rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'], ['rId2', 'image', `../media/${media}`], ...extra]))
   })
   return zipSync(files, { level: 6 })
 }

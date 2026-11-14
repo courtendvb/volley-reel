@@ -572,12 +572,16 @@ export function App() {
   const followData = useMemo(() => {
     const d = match ? dvws[match.id] : null
     if (!match || !d) return null
-    // 通し: the rally's serves, receptions and attacks, whatever the list shows; else the list's plays.
-    const plays = listThrough ? d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A') : results.filter(r => r.matchId === match.id).map(r => r.play)
-    const hold = (reel ? rangeDefaults(reel) : DEFAULT_RANGE).keyAfter
+    // 通し: the rally's serves, receptions and attacks as each happens, whatever the list shows. Else the
+    // play picked, for the whole of its window (what the list plays of it), from its start.
+    const defaults = reel ? rangeDefaults(reel) : DEFAULT_RANGE
+    const pick = !listThrough && selectedPlay ? defaultRange(d, selectedPlay, match.offsetSec, defaults, extract) : null
+    const windows = listThrough
+      ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
+      : pick && selectedPlay ? [{ from: pick.in, to: pick.out, playId: selectedPlay.id }] : []
     const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
     return {
-      key: match.id, windows: followWindows(plays, match.offsetSec, hold),
+      key: match.id, windows,
       data: (playId: number) => {
         const play = d.plays[playId]
         if (!play) return null
@@ -590,7 +594,7 @@ export function App() {
         return v
       },
     }
-  }, [match, dvws, results, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough])
+  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract])
   followDataRef.current = followData
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.

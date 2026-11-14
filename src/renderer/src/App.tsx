@@ -89,8 +89,9 @@ export function App() {
   const [matchIds, setMatchIds] = useState<string[]>([]) // the matches the list shows; none picked: all of the project's
   // How plays added from the search are cut: around the key play, or from it to the end of the rally.
   const [extract, setExtract] = useState<ClipMode>(() => { try { return localStorage.getItem('vr.extract') === 'toEnd' ? 'toEnd' : 'keyplay' } catch { return 'keyplay' } })
-  // 通し: the list's continuous play carries on through plays whose windows overlap, rather than going
-  // back to each one's start (a rally is seen once, not once per play).
+  // 通し: the list plays rally by rally: a play picked plays its whole rally (serve to its end) once, the
+  // list staying on it, then the next rally with a play in the list; only serves, receptions and
+  // attacks get a caption on the way (the display follows them).
   const [listThrough, setListThroughState] = useState(() => { try { return localStorage.getItem('vr.listThrough') === '1' } catch { return false } })
   const listThroughRef = useRef(listThrough)
   listThroughRef.current = listThrough
@@ -372,7 +373,7 @@ export function App() {
   // first; playback.seekIn holds the seek until that match's video is ready.
   // With 切り出し = プレー前後, a play picked in the list plays its key-play window and then the
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
-  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number } | null>(null)
+  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number; rallyId?: number } | null>(null)
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
@@ -386,6 +387,15 @@ export function App() {
     setActiveClipId(c ? c.id : null)
     setMatchId(r.matchId)
     const t = r.play.time + m.offsetSec
+    const rally = listThroughRef.current && r.play.rallyId !== null ? latest.current.dvwsRef?.[r.matchId]?.rallies[r.play.rallyId] : undefined
+    if (rally) {
+      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      const start = Math.max(0, rally.serveTime - d.rallyLead + m.offsetSec)
+      listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + m.offsetSec, rallyId: r.play.rallyId! }
+      setListRun(true)
+      playback.seekIn(r.matchId, start, { play: true })
+      return
+    }
     if (extractRef.current === 'keyplay') {
       const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
       listRunRef.current = { matchId: r.matchId, playId: r.play.id, start: t - d.keyBefore, end: t + d.keyAfter }
@@ -404,20 +414,9 @@ export function App() {
     if (!run || s.paused || playback.attachedKey !== run.matchId || s.time < run.end || s.time > run.end + 3 || s.time < run.start) return
     const res = latest.current.results
     const i = res.findIndex(x => x.matchId === run.matchId && x.play.id === run.playId)
-    const next = i >= 0 ? res[i + 1] : undefined
-    // 通し: the next play's window has begun already (the same rally): go on playing into it.
-    const m = next ? latest.current.matches[next.matchId] : undefined
-    if (next && m && listThroughRef.current && next.matchId === run.matchId) {
-      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
-      const t = next.play.time + m.offsetSec
-      if (t - d.keyBefore <= s.time && t + d.keyAfter > s.time) {
-        listRunRef.current = { matchId: run.matchId, playId: next.play.id, start: run.start, end: t + d.keyAfter }
-        setSelected({ matchId: next.matchId, playId: next.play.id })
-        const c = latest.current.reel && findClip(latest.current.reel, next.matchId, next.play.id)
-        setActiveClipId(c ? c.id : null)
-        return
-      }
-    }
+    // A rally played whole (通し): on to the next listed play in another rally.
+    const next = i < 0 ? undefined : run.rallyId === undefined ? res[i + 1]
+      : res.slice(i + 1).find(x => x.matchId !== run.matchId || x.play.rallyId !== run.rallyId)
     listRunRef.current = null
     if (next) jumpRef.current(next)
     else { setListRun(false); playback.pause() }
@@ -543,7 +542,8 @@ export function App() {
   const followData = useMemo(() => {
     const d = match ? dvws[match.id] : null
     if (!match || !d) return null
-    const plays = results.filter(r => r.matchId === match.id).map(r => r.play)
+    // 通し: the rally's serves, receptions and attacks, whatever the list shows; else the list's plays.
+    const plays = listThrough ? d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A') : results.filter(r => r.matchId === match.id).map(r => r.play)
     const hold = (reel ? rangeDefaults(reel) : DEFAULT_RANGE).keyAfter
     const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
     return {
@@ -560,7 +560,7 @@ export function App() {
         return v
       },
     }
-  }, [match, dvws, results, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs])
+  }, [match, dvws, results, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough])
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.
   const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match

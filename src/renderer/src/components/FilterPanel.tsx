@@ -68,10 +68,8 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         {extract === 'keyplay'
           ? <span>{t('〜 +')}<SecInput v={d.keyAfter} label={t('キープレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, keyAfter: n })} />{t('秒')}</span>
           : <span>{t('〜 ラリー終わり +')}<SecInput v={d.rallyTail} label={t('最後のプレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, rallyTail: n })} />{t('秒')}</span>}
-        {extract === 'keyplay' && (
-          <label className="check" title={t('リストを続けて再生するとき、次のプレーがもう再生した範囲から始まるなら巻き戻さずにそのまま流す（同じラリーを何度も見ない）。オフ: リストどおり 1 プレーずつ、それぞれの前後を再生する')}>
-            <input type="checkbox" checked={through} onChange={e => onThrough(e.target.checked)} /> {t('通しで見る')}</label>
-        )}
+        <label className="check" title={t('リストのプレーをラリーごとに、サーブからラリーの終わりまで 1 回ずつ再生する。ラリーの間はリストの選択はそのままで、画面にはサーブ・レセプション・アタックのテロップだけが順に出る。オフ: リストどおり 1 プレーずつ再生する')}>
+          <input type="checkbox" checked={through} onChange={e => onThrough(e.target.checked)} /> {t('通しで見る')}</label>
       </div>
       <div className="filter-row" title={t('ボールが画面の上へ向かうか下へ向かうか。サーブ・アタックは打った側から、レセプション・ディグ・ブロックは相手側から。セットなどネットを越えないプレーは、手前のコートなら上から下、奥のコートなら下から上。コートのグリッドを合わせた試合だけ分かります')}>
         <label className="field-label">{t('プレーの向き')}</label>

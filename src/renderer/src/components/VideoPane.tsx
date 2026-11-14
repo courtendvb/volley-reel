@@ -32,9 +32,12 @@ export function VideoPane({ match, overlay, editMode }: { match: Match; overlay?
     return () => ro.disconnect()
   }, [match.width, match.height])
 
+  // The frame is no taller than the picture at its width (it may be less, when the window is short):
+  // height it would have spent on black bars goes to the work area under the tabs instead.
+  const ratio = match.width && match.height ? match.width / match.height : 16 / 9
   return (
     <div className="video-pane">
-      <div className="video-frame" ref={frame}>
+      <div className="video-frame" ref={frame} style={{ aspectRatio: ratio }}>
         <div className="video-box" style={{ width: box.w, height: box.h }}>
           <video ref={ref} src={`media://${match.id}/video.mp4`} muted playsInline preload="auto" />
           {overlay && box.w > 0 && overlay(box)}

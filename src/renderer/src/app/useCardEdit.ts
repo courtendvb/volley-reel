@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Annotation } from '../../../shared/annotation'
 import { changed } from '../../../shared/annotationScope'
-import type { CardKind, CardLayout, OverlaySettings } from '../../../shared/overlay'
+import { alignTitleCards, layoutKeyOf, type AlignChoice } from '../../../shared/cardAlign'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardKind, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
 import { markerCardOn, setSlide, type Marker, type Reel } from '../../../shared/reel'
 import type { Match, ProjectSettings } from '../../../shared/types'
 import { cardMatch, cardObjects, slideCard, videoCard, type Card, type Video } from '../../../shared/video'
@@ -60,6 +61,8 @@ export function useCardEdit({ latest, settings, video, reels, matches, overlay, 
   }, [cardEdit, reels, video, matches, settings, overlay])
   const cardEditRef = useRef(cardEdit)
   cardEditRef.current = cardEdit
+  const cardEditCardRef = useRef(cardEditCard)
+  cardEditCardRef.current = cardEditCard
   const cardAnnsRef = useRef<Annotation[]>([])
   cardAnnsRef.current = cardEditCard?.annotations ?? []
   // The card's objects as edited (the merged list) split back: those of every card of its kind to the
@@ -170,9 +173,39 @@ export function useCardEdit({ latest, settings, video, reels, matches, overlay, 
   }, [cardEdit, reels])
   const editingSource = editingSlide?.bg.kind === 'image' ? editingSlide.bg.source : undefined
 
+  // ほかのカードにも揃える: the open card's title place, logo place and objects made the same on the
+  // other kinds of card chosen (shared/cardAlign.ts). With objects, the card's own move onto every card
+  // of its kind. resetOwn: cards of those kinds (and this one's) placed 「このカードだけ」 go back to
+  // their kind's place, which, with the title, is this card's too.
+  const alignCards = useCallback((c: AlignChoice & { resetOwn: boolean }) => {
+    const ce = cardEditRef.current, card = cardEditCardRef.current, v = latest.current.video
+    if (!ce || ce.slideId || !card || !v) return
+    const ov = latest.current.overlay, kind = kindOf(ce), now = new Date().toISOString()
+    const def = kind === 'video' ? DEFAULT_VIDEO_LAYOUT : kind === 'scene' ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT
+    const raw = card.layout ?? ov.titleCard[layoutKeyOf(kind)] ?? def
+    const layout = kind === 'marker' ? raw : sceneTopLeft(raw)
+    let tc = alignTitleCards(ov.titleCard, { kind, layout, logo: ov.titleCard.logos?.[kind], objects: card.annotations ?? [] }, c)
+    if (c.title && c.resetOwn && card.layout) tc = { ...tc, [layoutKeyOf(kind)]: layout }
+    const kinds = new Set<CardKind>([kind, ...c.to])
+    const clearOwn = c.objects // the card's own objects now sit on every card of its kind
+    updateVideo({ ...v, overlay: { ...ov, titleCard: tc }, updatedAt: now,
+      ...(clearOwn && kind === 'video' ? { cardAnnotations: [], cardHidden: [] } : {}),
+      ...(c.resetOwn && kinds.has('video') ? { cardLayout: undefined } : {}) })
+    for (const r of latest.current.reels) {
+      let n: Reel = r
+      if (clearOwn && r.id === ce.sceneId) {
+        n = ce.marker === null ? { ...n, cardAnnotations: [], cardHidden: [] }
+          : { ...n, markerCardAnnotations: { ...n.markerCardAnnotations, [ce.marker]: [] }, markerCardHidden: { ...n.markerCardHidden, [ce.marker]: [] } }
+      }
+      if (c.resetOwn && kinds.has('scene') && n.cardLayout) n = { ...n, cardLayout: undefined }
+      if (c.resetOwn && kinds.has('marker') && n.markerCardLayouts && Object.keys(n.markerCardLayouts).length) n = { ...n, markerCardLayouts: {} }
+      if (n !== r) updateReel({ ...n, updatedAt: now })
+    }
+  }, [updateReel, updateVideo])
+
   return {
     cardEdit, setCardEdit, focusEdit, setFocusEdit, cardTool, setCardTool, cardToolsOpen, setCardToolsOpen,
-    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown,
+    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown, alignCards,
     editCard, editingSlide, editingSource,
   }
 }

@@ -79,8 +79,8 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
           markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []),
           court: c => {
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
-            const dvws = latest.current.dvwsRef ?? {}
-            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(dvws).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play), setterName: set => chartName(dvws[c.matchId], set) }), flight: flightTiming(play, ms[c.matchId].offsetSec, playTimes(serveMarkOf(ms[c.matchId], play), c)) } : null
+            const dvws = latest.current.dvwsRef ?? {}, counted = latest.current.targetDvws ?? dvws // figures over the target matches only
+            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], gridStyleRef.current, () => Object.values(counted).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play), setterName: set => chartName(dvws[c.matchId], set) }), flight: flightTiming(play, ms[c.matchId].offsetSec, playTimes(serveMarkOf(ms[c.matchId], play), c)) } : null
           },
           courtStyle: gridStyleRef.current }, outPath,
         // Chapters always go into the MP4 (the whole video's scenes and markers, or a scene's markers);

@@ -28,6 +28,7 @@ interface Props {
   onChange: (r: Reel) => void
   info: (c: Clip) => ClipInfo
   missing: Set<string>
+  offTarget?: (matchId: string) => boolean // a match the project no longer searches (its clips still play)
   activeClipId: string | null
   playingClipId: string | null
   onActivate: (c: Clip, g: Group) => void // g: the group row it was clicked in
@@ -222,6 +223,7 @@ export function ReelPanel(p: Props) {
         ) : (
           <span className="clip-main">
             {multiMatch && <span className="muted">{inf.matchLabel} </span>}
+            {p.offTarget?.(c.matchId) && <span className="off-target" title={t('対象試合から外した試合のクリップです。再生・書き出しはそのままできます。左のリストには出ません')}>{t('対象外')} </span>}
             <span className="muted">S{r.play.setNum} {pad2(r.play.score.home)}-{pad2(r.play.score.away)} </span>
             {/* Skill, type and evaluation as scouted (AQ#) to keep rows short; the full names on hover. */}
             <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill} skill-short`}

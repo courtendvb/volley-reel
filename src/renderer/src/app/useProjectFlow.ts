@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { EMPTY_FILTER, type PlayFilter } from '../../../shared/filter'
 import { relink, type Reel } from '../../../shared/reel'
 import { settingsChange } from '../../../shared/settingsUndo'
-import type { ImportProgress, LibraryInfo, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, RecentProject, ScanResult } from '../../../shared/types'
+import type { ImportProgress, LibraryInfo, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, RecentProject, ScanResult } from '../../../shared/types'
 import type { Video } from '../../../shared/video'
 import { resetAssets } from '../assets'
 import { playback } from '../playback'
@@ -20,6 +20,7 @@ interface Host {
   project: ProjectInfo | null
   setProject: (p: ProjectInfo | null) => void
   setDvws: (d: Record<string, ParsedDVW>) => void
+  setSceneMatches: (m: Match[]) => void // matches the scenes use that aren't the project's targets
   setMatchId: Set<string | null>
   setMatchIds: Set<string[]>
   setFilter: (f: PlayFilter) => void
@@ -40,7 +41,7 @@ interface Host {
 }
 
 export function useProjectFlow(h: Host) {
-  const { latest, project, setProject, setDvws, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId, setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record } = h
+  const { latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId, setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record } = h
   const [library, setLibrary] = useState<LibraryInfo | null>(null)
   const [recent, setRecent] = useState<RecentProject[]>([])
   const [scan, setScan] = useState<ScanResult | null>(null)
@@ -66,15 +67,25 @@ export function useProjectFlow(h: Host) {
     setProject(p)
     setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
     setMatchIds(ids => ids.filter(id => p?.matches.some(m => m.id === id)))
-    if (!p) { setDvws({}); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
+    if (!p) { setDvws({}); setSceneMatches([]); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
     const parsed: Record<string, ParsedDVW> = {}
     for (const m of p.matches) {
       try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
     }
     if (gen !== loadGen.current) return
-    setDvws(parsed)
     const listed = await api.listReels()
     if (gen !== loadGen.current) return
+    // Matches the scenes' clips use but the project no longer searches (taken off its list): loaded
+    // too, so those clips keep their plays. Only a match gone from the library stays missing.
+    const used = [...new Set(listed.flatMap(r => Object.values(r.clips).map(c => c.matchId)))].filter(id => !parsed[id])
+    const lib = used.length ? await api.getLibrary() : null
+    const extra = (lib?.matches ?? []).filter(m => used.includes(m.id))
+    for (const m of extra) {
+      try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
+    }
+    if (gen !== loadGen.current) return
+    setSceneMatches(extra.filter(m => parsed[m.id]))
+    setDvws(parsed)
     const vids = await api.listVideos()
     if (gen !== loadGen.current) return
     // Scenes whose clips were re-pointed to their plays (the DVW changed) count as unsaved, so the

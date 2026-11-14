@@ -262,7 +262,7 @@ export function AnnotationTools(p: Props) {
             </span>
           )}
           {sel && !p.cardMode && (
-            <span className="fade-fields" title={t('出るときに、線は始点から伸び、枠は一周して描かれる（秒）。文字と画像は浮かび上がる。0 でなし')}>
+            <span className="fade-fields" title={t('出るときに、線は始点から伸び、枠は一周して描かれる（秒）。三角形（コーン）は先端の打点から開きながら浮かび上がる。文字と画像は浮かび上がる。0 でなし')}>
               <Num label={t('描き出し')} value={sel.drawIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
                 onChange={v => { const { drawIn: _d, ...rest } = sel; update((v > 0 ? { ...rest, drawIn: v } : rest) as Annotation) }} />
               <span className="muted">{t('秒')}</span>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { BLINK_ON, BLINK_SEC, PULSE_SEC, RIPPLE_SEC, animAfter, animAt, cutPoints, emphasisOf, fadeAlpha, isAnimated, withEmphasis, type Annotation } from './annotation'
+import { BLINK_ON, BLINK_SEC, PULSE_SEC, RIPPLE_SEC, animAfter, animAt, cutPoints, drawAnnotation, emphasisOf, fadeAlpha, isAnimated, withEmphasis, type Annotation } from './annotation'
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getAppPath: () => '' } }))
 const { layerEnable } = await import('../main/export')
@@ -85,5 +85,36 @@ describe('emphasis', () => {
     expect(animAfter(a, 0.5)).toEqual({ reveal: 0.5 })
     expect(animAfter(a, 1 + RIPPLE_SEC * 0.25)!.ripple).toBeCloseTo(0.25)
     expect(animAfter(a, 1 + RIPPLE_SEC * 2.5)!.ripple).toBeCloseTo(0.5)
+  })
+})
+
+describe('a triangle drawing in', () => {
+  // A canvas context that records the path's points and the opacity of each fill.
+  const recorder = () => {
+    const pts: [number, number][] = [], fills: number[] = []
+    const ctx: Record<string, unknown> = { globalAlpha: 1 }
+    const state: number[] = []
+    Object.assign(ctx, {
+      save: () => state.push(ctx.globalAlpha as number), restore: () => { ctx.globalAlpha = state.pop() },
+      moveTo: (x: number, y: number) => pts.push([x, y]), lineTo: (x: number, y: number) => pts.push([x, y]),
+      fill: () => fills.push(ctx.globalAlpha as number),
+    })
+    return { pts, fills, ctx: new Proxy(ctx, { get: (o, k) => (k in o ? o[k as string] : () => {}) }) as unknown as CanvasRenderingContext2D }
+  }
+  const cone: Annotation = { id: 'c', kind: 'polygon', color: '#EF4444', points: [[0.5, 0.2], [0.7, 0.8], [0.3, 0.8]], width: 4, fill: '#EF4444', fillOpacity: 1, drawIn: 1 }
+  it('opens out from its tip (its first point) as it fades in', () => {
+    const r = recorder()
+    drawAnnotation(r.ctx, cone, 100, 100, undefined, { reveal: 0.5 })
+    const e = 1 - 0.5 ** 3
+    expect(r.pts[0]).toEqual([50, 20])
+    expect(r.pts[1][0]).toBeCloseTo(50 + 20 * e)
+    expect(r.pts[1][1]).toBeCloseTo(20 + 60 * e)
+    expect(r.fills[0]).toBeCloseTo(0.75)
+  })
+  it('is whole once drawn', () => {
+    const r = recorder()
+    drawAnnotation(r.ctx, cone, 100, 100)
+    expect(r.pts.slice(0, 3)).toEqual([[50, 20], [70, 80], [30, 80]])
+    expect(r.fills[0]).toBe(1)
   })
 })

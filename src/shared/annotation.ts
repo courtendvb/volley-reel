@@ -393,7 +393,13 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
   if (reveal !== undefined && reveal < 1) {
     if (reveal <= 0) { ctx.restore(); return }
     if (a.kind === 'arrow' || a.kind === 'freehand' || a.kind === 'polyline') a = partOf(a, reveal, W, H)
-    else if (a.kind === 'rect' || a.kind === 'circle' || a.kind === 'polygon') {
+    else if (a.kind === 'polygon' && a.points.length === 3) {
+      // A triangle is almost always a direction cone: it opens out from its tip (the hit point; the
+      // triangle tool's first point) as it fades in, rather than having its outline traced.
+      const e = 1 - (1 - reveal) ** 3, [tx, ty] = a.points[0]
+      a = { ...a, points: a.points.map(([x, y]) => [tx + (x - tx) * e, ty + (y - ty) * e] as Pt) }
+      ctx.globalAlpha *= Math.min(1, reveal * 1.5)
+    } else if (a.kind === 'rect' || a.kind === 'circle' || a.kind === 'polygon') {
       drawOutlineIn(ctx, a, reveal, W, H, s)
       ctx.restore()
       return

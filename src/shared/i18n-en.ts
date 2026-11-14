@@ -253,7 +253,7 @@ export const EN: Record<string, string> = {
   "フェードイン": "Fade in",
   "描き出し": "Draw in",
   "パルス": "Pulse",
-  "出るときに、線は始点から伸び、枠は一周して描かれる（秒）。文字と画像は浮かび上がる。0 でなし": "When it appears, a line grows from its start and an outline is drawn round (seconds). Text and pictures fade in. 0 for none",
+  "出るときに、線は始点から伸び、枠は一周して描かれる（秒）。三角形（コーン）は先端の打点から開きながら浮かび上がる。文字と画像は浮かび上がる。0 でなし": "When it appears, a line grows from its start and an outline is drawn round (seconds). A triangle (a cone) opens out from its tip, the hit point, as it fades in. Text and pictures fade in. 0 for none",
   "目立たせる": "Emphasis",
   "目立たせる: なし": "Emphasis: none",
   "点滅": "Blink",

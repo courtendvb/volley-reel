@@ -3,17 +3,19 @@ import { t } from '../../../shared/i18n'
 import type { Slide } from '../../../shared/reel'
 
 // Picking which of a scene's slides go into a PowerPoint file: a small picture of each, in the
-// scene's order, all ticked at first. They are saved in that order, one to a slide.
+// scene's order, all ticked at first. They are saved in that order, one to a slide; their objects as
+// PowerPoint shapes unless that is switched off.
 export function SlidePickDialog({ slides, current, thumbs, onSave, onClose }: {
   slides: Slide[]
   current: string // the slide open when this was asked for
   thumbs: (slides: Slide[]) => Promise<Uint8Array[]> // JPEGs
-  onSave: (slides: Slide[]) => Promise<void>
+  onSave: (slides: Slide[], editable: boolean) => Promise<void>
   onClose: () => void
 }) {
   const [picked, setPicked] = useState(() => new Set(slides.map(s => s.id)))
   const [urls, setUrls] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [editable, setEditable] = useState(true)
   // As data: URLs (the page's policy allows no blob: pictures); they are small.
   useEffect(() => {
     let gone = false
@@ -28,13 +30,13 @@ export function SlidePickDialog({ slides, current, thumbs, onSave, onClose }: {
 
   const toggle = (id: string) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const chosen = slides.filter(s => picked.has(s.id))
-  const save = async () => { setBusy(true); try { await onSave(chosen) } finally { setBusy(false) } }
+  const save = async () => { setBusy(true); try { await onSave(chosen, editable) } finally { setBusy(false) } }
 
   return (
     <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div className="modal slide-pick" role="dialog" aria-label={t('PowerPoint に書き出す')} onClick={e => e.stopPropagation()}>
         <h2>{t('PowerPoint に書き出す')}</h2>
-        <p className="hint">{t('書き出すスライドを選んでください。シーンの順に、1 枚ずつ PowerPoint のスライドになります（画像として貼られます）。')}</p>
+        <p className="hint">{t('書き出すスライドを選んでください。シーンの順に、1 枚ずつ PowerPoint のスライドになります。')}</p>
         <div className="slide-pick-actions">
           <button className="link" onClick={() => setPicked(new Set(slides.map(s => s.id)))}>{t('すべて選ぶ')}</button>
           <button className="link" onClick={() => setPicked(new Set())}>{t('すべて外す')}</button>
@@ -52,6 +54,8 @@ export function SlidePickDialog({ slides, current, thumbs, onSave, onClose }: {
             </label>
           ))}
         </div>
+        <label className="check" title={t('文字・矢印・図形・画像を、PowerPoint で動かしたり直したりできる図形として入れます。背景とコートの表示は画像のままです。外すと、スライド全体を 1 枚の画像にします')}>
+          <input type="checkbox" checked={editable} onChange={e => setEditable(e.target.checked)} disabled={busy} /> {t('図形を PowerPoint で動かせる形にする')}</label>
         <div className="modal-actions">
           <button onClick={onClose} disabled={busy}>{t('キャンセル')}</button>
           <button className="primary" onClick={() => void save()} disabled={busy || !chosen.length}>

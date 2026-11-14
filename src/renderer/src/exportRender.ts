@@ -44,7 +44,7 @@ function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: n
 // Cards as pictures, for a PNG or a PDF, at full HD.
 export const CARD_W = 1920, CARD_H = 1080
 export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOpacity: number | undefined, type: 'image/png' | 'image/jpeg',
-  size = { w: CARD_W, h: CARD_H }): Promise<Uint8Array[]> {
+  size = { w: CARD_W, h: CARD_H }, leaveOut?: (a: Annotation) => boolean): Promise<Uint8Array[]> {
   const W = size.w, H = size.h
   const ids = cards.flatMap(c => [...(c.slide?.bg.kind === 'image' ? [c.slide.bg.assetId] : []), ...(c.annotations ?? []).flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
   const images = await preloadAssets(ids)
@@ -55,7 +55,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
       drawCard(ctx, W, H, c, overlay.titleCard, overlay.theme, logoImage(c.opp), images.lookup)
       if (c.slide) drawSlideMarks(ctx, W, H, c.slide, heatOpacity)
       if (c.slide?.flights) drawFlights(ctx, W, H, c.slide.flights, 1)
-      for (const a of c.annotations ?? []) drawAnnotation(ctx, a, W, H, images.lookup)
+      for (const a of c.annotations ?? []) if (!leaveOut?.(a)) drawAnnotation(ctx, a, W, H, images.lookup)
       out.push(new Uint8Array(await (await canvas.convertToBlob({ type, quality: 0.92 })).arrayBuffer()))
     }
     return out

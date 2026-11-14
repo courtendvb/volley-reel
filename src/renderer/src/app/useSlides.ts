@@ -9,12 +9,14 @@ import { markStyle, type GridStyle } from '../../../shared/court'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { findPhoto, type PackInfo } from '../../../shared/pack'
 import { pdfFromJpegs } from '../../../shared/pdf'
-import { pptxFromPictures } from '../../../shared/pptx'
+import { SHAPES_FIRST_RID, pptxFromSlides } from '../../../shared/pptx'
+import { editableInPptx, slideShapes, type ShapeImage } from '../../../shared/pptxShapes'
 import { chronological, groupRows, markersOf, newSlide, putSlides, setSlide, spotAt, type Clip, type Group, type Marker, type Reel, type Slide, type SlideSpot } from '../../../shared/reel'
 import { withRoles } from '../../../shared/roles'
+import type { Annotation } from '../../../shared/annotation'
 import type { ImportProgress, ParsedDVW, ProjectSettings, SlideFile } from '../../../shared/types'
 import { slideCard } from '../../../shared/video'
-import { pdfPages } from '../assets'
+import { pdfPages, preloadAssets } from '../assets'
 import type { BoardChoice } from '../components/BoardDialog'
 import type { SlideHow } from '../components/ReelPanel'
 import { CARD_H, CARD_W, cardImages } from '../exportRender'
@@ -182,16 +184,41 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
     }
   }
 
-  // The picked slides, in the scene's order, one to a PowerPoint slide.
-  const savePptx = async (slides: Slide[]) => {
+  // The picked slides, in the scene's order, one to a PowerPoint slide. Editable: the objects on them
+  // go in as PowerPoint shapes over the slide's picture (drawn without them), so they can be moved there.
+  const savePptx = async (slides: Slide[], editable: boolean) => {
     try {
       const name = sceneName()
-      const pics = await cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
-      const path = await api.saveCard(name, 'pptx', pptxFromPictures(pics.map(data => ({ data, type: 'jpeg', width: CARD_W, height: CARD_H })), name))
+      const images = editable ? await shapeImages(slides) : null
+      const leaveOut = images ? (a: Annotation) => editableInPptx(a, images) : undefined
+      const pics = await cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg', undefined, leaveOut)
+      const measure = new OffscreenCanvas(CARD_W, CARD_H).getContext('2d')!
+      const deck = pics.map((data, i) => ({
+        picture: { data, type: 'jpeg' as const, width: CARD_W, height: CARD_H },
+        ...(images ? { shapes: slideShapes(slides[i].annotations, { cx: 12192000, cy: 6858000, ctx: measure, W: CARD_W, H: CARD_H, image: images, firstRid: SHAPES_FIRST_RID }) } : {}),
+      }))
+      const path = await api.saveCard(name, 'pptx', pptxFromSlides(deck, name))
       if (path) { setPptxPick(null); setNotice(t('書き出しました: {0}', path)) }
     } catch (e) {
       setError(String(e))
     }
+  }
+  // The pictures placed on the slides, as their files (PNG or JPEG) with their size.
+  const shapeImages = async (slides: Slide[]): Promise<(assetId: string) => ShapeImage | null> => {
+    const ids = [...new Set(slides.flatMap(s => s.annotations.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))))]
+    const decoded = await preloadAssets(ids)
+    const got = new Map<string, ShapeImage>()
+    try {
+      for (const id of ids) {
+        const bmp = decoded.lookup(id) as ImageBitmap | null
+        const data = await api.readAsset(id).catch(() => null)
+        const type = data?.[0] === 0x89 && data[1] === 0x50 ? 'png' : data?.[0] === 0xff && data[1] === 0xd8 ? 'jpeg' : null
+        if (bmp && data && type) got.set(id, { data, type, width: bmp.width, height: bmp.height })
+      }
+    } finally {
+      decoded.release()
+    }
+    return id => got.get(id) ?? null
   }
   // Small pictures of slides, for picking them.
   const slideThumbs = (slides: Slide[]) => cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg', { w: 320, h: 180 })

@@ -83,7 +83,9 @@ const PREROLL_SEC = 2 // jump a little before the contact so the play is seen bu
 
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
+  // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
+  const [sceneMatches, setSceneMatches] = useState<Match[]>([])
   const [matchId, setMatchId] = useState<string | null>(null)
   const [shotPick, setShotPick] = useState<{ at: Pt; rows: ShotRow[]; zone: number | null } | null>(null) // a click on the heatmap
   const [matchIds, setMatchIds] = useState<string[]>([]) // the matches the list shows; none picked: all of the project's
@@ -135,7 +137,7 @@ export function App() {
     library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
     openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
   } = useProjectFlow({
-    latest, project, setProject, setDvws, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
+    latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
     setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
   })
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -154,7 +156,10 @@ export function App() {
   const gridStyleRef = useRef(gridStyle)
   gridStyleRef.current = gridStyle
 
-  const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
+  const matches = useMemo(() => Object.fromEntries([...(project?.matches ?? []), ...sceneMatches].map(m => [m.id, m])), [project, sceneMatches])
+  // The target matches only: what figures over "all matches" count (charts, codes, data slides), as the
+  // list searches them; a match only a scene still uses is played but not counted.
+  const targetDvws = useMemo(() => Object.fromEntries((project?.matchIds ?? []).filter(id => dvws[id]).map(id => [id, dvws[id]])), [dvws, project])
   const projectMatchIds = useMemo(() => (project?.matches ?? []).map(m => m.id), [project]) // oldest first
   const match = matchId ? matches[matchId] ?? null : null
   useEffect(() => setCourtFitting(false), [matchId])
@@ -197,16 +202,24 @@ export function App() {
   const settings = project?.settings
   // The setter calls coded in the matches (K1, KA...), with their names, for the set filter on the 表示 tab.
   const setterCalls = useMemo(() => {
-    const names: Record<string, string> = Object.assign({}, ...Object.values(dvws).map(d => d.codeNames))
-    const codes = new Set(Object.values(dvws).flatMap(d => d.plays.filter(p => p.skill === 'E').map(setterCall)).filter(Boolean))
+    const names: Record<string, string> = Object.assign({}, ...Object.values(targetDvws).map(d => d.codeNames))
+    const codes = new Set(Object.values(targetDvws).flatMap(d => d.plays.filter(p => p.skill === 'E').map(setterCall)).filter(Boolean))
     return [...codes].sort().map(code => ({ code, ...(names[code] ? { name: names[code] } : {}) }))
-  }, [dvws])
-  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter)
+  }, [targetDvws])
+  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter, sceneMatches)
   const courtZones = useMemo(() => (match?.court && selectedPlay
-    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay), setterName: set => chartName(dvws[match.id], set) })
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws])
+    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay), setterName: set => chartName(dvws[match.id], set) })
+    : null), [match?.court, selectedPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
 
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
+  // How many of the scenes' clips come from each match (the match picker says so), and whether a
+  // match is one the project searches (a clip of another is marked 対象外).
+  const sceneClips = useMemo(() => {
+    const n: Record<string, number> = {}
+    for (const r of reels) for (const c of Object.values(r.clips)) n[c.matchId] = (n[c.matchId] ?? 0) + 1
+    return n
+  }, [reels])
+  const offTarget = useCallback((matchId: string) => !!project && !project.matchIds.includes(matchId), [project])
   // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
   const infoFor = useCallback((c: Clip, scene: Reel | null): ClipInfo => {
     const m = matches[c.matchId], d = dvws[c.matchId], play = d?.plays[c.playId]
@@ -293,7 +306,7 @@ export function App() {
     if (!on) { const { [mark]: _gone, ...rest } = s; updateReel(setSlide(r, rest as Slide)); return }
     const fit = match?.court
     if (!selectedPlay || !fit) return
-    const all = () => Object.values(dvws).flatMap(d => d.plays)
+    const all = () => Object.values(targetDvws).flatMap(d => d.plays)
     const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true, cones: true, coneColor: gridStyle.coneColor, chart: markStyle(gridStyle, selectedPlay.skill).chart ?? DEFAULT_CHART }, all, { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[match!.id], selectedPlay) })
     const add: Partial<Slide> | null = mark === 'zones' ? { zones: { fit, zones: playMarks(selectedPlay, fit, nextPlay), detail: gridStyle.detail } }
       : mark === 'heat' && shots?.heat ? { heat: { fit, points: shots.heat.points, ...(shots.heat.rough ? { rough: shots.heat.rough } : {}) } }
@@ -353,7 +366,7 @@ export function App() {
     const o = overlaySettings(video?.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
   }, [video?.overlay, project?.settings.theme])
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, library, activeGroup }
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, targetDvws, library, activeGroup }
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
     latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
@@ -549,7 +562,7 @@ export function App() {
 
   // ---- slides ---------------------------------------------------------------------------------
   const { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards, pptxPick, setPptxPick, savePptx, slideThumbs } = useSlides({
-    latest, dvws, settings, packs, gridStyle, overlay, activeGroup, whenIn, cardEdit, editCard, updateScene, makeScene, setProgress, setNotice, setError,
+    latest, dvws: targetDvws, settings, packs, gridStyle, overlay, activeGroup, whenIn, cardEdit, editCard, updateScene, makeScene, setProgress, setNotice, setError,
   })
   const [reportOpen, setReportOpen] = useState(false) // the match report
   const [analysisOpen, setAnalysisOpen] = useState(false) // 分析
@@ -872,7 +885,7 @@ export function App() {
             <ReelPanel
               reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
               onNewReel={makeScene} onDeleteReel={deleteReel} onChange={updateReel}
-              info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
+              info={clipInfo} missing={missing} offTarget={offTarget} activeClipId={activeClipId} playingClipId={playingClipId}
               onActivate={(c, g) => { if (cardEditRef.current?.slideId) { setCardEdit(null); setSelectedAnn(null) } activateClip(c, g) }} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onPlayMax={() => void playMaximized(() => playThrough('scene', 0))} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
               videoSceneIds={video?.sceneIds ?? null} onAddToVideo={id => { if (video) updateVideo(addScene(video, id)) }}
@@ -904,7 +917,7 @@ export function App() {
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
       {picker && library && (
-        <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)}
+        <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}
           initial={picker === 'create'
             ? { name: '', codes: ['HTH'].filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />

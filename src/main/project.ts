@@ -160,12 +160,14 @@ export class Project {
     }
   }
 
+  // Any match in the library, not only the target ones: a scene's clips keep their match (and play,
+  // export, caption) when it is taken off the project's list, which is only what the list searches.
   getMatch(id: string): Match | undefined {
-    return this.file.matchIds.includes(id) ? this.library.getMatch(id) : undefined
+    return this.library.getMatch(id)
   }
 
   parse(id: string): Promise<ParsedDVW> {
-    if (!this.file.matchIds.includes(id)) throw new Error(t('この試合はプロジェクトに入っていません: {0}', id))
+    if (!this.library.getMatch(id)) throw new Error(t('この試合は倉庫にありません: {0}', id))
     return this.library.parse(id)
   }
 

@@ -826,3 +826,6 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .ov-look.on { border-color: var(--primary); }
 .ov-look.on span { color: var(--primary); font-weight: 600; }
 .ov-look canvas { display: block; border-radius: 3px; }
+/* A clip of a match taken off the project's list (still plays), and the match picker's note of scene use. */
+.off-target { font-size: 10.5px; padding: 0 4px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); font-weight: 600; }
+.match-row .scene-use { font-size: 11px; color: var(--primary); white-space: nowrap; }

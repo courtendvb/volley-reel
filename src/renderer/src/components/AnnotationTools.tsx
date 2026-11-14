@@ -4,8 +4,8 @@ import { useState, type ReactNode } from 'react'
 import { ZonePainter } from './ZonePainter'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
-  COLORS, DEFAULT_TEXT_BOX, styleMany, boxQuad, hasFill, isPoints, withGroups, withQuad,
-  type Annotation, type Dash, type Heads, type StylePatch, type TextBox,
+  COLORS, DEFAULT_TEXT_BOX, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
+  type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, setCurved, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
 import { forgetColor, usePalette } from '../palette'
@@ -266,9 +266,14 @@ export function AnnotationTools(p: Props) {
               <Num label={t('描き出し')} value={sel.drawIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
                 onChange={v => { const { drawIn: _d, ...rest } = sel; update((v > 0 ? { ...rest, drawIn: v } : rest) as Annotation) }} />
               <span className="muted">{t('秒')}</span>
-              <label className="check" title={t('表示中、ふくらんで戻るをくり返して目を引く')}>
-                <input type="checkbox" checked={!!sel.pulse} disabled={p.disabled}
-                  onChange={e => { const { pulse: _p, ...rest } = sel; update((e.target.checked ? { ...rest, pulse: true } : rest) as Annotation) }} /> {t('パルス')}</label>
+              <select aria-label={t('目立たせる')} value={emphasisOf(sel) ?? ''} disabled={p.disabled}
+                title={t('表示中くり返して目を引く。パルス: ふくらんで戻る／点滅: 消えてまた出る／波紋: 輪が広がって消える（矢印は先から）')}
+                onChange={e => update(withEmphasis(sel, (e.target.value || undefined) as Emphasis | undefined))}>
+                <option value="">{t('目立たせる: なし')}</option>
+                <option value="pulse">{t('パルス')}</option>
+                <option value="blink">{t('点滅')}</option>
+                <option value="ripple">{t('波紋')}</option>
+              </select>
             </span>
           )}
           {sel && !p.cardMode && (

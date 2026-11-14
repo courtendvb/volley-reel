@@ -94,11 +94,11 @@ export function AnnotationLayer(p: Props) {
   // every frame of the video.
   // A title card covers the frame during a through-play: the clip's objects are not on it.
   const [onCard, setOnCard] = useState(!!playback.current.card)
-  // Fading objects add their opacity in twentieths, and moving ones how far they are drawn and where
-  // they are in a swell, so the layer redraws as they fade and move.
+  // Fading objects add their opacity in twentieths, and moving ones how far they are drawn, where they
+  // are in a swell or a ring's spread and whether they are blinked off, so the layer redraws as they change.
   const motionKey = (a: Annotation, t: number) => {
     const m = animAt(a, t, clipRef.current)
-    return m ? `:${m.reveal !== undefined ? `r${Math.round(m.reveal * 60)}` : ''}${m.pulse !== undefined ? `p${Math.round(m.pulse * 30)}` : ''}` : ''
+    return m ? `:${m.reveal !== undefined ? `r${Math.round(m.reveal * 60)}` : ''}${m.pulse !== undefined ? `p${Math.round(m.pulse * 30)}` : ''}${m.ripple !== undefined ? `w${Math.round(m.ripple * 30)}` : ''}${m.hidden ? 'h' : ''}` : ''
   }
   const visibleKey = (t: number) => `${playback.attachedKey}|${annsRef.current.filter(a => visibleAt(a, t, clipRef.current))
     .map(a => (a.fadeIn || a.fadeOut ? `${a.id}:${Math.round(fadeAlpha(a, t, clipRef.current) * 20)}` : a.id) + (isAnimated(a) ? motionKey(a, t) : '')).join(',')}`

@@ -1857,6 +1857,26 @@ export function installSmoke(h: SmokeHost): void {
       if (logoFile && !logoAbove) throw new Error('no logo above the team column')
       return { team: slide.board!.config.team, heading: texts[0], receivers: names, pictures: images.length, logoAbove }
     }
+    if (layout === 'attack') {
+      // アタックディレクション: the first attacker, all three columns; the preview shot, then the slide
+      // made and read back: a direction chart (with name and numbers) and a set chart a column.
+      button(dialog, t('アタックディレクション'))!.click(); await sleep(400)
+      const box = (text: string) => [...dialog.querySelectorAll<HTMLLabelElement>('label.check')].find(l => l.textContent?.trim() === text)!.querySelector('input')!
+      await sleep(600); await api.smokeShot!('attack-preview-2.png') // the two columns it starts with
+      if (!box(t('トランジション')).checked) box(t('トランジション')).click()
+      await sleep(600); await api.smokeShot!('attack-preview.png')
+      // The middle's look: three blockers, the columns by attack code (no set charts); then back to the side's.
+      button(dialog, t('ミドル'))!.click(); button(dialog, t('アタックコード'))!.click()
+      await sleep(600); await api.smokeShot!('attack-middle.png')
+      button(dialog, t('自動'))!.click(); button(dialog, t('パスの質'))!.click(); await sleep(300)
+      button(dialog, t('作成'))!.click()
+      const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'D') ?? null, 10000, 'attack slide')
+      await sleep(800)
+      const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+      const charts = slide.charts ?? []
+      if (charts.length < 1 || !charts.every(c => c.chart.look.name && c.chart.look.stats)) throw new Error(`attack slide: ${charts.length} charts, ${texts.join(' | ')}`)
+      return { heading: texts.slice(0, 2), charts: charts.map(c => ({ att: c.chart.stats.att, k: c.chart.stats.k })), setCharts: (slide.setCharts ?? []).map(c => c.chart.total), conditions: slide.board?.config.attack?.conditions }
+    }
     if (layout === 'compare') {
       // チーム比較: the first other project as our own team; the slide's rows read back.
       button(dialog, t('チーム比較'))!.click(); await sleep(400)

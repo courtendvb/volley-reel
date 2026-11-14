@@ -158,6 +158,27 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
   return total ? { title: nameOf(set), rotation, rotLabel, filtered, dots, total, kills, errors, by } : null
 }
 
+// The sets one attacker was given, from the attacks with the set before each (null: none, as after a
+// dig straight over): where each set was given, coloured by where the attack came from, marked by how
+// it ended. Null when there were no sets.
+export function attackerSetChart(attacks: { attack: Play; set: Play | null }[], title = ''): SetChart | null {
+  const by = Object.fromEntries(SET_TARGETS.map(k => [k, { n: 0, kills: 0 }])) as SetChart['by']
+  const dots: SetDot[] = []
+  let kills = 0, errors = 0
+  for (const { attack, set } of attacks) {
+    if (!set || set.skill !== 'E') continue
+    const target = setTarget(attack, set.playerKey)
+    if (!target) continue
+    const result = resultOf(attack.effect)
+    by[target].n++
+    if (result === 'kill') { by[target].kills++; kills++ }
+    if (result === 'lost') errors++
+    const at = spot(set.startClick ?? null)
+    dots.push({ at, click: at ? set.startClick ?? null : null, target, result })
+  }
+  return dots.length ? { title, rotation: null, rotLabel: 'All', filtered: '', dots, total: dots.length, kills, errors, by } : null
+}
+
 // A click as seen across the net: the team's half with its end line at the top and the net at the
 // bottom, so the setter's right (zone 2) is on the left, as the camera sees the far team.
 const spot = (c: ClickPoint | null) => (c && c.v >= -0.1 && c.v <= 0.6 ? { x: 1 - c.u, y: Math.min(1, Math.max(0, c.v * 2)) } : null)

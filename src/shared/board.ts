@@ -8,16 +8,17 @@ import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
 import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type RotationTables, type SideOutRate } from './rotationBoard'
-import { setChart, type SetChart } from './setChart'
+import { setBefore, setChart, type SetChart } from './setChart'
+import { SETTER_ROW_NAMES, attackLayoutOf, attackSlide, codeColumn, conditionColumn, setterRowOf, type AttackCondition, type AttackLayout, type SetterRow } from './attackBoard'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
 import { compareSlide, type CompareSide } from './compare'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
 // E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets;
-// T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns;
+// D: one attacker's slide to set the defence against (attackBoard.ts); T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns;
 // C: the team's skills against our own team's, from another project (compare.ts), no columns
-export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C'
+export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C' | 'D'
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -32,18 +33,19 @@ export interface BoardPlayer {
   follow?: (Play | null)[] // a setter's sets: the same team's attack right after each, if there was one
   attention?: boolean // marked "Attention" on the card: the one to watch
   sets?: SetterSet[] // a setter's sets and dumps with the attack each led to (setterBoard.ts)
-  callNames?: Record<string, string> // the setter calls' names in the DVWs
+  callNames?: Record<string, string> // the setter calls' names in the DVWs (an attacker's slide: the attack codes')
   formations?: Record<number, FormationSpot[]> // a rotation slide: where the team lines up to receive in each rotation
   sideOut?: Record<number, SideOutRate> // and its serve receive in each
   setCharts?: Record<number, SetChart | null> // and the setter's set chart in each, after a # + ! reception
   attackers?: Record<number, RotationAttacker[]> // and the team's attackers with the most attacks in each
   receptions?: Received[] // a serve-target slide: all the team's receptions (the same list on each of its players)
+  setOf?: Map<Play, Play | null> // an attacker's slide: the set before each attack
 }
 
 // Everyone who served or attacked, most plays first. keep: only these plays (the search).
 export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
   // A rotation is read from its setter's sets, a serve target from the receptions; a comparison only needs the teams (who attacked).
-  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' ? 'A' : skill0
+  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' || skill0 === 'D' ? 'A' : skill0
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
     for (const [i, p] of d.plays.entries()) {
@@ -54,6 +56,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
       const had = out.get(key) ?? { key, team: t.code.toUpperCase(), teamName: t.name, player, plays: [], won: 0 }
       had.plays.push(p)
       if (skill === 'E') (had.follow ??= []).push(attackAfter(d.plays, i))
+      if (skill0 === 'D') (had.setOf ??= new Map()).set(p, setBefore(d.plays, p))
       if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) had.won++
       out.set(key, had)
     }
@@ -70,6 +73,10 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
         p.setCharts = Object.fromEntries(ROTATIONS.map(r => [r, set ? setChart(set, plays, () => name, { rot: [r], phases: ['r'], recs: ['#', '+', '!'] }) : null]))
       }
     }
+  }
+  if (skill0 === 'D') {
+    const codeNames = Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>
+    for (const p of out.values()) p.callNames = codeNames // the attack codes' names
   }
   if (skill0 === 'T') {
     const byTeam = new Map<string, Received[]>()
@@ -220,7 +227,14 @@ export interface BoardConfig {
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
   attackers?: number // and with the attackers there, how many (missing: three)
   compareProject?: string // a comparison: our own team's project (its folder), whose figures go left
+  attack?: AttackBoard // an attacker's slide: its columns and what its attacks are kept to
 }
+// An attacker's slide (attackBoard.ts): a column per condition, the attacks kept to when the setter was in
+// the front or back row (missing: both), and our blockers and diggers put on to move into place.
+// split: columns by the pass before the attack (conditions; missing: so) or by attack codes (codeGroups,
+// each column's codes); layout: how our defence stands (missing: from the attacker's position).
+export interface AttackBoard { conditions: AttackCondition[]; setterRow?: SetterRow; defense: boolean; split?: AttackSplit; codeGroups?: string[][]; layout?: AttackLayout }
+export type AttackSplit = 'pass' | 'codes'
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
 export interface BoardOptions {
@@ -241,6 +255,7 @@ export interface BoardOptions {
   tables?: RotationTables // and which tables (missing: all six)
   attackers?: number // and with the attackers' cards, how many (missing: three)
   compare?: { left: CompareSide; right: CompareSide } // a comparison: our team, and the team of this project
+  attack?: AttackBoard
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -337,6 +352,18 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 
 // One slide's columns, side by side; for a setter with a layout, their slide of six courts.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[]; setCharts?: PlacedSetChart[] } {
+  if (skill === 'D') {
+    const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', a = opts.attack ?? { conditions: ['good', 'poor'], defense: true }
+    if (!p) return { annotations: [], charts: [], noteIds: [] }
+    const attacks = a.setterRow ? p.plays.filter(x => setterRowOf(x) === a.setterRow) : p.plays
+    const kept = [p.code ? `${p.code}${p.codeName ? ` ${p.codeName}` : ''}` : '', a.setterRow ? SETTER_ROW_NAMES[a.setterRow] : ''].filter(Boolean)
+    const team = /^\d+$/.test(p.team) ? p.teamName : p.team // some DVWs code the teams by number
+    const label = [team, ...(kept.length ? kept : ['All attacks'])].join(' · ')
+    const made = attackSlide({ player: p.player, team: p.team, attacks, setOf: p.setOf ?? new Map(), label },
+      { columns: a.split === 'codes' ? (a.codeGroups ?? []).filter(g => g.length).map((g, i) => codeColumn(g, p.callNames ?? {}, i)) : a.conditions.map(conditionColumn),
+        sets: a.split !== 'codes', layout: a.layout ?? attackLayoutOf(p.player, attacks), defense: a.defense, style: { ...(opts.style ?? DEFAULT_CHART), ...opts.display }, ink })
+    return { annotations: made.annotations, charts: made.charts, noteIds: [], setCharts: made.setCharts }
+  }
   if (skill === 'C') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
     return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink) : [], charts: [], noteIds: [] }

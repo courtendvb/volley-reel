@@ -20,7 +20,7 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
-import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { captionData, followWindows, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
@@ -517,18 +517,31 @@ export function App() {
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches])
   const activeOverlay = overlayData(active)
-  // A play picked in the left list that is no clip on screen: its scoreboard and caption all the same
-  // (as the video's settings have them), over the window a clip of it would have (the scene's lengths,
-  // the 切り出し choice), so a play can be shown as the video would show it without making one.
-  const listOverlay = (() => {
-    if (!match || !selectedPlay || (active && activeInfo?.range && active.matchId === match.id)) return null
-    const d = dvws[match.id]
-    if (!d) return null
-    const range = defaultRange(d, selectedPlay, match.offsetSec, reel ? rangeDefaults(reel) : DEFAULT_RANGE, extract)
-    const caption = captionData(d, selectedPlay, overlay.playerCaption, undefined, video?.captionNames)
-    return { clip: { key: match.id, ...range }, scoreboard: scoreboardData(d, selectedPlay, settings?.ourTeamCodes ?? []),
-      caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, selectedPlay) } : caption }
-  })()
+  // No clip on screen: the scoreboard and caption follow the playhead over the left list's plays in
+  // this match (as the video's settings have them), each from its contact until the next listed play's,
+  // or for the scene's after-the-play length at most. So a play, or plays in a row, can be shown as the
+  // video would show them without making one.
+  const followData = useMemo(() => {
+    const d = match ? dvws[match.id] : null
+    if (!match || !d) return null
+    const plays = results.filter(r => r.matchId === match.id).map(r => r.play)
+    const hold = (reel ? rangeDefaults(reel) : DEFAULT_RANGE).keyAfter
+    const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
+    return {
+      key: match.id, windows: followWindows(plays, match.offsetSec, hold),
+      data: (playId: number) => {
+        const play = d.plays[playId]
+        if (!play) return null
+        let v = cache.get(playId)
+        if (!v) {
+          const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
+          v = { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+          cache.set(playId, v)
+        }
+        return v
+      },
+    }
+  }, [match, dvws, results, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs])
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.
   const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match
@@ -723,9 +736,8 @@ export function App() {
                 return (
                   <>
                     {!courtFitting && court}
-                    <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here ?? listOverlay?.clip ?? null}
-                      scoreboard={(here ? activeOverlay?.scoreboard : listOverlay?.scoreboard) ?? null} caption={(here ? activeOverlay?.caption : listOverlay?.caption) ?? null}
-                      override={here ? active?.overlayOverride : undefined} speed={speedPlate} />
+                    <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
+                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} speed={speedPlate} follow={followData} />
                     {here && active && (
                       <AnnotationLayer onMade={() => setAnnTool('select')}
                         size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here} floor={match.court?.corners ?? null}

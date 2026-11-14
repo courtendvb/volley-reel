@@ -612,7 +612,7 @@ export function App() {
   const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
   const {
     cardEdit, setCardEdit, focusEdit, setFocusEdit, cardTool, setCardTool, cardToolsOpen, setCardToolsOpen,
-    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown,
+    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown, alignCards,
     editCard, editingSlide, editingSource,
   } = useCardEdit({ latest, settings, video, reels, matches, overlay, setOverlay: o => setOverlay(o), selectedAnn, setSelectedAnn, updateReel, updateVideo })
   const {
@@ -821,7 +821,7 @@ export function App() {
               <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
                 title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} inserts={cardInserts}
-                hiddenCount={cardHiddenIds.length} onShowHidden={() => hideOnCard(cardHiddenIds, false)} />
+                hiddenCount={cardHiddenIds.length} onShowHidden={() => hideOnCard(cardHiddenIds, false)} onAlign={alignCards} />
             )}
             {cardEditCard && cardTool === 'objects' && (
               <div className="filter-row">

@@ -10,6 +10,8 @@ import type { Card } from '../../../shared/video'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { t } from '../../../shared/i18n'
+import type { AlignChoice } from '../../../shared/cardAlign'
+import type { CardKind } from '../../../shared/overlay'
 
 interface Props {
   size: { w: number; h: number }
@@ -119,13 +121,15 @@ export interface CardPhotoChoice { key: string; label: string; own: boolean; pac
 export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void
   onFrame: () => void } // a photo frame: filled with the card's player with the most clips when it plays
 
-export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden }: {
+export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden, onAlign }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
   tool: 'objects' | 'title' | 'logo'; onTool: (t: 'objects' | 'title' | 'logo') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
   inserts?: CardInserts
   hiddenCount?: number; onShowHidden?: () => void // objects of every card of this kind left off this one
+  onAlign?: (c: AlignChoice & { resetOwn: boolean }) => void // ほかのカードにも揃える
 }) {
+  const [aligning, setAligning] = useState(false)
   const kind = layoutKey(card), def = defaultLayout(card)
   const shared = asTopLeft(card, settings.titleCard[kind] ?? def), own = !!card.layout
   const layout = card.layout ? asTopLeft(card, card.layout) : shared
@@ -214,7 +218,54 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
           {' '}<button className="link" onClick={onShowHidden}>{t('出す')}</button></span>
       )}
       <span className="spacer" />
+      {onAlign && <button onClick={() => setAligning(true)} title={t('このカードのタイトルの位置・ロゴの位置・図形を、ほかの種類のカード（動画・シーン・マーカー）にも同じにする')}>{t('ほかのカードにも揃える…')}</button>}
       <button className="primary" onClick={onDone}>{t('完了')}</button>
+      {aligning && onAlign && (
+        <AlignCardsDialog from={cardKind(card)} objects={card.annotations?.length ?? 0} onClose={() => setAligning(false)}
+          onAlign={c => { onAlign(c); setAligning(false) }} />
+      )}
+    </div>
+  )
+}
+
+const KIND_NAMES = (): Record<CardKind, string> => ({ video: t('動画のカード'), scene: t('シーンのカード'), marker: t('マーカーのカード') })
+
+// What to make the same, and on which other kinds of card. Nothing is ticked by default for the
+// objects (they replace what those cards share), the title and logo places are.
+function AlignCardsDialog({ from, objects, onAlign, onClose }: { from: CardKind; objects: number; onAlign: (c: AlignChoice & { resetOwn: boolean }) => void; onClose: () => void }) {
+  const others = (['video', 'scene', 'marker'] as CardKind[]).filter(k => k !== from)
+  const [to, setTo] = useState<CardKind[]>(others)
+  const [title, setTitle] = useState(true)
+  const [logo, setLogo] = useState(true)
+  const [objs, setObjs] = useState(false)
+  const [resetOwn, setResetOwn] = useState(false)
+  const names = KIND_NAMES()
+  const nothing = !(title || logo || objs || resetOwn) || (!to.length && !resetOwn && !objs)
+  const check = (label: string, v: boolean, set: (v: boolean) => void, title?: string, disabled = false) => (
+    <label className="check" title={title}><input type="checkbox" checked={v} disabled={disabled} onChange={e => set(e.target.checked)} /> {label}</label>
+  )
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal align-cards" role="dialog" aria-label={t('ほかのカードにも揃える')} onClick={e => e.stopPropagation()}>
+        <h2>{t('{0}の設定を、ほかのカードにも揃える', names[from])}</h2>
+        <section>
+          <b>{t('揃えるもの')}</b>
+          {check(t('タイトルの位置と大きさ'), title, setTitle)}
+          {check(t('ロゴの位置'), logo, setLogo)}
+          {check(t('このカードの図形（{0} 個）を、すべてのカードに置く', objects), objs, setObjs,
+            t('このカードの図形・文字・写真枠を、この種類のすべてのカードと、下で選んだ種類のすべてのカードに置きます。それらのカードに共通で置いていた図形は、これに置き換わります'), !objects)}
+        </section>
+        <section>
+          <b>{t('揃える先')}</b>
+          {others.map(k => check(names[k], to.includes(k), v => setTo(s => (v ? [...s, k] : s.filter(x => x !== k)))))}
+          {check(t('「このカードだけ」の位置にしたカードも、共通の位置に戻す'), resetOwn, setResetOwn,
+            t('この種類と、上で選んだ種類のカードで、「このカードだけ」にしてあるタイトルの位置を外します'))}
+        </section>
+        <div className="modal-actions">
+          <button onClick={onClose}>{t('キャンセル')}</button>
+          <button className="primary" disabled={nothing} onClick={() => onAlign({ title, logo, objects: objs, to, resetOwn })}>{t('揃える')}</button>
+        </div>
+      </div>
     </div>
   )
 }

@@ -254,11 +254,21 @@ export function AnnotationTools(p: Props) {
         <Group title={t('全体')}>
           {sel && !p.cardMode && (
             <span className="fade-fields" title={t('出るときに透明から、消えるときに透明へ（秒）。0 でなし')}>
-              <Num label={t('フェードイン')} value={sel.fadeIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
+              <Num label={t('フェードイン')} value={sel.fadeIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled || !!sel.drawIn}
                 onChange={v => { const { fadeIn: _f, ...rest } = sel; update((v > 0 ? { ...rest, fadeIn: v } : rest) as Annotation) }} />
               <Num label={t('アウト')} value={sel.fadeOut ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
                 onChange={v => { const { fadeOut: _f, ...rest } = sel; update((v > 0 ? { ...rest, fadeOut: v } : rest) as Annotation) }} />
               <span className="muted">{t('秒')}</span>
+            </span>
+          )}
+          {sel && !p.cardMode && (
+            <span className="fade-fields" title={t('出るときに、線は始点から伸び、枠は一周して描かれる（秒）。文字と画像は浮かび上がる。0 でなし')}>
+              <Num label={t('描き出し')} value={sel.drawIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
+                onChange={v => { const { drawIn: _d, ...rest } = sel; update((v > 0 ? { ...rest, drawIn: v } : rest) as Annotation) }} />
+              <span className="muted">{t('秒')}</span>
+              <label className="check" title={t('表示中、ふくらんで戻るをくり返して目を引く')}>
+                <input type="checkbox" checked={!!sel.pulse} disabled={p.disabled}
+                  onChange={e => { const { pulse: _p, ...rest } = sel; update((e.target.checked ? { ...rest, pulse: true } : rest) as Annotation) }} /> {t('パルス')}</label>
             </span>
           )}
           {sel && !p.cardMode && (

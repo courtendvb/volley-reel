@@ -6,6 +6,7 @@ import {
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
+import { SlidePickDialog } from './components/SlidePickDialog'
 import { CheckPicker } from './components/CheckPicker'
 import { ShotPick, type ShotRow } from './components/ShotPick'
 import { FilterPanel } from './components/FilterPanel'
@@ -547,7 +548,7 @@ export function App() {
   })
 
   // ---- slides ---------------------------------------------------------------------------------
-  const { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards } = useSlides({
+  const { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards, pptxPick, setPptxPick, savePptx, slideThumbs } = useSlides({
     latest, dvws, settings, packs, gridStyle, overlay, activeGroup, whenIn, cardEdit, editCard, updateScene, makeScene, setProgress, setNotice, setError,
   })
   const [reportOpen, setReportOpen] = useState(false) // the match report
@@ -914,6 +915,9 @@ export function App() {
       )}
       {analysisOpen && project && (
         <AnalysisDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setAnalysisOpen(false)} />
+      )}
+      {pptxPick && (
+        <SlidePickDialog slides={pptxPick.slides} current={pptxPick.current} thumbs={slideThumbs} onSave={savePptx} onClose={() => setPptxPick(null)} />
       )}
       {(boardOpen || boardEdit) && (
         <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={boardDvws} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}

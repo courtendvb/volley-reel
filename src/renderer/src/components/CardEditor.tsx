@@ -223,7 +223,7 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
 // What can go on a slide from the court: from the play selected in the list.
 // The bar for a data slide: a sheet of data, so only what makes up that sheet.
 export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
-  slide: Slide; onChange: (s: Slide) => void; onBoard: () => void; onSave: (as: 'png' | 'pdf') => void; onDone: () => void
+  slide: Slide; onChange: (s: Slide) => void; onBoard: () => void; onSave: (as: 'png' | 'pdf' | 'pptx') => void; onDone: () => void
 }) {
   const look = slide.charts?.[0]?.chart.look
   return (
@@ -233,6 +233,7 @@ export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
       <span className="spacer" />
       <button onClick={() => onSave('png')} title={t('このスライドを画像に書き出します')}>{t('PNG に書き出す…')}</button>
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
+      <button onClick={() => onSave('pptx')} title={t('このシーンのスライドから選んで、1 つの PowerPoint ファイルにします')}>{t('PowerPoint に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
         {look && <ChartShow value={look} skill={slide.board?.config.skill ?? slide.charts?.[0]?.chart.skill ?? 'A'} onChange={p => onChange(restyleBoard(slide, p))} />}
@@ -249,7 +250,7 @@ export type SlideMark = 'zones' | 'heat' | 'landings' | 'flights' | 'cones' | 'c
 
 export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark, onSave }: {
   slide: Slide; onChange: (s: Slide) => void; onReload: (() => void) | null; onDone: () => void
-  onSave: (as: 'png' | 'pdf') => void
+  onSave: (as: 'png' | 'pdf' | 'pptx') => void
   target: string | null // the play the court marks come from, in words; null: none to use
   onMark: (mark: SlideMark, on: boolean) => void
 }) {
@@ -265,6 +266,7 @@ export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark
       <span className="spacer" />
       <button onClick={() => onSave('png')} title={t('このカードを画像に書き出します')}>{t('PNG に書き出す…')}</button>
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
+      <button onClick={() => onSave('pptx')} title={t('このシーンのスライドから選んで、1 つの PowerPoint ファイルにします')}>{t('PowerPoint に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
         <span className="court-row-label" title={t('左の一覧で選んだプレーから、コートの表示をこのスライドに載せます。載せた内容は固定され、あとでプレーを変えても変わりません')}>{t('コートの表示')}</span>

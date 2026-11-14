@@ -350,9 +350,9 @@ function registerIpc(): void {
     return lib().packs()
   })
   // A card as a picture, or the cards as a PDF: to a file the user names; the path, or null.
-  ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf', data: Uint8Array) => {
+  ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf' | 'pptx', data: Uint8Array) => {
     const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`, dir = await startFolder('docs')
-    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
+    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: ext === 'pptx' ? 'PowerPoint' : ext.toUpperCase(), extensions: [ext] }] })
     if (r.canceled || !r.filePath) return null
     remembered('docs', dirname(r.filePath))
     await writeFile(r.filePath, data)

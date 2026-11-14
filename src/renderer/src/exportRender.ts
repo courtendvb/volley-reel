@@ -40,17 +40,19 @@ function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: n
 // chapters: where YouTube chapters start, as plan indexes (planVideoChapters); kept on the job as item indexes.
 // Cards as pictures, for a PNG or a PDF, at full HD.
 export const CARD_W = 1920, CARD_H = 1080
-export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOpacity: number | undefined, type: 'image/png' | 'image/jpeg'): Promise<Uint8Array[]> {
+export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOpacity: number | undefined, type: 'image/png' | 'image/jpeg',
+  size = { w: CARD_W, h: CARD_H }): Promise<Uint8Array[]> {
+  const W = size.w, H = size.h
   const ids = cards.flatMap(c => [...(c.slide?.bg.kind === 'image' ? [c.slide.bg.assetId] : []), ...(c.annotations ?? []).flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
   const images = await preloadAssets(ids)
   try {
     const out: Uint8Array[] = []
     for (const c of cards) {
-      const canvas = new OffscreenCanvas(CARD_W, CARD_H), ctx = canvas.getContext('2d')!
-      drawCard(ctx, CARD_W, CARD_H, c, overlay.titleCard, overlay.theme, logoImage(c.opp), images.lookup)
-      if (c.slide) drawSlideMarks(ctx, CARD_W, CARD_H, c.slide, heatOpacity)
-      if (c.slide?.flights) drawFlights(ctx, CARD_W, CARD_H, c.slide.flights, 1)
-      for (const a of c.annotations ?? []) drawAnnotation(ctx, a, CARD_W, CARD_H, images.lookup)
+      const canvas = new OffscreenCanvas(W, H), ctx = canvas.getContext('2d')!
+      drawCard(ctx, W, H, c, overlay.titleCard, overlay.theme, logoImage(c.opp), images.lookup)
+      if (c.slide) drawSlideMarks(ctx, W, H, c.slide, heatOpacity)
+      if (c.slide?.flights) drawFlights(ctx, W, H, c.slide.flights, 1)
+      for (const a of c.annotations ?? []) drawAnnotation(ctx, a, W, H, images.lookup)
       out.push(new Uint8Array(await (await canvas.convertToBlob({ type, quality: 0.92 })).arrayBuffer()))
     }
     return out

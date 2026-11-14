@@ -20,7 +20,7 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
-import { captionData, followWindows, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
@@ -199,7 +199,11 @@ export function App() {
   setChartColors(chartColors) // before anything below draws a chart
   const lineKey = JSON.stringify(chartColors) // charts already drawn are drawn again
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
-  const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
+  // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
+  // rally, the serve, reception or attack on screen (the list staying on the play picked).
+  const [followPlay, setFollowPlay] = useState<PlayKey | null>(null)
+  const courtPlay = (match && followPlay?.matchId === match.id ? dvws[match.id]?.plays[followPlay.playId] : null) ?? selectedPlay
+  const nextPlay = courtPlay && match ? dvws[match.id]?.plays[courtPlay.id + 1] ?? null : null
 
   const settings = project?.settings
   // The setter calls coded in the matches (K1, KA...), with their names, for the set filter on the 表示 tab.
@@ -209,9 +213,9 @@ export function App() {
     return [...codes].sort().map(code => ({ code, ...(names[code] ? { name: names[code] } : {}) }))
   }, [dvws])
   const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter)
-  const courtZones = useMemo(() => (match?.court && selectedPlay
-    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay), setterName: set => chartName(dvws[match.id], set) })
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws])
+  const courtZones = useMemo(() => (match?.court && courtPlay
+    ? playMarks(courtPlay, match.court, nextPlay, gridStyle, () => Object.values(dvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set) })
+    : null), [match?.court, courtPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws])
 
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
   // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
@@ -374,21 +378,28 @@ export function App() {
   // With 切り出し = プレー前後, a play picked in the list plays its key-play window and then the
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
   const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number; rallyId?: number } | null>(null)
+  // 通し: the display's windows (followData), for the court's marks to follow them; the play they last took.
+  const followDataRef = useRef<{ key: string; windows: FollowWindow[] } | null>(null)
+  const followSel = useRef<number | null>(null)
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
   const [loopOn, setLoopOn] = useState(true) // the trim bar's ループ再生 box: off lets the clip play on past OUT
-  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false) }, [])
+  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false); setFollowPlay(null) }, [])
   const jump = useCallback((r: PlayRef) => {
     const m = latest.current.matches[r.matchId]
     if (!m) return
     setSelected({ matchId: r.matchId, playId: r.play.id })
+    setFollowPlay(null)
     const c = latest.current.reel && findClip(latest.current.reel, r.matchId, r.play.id)
     setActiveClipId(c ? c.id : null)
     setMatchId(r.matchId)
     const t = r.play.time + m.offsetSec
     const rally = listThroughRef.current && r.play.rallyId !== null ? latest.current.dvwsRef?.[r.matchId]?.rallies[r.play.rallyId] : undefined
     if (rally) {
+      // Played as the list's, not as a clip: the display follows the rally (followData).
+      setActiveClipId(null)
+      followSel.current = r.play.id
       const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
       const start = Math.max(0, rally.serveTime - d.rallyLead + m.offsetSec)
       listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + m.offsetSec, rallyId: r.play.rallyId! }
@@ -410,6 +421,12 @@ export function App() {
   jumpRef.current = jump
   useEffect(() => playback.subscribe(s => {
     const run = listRunRef.current
+    // 通し: the court's marks follow the serve, reception or attack on screen; the list stays on the play picked.
+    if (run?.rallyId !== undefined && playback.attachedKey === run.matchId && s.time >= run.start && s.time <= run.end) {
+      const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.windows, s.time) : -1
+      const pid = at >= 0 ? f!.windows[at].playId : null
+      if (pid !== null && pid !== followSel.current) { followSel.current = pid; setFollowPlay({ matchId: run.matchId, playId: pid }) }
+    }
     // Only inside this play's window: right after a jump the time can still be the old one.
     if (!run || s.paused || playback.attachedKey !== run.matchId || s.time < run.end || s.time > run.end + 3 || s.time < run.start) return
     const res = latest.current.results
@@ -419,7 +436,7 @@ export function App() {
       : res.slice(i + 1).find(x => x.matchId !== run.matchId || x.play.rallyId !== run.rallyId)
     listRunRef.current = null
     if (next) jumpRef.current(next)
-    else { setListRun(false); playback.pause() }
+    else { setListRun(false); setFollowPlay(null); playback.pause() }
   }), [])
 
   const activateClip = useCallback((c: Clip, g?: Group) => {
@@ -561,6 +578,7 @@ export function App() {
       },
     }
   }, [match, dvws, results, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough])
+  followDataRef.current = followData
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.
   const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match
@@ -748,7 +766,7 @@ export function App() {
                   )
                 }
                 const court = match.court && (
-                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, playTimes(serveMarkOf(match, selectedPlay), active?.matchId === match.id && active.playId === selectedPlay.id ? active : null)) : null} fitting={courtFitting}
+                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={courtPlay ? flightTiming(courtPlay, match.offsetSec, playTimes(serveMarkOf(match, courtPlay), active?.matchId === match.id && active.playId === courtPlay.id ? active : null)) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
                     onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )

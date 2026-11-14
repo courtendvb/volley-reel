@@ -5,6 +5,7 @@ import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { effectName, skillName } from './labels'
 import type { ParsedDVW, Play } from './types'
+import { matchReport, type MatchReport } from './report'
 import { t } from './i18n'
 
 export type Anchor = 'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br'
@@ -27,7 +28,7 @@ export interface OverlaySettings {
   look?: TelopLook // missing = slant
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   // photo: the player's photo from the player packs, above a caption at the bottom (below one at the top).
-  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean }
+  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean; showStats?: boolean }
   // A serve's measured speed (hit to the reception's touch, serveMark.ts) on its own plate, from the touch on.
   serveSpeed: { enabled: boolean; anchor: Anchor; scale: number }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
@@ -126,7 +127,28 @@ export interface ScoreboardData {
 export interface SpeedData { kmh: number; touchSec: number }
 
 // photo: the player's photo in a pack (shared/pack.ts captionPhoto), when the caption shows one.
-export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null }
+export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null; stats?: CaptionStat[] | null }
+
+// A figure shown beside the caption: what it is, the percentage, and the count it comes from.
+export interface CaptionStat { label: string; value: string; count: string } // count '': none shown
+
+// The player's figures for the skill of the play, over the whole match (the match report's lines):
+// serve ERR% and BP%, attack KILL% and EFF% (EFF without a count: its top is no number of plays),
+// reception #+% and #%. Null for other skills, or when the
+// player has none of that skill in the match.
+const reports = new WeakMap<ParsedDVW, MatchReport>()
+export function captionStats(dvw: ParsedDVW, play: Play): CaptionStat[] | null {
+  if (play.skill !== 'S' && play.skill !== 'A' && play.skill !== 'R') return null
+  let r = reports.get(dvw)
+  if (!r) { r = matchReport(dvw); reports.set(dvw, r) }
+  const line = r.teams[play.side === '*' ? 0 : 1].players.find(p => p.jersey === play.jersey)
+  if (!line) return null
+  const stat = (label: string, n: number, of: number, count = true): CaptionStat => ({ label, value: `${Math.round((n / of) * 100)}%`, count: count ? `${n}/${of}` : '' })
+  if (play.skill === 'S') { const s = line.serve; return s.tot ? [stat('ERR', s.err, s.tot), stat('BP', s.brk, s.tot)] : null }
+  if (play.skill === 'A') { const a = line.att; return a.tot ? [stat('KILL', a.pts, a.tot), stat('EFF', a.pts - a.err - a.blo, a.tot, false)] : null }
+  const c = line.rec
+  return c.tot ? [stat('#+', c.pos, c.tot), stat('#', c.exc, c.tot)] : null
+}
 
 // Our team always on the left (design §3.7); scrimmages and all-home files keep home on the left.
 // The score is the one before the rally.
@@ -153,5 +175,27 @@ export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['play
     number: s.showNumber ? play.jersey : null,
     name: s.showName ? name : null,
     line: o?.line !== undefined && o.line.trim() !== '' ? o.line.trim().toUpperCase() : autoLine,
+    ...(s.showStats ? { stats: captionStats(dvw, play) } : {}),
   }
+}
+
+// Following the playhead over a match (the left list's plays, no clip on screen): each play's
+// scoreboard and caption from just before its contact until the next play's, or for at most holdSec.
+// So watching plays in a row, the display moves to each play as it happens. Times are video times.
+export interface FollowWindow { from: number; to: number; playId: number }
+export const FOLLOW_LEAD_SEC = 0.3 // up this long before the contact
+export function followWindows(plays: { id: number; time: number }[], offsetSec: number, holdSec: number): FollowWindow[] {
+  const sorted = [...plays].sort((a, b) => a.time - b.time || a.id - b.id)
+  return sorted.map((p, i) => {
+    const from = p.time + offsetSec - FOLLOW_LEAD_SEC, next = sorted[i + 1]
+    const to = Math.min(p.time + offsetSec + holdSec, next ? next.time + offsetSec - FOLLOW_LEAD_SEC : Infinity)
+    return { from, to, playId: p.id }
+  }).filter(w => w.to > w.from)
+}
+
+// The window at time t (the last that has begun and not ended), or -1.
+export function followAt(ws: FollowWindow[], t: number): number {
+  let lo = 0, hi = ws.length - 1, found = -1
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (ws[mid].from <= t) { found = mid; lo = mid + 1 } else hi = mid - 1 }
+  return found >= 0 && t <= ws[found].to ? found : -1
 }

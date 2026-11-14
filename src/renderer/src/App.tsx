@@ -20,7 +20,7 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
-import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
@@ -91,6 +91,13 @@ export function App() {
   const [matchIds, setMatchIds] = useState<string[]>([]) // the matches the list shows; none picked: all of the project's
   // How plays added from the search are cut: around the key play, or from it to the end of the rally.
   const [extract, setExtract] = useState<ClipMode>(() => { try { return localStorage.getItem('vr.extract') === 'toEnd' ? 'toEnd' : 'keyplay' } catch { return 'keyplay' } })
+  // 通し: the list plays rally by rally: a play picked plays its whole rally (serve to its end) once, the
+  // list staying on it, then the next rally with a play in the list; only serves, receptions and
+  // attacks get a caption on the way (the display follows them).
+  const [listThrough, setListThroughState] = useState(() => { try { return localStorage.getItem('vr.listThrough') === '1' } catch { return false } })
+  const listThroughRef = useRef(listThrough)
+  listThroughRef.current = listThrough
+  const setListThrough = (v: boolean) => { setListThroughState(v); try { localStorage.setItem('vr.listThrough', v ? '1' : '0') } catch { /* kept for this run only */ } }
   useEffect(() => { try { localStorage.setItem('vr.extract', extract) } catch { /* not kept */ } }, [extract])
   const extractRef = useRef(extract)
   extractRef.current = extract
@@ -197,7 +204,11 @@ export function App() {
   setChartColors(chartColors) // before anything below draws a chart
   const lineKey = JSON.stringify(chartColors) // charts already drawn are drawn again
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
-  const nextPlay = selectedPlay && match ? dvws[match.id]?.plays[selectedPlay.id + 1] ?? null : null
+  // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
+  // rally, the serve, reception or attack on screen (the list staying on the play picked).
+  const [followPlay, setFollowPlay] = useState<PlayKey | null>(null)
+  const courtPlay = (match && followPlay?.matchId === match.id ? dvws[match.id]?.plays[followPlay.playId] : null) ?? selectedPlay
+  const nextPlay = courtPlay && match ? dvws[match.id]?.plays[courtPlay.id + 1] ?? null : null
 
   const settings = project?.settings
   // The setter calls coded in the matches (K1, KA...), with their names, for the set filter on the 表示 tab.
@@ -207,9 +218,9 @@ export function App() {
     return [...codes].sort().map(code => ({ code, ...(names[code] ? { name: names[code] } : {}) }))
   }, [targetDvws])
   const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter, sceneMatches)
-  const courtZones = useMemo(() => (match?.court && selectedPlay
-    ? playMarks(selectedPlay, match.court, nextPlay, gridStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], selectedPlay), setterName: set => chartName(dvws[match.id], set) })
-    : null), [match?.court, selectedPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
+  const courtZones = useMemo(() => (match?.court && courtPlay
+    ? playMarks(courtPlay, match.court, nextPlay, gridStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set) })
+    : null), [match?.court, courtPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
 
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
   // How many of the scenes' clips come from each match (the match picker says so), and whether a
@@ -379,20 +390,36 @@ export function App() {
   // first; playback.seekIn holds the seek until that match's video is ready.
   // With 切り出し = プレー前後, a play picked in the list plays its key-play window and then the
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
-  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number } | null>(null)
+  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number; rallyId?: number } | null>(null)
+  // 通し: the display's windows (followData), for the court's marks to follow them; the play they last took.
+  const followDataRef = useRef<{ key: string; windows: FollowWindow[] } | null>(null)
+  const followSel = useRef<number | null>(null)
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
   const [loopOn, setLoopOn] = useState(true) // the trim bar's ループ再生 box: off lets the clip play on past OUT
-  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false) }, [])
+  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false); setFollowPlay(null) }, [])
   const jump = useCallback((r: PlayRef) => {
     const m = latest.current.matches[r.matchId]
     if (!m) return
     setSelected({ matchId: r.matchId, playId: r.play.id })
+    setFollowPlay(null)
     const c = latest.current.reel && findClip(latest.current.reel, r.matchId, r.play.id)
     setActiveClipId(c ? c.id : null)
     setMatchId(r.matchId)
     const t = r.play.time + m.offsetSec
+    const rally = listThroughRef.current && r.play.rallyId !== null ? latest.current.dvwsRef?.[r.matchId]?.rallies[r.play.rallyId] : undefined
+    if (rally) {
+      // Played as the list's, not as a clip: the display follows the rally (followData).
+      setActiveClipId(null)
+      followSel.current = r.play.id
+      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      const start = Math.max(0, rally.serveTime - d.rallyLead + m.offsetSec)
+      listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + m.offsetSec, rallyId: r.play.rallyId! }
+      setListRun(true)
+      playback.seekIn(r.matchId, start, { play: true })
+      return
+    }
     if (extractRef.current === 'keyplay') {
       const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
       listRunRef.current = { matchId: r.matchId, playId: r.play.id, start: t - d.keyBefore, end: t + d.keyAfter }
@@ -407,14 +434,22 @@ export function App() {
   jumpRef.current = jump
   useEffect(() => playback.subscribe(s => {
     const run = listRunRef.current
+    // 通し: the court's marks follow the serve, reception or attack on screen; the list stays on the play picked.
+    if (run?.rallyId !== undefined && playback.attachedKey === run.matchId && s.time >= run.start && s.time <= run.end) {
+      const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.windows, s.time) : -1
+      const pid = at >= 0 ? f!.windows[at].playId : null
+      if (pid !== null && pid !== followSel.current) { followSel.current = pid; setFollowPlay({ matchId: run.matchId, playId: pid }) }
+    }
     // Only inside this play's window: right after a jump the time can still be the old one.
     if (!run || s.paused || playback.attachedKey !== run.matchId || s.time < run.end || s.time > run.end + 3 || s.time < run.start) return
     const res = latest.current.results
     const i = res.findIndex(x => x.matchId === run.matchId && x.play.id === run.playId)
-    const next = i >= 0 ? res[i + 1] : undefined
+    // A rally played whole (通し): on to the next listed play in another rally.
+    const next = i < 0 ? undefined : run.rallyId === undefined ? res[i + 1]
+      : res.slice(i + 1).find(x => x.matchId !== run.matchId || x.play.rallyId !== run.rallyId)
     listRunRef.current = null
     if (next) jumpRef.current(next)
-    else { setListRun(false); playback.pause() }
+    else { setListRun(false); setFollowPlay(null); playback.pause() }
   }), [])
 
   const activateClip = useCallback((c: Clip, g?: Group) => {
@@ -530,6 +565,33 @@ export function App() {
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches])
   const activeOverlay = overlayData(active)
+  // No clip on screen: the scoreboard and caption follow the playhead over the left list's plays in
+  // this match (as the video's settings have them), each from its contact until the next listed play's,
+  // or for the scene's after-the-play length at most. So a play, or plays in a row, can be shown as the
+  // video would show them without making one.
+  const followData = useMemo(() => {
+    const d = match ? dvws[match.id] : null
+    if (!match || !d) return null
+    // 通し: the rally's serves, receptions and attacks, whatever the list shows; else the list's plays.
+    const plays = listThrough ? d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A') : results.filter(r => r.matchId === match.id).map(r => r.play)
+    const hold = (reel ? rangeDefaults(reel) : DEFAULT_RANGE).keyAfter
+    const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
+    return {
+      key: match.id, windows: followWindows(plays, match.offsetSec, hold),
+      data: (playId: number) => {
+        const play = d.plays[playId]
+        if (!play) return null
+        let v = cache.get(playId)
+        if (!v) {
+          const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
+          v = { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+          cache.set(playId, v)
+        }
+        return v
+      },
+    }
+  }, [match, dvws, results, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough])
+  followDataRef.current = followData
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.
   const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match
@@ -684,7 +746,7 @@ export function App() {
             )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
-              filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
+              filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract} through={listThrough} onThrough={setListThrough}
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
@@ -717,7 +779,7 @@ export function App() {
                   )
                 }
                 const court = match.court && (
-                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={selectedPlay ? flightTiming(selectedPlay, match.offsetSec, playTimes(serveMarkOf(match, selectedPlay), active?.matchId === match.id && active.playId === selectedPlay.id ? active : null)) : null} fitting={courtFitting}
+                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={courtPlay ? flightTiming(courtPlay, match.offsetSec, playTimes(serveMarkOf(match, courtPlay), active?.matchId === match.id && active.playId === courtPlay.id ? active : null)) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
                     onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )
@@ -725,7 +787,7 @@ export function App() {
                   <>
                     {!courtFitting && court}
                     <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
-                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} speed={speedPlate} />
+                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} speed={speedPlate} follow={followData} />
                     {here && active && (
                       <AnnotationLayer onMade={() => setAnnTool('select')}
                         size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here} floor={match.court?.corners ?? null}

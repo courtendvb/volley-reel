@@ -88,6 +88,8 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {check(t('名前'), s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
                 {check(t('スキル'), s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
                 {check(t('評価'), s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
+                <span title={t('テロップの横に、その試合でのその選手の数字を出す。サーブ: ミス率・BP%／アタック: 決定率・効果率／レセプション: #+%・#%（それぞれ本数も）')}>
+                  {check(t('統計'), !!s.playerCaption.showStats, v => set('playerCaption', { showStats: v }))}</span>
                 {check(t('写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）'), s.playerCaption.photo, v => set('playerCaption', { photo: v }))}
               </div>
             </section>

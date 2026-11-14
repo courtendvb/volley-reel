@@ -517,6 +517,18 @@ export function App() {
     return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches])
   const activeOverlay = overlayData(active)
+  // A play picked in the left list that is no clip on screen: its scoreboard and caption all the same
+  // (as the video's settings have them), over the window a clip of it would have (the scene's lengths,
+  // the 切り出し choice), so a play can be shown as the video would show it without making one.
+  const listOverlay = (() => {
+    if (!match || !selectedPlay || (active && activeInfo?.range && active.matchId === match.id)) return null
+    const d = dvws[match.id]
+    if (!d) return null
+    const range = defaultRange(d, selectedPlay, match.offsetSec, reel ? rangeDefaults(reel) : DEFAULT_RANGE, extract)
+    const caption = captionData(d, selectedPlay, overlay.playerCaption, undefined, video?.captionNames)
+    return { clip: { key: match.id, ...range }, scoreboard: scoreboardData(d, selectedPlay, settings?.ourTeamCodes ?? []),
+      caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, selectedPlay) } : caption }
+  })()
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.
   const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match
@@ -711,8 +723,9 @@ export function App() {
                 return (
                   <>
                     {!courtFitting && court}
-                    <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
-                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} speed={speedPlate} />
+                    <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here ?? listOverlay?.clip ?? null}
+                      scoreboard={(here ? activeOverlay?.scoreboard : listOverlay?.scoreboard) ?? null} caption={(here ? activeOverlay?.caption : listOverlay?.caption) ?? null}
+                      override={here ? active?.overlayOverride : undefined} speed={speedPlate} />
                     {here && active && (
                       <AnnotationLayer onMade={() => setAnnTool('select')}
                         size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here} floor={match.court?.corners ?? null}

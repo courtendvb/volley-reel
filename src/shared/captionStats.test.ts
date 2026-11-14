@@ -38,8 +38,8 @@ describe('captionStats', () => {
     expect(captionStats(d, play('a', 9, 'S'))).toEqual([{ label: 'ERR', value: '100%', count: '1/1' }, { label: 'BP', value: '0%', count: '0/1' }])
     expect(captionStats(d, play('*', 2, 'S'))).toEqual([{ label: 'ERR', value: '0%', count: '0/1' }, { label: 'BP', value: '100%', count: '1/1' }])
   })
-  it('gives an attacker KILL% and EFF%', () => {
-    expect(captionStats(d, play('a', 9, 'A'))).toEqual([{ label: 'KILL', value: '100%', count: '1/1' }, { label: 'EFF', value: '100%', count: '1/1' }])
+  it('gives an attacker KILL% and EFF% (EFF without a count)', () => {
+    expect(captionStats(d, play('a', 9, 'A'))).toEqual([{ label: 'KILL', value: '100%', count: '1/1' }, { label: 'EFF', value: '100%', count: '' }])
   })
   it('gives a receiver #+% and #%', () => {
     expect(captionStats(d, play('a', 9, 'R'))).toEqual([{ label: '#+', value: '100%', count: '1/1' }, { label: '#', value: '0%', count: '0/1' }])

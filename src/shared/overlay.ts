@@ -130,10 +130,11 @@ export interface SpeedData { kmh: number; touchSec: number }
 export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null; stats?: CaptionStat[] | null }
 
 // A figure shown beside the caption: what it is, the percentage, and the count it comes from.
-export interface CaptionStat { label: string; value: string; count: string }
+export interface CaptionStat { label: string; value: string; count: string } // count '': none shown
 
 // The player's figures for the skill of the play, over the whole match (the match report's lines):
-// serve ERR% and BP%, attack KILL% and EFF%, reception #+% and #%. Null for other skills, or when the
+// serve ERR% and BP%, attack KILL% and EFF% (EFF without a count: its top is no number of plays),
+// reception #+% and #%. Null for other skills, or when the
 // player has none of that skill in the match.
 const reports = new WeakMap<ParsedDVW, MatchReport>()
 export function captionStats(dvw: ParsedDVW, play: Play): CaptionStat[] | null {
@@ -142,9 +143,9 @@ export function captionStats(dvw: ParsedDVW, play: Play): CaptionStat[] | null {
   if (!r) { r = matchReport(dvw); reports.set(dvw, r) }
   const line = r.teams[play.side === '*' ? 0 : 1].players.find(p => p.jersey === play.jersey)
   if (!line) return null
-  const stat = (label: string, n: number, of: number): CaptionStat => ({ label, value: `${Math.round((n / of) * 100)}%`, count: `${n}/${of}` })
+  const stat = (label: string, n: number, of: number, count = true): CaptionStat => ({ label, value: `${Math.round((n / of) * 100)}%`, count: count ? `${n}/${of}` : '' })
   if (play.skill === 'S') { const s = line.serve; return s.tot ? [stat('ERR', s.err, s.tot), stat('BP', s.brk, s.tot)] : null }
-  if (play.skill === 'A') { const a = line.att; return a.tot ? [stat('KILL', a.pts, a.tot), stat('EFF', a.pts - a.err - a.blo, a.tot)] : null }
+  if (play.skill === 'A') { const a = line.att; return a.tot ? [stat('KILL', a.pts, a.tot), stat('EFF', a.pts - a.err - a.blo, a.tot, false)] : null }
   const c = line.rec
   return c.tot ? [stat('#+', c.pos, c.tot), stat('#', c.exc, c.tot)] : null
 }

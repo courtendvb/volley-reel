@@ -74,8 +74,8 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
   // The player's figures on a plate of their own right after it: each a label over its percentage,
   // with the count it comes from beside that.
   const stats = d.stats?.length ? d.stats : null
-  const labFont = font(10 * k), valFont = font(22 * k), cntFont = font(11 * k, 400), statGap = 18 * k, statPad = 14 * k
-  const statW = (st: CaptionStat) => Math.max(measure(ctx, st.label, labFont, 0.15 * 10 * k), measure(ctx, st.value, valFont, 0) + 5 * k + measure(ctx, st.count, cntFont, 0))
+  const labFont = font(10 * k), valFont = font(27 * k), cntFont = font(11 * k, 400), statGap = 18 * k, statPad = 14 * k
+  const statW = (st: CaptionStat) => Math.max(measure(ctx, st.label, labFont, 0.15 * 10 * k), measure(ctx, st.value, valFont, 0) + (st.count ? 5 * k + measure(ctx, st.count, cntFont, 0) : 0))
   const statsW = stats ? stats.reduce((w, st) => w + statW(st), 0) + statGap * (stats.length - 1) + 2 * statPad + L.cut(slant) : 0
   const join = stats ? 4 * k : 0
   const total = numW + plateW - overlap + join + statsW
@@ -109,10 +109,11 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
     ctx.textBaseline = 'middle'
     let bx = sx + L.cut(slant) + statPad
     for (const st of stats) {
-      text(ctx, st.label, bx, y + h * 0.27, labFont, L.line, 0.15 * 10 * k)
+      // The label high up, so the percentage below it can be large.
+      text(ctx, st.label, bx, y + h * 0.17, labFont, L.line, 0.15 * 10 * k)
       const vw = measure(ctx, st.value, valFont, 0)
-      text(ctx, st.value, bx, y + h * 0.66, valFont, L.text, 0)
-      text(ctx, st.count, bx + vw + 5 * k, y + h * 0.7, cntFont, L.sub, 0)
+      text(ctx, st.value, bx, y + h * 0.62, valFont, L.text, 0)
+      if (st.count) text(ctx, st.count, bx + vw + 5 * k, y + h * 0.72, cntFont, L.sub, 0)
       bx += statW(st) + statGap
     }
   }

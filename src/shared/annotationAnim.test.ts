@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { PULSE_SEC, animAfter, animAt, cutPoints, fadeAlpha, isAnimated, type Annotation } from './annotation'
+import { BLINK_ON, BLINK_SEC, PULSE_SEC, RIPPLE_SEC, animAfter, animAt, cutPoints, emphasisOf, fadeAlpha, isAnimated, withEmphasis, type Annotation } from './annotation'
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getAppPath: () => '' } }))
 const { layerEnable } = await import('../main/export')
@@ -61,5 +61,29 @@ describe('layerEnable', () => {
   it('switches a pulse layer on at its moment of every period', () => {
     expect(layerEnable({ from: 1, to: 4, every: { period: 1.2, at: 0.3, len: 0.1 } }, 1, 4))
       .toBe(":enable='between(t,1.000,4.000)*gte(mod(t-1.000,1.200),0.300)*lt(mod(t-1.000,1.200),0.400)'")
+  })
+})
+
+describe('emphasis', () => {
+  it('reads the older pulse flag as a pulse, and drops it when the emphasis is set', () => {
+    expect(emphasisOf({ ...arrow, pulse: true })).toBe('pulse')
+    const a = withEmphasis({ ...arrow, pulse: true }, 'blink')
+    expect(a).not.toHaveProperty('pulse')
+    expect(emphasisOf(a)).toBe('blink')
+    expect(withEmphasis(a, undefined)).not.toHaveProperty('emphasis')
+    expect(isAnimated({ ...arrow, emphasis: 'ripple' })).toBe(true)
+  })
+  it('blinks: shown for the first part of every blink, off for the rest', () => {
+    const a: Annotation = { ...arrow, emphasis: 'blink' }
+    expect(animAfter(a, 0)).toBeUndefined()
+    expect(animAfter(a, BLINK_SEC * (BLINK_ON - 0.05))).toBeUndefined()
+    expect(animAfter(a, BLINK_SEC * (BLINK_ON + 0.05))).toEqual({ hidden: true })
+    expect(animAfter(a, BLINK_SEC * 3.1)).toBeUndefined()
+  })
+  it('sends out a ring every RIPPLE_SEC, after drawing in', () => {
+    const a: Annotation = { ...arrow, drawIn: 1, emphasis: 'ripple' }
+    expect(animAfter(a, 0.5)).toEqual({ reveal: 0.5 })
+    expect(animAfter(a, 1 + RIPPLE_SEC * 0.25)!.ripple).toBeCloseTo(0.25)
+    expect(animAfter(a, 1 + RIPPLE_SEC * 2.5)!.ripple).toBeCloseTo(0.5)
   })
 })

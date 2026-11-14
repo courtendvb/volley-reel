@@ -17,6 +17,7 @@ import type { DiscPart } from './disc'
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
 export type Heads = 'end' | 'both' | 'none'
+export type Emphasis = 'pulse' | 'blink' | 'ripple'
 
 interface Base {
   id: string
@@ -30,7 +31,10 @@ interface Base {
   fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
   drawIn?: number // seconds it takes to be drawn when it appears: a line grows from its start, an outline goes round (fade-in is then not used)
-  pulse?: boolean // once drawn, it swells and settles again and again while it shows
+  // Once drawn, while it shows, again and again: pulse swells and settles, blink goes out and back,
+  // ripple sends a ring out from it (from an arrow's tip) that fades as it spreads.
+  emphasis?: Emphasis
+  pulse?: boolean // older files: emphasis 'pulse'
   locked?: boolean // part of the background (a data slide's court): drawn, but not picked by a click
 }
 
@@ -176,11 +180,25 @@ export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: num
 }
 
 // How an object moves at a moment. reveal: how much of it is drawn (0..1), while it is being drawn
-// in; pulse: where it is in a swell (0..1), once drawn. Undefined: still, as it is.
-export interface Anim { reveal?: number; pulse?: number }
+// in; pulse / ripple: where it is in a swell or a ring's spread (0..1), once drawn; hidden: off for
+// a moment of its blinking. Undefined: still, as it is.
+export interface Anim { reveal?: number; pulse?: number; ripple?: number; hidden?: boolean }
 export const PULSE_SEC = 1.2 // one swell and settle
+export const BLINK_SEC = 1.0 // one blink: on, then off
+export const BLINK_ON = 0.6 // the share of a blink it shows
+export const RIPPLE_SEC = 1.5 // one ring, from the object out until it has faded
 const PULSE_GROW = 0.12 // at the top of a swell, this much larger
-export const isAnimated = (a: Annotation): boolean => !!(a.drawIn || a.pulse)
+const RIPPLE_GROW = 0.5 // a ring spreads this share of the object's size (at least RIPPLE_MIN px at 720p)
+const RIPPLE_MIN = 36
+export const emphasisOf = (a: Annotation): Emphasis | undefined => a.emphasis ?? (a.pulse ? 'pulse' : undefined)
+export const emphasisSec = (e: Emphasis): number => (e === 'pulse' ? PULSE_SEC : e === 'blink' ? BLINK_SEC : RIPPLE_SEC)
+export const isAnimated = (a: Annotation): boolean => !!(a.drawIn || emphasisOf(a))
+
+// An object with its emphasis set (none: undefined), the older pulse flag dropped.
+export function withEmphasis(a: Annotation, e: Emphasis | undefined): Annotation {
+  const { emphasis: _e, pulse: _p, ...rest } = a
+  return (e ? { ...rest, emphasis: e } : rest) as Annotation
+}
 
 // The motion at time t, seconds into the object's showing (from its show time, else the clip's IN).
 export function animAt(a: Annotation, t: number, clip: { in: number; out: number }): Anim | undefined {
@@ -189,8 +207,12 @@ export function animAt(a: Annotation, t: number, clip: { in: number; out: number
 export function animAfter(a: Annotation, since: number): Anim | undefined {
   const d = a.drawIn ?? 0
   if (d > 0 && since < d) return { reveal: Math.max(0, since / d) }
-  if (a.pulse) { const k = (since - d) / PULSE_SEC; return { pulse: k - Math.floor(k) } }
-  return undefined
+  const e = emphasisOf(a)
+  if (!e) return undefined
+  const k = Math.max(0, since - d) / emphasisSec(e), phase = k - Math.floor(k)
+  if (e === 'pulse') return { pulse: phase }
+  if (e === 'ripple') return { ripple: phase }
+  return phase < BLINK_ON ? undefined : { hidden: true }
 }
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {
@@ -356,7 +378,9 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
 }
 
 export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup, anim?: Anim): void {
+  if (anim?.hidden) return
   const s = H / REF_HEIGHT
+  if (anim?.ripple !== undefined) drawRipple(ctx, a, W, H, s, anim.ripple)
   ctx.save()
   ctx.globalAlpha *= a.opacity ?? 1
   if (anim?.pulse !== undefined) {
@@ -437,6 +461,30 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       else { ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = a.width * s; setDash(ctx, a.dash, a.width * s); ctx.stroke() }
     }
   }
+  ctx.restore()
+}
+
+// A ring going out from the object, t of the way (0..1): from just outside it, larger and fainter as
+// it goes. Round around a circle or a numbered circle, a rounded box around the rest, a circle out
+// from an arrow's tip. In the object's colour (a boxed text's box colour), under the object.
+function drawRipple(ctx: Ctx, a: Annotation, W: number, H: number, s: number, t: number): void {
+  ctx.save()
+  ctx.globalAlpha *= (a.opacity ?? 1) * 0.95 * (1 - t)
+  ctx.strokeStyle = a.kind === 'text' ? a.box?.fill ?? a.color : a.color
+  ctx.lineWidth = Math.max(4, 'width' in a && a.width > 0 ? a.width : 4) * s
+  ctx.beginPath()
+  if (a.kind === 'arrow') {
+    const r0 = Math.max(a.width * 3.2, 14) * s
+    ctx.arc(a.x2 * W, a.y2 * H, r0 + Math.max(r0 * 2, RIPPLE_MIN * s) * t, 0, Math.PI * 2)
+  } else {
+    // The same distance out all round, so a thin box's ring stays a ring around it.
+    const b = bounds(ctx, a, W, H), pad = 6 * s, hw = (b.w * W) / 2 + pad, hh = (b.h * H) / 2 + pad
+    const out = Math.max(RIPPLE_GROW * Math.max(hw, hh), RIPPLE_MIN * s) * t
+    const cx = (b.x + b.w / 2) * W, cy = (b.y + b.h / 2) * H, rx = hw + out, ry = hh + out
+    if (a.kind === 'circle' || (a.kind === 'text' && a.box?.circle)) ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+    else ctx.roundRect(cx - rx, cy - ry, rx * 2, ry * 2, Math.min(rx, ry) * 0.3)
+  }
+  ctx.stroke()
   ctx.restore()
 }
 

@@ -1,6 +1,6 @@
 // Turns a video plan (scenes → marker groups → clips, with title cards) into an ExportJob, with
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
-import { PULSE_SEC, drawAnnotation, isAnimated, type Anim, type Annotation } from '../../shared/annotation'
+import { BLINK_ON, drawAnnotation, emphasisOf, emphasisSec, isAnimated, type Anim, type Annotation, type Emphasis } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
 import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
@@ -17,7 +17,7 @@ const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
 const DRAW_STEPS_PER_SEC = 15 // an object being drawn in: steps a second (at most DRAW_STEPS)
 const DRAW_STEPS = 15
-const PULSE_STEPS = 12 // moments of one swell, each its own layer shown at that moment of every swell
+const EMPHASIS_STEPS = 12 // moments of one swell or ring, each its own layer shown at that moment of every one
 
 interface Deps {
   range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
@@ -187,20 +187,21 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
     if (whole(a)) continue
     const w = window(a)
     if (w.to <= w.from) continue // window falls outside the trimmed clip
-    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.drawIn ? 0 : a.fadeIn ?? 0}|${a.fadeOut ?? 0}|${a.drawIn ?? 0}|${a.pulse ? 1 : 0}`
+    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.drawIn ? 0 : a.fadeIn ?? 0}|${a.fadeOut ?? 0}|${a.drawIn ?? 0}|${emphasisOf(a) ?? ''}`
     timed.set(k, [...(timed.get(k) ?? []), a])
   }
   for (const [k, list] of timed) {
-    const [from, to, fadeIn, fadeOut, drawIn, pulse] = k.split('|').map(Number)
-    layers.push(...await movingLayers(list, { from, to, fadeIn, fadeOut, drawIn, pulse: !!pulse }, W, H, png, assetImage))
+    const parts = k.split('|'), [from, to, fadeIn, fadeOut, drawIn] = parts.map(Number), emphasis = (parts[5] || undefined) as Emphasis | undefined
+    layers.push(...await movingLayers(list, { from, to, fadeIn, fadeOut, drawIn, emphasis }, W, H, png, assetImage))
   }
   return layers
 }
 
 // The layers of objects shown in one window: drawn in step by step (each step its own layer), then
-// still, or swelling (one layer per moment of a swell, each shown at that moment of every swell).
+// still; blinking (one layer, shown for the first part of every blink); or swelling or sending out
+// rings (one layer per moment of a swell or ring, each shown at that moment of every one).
 // Fading in is left to objects not drawn in; fading out goes on what shows at the end.
-async function movingLayers(list: Annotation[], w: { from: number; to: number; fadeIn: number; fadeOut: number; drawIn: number; pulse: boolean },
+async function movingLayers(list: Annotation[], w: { from: number; to: number; fadeIn: number; fadeOut: number; drawIn: number; emphasis?: Emphasis },
   W: number, H: number, png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
   const draw = (anim?: Anim) => png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage, anim)))
   const out: ExportLayer[] = []
@@ -215,10 +216,13 @@ async function movingLayers(list: Annotation[], w: { from: number; to: number; f
   }
   if (w.to - start <= 0.001) return out
   const fades = { ...(w.fadeIn && !w.drawIn ? { fadeIn: w.fadeIn } : {}), ...(w.fadeOut ? { fadeOut: w.fadeOut } : {}) }
-  if (!w.pulse) return [...out, { from: start, to: w.to, ...fades, png: await draw() }]
-  const len = PULSE_SEC / PULSE_STEPS
-  for (let i = 0; i < PULSE_STEPS; i++) {
-    out.push({ from: start, to: w.to, ...fades, every: { period: PULSE_SEC, at: i * len, len }, png: await draw({ pulse: (i + 0.5) / PULSE_STEPS }) })
+  if (!w.emphasis) return [...out, { from: start, to: w.to, ...fades, png: await draw() }]
+  const period = emphasisSec(w.emphasis)
+  if (w.emphasis === 'blink') return [...out, { from: start, to: w.to, ...fades, every: { period, at: 0, len: period * BLINK_ON }, png: await draw() }]
+  const len = period / EMPHASIS_STEPS
+  for (let i = 0; i < EMPHASIS_STEPS; i++) {
+    const phase = (i + 0.5) / EMPHASIS_STEPS
+    out.push({ from: start, to: w.to, ...fades, every: { period, at: i * len, len }, png: await draw(w.emphasis === 'pulse' ? { pulse: phase } : { ripple: phase }) })
   }
   return out
 }

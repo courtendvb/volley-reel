@@ -358,6 +358,8 @@ export const EN: Record<string, string> = {
   "対象チーム": "Target team",
   "相手": "Opponent",
   "シーンに入れるときの長さ。秒数は今開いているシーンの設定で、そのシーンのクリップすべてに効きます": "How long clips are when added to a scene. The seconds are the open scene's setting and apply to all its clips",
+  "通しで見る": "Play through",
+  "リストのプレーをラリーごとに、サーブからラリーの終わりまで 1 回ずつ再生する。ラリーの間はリストの選択はそのままで、画面にはサーブ・レセプション・アタックのテロップだけが順に出る。オフ: リストどおり 1 プレーずつ再生する": "Play the list's plays rally by rally, each rally once from the serve to its end. The list stays on the play during the rally, and only serve, reception and attack captions come up as they happen. Off: play by play as the list has them",
   "切り出し": "Cut",
   "プレー前後": "Around the play",
   "ラリー終わりまで": "To the rally's end",

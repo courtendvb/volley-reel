@@ -1,6 +1,7 @@
 // Slides in a scene: blank pages, PDF pages and pictures (they remember their file, to be read again
 // when it changes), the picture on screen, and data slides comparing players. Blank and on-screen
-// slides open for editing right away. Also saving the cards and slides as a picture or a PDF.
+// slides open for editing right away. Also saving the cards and slides as a picture, a PDF, or a
+// PowerPoint file of the ones picked.
 import { useMemo, useState, type RefObject } from 'react'
 import { boardSlide, keptByHand, type BoardPhoto } from '../../../shared/board'
 import { logoKey } from '../../../shared/serveTargetBoard'
@@ -8,6 +9,7 @@ import { markStyle, type GridStyle } from '../../../shared/court'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { findPhoto, type PackInfo } from '../../../shared/pack'
 import { pdfFromJpegs } from '../../../shared/pdf'
+import { pptxFromPictures } from '../../../shared/pptx'
 import { chronological, groupRows, markersOf, newSlide, putSlides, setSlide, spotAt, type Clip, type Group, type Marker, type Reel, type Slide, type SlideSpot } from '../../../shared/reel'
 import { withRoles } from '../../../shared/roles'
 import type { ImportProgress, ParsedDVW, ProjectSettings, SlideFile } from '../../../shared/types'
@@ -150,19 +152,29 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
     }
   }
 
-  // The open card as a picture, or all the scene's cards and slides, in order, as a PDF.
-  const saveCards = async (as: 'png' | 'pdf', slide: Slide) => {
+  // The scene's slides in the order they play (just this one when it is in no scene).
+  const sceneSlides = (slide: Slide): Slide[] => {
+    const scene = latest.current.reel
+    return scene ? ['head' as const, ...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
+  }
+  const sceneName = () => latest.current.reel?.name || t('データスライド')
+
+  // Slides to pick from for a PowerPoint file, with the one open when it was asked for.
+  const [pptxPick, setPptxPick] = useState<{ slides: Slide[]; current: string } | null>(null)
+
+  // The open card as a picture; all the scene's cards and slides, in order, as a PDF; or (pptx) a
+  // choice of them, saved by savePptx.
+  const saveCards = async (as: 'png' | 'pdf' | 'pptx', slide: Slide) => {
     try {
-      const scene = latest.current.reel
-      const name = scene?.name || t('データスライド')
+      const name = sceneName()
+      if (as === 'pptx') { setPptxPick({ slides: sceneSlides(slide), current: slide.id }); return }
       if (as === 'png') {
         const [png] = await cardImages([slideCard(slide)], overlay, gridStyle.heatOpacity, 'image/png')
         const path = await api.saveCard(name, 'png', png)
         if (path) setNotice(t('書き出しました: {0}', path))
         return
       }
-      const all = scene ? ['head' as const, ...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
-      const pages = await cardImages(all.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
+      const pages = await cardImages(sceneSlides(slide).map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
       const path = await api.saveCard(name, 'pdf', pdfFromJpegs(pages.map(jpeg => ({ jpeg, width: CARD_W, height: CARD_H }))))
       if (path) setNotice(t('書き出しました: {0}', path))
     } catch (e) {
@@ -170,5 +182,19 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
     }
   }
 
-  return { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards }
+  // The picked slides, in the scene's order, one to a PowerPoint slide.
+  const savePptx = async (slides: Slide[]) => {
+    try {
+      const name = sceneName()
+      const pics = await cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
+      const path = await api.saveCard(name, 'pptx', pptxFromPictures(pics.map(data => ({ data, type: 'jpeg', width: CARD_W, height: CARD_H })), name))
+      if (path) { setPptxPick(null); setNotice(t('書き出しました: {0}', path)) }
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+  // Small pictures of slides, for picking them.
+  const slideThumbs = (slides: Slide[]) => cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg', { w: 320, h: 180 })
+
+  return { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards, pptxPick, setPptxPick, savePptx, slideThumbs }
 }

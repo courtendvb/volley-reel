@@ -276,7 +276,7 @@ export interface Api {
   importPack(): Promise<PackInfo[]> // asks for a .vrpack; the packs after
   removePack(id: string): Promise<PackInfo[]>
   packRoster(): Promise<RosterPlayer[]> // everyone in the library's matches
-  saveCard(name: string, ext: 'png' | 'pdf', data: Uint8Array): Promise<string | null> // asks where; the path
+  saveCard(name: string, ext: 'png' | 'pdf' | 'pptx', data: Uint8Array): Promise<string | null> // asks where; the path
   saveReportPdf(html: string, name: string): Promise<string | null> // the match report as an A4 PDF; asks where; the path
   savePack(manifest: PackManifest, photos: Record<string, Uint8Array>, install: boolean): Promise<{ saved: string | null; packs: PackInfo[] }>
   readPackPhoto(id: string, photo: string): Promise<Uint8Array>

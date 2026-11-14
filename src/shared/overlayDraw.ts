@@ -3,7 +3,7 @@
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
 import type { Ctx } from './court'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CardKind, type CardLayout, type LookTheme, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CaptionStat, type CardKind, type CardLayout, type LookTheme, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
 
@@ -71,7 +71,14 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
   const lineW = d.line ? measure(ctx, d.line, lineFont, 0.2 * 11 * k) : 0
   const plateW = Math.max(nameW, lineW) + 42 * k
   const overlap = numW ? 6 * k : 0
-  const total = numW + plateW - overlap
+  // The player's figures on a plate of their own right after it: each a label over its percentage,
+  // with the count it comes from beside that.
+  const stats = d.stats?.length ? d.stats : null
+  const labFont = font(10 * k), valFont = font(22 * k), cntFont = font(11 * k, 400), statGap = 18 * k, statPad = 14 * k
+  const statW = (st: CaptionStat) => Math.max(measure(ctx, st.label, labFont, 0.15 * 10 * k), measure(ctx, st.value, valFont, 0) + 5 * k + measure(ctx, st.count, cntFont, 0))
+  const statsW = stats ? stats.reduce((w, st) => w + statW(st), 0) + statGap * (stats.length - 1) + 2 * statPad + L.cut(slant) : 0
+  const join = stats ? 4 * k : 0
+  const total = numW + plateW - overlap + join + statsW
   const { x, y } = place(s.anchor, total, h, W, H)
 
   // Plate first so the number block's slanted edge sits on top of it.
@@ -94,6 +101,20 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
     text(ctx, d.name, tx, y + h / 2, nameFont, L.text, 0.06 * 19 * k)
   } else if (d.line) {
     text(ctx, d.line, tx, y + h / 2, lineFont, L.line, 0.2 * 11 * k)
+  }
+  if (stats) {
+    const sx = px + plateW + join
+    L.shape(ctx, 'plate', sx, y, statsW, h, { tl: slant, br: 14 * k }, { r: true })
+    L.texts(ctx)
+    ctx.textBaseline = 'middle'
+    let bx = sx + L.cut(slant) + statPad
+    for (const st of stats) {
+      text(ctx, st.label, bx, y + h * 0.27, labFont, L.line, 0.15 * 10 * k)
+      const vw = measure(ctx, st.value, valFont, 0)
+      text(ctx, st.value, bx, y + h * 0.66, valFont, L.text, 0)
+      text(ctx, st.count, bx + vw + 5 * k, y + h * 0.7, cntFont, L.sub, 0)
+      bx += statW(st) + statGap
+    }
   }
   if (photo && s.photo) drawCaptionPhoto(ctx, photo, s.anchor, { x, y, w: total, h }, k, theme)
   ctx.restore()

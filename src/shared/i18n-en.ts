@@ -371,6 +371,8 @@ export const EN: Record<string, string> = {
   "選手": "Player",
   "すべての選手": "All players",
   "スキル": "Skill",
+  "統計": "Stats",
+  "テロップの横に、その試合でのその選手の数字を出す。サーブ: ミス率・BP%／アタック: 決定率・効果率／レセプション: #+%・#%（それぞれ本数も）": "Beside the caption, the player's figures in that match. Serve: error % and BP% / Attack: kill % and efficiency / Reception: #+% and #% (each with its count)",
   "評価": "Evaluation",
   "セット": "Set",
   "ローテ": "Rotation",

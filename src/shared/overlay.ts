@@ -155,3 +155,24 @@ export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['play
     line: o?.line !== undefined && o.line.trim() !== '' ? o.line.trim().toUpperCase() : autoLine,
   }
 }
+
+// Following the playhead over a match (the left list's plays, no clip on screen): each play's
+// scoreboard and caption from just before its contact until the next play's, or for at most holdSec.
+// So watching plays in a row, the display moves to each play as it happens. Times are video times.
+export interface FollowWindow { from: number; to: number; playId: number }
+export const FOLLOW_LEAD_SEC = 0.3 // up this long before the contact
+export function followWindows(plays: { id: number; time: number }[], offsetSec: number, holdSec: number): FollowWindow[] {
+  const sorted = [...plays].sort((a, b) => a.time - b.time || a.id - b.id)
+  return sorted.map((p, i) => {
+    const from = p.time + offsetSec - FOLLOW_LEAD_SEC, next = sorted[i + 1]
+    const to = Math.min(p.time + offsetSec + holdSec, next ? next.time + offsetSec - FOLLOW_LEAD_SEC : Infinity)
+    return { from, to, playId: p.id }
+  }).filter(w => w.to > w.from)
+}
+
+// The window at time t (the last that has begun and not ended), or -1.
+export function followAt(ws: FollowWindow[], t: number): number {
+  let lo = 0, hi = ws.length - 1, found = -1
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (ws[mid].from <= t) { found = mid; lo = mid + 1 } else hi = mid - 1 }
+  return found >= 0 && t <= ws[found].to ? found : -1
+}

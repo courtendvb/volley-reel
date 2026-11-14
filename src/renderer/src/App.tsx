@@ -89,6 +89,12 @@ export function App() {
   const [matchIds, setMatchIds] = useState<string[]>([]) // the matches the list shows; none picked: all of the project's
   // How plays added from the search are cut: around the key play, or from it to the end of the rally.
   const [extract, setExtract] = useState<ClipMode>(() => { try { return localStorage.getItem('vr.extract') === 'toEnd' ? 'toEnd' : 'keyplay' } catch { return 'keyplay' } })
+  // 通し: the list's continuous play carries on through plays whose windows overlap, rather than going
+  // back to each one's start (a rally is seen once, not once per play).
+  const [listThrough, setListThroughState] = useState(() => { try { return localStorage.getItem('vr.listThrough') === '1' } catch { return false } })
+  const listThroughRef = useRef(listThrough)
+  listThroughRef.current = listThrough
+  const setListThrough = (v: boolean) => { setListThroughState(v); try { localStorage.setItem('vr.listThrough', v ? '1' : '0') } catch { /* kept for this run only */ } }
   useEffect(() => { try { localStorage.setItem('vr.extract', extract) } catch { /* not kept */ } }, [extract])
   const extractRef = useRef(extract)
   extractRef.current = extract
@@ -399,6 +405,19 @@ export function App() {
     const res = latest.current.results
     const i = res.findIndex(x => x.matchId === run.matchId && x.play.id === run.playId)
     const next = i >= 0 ? res[i + 1] : undefined
+    // 通し: the next play's window has begun already (the same rally): go on playing into it.
+    const m = next ? latest.current.matches[next.matchId] : undefined
+    if (next && m && listThroughRef.current && next.matchId === run.matchId) {
+      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      const t = next.play.time + m.offsetSec
+      if (t - d.keyBefore <= s.time && t + d.keyAfter > s.time) {
+        listRunRef.current = { matchId: run.matchId, playId: next.play.id, start: run.start, end: t + d.keyAfter }
+        setSelected({ matchId: next.matchId, playId: next.play.id })
+        const c = latest.current.reel && findClip(latest.current.reel, next.matchId, next.play.id)
+        setActiveClipId(c ? c.id : null)
+        return
+      }
+    }
     listRunRef.current = null
     if (next) jumpRef.current(next)
     else { setListRun(false); playback.pause() }
@@ -671,7 +690,7 @@ export function App() {
             )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
-              filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
+              filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract} through={listThrough} onThrough={setListThrough}
               range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}

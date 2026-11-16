@@ -26,6 +26,21 @@ export function MatchReportDialog({ matches, dvws, initial, ourCodes, onClose, o
   useEffect(() => { try { localStorage.setItem('vr.reportZoom', String(zoom)) } catch { /* not kept */ } }, [zoom])
   const step = (d: number) => setZoom(z => ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + d))])
   const match = matches.find(m => m.id === id) ?? null
+  // Full screen: the dialog fills the screen (Esc or the button leaves it); left when the dialog closes.
+  const box = useRef<HTMLDivElement>(null)
+  const [full, setFull] = useState(false)
+  useEffect(() => {
+    const f = () => setFull(!!box.current && document.fullscreenElement === box.current)
+    document.addEventListener('fullscreenchange', f)
+    return () => {
+      document.removeEventListener('fullscreenchange', f)
+      if (box.current && document.fullscreenElement === box.current) void document.exitFullscreen().catch(() => { /* already left */ })
+    }
+  }, [])
+  const toggleFull = () => {
+    if (full) void document.exitFullscreen().catch(() => { /* already left */ })
+    else void box.current?.requestFullscreen().catch(() => { /* not allowed now */ })
+  }
   // The target team's side in each match it played, and the other team's name for the row.
   const ours = useMemo(() => {
     const codes = ourCodes.map(c => c.toUpperCase())
@@ -61,7 +76,7 @@ export function MatchReportDialog({ matches, dvws, initial, ourCodes, onClose, o
   }
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal report-dialog" role="dialog" aria-label={t('マッチレポート')} onClick={e => e.stopPropagation()}>
+      <div ref={box} className="modal report-dialog" role="dialog" aria-label={t('マッチレポート')} onClick={e => e.stopPropagation()}>
         <div className="report-bar">
           <h2>{t('マッチレポート')}</h2>
           <select value={id} aria-label={t('試合')} onChange={e => { setId(e.target.value); setSaved(null) }}>
@@ -74,6 +89,7 @@ export function MatchReportDialog({ matches, dvws, initial, ourCodes, onClose, o
             <span>{Math.round(zoom * 100)}%</span>
             <button onClick={() => step(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]} aria-label={t('拡大')} title={t('拡大（画面の表示だけ。PDF は A4 のまま）')}>＋</button>
           </span>
+          <button onClick={toggleFull} aria-pressed={full} title={full ? t('全画面をやめる（Esc）') : t('レポートを画面いっぱいに表示します（Esc で戻る）')}>{full ? t('全画面をやめる') : t('全画面')}</button>
           {saved && <span className="muted small">{t('書き出しました: {0}', saved.split(/[\\/]/).pop() ?? '')}</span>}
           <button className="primary" disabled={!html || busy} onClick={() => void save()}>{busy ? t('書き出しています…') : t('PDF に書き出す…')}</button>
           <button onClick={onClose}>{t('閉じる')}</button>

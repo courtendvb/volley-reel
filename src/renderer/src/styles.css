@@ -797,6 +797,7 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 
 /* The match report: its A4 page as it will print, scrolled in the dialog. */
 .modal.report-dialog { width: min(1280px, 96vw); height: 94vh; max-height: 94vh; gap: 8px; }
+.modal.report-dialog:fullscreen { width: 100vw; height: 100vh; max-height: 100vh; max-width: none; border-radius: 0; box-sizing: border-box; }
 .report-zoom { display: inline-flex; align-items: center; gap: 4px; }
 .report-zoom span { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
 .report-zoom button { min-width: 30px; font-size: 15px; padding: 2px 8px; }

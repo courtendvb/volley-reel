@@ -12,6 +12,7 @@ import type { Tool } from './components/AnnotationLayer'
 import { assetStats, forgetLogo } from './assets'
 import { canvasStats } from './canvas'
 import { playback } from './playback'
+import { isMaximized } from './maximize'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
 import { playTimes, serveMarkOf } from '../../shared/serveMark'
@@ -1758,6 +1759,22 @@ export function installSmoke(h: SmokeHost): void {
     let frame = await openReport()
     await sleep(300)
     await api.smokeShot!('report.png')
+    // 全画面 with a real click (full screen needs one): the dialog fills the window, the video is not
+    // taken as maximized, and Esc leaves it with the report still open (report-full.png).
+    const dialog = document.querySelector<HTMLElement>('.report-dialog')!
+    const fullButton = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('全画面'))
+    if (!fullButton) throw new Error('no 全画面 button')
+    const fb = fullButton.getBoundingClientRect()
+    await api.smokeDrag!([[fb.left + fb.width / 2, fb.top + fb.height / 2]])
+    await waitFor(() => (document.fullscreenElement === dialog) || null, 5000, 'report full screen')
+    await sleep(500)
+    const fr = dialog.getBoundingClientRect()
+    const fullScreen = { width: Math.round(fr.width), height: Math.round(fr.height), window: [window.innerWidth, window.innerHeight], maximized: isMaximized(), label: dialog.querySelector('button[aria-pressed="true"]')?.textContent }
+    if (fr.width < window.innerWidth - 2 || fr.height < window.innerHeight - 2 || fullScreen.maximized) throw new Error(`report full screen: ${JSON.stringify(fullScreen)}`)
+    await api.smokeShot!('report-full.png')
+    await api.smokeKey!('Escape')
+    await waitFor(() => (!document.fullscreenElement && document.querySelector('.report-dialog')) || null, 5000, 'Esc leaves full screen')
+    await sleep(300)
     const all = () => [...frame.contentDocument!.querySelectorAll<HTMLElement>('[data-f]')]
     const cells = all()
     // One of each kind: a player's attacks, a team total, a set's row, a first attack after reception, a rotation.
@@ -1783,7 +1800,7 @@ export function installSmoke(h: SmokeHost): void {
       frame = await openReport()
       await sleep(200)
     }
-    return { matchReport: out }
+    return { matchReport: out, fullScreen }
   }
   const smokePicker = async () => {
     const trigger = await waitFor(() => document.querySelector<HTMLButtonElement>(`button.check-picker[aria-label="${t('選手')}"]`), 10000, 'player picker')

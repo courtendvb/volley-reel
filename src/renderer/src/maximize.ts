@@ -6,7 +6,8 @@ import { playback } from './playback'
 
 const stage = () => document.querySelector<HTMLElement>('.stage')
 
-export const isMaximized = () => !!document.fullscreenElement
+// Only the stage counts: another full screen (the match report's) is not the video maximized.
+export const isMaximized = () => !!document.fullscreenElement?.classList.contains('stage')
 
 export async function setMaximized(on: boolean): Promise<void> {
   if (on === isMaximized()) return

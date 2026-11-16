@@ -1462,4 +1462,8 @@ export const EN: Record<string, string> = {
   "倉庫にあるチームのロゴを入れます": "Puts in the teams' logos from the library",
   "レセプションからの最初の攻撃で決めた本数 ÷ レセプションしたラリー": "Rallies won by the first attack after the reception ÷ rallies received",
   "自チームのミスで相手に入った点 ÷ セット数（相手が得点のプレーなしで取ったラリー。サーブ・アタック・ブロック・セットのミスや反則。レセプションミスと被ブロックは相手のエース・ブロック得点なので入れない）": "Points our errors gave the other team ÷ sets (rallies it won with no point of its own: serve, attack, block and set errors and faults; reception errors and blocked attacks are its aces and block points, so they are left out)",
+  "全画面をやめる（Esc）": "Leave full screen (Esc)",
+  "レポートを画面いっぱいに表示します（Esc で戻る）": "Shows the report filling the screen (Esc to go back)",
+  "全画面をやめる": "Exit full screen",
+  "全画面": "Full screen",
 }

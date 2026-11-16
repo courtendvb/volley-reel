@@ -32,9 +32,10 @@ const attackZero = (): AttackLine => ({ tot: 0, err: 0, blo: 0, pts: 0 })
 function add(l: StatLine, p: Play, serving: boolean, won: boolean): void {
   const point = p.effect === '#' && (p.skill === 'S' || p.skill === 'A' || p.skill === 'B')
   if (point) { l.points++; if (serving) l.bp++ }
-  // Won minus lost: a point scored, or an error that gave the point away (a blocked attack too).
+  // Won minus lost: a point scored, or an error that gave the point away (a blocked attack too). A dig
+  // or block error is not counted as lost: the other team's attack won that point.
   if (point) l.wl++
-  if (p.effect === '=' || (p.skill === 'A' && p.effect === '/')) l.wl--
+  if ((p.effect === '=' && p.skill !== 'D' && p.skill !== 'B') || (p.skill === 'A' && p.effect === '/')) l.wl--
   if (p.skill === 'S') { l.serve.tot++; if (p.effect === '=') l.serve.err++; if (p.effect === '#') l.serve.pts++; if (p.possibility) l.serve.poss++; if (won) l.serve.brk++ }
   if (p.skill === 'R') { l.rec.tot++; if (p.effect === '=') l.rec.err++; if (p.effect === '#' || p.effect === '+') l.rec.pos++; if (p.effect === '#') l.rec.exc++; if (p.effect === '/') l.rec.ovr++ }
   if (p.skill === 'A') addAttack(l.att, p)

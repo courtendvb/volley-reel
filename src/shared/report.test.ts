@@ -53,6 +53,12 @@ describe('the match report', () => {
     expect([two.points, two.bp, two.serve.pts, two.serve.brk]).toEqual([1, 1, 1, 1]) // the ace, on their own serve: a break point
     expect(home.players[0].serve.poss).toBe(0) // received and killed: no attack of their own
   })
+  it('leaves dig and block errors out of the points lost (W-L)', () => {
+    // The away kill dug in error and blocked in error by home #1; then a home reception error (lost).
+    const errs = parseDVW(DVW.replace('a09AQ#PA~36BH1', 'a09AQ#PA~36BH1;;;;;;;;1;1;1;1;104;;\n*01BQ=~~~;;;;;;;;1;1;1;1;105;;\n*01DQ=~~~;;;;;;;;1;1;1;1;106;;\n*01RQ=~~~16D'))
+    const one = matchReport(errs).teams[0].players[0]
+    expect(one.wl).toBe(-1) // the reception error only
+  })
   it('counts the serves after which their team got an attack of its own', () => {
     // The away attack kept in play, then a home attack: the home serve made a possibility.
     const dug = parseDVW(DVW.replace('a09AQ#PA~36BH1', 'a09AQ-PA~36BH1;;;;;;;;1;1;1;1;104;;\n*01AQ#PA~36BH1'))

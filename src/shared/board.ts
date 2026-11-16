@@ -12,12 +12,14 @@ import { setChart, type SetChart } from './setChart'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
 import { compareSlide, type CompareSide } from './compare'
+import { STAT_SKILL, statRows, statsSlide, type StatKind, type StatLook } from './statsBoard'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
 // E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets;
 // T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns;
-// C: the team's skills against our own team's, from another project (compare.ts), no columns
-export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C'
+// C: the team's skills against our own team's, from another project (compare.ts), no columns;
+// P: a table of the team's players' serves, attacks or receptions (statsBoard.ts), its players as the columns
+export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C' | 'P'
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -38,12 +40,15 @@ export interface BoardPlayer {
   setCharts?: Record<number, SetChart | null> // and the setter's set chart in each, after a # + ! reception
   attackers?: Record<number, RotationAttacker[]> // and the team's attackers with the most attacks in each
   receptions?: Received[] // a serve-target slide: all the team's receptions (the same list on each of its players)
+  wins?: Set<Play> // a table of figures: the plays whose rally their team won
+  matches?: number // and the team's matches
 }
 
-// Everyone who served or attacked, most plays first. keep: only these plays (the search).
-export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
+// Everyone who served or attacked, most plays first. keep: only these plays (the search). stat: a
+// table of figures, of which skill.
+export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean, stat: StatKind = 'attack'): BoardPlayer[] {
   // A rotation is read from its setter's sets, a serve target from the receptions; a comparison only needs the teams (who attacked).
-  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' ? 'A' : skill0
+  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' ? 'A' : skill0 === 'P' ? STAT_SKILL[stat] : skill0
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
     for (const [i, p] of d.plays.entries()) {
@@ -54,7 +59,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
       const had = out.get(key) ?? { key, team: t.code.toUpperCase(), teamName: t.name, player, plays: [], won: 0 }
       had.plays.push(p)
       if (skill === 'E') (had.follow ??= []).push(attackAfter(d.plays, i))
-      if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) had.won++
+      if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) { had.won++; if (skill0 === 'P') (had.wins ??= new Set()).add(p) }
       out.set(key, had)
     }
   }
@@ -70,6 +75,10 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
         p.setCharts = Object.fromEntries(ROTATIONS.map(r => [r, set ? setChart(set, plays, () => name, { rot: [r], phases: ['r'], recs: ['#', '+', '!'] }) : null]))
       }
     }
+  }
+  if (skill0 === 'P') {
+    const matches = (team: string) => dvws.filter(d => d.teams.some(x => x.code.toUpperCase() === team)).length
+    for (const p of out.values()) p.matches = matches(p.team)
   }
   if (skill0 === 'T') {
     const byTeam = new Map<string, Received[]>()
@@ -220,6 +229,9 @@ export interface BoardConfig {
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
   attackers?: number // and with the attackers there, how many (missing: three)
   compareProject?: string // a comparison: our own team's project (its folder), whose figures go left
+  stat?: StatKind // a table of figures: of which skill
+  statTop?: number // and how many players, most plays first (missing: STAT_ROWS)
+  statLook?: StatLook // and its colours (missing: STAT_LOOK)
 }
 export interface BoardMade { config: BoardConfig; made: string[]; noteIds: string[] }
 
@@ -241,6 +253,9 @@ export interface BoardOptions {
   tables?: RotationTables // and which tables (missing: all six)
   attackers?: number // and with the attackers' cards, how many (missing: three)
   compare?: { left: CompareSide; right: CompareSide } // a comparison: our team, and the team of this project
+  stat?: StatKind // a table of figures: of which skill (missing: attacks)
+  statTop?: number // and how many players (missing: STAT_ROWS)
+  statLook?: StatLook // and its colours (missing: STAT_LOOK)
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -340,6 +355,11 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   if (skill === 'C') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
     return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink) : [], charts: [], noteIds: [] }
+  }
+  if (skill === 'P') {
+    const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', kind = opts.stat ?? 'attack'
+    const rows = statRows(kind, columns.map(c => ({ player: c.player, plays: c.plays, wins: c.wins ?? new Set() })), opts.statTop)
+    return { annotations: statsSlide(kind, columns[0]?.team ?? '', columns[0]?.matches ?? 0, rows, ink, opts.statLook), charts: [], noteIds: [] }
   }
   if (skill === 'T') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'

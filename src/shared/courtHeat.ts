@@ -46,10 +46,55 @@ export function heatAt({ cols, rows, data }: HeatGrid, x: number, y: number): nu
   return (data[i] * (1 - fx) + data[i + 1] * fx) * (1 - fy) + (data[i + cols] * (1 - fx) + data[i + cols + 1] * fx) * fy
 }
 
+// The landing ripple (着弾の波紋): from the landing, a ring of light spreads over the floor and the
+// player's heatmap shows behind it; it stays, then fades out. Seconds from the landing.
+export const RIPPLE_REVEAL_SEC = 0.8, RIPPLE_HOLD_SEC = 2.3, RIPPLE_END_SEC = 3.0
+export const RIPPLE_COLOR = '#00E5FF'
+const RIPPLE_REACH_M = 12, RIPPLE_EDGE_M = 0.8, RIPPLE_RING_M = 0.35
+const easeOutCubic = (x: number) => 1 - (1 - x) ** 3
+const hexRgb = (hex: string): [number, number, number] => { const n = parseInt(/^#[0-9a-f]{6}$/i.test(hex) ? hex.slice(1) : RIPPLE_COLOR.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+// How far the ring has gone (metres), how strong it is, and how much of everything is left; null when nothing shows.
+export function ripplePhase(sec: number): { radius: number; ring: number; fade: number } | null {
+  if (sec < 0 || sec >= RIPPLE_END_SEC) return null
+  const p = Math.min(1, sec / RIPPLE_REVEAL_SEC)
+  return { radius: RIPPLE_REACH_M * easeOutCubic(p), ring: p >= 1 ? 0 : 0.9 * (1 - 0.6 * p), fade: sec < RIPPLE_HOLD_SEC ? 1 : 1 - (sec - RIPPLE_HOLD_SEC) / (RIPPLE_END_SEC - RIPPLE_HOLD_SEC) }
+}
+// The moments the export draws (each its own layer): [from, to) seconds from the landing, and the time drawn.
+export function rippleSteps(): { from: number; to: number; at: number }[] {
+  const out: { from: number; to: number; at: number }[] = []
+  for (let k = 0; k < 10; k++) { const from = (RIPPLE_REVEAL_SEC * k) / 10, to = (RIPPLE_REVEAL_SEC * (k + 1)) / 10; out.push({ from, to, at: (from + to) / 2 }) }
+  out.push({ from: RIPPLE_REVEAL_SEC, to: RIPPLE_HOLD_SEC, at: (RIPPLE_REVEAL_SEC + RIPPLE_HOLD_SEC) / 2 })
+  for (let k = 0; k < 7; k++) { const from = RIPPLE_HOLD_SEC + 0.1 * k, to = Math.min(RIPPLE_END_SEC, from + 0.1); out.push({ from, to, at: (from + to) / 2 }) }
+  return out
+}
+
+// The landing's mark on the floor: a ring and a dot, flashing as it lands, then pulsing a little.
+export function drawRipplePin(ctx: Ctx, w: number, h: number, fit: CourtFit, impact: Pt, sec: number, color = RIPPLE_COLOR): void {
+  const rp = ripplePhase(sec)
+  if (!rp) return
+  const H = homography(inPixels(fit, w, h))
+  const scale = sec < 0.25 ? 0.4 + 0.6 * easeOutCubic(sec / 0.25) + 0.5 * (1 - sec / 0.25) : 1 + 0.06 * Math.sin(sec * 4 * Math.PI)
+  const circle = (m: number) => Array.from({ length: 36 }, (_, i) => project(H, impact.x + (m * scale * Math.cos((i / 36) * Math.PI * 2)) / COURT_W_M, impact.y + (m * scale * Math.sin((i / 36) * Math.PI * 2)) / COURT_L_M))
+  const path = (pts: Pt[]) => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath() }
+  ctx.save()
+  ctx.globalAlpha = rp.fade
+  ctx.shadowColor = color; ctx.shadowBlur = w / 90 * (sec < 0.25 ? 2.5 : 1)
+  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(2, w / 400)
+  path(circle(0.55)); ctx.stroke()
+  ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, w / 600)
+  path(circle(0.85)); ctx.stroke()
+  ctx.fillStyle = color
+  path(circle(0.22)); ctx.fill()
+  ctx.restore()
+}
+
 const grids = new WeakMap<SlideHeat, HeatGrid>()
 
 // Painted pixel by pixel from the picture back onto the floor, at half size and smoothed up.
-export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY): void {
+export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY, ripple?: { sec: number; impact: Pt; color?: string }): void {
+  const rp = ripple ? ripplePhase(ripple.sec) : null
+  if (ripple && !rp) return
+  const [rr, rg, rb] = hexRgb(ripple?.color ?? RIPPLE_COLOR)
   const grid = grids.get(heat) ?? heatGrid(heat.points, heat.rough)
   grids.set(heat, grid)
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
@@ -64,11 +109,26 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacit
     for (let x = 0; x < sw; x++, i += 4) {
       const q = G * x + J * y + K
       if (q * side <= 1e-9) continue
-      const v = heatAt(grid, (A * x + B * y + C) / q, (D * x + E * y + F) / q)
-      if (v < 0.04) continue
-      const c = heatColor(v)
-      px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]
-      px[i + 3] = 255 * opacity * Math.min(1, v * 5)
+      const fx = (A * x + B * y + C) / q, fy = (D * x + E * y + F) / q
+      const v = heatAt(grid, fx, fy)
+      let a = 0, r = 0, g = 0, b = 0 // the heat, then (with a ripple) the ring over it
+      if (v >= 0.04) {
+        const c = heatColor(v)
+        r = c[0]; g = c[1]; b = c[2]
+        a = 255 * opacity * Math.min(1, v * 5)
+      }
+      if (rp && ripple) {
+        const d = Math.hypot((fx - ripple.impact.x) * COURT_W_M, (fy - ripple.impact.y) * COURT_L_M)
+        a *= Math.max(0, Math.min(1, (rp.radius - d) / RIPPLE_EDGE_M)) * rp.fade // only what the ring has passed
+        const ring = rp.ring * Math.exp(-(((d - rp.radius) / RIPPLE_RING_M) ** 2)) * 255
+        if (ring > 1) {
+          const under = a * (1 - ring / 255), out = ring + under
+          r = (r * under + rr * ring) / out; g = (g * under + rg * ring) / out; b = (b * under + rb * ring) / out
+          a = out
+        }
+      }
+      if (a < 1) continue
+      px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = a
     }
   }
   out.putImageData(image, 0, 0)

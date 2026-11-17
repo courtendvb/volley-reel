@@ -144,6 +144,19 @@ export function useProjectFlow(h: Host) {
     if (r.project) await loadProject(r.project)
     setNotice(r.note)
   })
+  const deleteMatch = (m: Match) => guard(async () => {
+    const users = await api.matchUsers(m.id)
+    const note = users.length ? t('\n{0} 個のプロジェクトがこの試合を使っています（{1}）。そこでは検索の対象から外れ、シーンのクリップは再生できなくなります。', users.length, users.join('、')) : ''
+    if (!confirm(t('試合「{0}」を倉庫から削除しますか？{1}\n動画と DVW のファイルは消えません。（matches/deleted/ に移動します）', m.name, note))) return
+    const r = await api.deleteMatch(m.id)
+    setLibrary(r.library)
+    setNotice(t('試合「{0}」を削除しました', m.name))
+  })
+  const deleteProject = (r: RecentProject) => guard(async () => {
+    if (!confirm(t('プロジェクト「{0}」を削除しますか？\n{1}\nフォルダごとゴミ箱に移します（試合の動画と DVW は消えません）。', r.name, r.path))) return
+    setRecent(await api.deleteProject(r.path))
+    setNotice(t('プロジェクト「{0}」をゴミ箱に移しました', r.name))
+  })
   const importOne = () => guard(async () => { const m = await api.importMatch(); if (m) setLibrary(await api.getLibrary()) })
   const pickerDone = (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => guard(async () => {
     setPicker(null)
@@ -172,6 +185,6 @@ export function useProjectFlow(h: Host) {
 
   return {
     library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
-    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
+    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, deleteMatch, deleteProject, pickerDone, projectTeams, saveSettings,
   }
 }

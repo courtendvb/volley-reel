@@ -356,6 +356,18 @@ export class Library {
     await this.saveMatch(next)
   }
 
+  // Takes a match off the library: its file moves to matches/deleted/ (the video and the DVW are never
+  // touched). Projects that list it stop searching it; scenes with its clips keep them, unplayable.
+  async deleteMatch(id: string): Promise<void> {
+    if (!this.matches.has(id)) return
+    const f = join(this.dir, 'matches', `${safeId(id)}.json`)
+    if (existsSync(f)) {
+      await mkdir(join(this.dir, 'matches', 'deleted'), { recursive: true })
+      await rename(f, join(this.dir, 'matches', 'deleted', `${safeId(id)}-${Date.now()}.json`))
+    }
+    this.matches.delete(id)
+  }
+
   private async saveMatch(m: Match): Promise<void> {
     await writeJSON(join(this.dir, 'matches', `${safeId(m.id)}.json`), m)
     this.matches.set(m.id, m)

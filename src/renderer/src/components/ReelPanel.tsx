@@ -41,6 +41,7 @@ interface Props {
   overlaps: Map<string, string[]>
   usedIn: number // videos that include this scene
   videoSceneIds: string[] | null // the open video's scenes (null: no video): the scene list is split by them
+  videos: { id: string; name: string; sceneIds: string[] }[] // every video: with many scenes, "move / copy to" is sorted by them
   onAddToVideo: (sceneId: string) => void
   markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
   onEditCard: (m: Marker) => void // the gear: edit how marker title cards look, in the video window
@@ -66,7 +67,7 @@ export function ReelPanel(p: Props) {
   const [slideDrag, setSlideDrag] = useState(false) // a slide is being dragged: the scene's head shows as a place to drop it
   // The right-click menu: slides to put in, and on a clip row that clip's own actions first (pick:
   // the list of scenes to move or copy it to, in place of the menu).
-  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number; clip?: { id: string; g: Group }; pick?: 'move' | 'copy' } | null>(null)
+  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number; clip?: { id: string; g: Group }; pick?: 'move' | 'copy'; vid?: string } | null>(null)
   const [folded, setFolded] = useState<Set<string>>(() => new Set()) // "sceneId:group" whose rows are hidden
   useEffect(() => {
     if (!menu) return
@@ -152,6 +153,21 @@ export function ReelPanel(p: Props) {
     const inVideo = (p.videoSceneIds ?? []).filter((id, i, a) => a.indexOf(id) === i && id !== reel.id)
     const byId = new Map(p.reels.map(r => [r.id, r]))
     return [...inVideo.flatMap(id => byId.get(id) ?? []), ...p.reels.filter(r => r.id !== reel.id && !inVideo.includes(r.id))]
+  }
+  // Past this many scenes the list is sorted by video first (a long list does not fit the menu).
+  const SCENE_PICK_FLAT = 8
+  // The scenes other than this one, by video: the open video first, then the rest; scenes in no video last.
+  const sceneGroups = (scenes: Reel[]) => {
+    const ids = new Set(scenes.map(s => s.id)), used = new Set<string>()
+    const open = (v: { sceneIds: string[] }) => (p.videoSceneIds === v.sceneIds ? 0 : 1)
+    const vs = [...p.videos].sort((a, b) => open(a) - open(b))
+    const groups = vs.map(v => {
+      const list = [...new Set(v.sceneIds)].filter(id => ids.has(id))
+      list.forEach(id => used.add(id))
+      return { id: v.id, name: v.name, scenes: list.flatMap(id => scenes.find(s => s.id === id) ?? []) }
+    }).filter(g => g.scenes.length)
+    const rest = scenes.filter(s => !used.has(s.id))
+    return rest.length ? [...groups, { id: '', name: t('どの動画にも入っていない'), scenes: rest }] : groups
   }
   const BELOW = t('この行の下にスライドを入れる'), AT_TOP = t('マーカーの先頭にスライドを入れる'), AT_HEAD = t('シーンの頭にスライドを入れる')
   const rowsOf = (g: SlideGroup, ids: string[]) => {
@@ -362,18 +378,30 @@ export function ReelPanel(p: Props) {
           <div className="menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
           <div className="slide-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
             {menu.clip && menu.pick ? (() => {
-              const scenes = otherScenes(), clipId = menu.clip.id, move = menu.pick === 'move'
+              const all = otherScenes(), clipId = menu.clip.id, move = menu.pick === 'move'
+              const groups = all.length > SCENE_PICK_FLAT ? sceneGroups(all) : null
+              const group = groups && menu.vid !== undefined ? groups.find(g => g.id === menu.vid) : undefined
+              const scenes = group ? group.scenes : all
+              const title = move ? t('別のシーンへ移動') : t('別のシーンへコピー')
               return (
                 <>
-                  <button role="menuitem" className="menu-back" onClick={() => setMenu({ ...menu, pick: undefined })}>‹ {move ? t('別のシーンへ移動') : t('別のシーンへコピー')}</button>
-                  <div className="menu-scenes">
+                  <button role="menuitem" className="menu-back" onClick={() => setMenu(group ? { ...menu, vid: undefined } : { ...menu, pick: undefined })}>‹ {group ? `${title}: ${group.name}` : title}</button>
+                  {groups && !group ? (
+                    <div className="menu-scenes menu-videos">
+                      {groups.map(g => (
+                        <button key={g.id || 'none'} role="menuitem" title={g.name} onClick={() => setMenu({ ...menu, vid: g.id })}>
+                          {g.name} <span className="muted">({g.scenes.length})</span> ›
+                        </button>
+                      ))}
+                    </div>
+                  ) : <div className="menu-scenes">
                     {scenes.map(s => (
                       <button key={s.id} role="menuitem" title={s.name} onClick={() => { setMenu(null); p.onClipToScene(clipId, s.id, move) }}>
                         {s.name}{p.videoSceneIds && !p.videoSceneIds.includes(s.id) && <span className="muted"> {t('（動画の外）')}</span>}
                       </button>
                     ))}
                     {!scenes.length && <span className="muted pad-x">{t('ほかのシーンがありません')}</span>}
-                  </div>
+                  </div>}
                 </>
               )
             })() : <>

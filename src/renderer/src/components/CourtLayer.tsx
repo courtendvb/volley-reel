@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { drawCourt, flightMoves, handleAt, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { drawCourt, flightMoves, handleAt, rippleImpact, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
 import { playback } from '../playback'
 import { prepareCanvas } from '../canvas'
 
@@ -32,12 +32,21 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
     return playback.subscribe(s => setProgress(Math.round(Math.max(0, Math.min(1, (s.time - flight.startSec) / flight.sec)) * 40) / 40))
   }, [flies, flight?.startSec, flight?.sec])
 
+  // The ripple from the landing: seconds since it, in 20ths, only while it shows (-1: not yet, 4: over).
+  const rippling = !fitting && !!flight && !!rippleImpact(style, zones)
+  const [rippleSec, setRippleSec] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    if (!rippling || !flight) { setRippleSec(undefined); return }
+    const land = flight.startSec + flight.sec
+    return playback.subscribe(s => setRippleSec(Math.round(Math.max(-1, Math.min(4, s.time - land)) * 20) / 20))
+  }, [rippling, flight?.startSec, flight?.sec])
+
   useEffect(() => {
     const c = canvas.current
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
     // While fitting the grid is always drawn, so the lines can be laid on the court's.
-    drawCourt(ctx, size.w, size.h, { ...fit, corners }, fitting ? { ...style, grid: true } : style, fitting ? null : zones, flies ? progress : 1)
+    drawCourt(ctx, size.w, size.h, { ...fit, corners }, fitting ? { ...style, grid: true } : style, fitting ? null : zones, flies ? progress : 1, rippling ? rippleSec ?? -1 : undefined)
     if (!fitting) return
     for (const p of corners) {
       const at = handleAt(p, size.w, size.h, HANDLE + 2), x = at.x * size.w, y = at.y * size.h
@@ -45,7 +54,7 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
       ctx.beginPath(); ctx.arc(x, y, HANDLE, 0, Math.PI * 2); ctx.fillStyle = style.color; ctx.fill()
       ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill()
     }
-  }, [size.w, size.h, fit, corners, style, zones, fitting, flies, progress])
+  }, [size.w, size.h, fit, corners, style, zones, fitting, flies, progress, rippling, rippleSec])
 
   // Clicks are looked at before the layers above see them, and pass on when they aren't for the court.
   const point = useRef(onPoint)

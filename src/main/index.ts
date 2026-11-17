@@ -254,6 +254,29 @@ function registerIpc(): void {
     return { library: l.info(), project: project?.info() ?? null, note }
   })
 
+  // Projects that list a match (for the warning before it is deleted).
+  ipcMain.handle('match:users', async (_e, id: string) => {
+    const out: string[] = []
+    for (const dir of await projectDirs(lib())) {
+      const f = await projectFile(dir)
+      if (f?.matchIds?.includes(id)) out.push(f.name || basename(dir))
+    }
+    return out
+  })
+  ipcMain.handle('match:delete', async (_e, id: string) => {
+    const l = lib()
+    await l.deleteMatch(id)
+    if (project) await project.setMatches(project.info().matchIds.filter(x => x !== id))
+    return { library: l.info(), project: project?.info() ?? null }
+  })
+  // A project's folder goes to the trash (it can be put back from there); the open one can't go.
+  ipcMain.handle('project:delete', async (_e, path: string) => {
+    if (project && project.dir.toLowerCase() === path.toLowerCase()) throw new Error(t('開いているプロジェクトは削除できません。先にホームへ戻ってください'))
+    if (!existsSync(join(path, 'project.json'))) throw new Error(t('プロジェクトが見つかりません（project.json がありません）'))
+    await shell.trashItem(path)
+    return recentProjects()
+  })
+
   ipcMain.handle('match:setCourt', async (_e, id: string, court: CourtFit | null) => {
     const l = lib()
     await l.setCourt(id, court)

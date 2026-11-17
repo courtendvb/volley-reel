@@ -7,7 +7,8 @@ import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_NAMES, SET_TARGETS, drawS
 import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
-import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, type SlideHeat, drawHeat } from './courtHeat'
+import { rangePlays, type RangeSource } from './markRange'
+import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRipplePin } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
@@ -154,9 +155,10 @@ function scattered(c: ClickPoint, i: number): ClickPoint {
 // this play is on: where their shots of the same kind landed (shotKind), all their serves' flights,
 // and the landings as points: all their serves, or their attacks of the same code.
 // source: for the direction chart, the plays of the search and the player's name.
-export interface ChartSource { filtered?: () => Play[]; name?: string; setterName?: (set: Play) => string } // setterName: the set chart's title
-export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, plays: () => Play[], source?: ChartSource): PlayerMarks | null {
+export interface ChartSource { filtered?: () => Play[]; name?: string; setterName?: (set: Play) => string; ranges?: RangeSource } // setterName: the set chart's title; ranges: where the 範囲 choices look (markRange.ts)
+export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, all: () => Play[], source?: ChartSource): PlayerMarks | null {
   const style = markStyle(style0, play.skill)
+  const plays = () => rangePlays(style.range, play, all, source?.ranges)
   // A set, or an attack after one: the setter's distribution in that rotation.
   const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
   const setMarks: PlayerMarks = setsAll ? {
@@ -479,8 +481,22 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 
+// Where the play landed, when its heatmap is to come as a ripple from there (the 波紋 box; needs the heatmap).
+export function rippleImpact(style0: GridStyle, zones: PlayZones | null | undefined): Pt | null {
+  return markStyle(style0, zones?.skill).ripple && zones?.player?.heat ? zones.points?.end ?? null : null
+}
+// The ripple's heatmap and the landing mark at `sec` seconds from the landing, on a layer of their own (the export's).
+export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
+  const impact = rippleImpact(style0, zones), style = markStyle(style0, zones.skill)
+  if (!impact || !zones.player?.heat) return
+  drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity, { sec, impact })
+  drawRipplePin(ctx, w, h, fit, impact, sec)
+}
+
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
-export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1): void {
+// ripple: seconds since the landing, for a heatmap that comes as a ripple (rippleImpact); undefined shows it as it
+// stays after it has spread; null leaves it out (the export draws it on its own layers).
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null): void {
   const style = markStyle(style0, zones?.skill)
   const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
@@ -495,7 +511,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   }
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
-  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
+  const impact = rippleImpact(style0, zones), still = (RIPPLE_REVEAL_SEC + RIPPLE_HOLD_SEC) / 2
+  if (zones?.player?.heat && !impact) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
+  else if (zones?.player?.heat && impact && ripple !== null) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity, { sec: ripple ?? still, impact })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
   if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
@@ -544,6 +562,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
     if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
+  if (impact && ripple !== null) drawRipplePin(ctx, w, h, fit, impact, ripple ?? still)
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
@@ -631,6 +650,7 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
     return
   }
   const top = Math.max(...SET_TARGETS.map(k => c.by[k].n), 1), { most, least } = setExtremes(c)
+  const labels: ShareLabel[] = []
   for (const k of SET_TARGETS) {
     const a = SET_AREAS[k], n = c.by[k].n
     if (!a || !n) continue
@@ -638,13 +658,49 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
     ctx.beginPath(); ring.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath()
     ctx.globalAlpha = 0.2 + 0.45 * (n / top); ctx.fillStyle = SET_COLORS[k]; ctx.fill(); ctx.globalAlpha = 1
     if (k === most || k === least) { ctx.strokeStyle = k === most ? '#DC2626' : '#2563EB'; ctx.lineWidth = Math.max(3.5, w / 220); ctx.stroke() }
-    const mid = on((a.u[0] + a.u[1]) / 2, (a.v[0] + a.v[1]) / 2), fs = Math.max(11, w / 55)
-    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2.5, fs * 0.18); ctx.strokeStyle = '#000000'; ctx.fillStyle = '#FFFFFF'
-    ctx.font = `bold ${fs * 0.8}px sans-serif`
-    ctx.strokeText(SET_NAMES[k], mid.x, mid.y - fs * 0.55); ctx.fillText(SET_NAMES[k], mid.x, mid.y - fs * 0.55)
-    ctx.font = `bold ${fs}px sans-serif`
-    const share = `${Math.round((n / c.total) * 100)}%`
-    ctx.strokeText(share, mid.x, mid.y + fs * 0.45); ctx.fillText(share, mid.x, mid.y + fs * 0.45)
+    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on((a.u[0] + a.u[1]) / 2, (a.v[0] + a.v[1]) / 2) })
   }
+  drawShareLabels(ctx, labels, Math.max(11, w / 55))
   ctx.restore()
+}
+
+// A place's name and share, centred on the place. From a low camera the court is squashed and the
+// places lie close together on the picture (Zone3 and Pipe above all), so the labels are laid out
+// together: two lines when they clear one another, else one line, smaller and smaller, and last of
+// all pushed apart downward.
+interface ShareLabel { name: string; share: string; x: number; y: number }
+function drawShareLabels(ctx: Ctx, labels: ShareLabel[], fs: number): void {
+  type Box = { l: ShareLabel; text: [string, number, number][]; x0: number; x1: number; y0: number; y1: number }
+  const width = (text: string, size: number) => { ctx.font = `bold ${size}px sans-serif`; return ctx.measureText(text).width }
+  const lay = (two: boolean, scale: number): Box[] => labels.map(l => {
+    const f = fs * scale
+    if (two) {
+      const half = Math.max(width(l.name, f * 0.8), width(l.share, f)) / 2
+      return { l, text: [[l.name, l.y - f * 0.55, f * 0.8], [l.share, l.y + f * 0.45, f]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 1.1, y1: l.y + f * 0.95 }
+    }
+    const t = `${l.name} ${l.share}`, half = width(t, f * 0.9) / 2
+    return { l, text: [[t, l.y, f * 0.9]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 0.55, y1: l.y + f * 0.55 }
+  })
+  const clash = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+  const clear = (bs: Box[]) => bs.every((a, i) => bs.every((b, j) => j <= i || !clash(a, b)))
+  const tries: [boolean, number][] = [[true, 1], [false, 1], [false, 0.85], [false, 0.7], [false, 0.55]]
+  let boxes: Box[] | null = null
+  for (const [two, scale] of tries) { const bs = lay(two, scale); if (clear(bs)) { boxes = bs; break } }
+  if (!boxes) {
+    boxes = lay(false, 0.55).sort((a, b) => a.l.y - b.l.y)
+    for (let i = 1; i < boxes.length; i++) {
+      for (let j = 0; j < i; j++) {
+        if (!clash(boxes[i], boxes[j])) continue
+        const dy = boxes[j].y1 - boxes[i].y0
+        boxes[i] = { ...boxes[i], y0: boxes[i].y0 + dy, y1: boxes[i].y1 + dy, text: boxes[i].text.map(([t, y, f]) => [t, y + dy, f] as [string, number, number]) }
+      }
+    }
+  }
+  ctx.lineJoin = 'round'; ctx.strokeStyle = '#000000'; ctx.fillStyle = '#FFFFFF'
+  for (const b of boxes) {
+    for (const [text, y, f] of b.text) {
+      ctx.font = `bold ${f}px sans-serif`; ctx.lineWidth = Math.max(2.5, f * 0.18)
+      ctx.strokeText(text, b.l.x, y); ctx.fillText(text, b.l.x, y)
+    }
+  }
 }

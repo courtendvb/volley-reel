@@ -199,6 +199,9 @@ export interface Api {
   getLibrary(): Promise<LibraryInfo | null>
   chooseLibrary(): Promise<LibraryInfo | null>
   importMatch(): Promise<Match | null> // into the library, choosing a video and a DVW
+  matchUsers(id: string): Promise<string[]> // names of the projects that list this match
+  deleteMatch(id: string): Promise<{ library: LibraryInfo; project: ProjectInfo | null }> // off the library (its file moves to matches/deleted/; the video and DVW stay)
+  deleteProject(path: string): Promise<RecentProject[]> // the folder to the trash; the recent list as it is now
   relocateMatch(id: string, part: MissingPart): Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string } | null> // choose where the moved file is now
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>

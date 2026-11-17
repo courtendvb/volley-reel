@@ -1,6 +1,7 @@
 // How the court tab draws (court.ts): the grid, the zones and the player's marks, kept per kind of play.
 import { cleanSetChart, cleanSetCourt, cleanSetFilter, setFilterCount, type SetFilter, type SetChartStyle, type SetCourtStyle } from './setChart'
 import { cleanChart, type ChartStyle } from './chart'
+import { isMarkRange, type MarkRange } from './markRange'
 
 export interface GridStyle {
   grid: boolean
@@ -11,6 +12,7 @@ export interface GridStyle {
   flight?: boolean // with the points: the ball's path as a curve
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
+  ripple?: boolean // with the heatmap: it shows only as a ripple from where the play landed (courtHeat.ts), from the landing for 3 s
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
   noLift?: boolean // no dashed line from the floor up to a point in the air
   serveFlights?: boolean // on a serve: all the player's serves flying with it
@@ -20,6 +22,7 @@ export interface GridStyle {
   chart?: ChartStyle // on an attack: the player's direction chart over the picture; none: off
   setChart?: SetChartStyle // on a set or the attack after one: the setter's distribution in that rotation, as a chart in a corner; none: off
   setFilter?: SetFilter // what the setter's sets above are kept to: rotations, setter calls, the other team's rotations
+  range?: MarkRange // which shots all of the above are made from (markRange.ts); none: every shot of the player
   setCourt?: SetCourtStyle // the same laid on the court in the picture: where the sets were given, or each place's share; none: off
   // The marks of the player's other plays above, kept apart for each kind of play selected: a serve, an
   // attack or a set shows its own. When there, these win over the fields above (markStyle).
@@ -28,7 +31,7 @@ export interface GridStyle {
 }
 
 export type MarkSkill = 'S' | 'A' | 'E'
-const MARK_KEYS = ['heat', 'serveFlights', 'landings', 'cones', 'chart', 'setChart', 'setCourt', 'setFilter'] as const
+const MARK_KEYS = ['heat', 'ripple', 'serveFlights', 'landings', 'cones', 'chart', 'setChart', 'setCourt', 'setFilter', 'range'] as const
 export type PlayerMarkStyle = Pick<GridStyle, typeof MARK_KEYS[number]>
 export const markSkill = (skill: string | null | undefined): MarkSkill | null => (skill === 'S' || skill === 'A' || skill === 'E' ? skill : null)
 // The style for a play of this skill: its own marks, none for other skills. A style without bySkill
@@ -53,7 +56,8 @@ export function marksBySkill(style: GridStyle): GridStyle {
 export function cleanGridStyle(x: unknown): GridStyle {
   const o = { ...DEFAULT_GRID_STYLE, ...(x && typeof x === 'object' ? x : {}) } as GridStyle & Record<string, unknown>
   const marks = (m: Record<string, unknown> | undefined): PlayerMarkStyle => ({
-    ...(m?.heat ? { heat: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
+    ...(m?.heat ? { heat: true } : {}), ...(m?.heat && m?.ripple ? { ripple: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
+    ...(isMarkRange(m?.range) && m.range !== 'all' ? { range: m.range } : {}),
     ...(m?.chart ? { chart: cleanChart(m.chart) } : {}), ...(m?.setChart ? { setChart: cleanSetChart(m.setChart) } : {}), ...(m?.setCourt ? { setCourt: cleanSetCourt(m.setCourt) } : {}), ...(m?.setFilter && setFilterCount(cleanSetFilter(m.setFilter)) ? { setFilter: cleanSetFilter(m.setFilter) } : {}),
   })
   const base: GridStyle = {

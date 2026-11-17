@@ -75,7 +75,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
     if (st.card) {
-      drawCard(ctx, size.w, size.h, st.card, settings.titleCard, settings.theme, logoImage(st.card.opp), assetImage)
+      drawCard(ctx, size.w, size.h, st.card, settings.titleCard, lookTheme(settings), logoImage(st.card.opp), assetImage)
       if (st.card.slide) drawSlideMarks(ctx, size.w, size.h, st.card.slide, heatOpacity)
       for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
       if (flights) drawFlights(ctx, size.w, size.h, flights, progress)

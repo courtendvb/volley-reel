@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { clipRangeSource } from '../../shared/markRange'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
@@ -142,7 +143,7 @@ export function App() {
   const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
   const {
     library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
-    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
+    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, deleteMatch, deleteProject, pickerDone, projectTeams, saveSettings,
   } = useProjectFlow({
     latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
     setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
@@ -218,9 +219,12 @@ export function App() {
     return [...codes].sort().map(code => ({ code, ...(names[code] ? { name: names[code] } : {}) }))
   }, [targetDvws])
   const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter, sceneMatches)
+  // The scene and marker group of the clip on screen (while 通し plays, the one playing), for the 範囲 of the marks.
+  const rangeScene = (playingClipId ? reels.find(r => r.clips[playingClipId]) : null) ?? reel ?? null
+  const rangeGroup = rangeScene && playingClipId && rangeScene.clips[playingClipId] ? groupOf(rangeScene, playingClipId) : activeGroup
   const courtZones = useMemo(() => (match?.court && courtPlay
-    ? playMarks(courtPlay, match.court, nextPlay, gridStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set) })
-    : null), [match?.court, courtPlay, nextPlay, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
+    ? playMarks(courtPlay, match.court, nextPlay, gridStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set), ranges: clipRangeSource(rangeScene, rangeGroup, match.id, dvws) })
+    : null), [match?.court, courtPlay, nextPlay, rangeScene, rangeGroup, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
 
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
   // How many of the scenes' clips come from each match (the match picker says so), and whether a
@@ -730,7 +734,7 @@ export function App() {
       {!project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
           onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
-          onRelocate={(id, part) => void relocate(id, part)} />
+          onRelocate={(id, part) => void relocate(id, part)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
       ) : !project.matches.length ? (
         <div className="empty"><h2>{t('試合を選びましょう')}</h2>
           <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
@@ -954,7 +958,7 @@ export function App() {
               info={clipInfo} missing={missing} offTarget={offTarget} activeClipId={activeClipId} playingClipId={playingClipId}
               onActivate={(c, g) => { if (cardEditRef.current?.slideId) { setCardEdit(null); setSelectedAnn(null) } activateClip(c, g) }} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onPlayMax={() => void playMaximized(() => playThrough('scene', 0))} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
-              videoSceneIds={video?.sceneIds ?? null} onAddToVideo={id => { if (video) updateVideo(addScene(video, id)) }}
+              videoSceneIds={video?.sceneIds ?? null} videos={videos} onAddToVideo={id => { if (video) updateVideo(addScene(video, id)) }}
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
               onSlide={(spot, how) => void putSlide(spot, how)} onEditSlide={id => reel && editCard(reel.id, null, id)}
               editingSlideId={cardEdit?.slideId ?? null} canFrame={!!match}

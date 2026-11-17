@@ -2,7 +2,7 @@ import { PaletteColor } from './PaletteColor'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
+import { DEFAULT_MARKER_LAYOUT, lookTheme, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, cardKind, drawCard, type Box, type TitleBox } from '../../../shared/overlayDraw'
 import { drawFlights, drawSlideMarks } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
@@ -43,7 +43,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
     const c = canvas.current
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
-    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp), assetImage)
+    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, lookTheme(settings), logoImage(card.opp), assetImage)
     boxRef.current = b
     if (card.slide) drawSlideMarks(ctx, size.w, size.h, card.slide, heatOpacity)
     if (card.slide?.flights) drawFlights(ctx, size.w, size.h, card.slide.flights, 1)

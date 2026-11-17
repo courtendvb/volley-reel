@@ -14,11 +14,13 @@ interface Props {
   onOpenProject: (path?: string) => void
   onOpenMatch: (matchId: string, code: string) => void // the match alone, that team ours
   onRelocate: (id: string, part: MissingPart) => void
+  onDeleteMatch: (m: Match) => void
+  onDeleteProject: (r: RecentProject) => void
 }
 
 // Entry point (v3): the library on the left — every match, filterable by team code — and
 // projects on the right. A project is made by picking matches out of the library.
-export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportOne, onNewProject, onOpenProject, onOpenMatch, onRelocate }: Props) {
+export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportOne, onNewProject, onOpenProject, onOpenMatch, onRelocate, onDeleteMatch, onDeleteProject }: Props) {
   const [q, setQ] = useState('')
   const shown = useMemo(() => filterMatches(library?.matches ?? [], q), [library, q])
 
@@ -44,7 +46,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
             </div>
             <p className="count">{shown.length} / {library.matches.length} {t('試合')}</p>
             <div className="match-table" role="list">
-              {shown.map(m => <MatchRow key={m.id} m={m} missing={library.missing[m.id]} busy={busy} onRelocate={part => onRelocate(m.id, part)} onOpen={code => onOpenMatch(m.id, code)} />)}
+              {shown.map(m => <MatchRow key={m.id} m={m} missing={library.missing[m.id]} busy={busy} onRelocate={part => onRelocate(m.id, part)} onOpen={code => onOpenMatch(m.id, code)} onDelete={() => onDeleteMatch(m)} />)}
               {!library.matches.length && <p className="muted pad">{t('まだ試合がありません。「フォルダから一括取り込み」で、動画と DVW のあるフォルダを選んでください。')}</p>}
             </div>
           </>
@@ -59,16 +61,19 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
         </div>
         <h3 className="muted small-head">{t('最近のプロジェクト')}</h3>
         {recent.length ? recent.map(r => (
-          <button key={r.path} className="recent" onClick={() => onOpenProject(r.path)} title={r.path}>
-            <b>{r.name}</b><span className="muted">{r.path}</span>
-          </button>
+          <div key={r.path} className="recent-row">
+            <button className="recent" onClick={() => onOpenProject(r.path)} title={r.path}>
+              <b>{r.name}</b><span className="muted">{r.path}</span>
+            </button>
+            <button className="small" disabled={busy} onClick={() => onDeleteProject(r)} title={t('このプロジェクトを削除（フォルダをゴミ箱へ）')}>{t('削除')}</button>
+          </div>
         )) : <p className="muted">{t('まだありません')}</p>}
       </section>
     </main>
   )
 }
 
-function MatchRow({ m, missing, busy, onRelocate, onOpen }: { m: Match; missing?: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void; onOpen: (code: string) => void }) {
+function MatchRow({ m, missing, busy, onRelocate, onOpen, onDelete }: { m: Match; missing?: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void; onOpen: (code: string) => void; onDelete: () => void }) {
   return (
     <div className={`match-row${missing ? ' lost' : ''}`} role="listitem" title={`${m.sourceVideoPath}\n${m.dvwPath}`}>
       <MatchCells m={m} />
@@ -80,6 +85,7 @@ function MatchRow({ m, missing, busy, onRelocate, onOpen }: { m: Match; missing?
           <button key={code} className="small" disabled={busy} onClick={() => onOpen(code)}
             title={t('この試合だけのプロジェクトを、{0} を対象チームにして開きます（初回は倉庫の projects に作り、次からは同じものを開く）', code)}>{t('{0} で開く', code)}</button>
         ))}
+        <button className="small" disabled={busy} onClick={onDelete} title={t('この試合を倉庫から削除（動画と DVW のファイルは消えません）')}>{t('削除')}</button>
       </span>
     </div>
   )

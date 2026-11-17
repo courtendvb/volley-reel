@@ -8,7 +8,7 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
+import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, drawRipple, rippleImpact, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
@@ -26,7 +26,7 @@ interface Deps {
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
   markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
-  court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
+  court?: (c: Clip, sceneId: string, group: Group) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
   courtStyle?: GridStyle // the grid's look, as in the player
 }
 
@@ -52,7 +52,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
     const out: Uint8Array[] = []
     for (const c of cards) {
       const canvas = new OffscreenCanvas(W, H), ctx = canvas.getContext('2d')!
-      drawCard(ctx, W, H, c, overlay.titleCard, overlay.theme, logoImage(c.opp), images.lookup)
+      drawCard(ctx, W, H, c, overlay.titleCard, lookTheme(overlay), logoImage(c.opp), images.lookup)
       if (c.slide) drawSlideMarks(ctx, W, H, c.slide, heatOpacity)
       if (c.slide?.flights) drawFlights(ctx, W, H, c.slide.flights, 1)
       for (const a of c.annotations ?? []) if (!leaveOut?.(a)) drawAnnotation(ctx, a, W, H, images.lookup)
@@ -91,7 +91,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     firstItem.push(items.length)
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
-        drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
+        drawCard(ctx, W, H, p.card, overlay.titleCard, lookTheme(overlay), logoImage(p.card.opp), assetImage)
         if (p.card.slide) drawSlideMarks(ctx, W, H, p.card.slide, d.courtStyle?.heatOpacity)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
       }), ...(p.card.slide?.flights ? { layers: await flightLayers(p.card.slide.flights, p.durationSec, png) } : {}) })
@@ -131,7 +131,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
   // The court as the player shows it (grid, zones, the player's marks and charts, as set on the 表示
   // tab), on every clip of a match whose court is fitted.
-  const court = d.courtStyle ? d.court?.(c) ?? null : null
+  const court = d.courtStyle ? d.court?.(c, sceneId, group) ?? null : null
   // Windows in seconds into the clip as played: slow stretches stretch them, and an object shown at
   // a held moment stays up while it is held (shared/timing.ts).
   const ps = pieces(r.in, r.out, c.timing), played = playedSec(ps)
@@ -148,11 +148,12 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const layers: ExportLayer[] = []
   const always = anns.filter(whole)
   const flies = !!court?.flight && flightMoves(d.courtStyle!, court.zones)
+  const ripples = !!court?.flight && !!rippleImpact(d.courtStyle!, court.zones)
   if (court || showSb || showCap || always.length) {
     layers.push({
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
-        if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones, flies ? null : 1)
+        if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones, flies ? null : 1, ripples ? null : undefined)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, lookTheme(overlay))
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, lookTheme(overlay), packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
@@ -173,6 +174,16 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
         if (court!.zones?.player?.flights) drawFlights(ctx, W, H, court!.zones.player.flights, i / steps)
         if (hasFlight(d.courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !d.courtStyle!.noLift)
       }) })
+    }
+  }
+  // The ripple from the landing, in steps (each its own layer): it spreads, stays, fades, and is gone.
+  if (ripples) {
+    const land = court!.flight!.startSec + court!.flight!.sec
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of rippleSteps()) {
+      const from = playedOf(land + st.from), to = playedOf(land + st.to)
+      if (land + st.from >= r.out || to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawRipple(ctx, W, H, court!.fit, d.courtStyle!, court!.zones!, st.at)) })
     }
   }
   // A serve's speed plate, from the reception's touch to the end of the clip.

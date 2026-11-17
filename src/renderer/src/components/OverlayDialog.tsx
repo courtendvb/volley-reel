@@ -33,7 +33,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
     if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, lookTheme(s), packPhotoImage(sample.caption.photo))
     if (s.serveSpeed.enabled) drawServeSpeed(ctx, c.width, c.height, 98, s.serveSpeed, lookTheme(s))
     const t = card.current
-    if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, s.theme)
+    if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, lookTheme(s))
   }, [s, sample])
 
   const check = (label: string, value: boolean, on: (v: boolean) => void) => (
@@ -66,7 +66,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
 
             <section>
               <span className="field-label">{t('デザイン')}</span>
-              <div className="ov-looks" role="radiogroup" aria-label={t('スコアボード・テロップ・サーブ速度のデザイン')}>
+              <div className="ov-looks" role="radiogroup" aria-label={t('スコアボード・テロップ・サーブ速度・タイトルカードのデザイン')}>
                 {TELOP_LOOKS.map(l => (
                   <LookButton key={l.look} name={l.name} on={(s.look ?? 'slant') === l.look} settings={{ ...s, look: l.look }} sample={sample}
                     onPick={() => onChange(l.look === 'slant' ? (({ look: _l, ...rest }) => rest)(s) : { ...s, look: l.look })} />

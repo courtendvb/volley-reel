@@ -32,13 +32,13 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
     return playback.subscribe(s => setProgress(Math.round(Math.max(0, Math.min(1, (s.time - flight.startSec) / flight.sec)) * 40) / 40))
   }, [flies, flight?.startSec, flight?.sec])
 
-  // The ripple from the landing: seconds since it, in 20ths, only while it shows (-1: not yet, 4: over).
+  // The ripple from the landing: seconds since it, in 40ths (the burst is quick), only while it shows (-1: not yet, 4: over).
   const rippling = !fitting && !!flight && !!rippleImpact(style, zones)
   const [rippleSec, setRippleSec] = useState<number | undefined>(undefined)
   useEffect(() => {
     if (!rippling || !flight) { setRippleSec(undefined); return }
     const land = flight.startSec + flight.sec
-    return playback.subscribe(s => setRippleSec(Math.round(Math.max(-1, Math.min(4, s.time - land)) * 20) / 20))
+    return playback.subscribe(s => setRippleSec(Math.round(Math.max(-1, Math.min(4, s.time - land)) * 40) / 40))
   }, [rippling, flight?.startSec, flight?.sec])
 
   useEffect(() => {

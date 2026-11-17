@@ -52,12 +52,14 @@ export function heatAt({ cols, rows, data }: HeatGrid, x: number, y: number): nu
 // start, wider and dimmer as it goes, with a fainter echo a moment behind; the floor just behind it
 // glows gold for a moment, as if lit by it.
 export const RIPPLE_REVEAL_SEC = 0.8, RIPPLE_HOLD_SEC = 2.3, RIPPLE_END_SEC = 3.0
-export const RIPPLE_COLOR = '#FFC23D' // gold: the glow, the pin's ring
-const RIPPLE_CORE = '#FFF6D5' // the ring's hot middle, nearly white
+export const RIPPLE_COLOR = '#FFC23D' // gold, the usual: the glow, the pin's ring (GridStyle.rippleColor for another)
 const RIPPLE_REACH_M = 12, RIPPLE_EDGE_M = 0.8, RIPPLE_ECHO_SEC = 0.14
 const easeOutExpo = (x: number) => (x >= 1 ? 1 : 1 - 2 ** (-10 * x))
 const easeOutBack = (x: number) => 1 + 2.7 * (x - 1) ** 3 + 1.7 * (x - 1) ** 2
 const hexRgb = (hex: string): [number, number, number] => { const n = parseInt(/^#[0-9a-f]{6}$/i.test(hex) ? hex.slice(1) : RIPPLE_COLOR.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+// The ring's hot middle: the colour three quarters of the way to white (gold's is a pale cream).
+const coreOf = (hex: string): [number, number, number] => hexRgb(hex).map(c => Math.round(c + (255 - c) * 0.78)) as [number, number, number]
+const css = ([r, g, b]: [number, number, number]) => `rgb(${r},${g},${b})`
 interface Ring { radius: number; strength: number; core: number; glow: number } // metres; 0–1; the core's and the glow's half widths in metres
 export interface RipplePhase { radius: number; ring: number; fade: number; rings: Ring[] }
 const ringAt = (sec: number, strength: number): Ring | null => {
@@ -96,8 +98,9 @@ export function drawRipplePin(ctx: Ctx, w: number, h: number, fit: CourtFit, imp
   ctx.save()
   ctx.globalAlpha = rp.fade
   ctx.shadowColor = color; ctx.shadowBlur = (w / 90) * (1 + 3 * flash)
-  if (flash > 0) { ctx.globalAlpha = rp.fade * flash * 0.8; ctx.fillStyle = RIPPLE_CORE; path(circle(1.4)); ctx.fill(); ctx.globalAlpha = rp.fade }
-  ctx.strokeStyle = RIPPLE_CORE; ctx.lineWidth = Math.max(2, w / 400)
+  const core = css(coreOf(color))
+  if (flash > 0) { ctx.globalAlpha = rp.fade * flash * 0.8; ctx.fillStyle = core; path(circle(1.4)); ctx.fill(); ctx.globalAlpha = rp.fade }
+  ctx.strokeStyle = core; ctx.lineWidth = Math.max(2, w / 400)
   path(circle(0.55)); ctx.stroke()
   ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, w / 600)
   path(circle(0.85)); ctx.stroke()
@@ -109,14 +112,20 @@ export function drawRipplePin(ctx: Ctx, w: number, h: number, fit: CourtFit, imp
 const grids = new WeakMap<SlideHeat, HeatGrid>()
 
 // Painted pixel by pixel from the picture back onto the floor, at half size and smoothed up.
-export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY, ripple?: { sec: number; impact: Pt; color?: string }): void {
+export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacity = HEAT_OPACITY): void {
+  drawRippleFloor(ctx, w, h, heat.fit, heat, opacity)
+}
+
+// The floor's light: the heatmap (when there is one) and, with a ripple, the rings over it, the
+// heatmap showing only where they have passed. Without a heatmap the ripple shows alone.
+export function drawRippleFloor(ctx: Ctx, w: number, h: number, fit: CourtFit, heat: SlideHeat | null, opacity = HEAT_OPACITY, ripple?: { sec: number; impact: Pt; color?: string }): void {
   const rp = ripple ? ripplePhase(ripple.sec) : null
-  if (ripple && !rp) return
-  const [gr, gg, gb] = hexRgb(ripple?.color ?? RIPPLE_COLOR), [cr, cg, cb] = hexRgb(RIPPLE_CORE)
-  const grid = grids.get(heat) ?? heatGrid(heat.points, heat.rough)
-  grids.set(heat, grid)
+  if ((ripple && !rp) || (!heat && !rp?.rings.length)) return
+  const [gr, gg, gb] = hexRgb(ripple?.color ?? RIPPLE_COLOR), [cr, cg, cb] = coreOf(ripple?.color ?? RIPPLE_COLOR)
+  let grid: HeatGrid | null = null
+  if (heat) { grid = grids.get(heat) ?? heatGrid(heat.points, heat.rough); grids.set(heat, grid) }
   const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2)
-  const H = homography(inPixels(heat.fit, sw, sh))
+  const H = homography(inPixels(fit, sw, sh))
   // The inverse of the homography (its adjugate); `side` tells the floor from what is above the horizon.
   const A = H.e - H.f * H.h, B = H.c * H.h - H.b, C = H.b * H.f - H.c * H.e
   const D = H.f * H.g - H.d, E = H.a - H.c * H.g, F = H.c * H.d - H.a * H.f
@@ -128,7 +137,7 @@ export function drawHeat(ctx: Ctx, w: number, h: number, heat: SlideHeat, opacit
       const q = G * x + J * y + K
       if (q * side <= 1e-9) continue
       const fx = (A * x + B * y + C) / q, fy = (D * x + E * y + F) / q
-      const v = heatAt(grid, fx, fy)
+      const v = grid ? heatAt(grid, fx, fy) : 0
       let a = 0, r = 0, g = 0, b = 0 // the heat, then (with a ripple) the ring over it
       if (v >= 0.04) {
         const c = heatColor(v)

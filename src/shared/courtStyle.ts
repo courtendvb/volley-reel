@@ -12,7 +12,8 @@ export interface GridStyle {
   flight?: boolean // with the points: the ball's path as a curve
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
-  ripple?: boolean // with the heatmap: it shows only as a ripple from where the play landed (courtHeat.ts), from the landing for 3 s
+  ripple?: boolean // a ripple of light from where the play landed, for 3 s (courtHeat.ts); with the heatmap, the heatmap shows only behind it
+  rippleColor?: string // the ripple's colour, unless the usual gold
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
   noLift?: boolean // no dashed line from the floor up to a point in the air
   serveFlights?: boolean // on a serve: all the player's serves flying with it
@@ -56,7 +57,7 @@ export function marksBySkill(style: GridStyle): GridStyle {
 export function cleanGridStyle(x: unknown): GridStyle {
   const o = { ...DEFAULT_GRID_STYLE, ...(x && typeof x === 'object' ? x : {}) } as GridStyle & Record<string, unknown>
   const marks = (m: Record<string, unknown> | undefined): PlayerMarkStyle => ({
-    ...(m?.heat ? { heat: true } : {}), ...(m?.heat && m?.ripple ? { ripple: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
+    ...(m?.heat ? { heat: true } : {}), ...(m?.ripple ? { ripple: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
     ...(isMarkRange(m?.range) && m.range !== 'all' ? { range: m.range } : {}),
     ...(m?.chart ? { chart: cleanChart(m.chart) } : {}), ...(m?.setChart ? { setChart: cleanSetChart(m.setChart) } : {}), ...(m?.setCourt ? { setCourt: cleanSetCourt(m.setCourt) } : {}), ...(m?.setFilter && setFilterCount(cleanSetFilter(m.setFilter)) ? { setFilter: cleanSetFilter(m.setFilter) } : {}),
   })
@@ -64,7 +65,7 @@ export function cleanGridStyle(x: unknown): GridStyle {
     grid: o.grid !== false, color: typeof o.color === 'string' ? o.color : DEFAULT_GRID_STYLE.color, opacity: typeof o.opacity === 'number' ? o.opacity : DEFAULT_GRID_STYLE.opacity,
     lineWidth: typeof o.lineWidth === 'number' ? o.lineWidth : DEFAULT_GRID_STYLE.lineWidth, playZones: o.playZones !== false,
     flight: !!o.flight, flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
-    ...(typeof o.heatOpacity === 'number' ? { heatOpacity: o.heatOpacity } : {}), ...(typeof o.coneColor === 'string' ? { coneColor: o.coneColor } : {}),
+    ...(typeof o.heatOpacity === 'number' ? { heatOpacity: o.heatOpacity } : {}), ...(typeof o.coneColor === 'string' ? { coneColor: o.coneColor } : {}), ...(typeof o.rippleColor === 'string' && /^#[0-9a-f]{6}$/i.test(o.rippleColor) ? { rippleColor: o.rippleColor } : {}),
   }
   const by = o.bySkill as Record<string, Record<string, unknown>> | undefined
   return by && typeof by === 'object'

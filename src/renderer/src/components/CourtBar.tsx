@@ -1,7 +1,7 @@
 import { PaletteColor } from './PaletteColor'
 import { useEffect, useState } from 'react'
 import { DEFAULT_CHART, type ChartCorner, type ChartScope } from '../../../shared/chart'
-import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
+import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, RIPPLE_COLOR, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilterCount, type SetChartView, type SetCourtLayer, type SetFilter, type SetPhase } from '../../../shared/setChart'
 import { effectName } from '../../../shared/labels'
@@ -138,7 +138,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         <span className="court-row-label" title={t('選んだプレーの選手の、全試合の分を重ねる。サーブ・アタック・セットで別々に決める')}>{t('選手の全本数')}</span>
         <div className="segmented" role="tablist" aria-label={t('プレーの種類')}>
           {MARK_TABS.map(([k, label]) => {
-            const n = Object.entries(s.bySkill?.[k] ?? {}).filter(([key, v]) => key !== 'range' && key !== 'ripple' && v).length
+            const n = Object.entries(s.bySkill?.[k] ?? {}).filter(([key, v]) => key !== 'range' && v).length
             return (
               <button key={k} role="tab" aria-selected={tab === k} className={`${tab === k ? 'on' : ''}${selected === k ? ' current' : ''}`} onClick={() => setTab(k)}
                 title={selected === k ? t('いま選んでいるプレー') : t('{0}を選んだときに出すもの', label)}>
@@ -167,10 +167,11 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           <label className="check" title={tab === 'S' ? t('その選手のサーブの落下点の多さを、同じスタートゾーンのものから色で出す。コートをクリックすると近い 5 本を出す（書き出しも同じ）') : t('その選手のアタックの落下点の多さを、同じアタックコードのものから色で出す。コートをクリックすると近い 5 本を出す（書き出しも同じ）')}>
             <input type="checkbox" checked={!!m.heat} onChange={e => put('heat', e.target.checked || undefined)} /> {t('ヒートマップ')}</label>
         )}
-        {tab !== 'E' && m.heat && (
-          <label className="check" title={t('着弾の瞬間から光の波紋が床に広がり、通ったところにヒートマップが浮かぶ（0.8 秒）。そのまま 1.5 秒見せて、0.7 秒で消える。波紋は着弾のあと 3 秒間だけ（書き出しも同じ）')}>
+        {tab !== 'E' && (
+          <label className="check" title={t('着弾の瞬間から光の波紋が床に広がる（0.8 秒）。ヒートマップも入れると、波紋が通ったところにヒートマップが浮かび、1.5 秒見せて 0.7 秒で消える。ヒートマップなしなら波紋だけ。着弾のあと 3 秒間だけ（書き出しも同じ）')}>
             <input type="checkbox" checked={!!m.ripple} onChange={e => put('ripple', e.target.checked || undefined)} /> {t('着弾の波紋')}</label>
         )}
+        {tab !== 'E' && m.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}
         {tab !== 'E' && m.heat && (
           <label className="check" title={t('ヒートマップの濃さ。下げると透けて床や選手が見えます。スライドのヒートマップも同じ（書き出しも同じ）')}>{t('濃さ')}
             <input type="range" min={0.1} max={1} step={0.05} value={s.heatOpacity ?? HEAT_OPACITY} aria-label={t('ヒートマップの濃さ')} onChange={e => onStyle({ ...s, heatOpacity: +e.target.value })} /> {Math.round((s.heatOpacity ?? HEAT_OPACITY) * 100)}%</label>

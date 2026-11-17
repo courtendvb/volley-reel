@@ -38,9 +38,11 @@ describe('rippleSteps', () => {
 })
 
 describe('cleanGridStyle ripple', () => {
-  it('keeps the ripple only with the heatmap', () => {
-    const g = cleanGridStyle({ bySkill: { S: { heat: true, ripple: true }, A: { ripple: true }, E: {} } })
+  it('keeps the ripple with or without the heatmap, and a valid colour', () => {
+    const g = cleanGridStyle({ rippleColor: '#22D3EE', bySkill: { S: { heat: true, ripple: true }, A: { ripple: true }, E: {} } })
     expect(g.bySkill?.S?.ripple).toBe(true)
-    expect(g.bySkill?.A?.ripple).toBeUndefined()
+    expect(g.bySkill?.A?.ripple).toBe(true)
+    expect(g.rippleColor).toBe('#22D3EE')
+    expect(cleanGridStyle({ rippleColor: 'gold' }).rippleColor).toBeUndefined()
   })
 })

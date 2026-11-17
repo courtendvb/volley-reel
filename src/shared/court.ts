@@ -8,7 +8,7 @@ import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartD
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
 import { rangePlays, type RangeSource } from './markRange'
-import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRipplePin } from './courtHeat'
+import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
@@ -481,16 +481,17 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 
-// Where the play landed, when its heatmap is to come as a ripple from there (the 波紋 box; needs the heatmap).
+// Where the play landed, when a ripple is to spread from there (the 波紋 box); with the heatmap on, the
+// heatmap comes with it, else the ripple shows alone.
 export function rippleImpact(style0: GridStyle, zones: PlayZones | null | undefined): Pt | null {
-  return markStyle(style0, zones?.skill).ripple && zones?.player?.heat ? zones.points?.end ?? null : null
+  return markStyle(style0, zones?.skill).ripple ? zones?.points?.end ?? null : null
 }
 // The ripple's heatmap and the landing mark at `sec` seconds from the landing, on a layer of their own (the export's).
 export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
   const impact = rippleImpact(style0, zones), style = markStyle(style0, zones.skill)
-  if (!impact || !zones.player?.heat) return
-  drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity, { sec, impact })
-  drawRipplePin(ctx, w, h, fit, impact, sec)
+  if (!impact) return
+  drawRippleFloor(ctx, w, h, fit, zones.player?.heat ?? null, style.heatOpacity, { sec, impact, color: style0.rippleColor })
+  drawRipplePin(ctx, w, h, fit, impact, sec, style0.rippleColor)
 }
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
@@ -513,7 +514,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
 
   const impact = rippleImpact(style0, zones), still = (RIPPLE_REVEAL_SEC + RIPPLE_HOLD_SEC) / 2
   if (zones?.player?.heat && !impact) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
-  else if (zones?.player?.heat && impact && ripple !== null) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity, { sec: ripple ?? still, impact })
+  else if (impact && ripple !== null) drawRippleFloor(ctx, w, h, fit, zones?.player?.heat ?? null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
   if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
@@ -562,7 +563,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
     if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
-  if (impact && ripple !== null) drawRipplePin(ctx, w, h, fit, impact, ripple ?? still)
+  if (impact && ripple !== null) drawRipplePin(ctx, w, h, fit, impact, ripple ?? still, style0.rippleColor)
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }

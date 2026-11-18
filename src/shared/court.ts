@@ -482,22 +482,22 @@ const END_COLOR = '#EF4444'
 
 
 // Where the selected serve or attack landed, when a ripple is to spread from there (選んだプレー's 波紋
-// box); with that kind's heatmap on, the heatmap comes with it, else the ripple shows alone.
+// box). It is light over the floor only: a heatmap, when on, shows as it always does.
 export function rippleImpact(style0: GridStyle, zones: PlayZones | null | undefined): Pt | null {
   return style0.ripple && (zones?.skill === 'S' || zones?.skill === 'A') ? zones.points?.end ?? null : null
 }
 // When the ripple starts, in video time: the landing (the end of the ball's flight), moved earlier by rippleLead.
 export const rippleStart = (flight: Flight, style0: GridStyle): number => flight.startSec + flight.sec - (style0.rippleLead ?? 0)
-// The ripple's heatmap and the landing mark at `sec` seconds from the landing, on a layer of their own (the export's).
+// The ripple and the landing mark at `sec` seconds from the landing, on a layer of their own (the export's).
 export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
   const impact = rippleImpact(style0, zones), style = markStyle(style0, zones.skill)
   if (!impact) return
-  drawRippleFloor(ctx, w, h, fit, zones.player?.heat ?? null, style.heatOpacity, { sec, impact, color: style0.rippleColor })
+  drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec, impact, color: style0.rippleColor }) // the ring only: the heatmap is on the court's own layer
   drawRipplePin(ctx, w, h, fit, impact, sec, style0.rippleColor)
 }
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
-// ripple: seconds since the landing, for a heatmap that comes as a ripple (rippleImpact); undefined shows it as it
+// ripple: seconds since the ripple starts (rippleImpact, rippleStart); undefined shows it as it
 // stays after it has spread; null leaves it out (the export draws it on its own layers).
 export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null): void {
   const style = markStyle(style0, zones?.skill)
@@ -515,8 +515,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   const line = (a: Pt, b: Pt) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() }
 
   const impact = rippleImpact(style0, zones), still = (RIPPLE_REVEAL_SEC + RIPPLE_HOLD_SEC) / 2
-  if (zones?.player?.heat && !impact) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
-  else if (impact && ripple !== null) drawRippleFloor(ctx, w, h, fit, zones?.player?.heat ?? null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
+  // The heatmap as it is, whether or not a ripple comes; the ripple is only light over the floor.
+  if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
+  if (impact && ripple !== null) drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
   if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place

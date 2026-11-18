@@ -12,7 +12,7 @@ export interface GridStyle {
   flight?: boolean // with the points: the ball's path as a curve
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
-  ripple?: boolean // on the selected serve or attack: a ripple of light from where it landed, for 3 s (courtHeat.ts); with its heatmap, the heatmap shows only behind it
+  ripple?: boolean // on the selected serve or attack: a ripple of light from where it landed, for 3 s (courtHeat.ts); a heatmap shows as it always does
   rippleLead?: number // how many seconds before the landing the ripple starts (the landing is the DVW's, to the second); below 0, after it
   rippleColor?: string // the ripple's colour, unless the usual gold
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too

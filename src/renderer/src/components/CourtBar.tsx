@@ -133,7 +133,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               <input type="checkbox" checked={!s.noLift} onChange={e => onStyle({ ...s, noLift: !e.target.checked })} /> {t('打点の高さの線')}</label>
           </>
         )}
-        <label className="check" title={t('選んだサーブ・アタックの着弾点から光の波紋が床に広がる（0.8 秒）。その選手のヒートマップを入れていると、波紋が通ったところにヒートマップが浮かび、1.5 秒見せて 0.7 秒で消える。入れていなければ波紋だけ（書き出しも同じ）')}>
+        <label className="check" title={t('選んだサーブ・アタックの着弾点から光の波紋が床に広がり（0.8 秒）、着弾の印を残して 3 秒で消える。ヒートマップとは別に動き、ヒートマップはいつもどおり出たまま（書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.ripple} onChange={e => { const { ripple: _r, ...rest } = s; onStyle(e.target.checked ? { ...rest, ripple: true } : rest) }} /> {t('着弾の波紋')}</label>
         {s.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}
         {s.ripple && (

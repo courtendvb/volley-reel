@@ -1422,7 +1422,7 @@ export const EN: Record<string, string> = {
   "このマーカーだけ": "This marker only",
   "このラリーだけ": "This rally only",
   "着弾の波紋": "Landing ripple",
-  "選んだサーブ・アタックの着弾点から光の波紋が床に広がる（0.8 秒）。その選手のヒートマップを入れていると、波紋が通ったところにヒートマップが浮かび、1.5 秒見せて 0.7 秒で消える。入れていなければ波紋だけ（書き出しも同じ）": "A ring of light spreads over the floor from where the selected serve or attack lands (0.8 s). With the player's heatmap on, the heatmap appears where it passes, stays 1.5 s and fades in 0.7 s; without it, the ripple shows alone (exports too)",
+  "選んだサーブ・アタックの着弾点から光の波紋が床に広がり（0.8 秒）、着弾の印を残して 3 秒で消える。ヒートマップとは別に動き、ヒートマップはいつもどおり出たまま（書き出しも同じ）": "A ring of light spreads over the floor from where the selected serve or attack lands (0.8 s), leaving a mark that fades within 3 s. It is apart from the heatmap, which shows as it always does (exports too)",
   "波紋を着弾の何秒前に出すか。着弾の時刻は DVW の秒単位からの推定なので、映像に合わせて調整する。0 で推定の着弾と同時、マイナスにすると着弾のあと（書き出しも同じ）": "How many seconds before the landing the ripple starts. The landing time is estimated from the DVW's whole seconds, so set it to match the picture. 0 is the estimated landing; below 0, after it (exports too)",
   "着弾の": "Start",
   "秒前に出す": "s before the landing",

@@ -45,7 +45,7 @@ interface Props {
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')], ['curve', '⤴', 'B', t('曲線の矢印（ベジェ曲線。ドラッグで始点から終点へ。青い点を動かして曲げる）')],
-  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['floorDisc', '⬭', '', t('コート上の円柱（中心から外へドラッグ。コートの遠近と厚みで立体に見える。厚みと半径は後から変えられる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
+  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['floorFan', '◢', '', t('コート上の扇（サーブの方向などに。始点から底辺の中央へドラッグ。コートの遠近に合わせて床に敷かれる。広さと曲がりは右の設定で。頂点は後から動かせる）')], ['floorDisc', '⬭', '', t('コート上の円柱（中心から外へドラッグ。コートの遠近と厚みで立体に見える。厚みと半径は後から変えられる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
   ['number', '①', '', t('丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）')],
   ['polygon', '⬠', 'P', t('多角形（クリックで頂点）')], ['freehand', '✎', '', t('フリーハンド')], // no key: F and D step through the scene's clips
 ]
@@ -82,7 +82,7 @@ export function AnnotationTools(p: Props) {
 
   // What the controls show: the selection's values with the old-look defaults filled in.
   const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool === 'curve' ? 'arrow' : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' || p.tool === 'floorFan' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool === 'curve' ? 'arrow' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
@@ -110,7 +110,7 @@ export function AnnotationTools(p: Props) {
     <div className={`ann-tools${p.disabled ? ' disabled' : ''}`}>
       <div className="ann-row">
         <div className="segmented" role="radiogroup" aria-label={t('注釈ツール')}>
-          {TOOLS.filter(([t]) => (t !== 'floorRect' && t !== 'floorDisc') || p.court).map(([t, label, key, title]) => (
+          {TOOLS.filter(([t]) => (t !== 'floorRect' && t !== 'floorDisc' && t !== 'floorFan') || p.court).map(([t, label, key, title]) => (
             <button key={t} role="radio" aria-checked={p.tool === t} className={p.tool === t ? 'on' : ''} title={key ? `${title} (${key})` : title}
               onClick={() => p.onTool(t)} disabled={p.disabled}>{label}</button>
           ))}
@@ -202,6 +202,14 @@ export function AnnotationTools(p: Props) {
               <select aria-label={t('矢印の先')} value={v.heads} onChange={e => set({ heads: e.target.value as Heads })} disabled={p.disabled}>
                 <option value="end">{t('矢印: 終点')}</option><option value="both">{t('矢印: 両端')}</option><option value="none">{t('矢印: なし')}</option>
               </select>
+            )}
+            {p.tool === 'floorFan' && !sel && (
+              <>
+                <label className="check" title={t('扇の底辺の半分の幅（メートル）')}>{t('扇の広さ')}
+                  <input type="range" min={1} max={8} step={0.5} value={p.style.fanWidth ?? 3} onChange={e => p.onStyle({ ...p.style, fanWidth: +e.target.value })} /></label>
+                <label className="check" title={t('軸の曲がり。0 でまっすぐ、左右に振ると反対側へ曲がる')}>{t('扇の曲がり')}
+                  <input type="range" min={-0.5} max={0.5} step={0.05} value={p.style.fanBend ?? 0.2} onChange={e => p.onStyle({ ...p.style, fanBend: +e.target.value })} /></label>
+              </>
             )}
             {(kind === 'rect' || kind === 'circle' || kind === 'polygon') && (
               // Fill only: no outline (turns the fill on, so the shape doesn't vanish).

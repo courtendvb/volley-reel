@@ -153,6 +153,31 @@ export function floorRect(corners: CourtFit['corners'], from: Pt, to: Pt): [numb
   return ([[a.x, a.y], [b.x, a.y], [b.x, b.y], [a.x, b.y]] as const).map(([u, v]) => { const p = project(H, u, v); return [p.x, p.y] as [number, number] })
 }
 
+// A fan laid on the floor: a flat isosceles triangle with its point at `from` and its straight base
+// across `to`, `half` metres either side, its long axis bent sideways by `bend` (a share of its
+// length; the sign is the side). As the picture's own points, in perspective; null off the floor.
+export function floorFan(corners: CourtFit['corners'], from: Pt, to: Pt, half: number, bend: number): [number, number][] | null {
+  const a = floorAt({ corners }, from), b = floorAt({ corners }, to)
+  if (!a || !b) return null
+  const H = homography(corners), W = 9, L = 18 // the court in metres
+  const ax = a.x * W, ay = a.y * L, dx = b.x * W - ax, dy = b.y * L - ay, len = Math.hypot(dx, dy)
+  if (len < 0.2) return null
+  const ux = dx / len, uy = dy / len, nx = -uy, ny = ux
+  const N = 12
+  // The axis at t, and the side the triangle's width lies along there (across the bent axis).
+  const axis = (t: number) => ({ x: ax + dx * t + nx * bend * len * Math.sin(Math.PI * t), y: ay + dy * t + ny * bend * len * Math.sin(Math.PI * t) })
+  const across = (t: number) => {
+    const sx = ux + nx * bend * Math.PI * Math.cos(Math.PI * t), sy = uy + ny * bend * Math.PI * Math.cos(Math.PI * t), m = Math.hypot(sx, sy)
+    return { x: -sy / m, y: sx / m }
+  }
+  const edge = (sign: number) => Array.from({ length: N + 1 }, (_, i) => {
+    const t = i / N, c = axis(t), n = across(t)
+    return { x: c.x + n.x * half * t * sign, y: c.y + n.y * half * t * sign }
+  })
+  const left = edge(-1), right = edge(1)
+  return [...left, ...right.slice(1).reverse()].map(m => { const q = project(H, m.x / W, m.y / L); return [q.x, q.y] as [number, number] })
+}
+
 // The zone a point of the floor is in; null off the court.
 export function zoneAt(p: Pt): number | null {
   const row = Math.floor(p.y * ROWS), col = Math.floor(p.x * COLS)

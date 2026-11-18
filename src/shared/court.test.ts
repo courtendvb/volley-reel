@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART } from './chart'
-import { withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { floorFan, withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -578,5 +578,25 @@ describe('withoutPlayerMarks', () => {
     const play = { id: 0, skill: 'S', side: '*', playerKey: 'P', code: '*01SM+', startZone: 1, endZone: 5, startSub: null, endSub: null, setNum: 1, score: { home: 0, away: 0 }, rallyId: 0, startClick: null, endClick: null } as never
     expect(playMarks(play, fit, null, style, () => [play]).player).toBeDefined()
     expect(playMarks(play, fit, null, withoutPlayerMarks(style), () => [play]).player).toBeUndefined()
+  })
+})
+
+describe('floorFan', () => {
+  const corners = DEFAULT_CORNERS
+  it('starts at a point, widens to a straight base', () => {
+    const a = project(homography(corners), 0.5, 0.9), b = project(homography(corners), 0.5, 0.2)
+    const pts = floorFan(corners, a, b, 3, 0)!
+    expect(pts[0][0]).toBeCloseTo(a.x, 3)
+    expect(pts[0][1]).toBeCloseTo(a.y, 3)
+    expect(pts.length).toBe(25)
+    const left = pts[12], right = pts[13] // the two ends of the base
+    expect(left[1]).toBeCloseTo(right[1], 3) // straight across, no bend
+    expect(Math.abs(right[0] - left[0])).toBeGreaterThan(0.05)
+  })
+  it('bends to one side and the other, and is null off the court or when too short', () => {
+    const a = project(homography(corners), 0.5, 0.9), b = project(homography(corners), 0.5, 0.2)
+    const mid = (bend: number) => floorFan(corners, a, b, 3, bend)![6]
+    expect(mid(0.3)[0]).not.toBeCloseTo(mid(-0.3)[0], 2)
+    expect(floorFan(corners, a, a, 3, 0)).toBeNull()
   })
 })

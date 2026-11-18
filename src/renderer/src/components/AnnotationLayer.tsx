@@ -10,7 +10,7 @@ import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { t } from '../../../shared/i18n'
 import { keyName } from '../../../shared/keys'
-import { floorAt, floorRect, type CourtFit } from '../../../shared/court'
+import { floorAt, floorFan, floorRect, type CourtFit } from '../../../shared/court'
 import { discOutline, discShapes, type FloorDisc } from '../../../shared/disc'
 
 const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AED', scene: '#D97706', video: '#059669' }
@@ -26,10 +26,10 @@ function editColors(color: string): { color: string; background: string; caretCo
   return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
 }
 
-export type Tool = 'select' | AnnotationKind | 'curve' | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
+export type Tool = 'select' | AnnotationKind | 'curve' | 'triangle' | 'number' | 'floorRect' | 'floorDisc' | 'floorFan'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
-export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string; discHeight?: number } // discHeight: metres, for new discs on the court
+export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string; discHeight?: number; fanWidth?: number; fanBend?: number } // discHeight: metres, for new discs on the court
 export const textStyle = (s: AnnStyle): AnnStyle => ({ ...s, color: s.textColor ?? '#FFFFFF' })
 
 interface Props {
@@ -239,6 +239,9 @@ export function AnnotationLayer(p: Props) {
     if (!c || !e) return null
     return { u: c.x, v: c.y, r: Math.max(0.1, Math.round(Math.hypot((e.x - c.x) * 9, (e.y - c.y) * 18) * 10) / 10), z: p.style.discHeight ?? DISC_HEIGHT }
   }
+  // A fan on the court: dragged from its point to the middle of its base; width in metres and bend from the style.
+  const fanAt = (from: [number, number], to: [number, number]): [number, number][] | null =>
+    p.floor ? floorFan(p.floor, { x: from[0], y: from[1] }, { x: to[0], y: to[1] }, p.style.fanWidth ?? 3, p.style.fanBend ?? 0.2) : null
   const discFill = () => p.style.fill ?? p.style.color
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
@@ -295,6 +298,7 @@ export function AnnotationLayer(p: Props) {
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
       : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
       : p.tool === 'floorRect' ? { ...base, kind: 'polygon', points: onFloor(pt, pt), width: p.style.width }
+      : p.tool === 'floorFan' ? { ...base, kind: 'polygon', points: [pt, pt, pt], width: p.style.width, fill: p.style.fill ?? p.style.color, fillOpacity: p.style.fillOpacity ?? 0.45 }
       : p.tool === 'floorDisc' ? { ...base, kind: 'polygon', points: [pt, pt, pt], width: p.style.width, fill: discFill(), fillOpacity: p.style.fillOpacity ?? 1 }
       : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
     setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
@@ -338,6 +342,7 @@ export function AnnotationLayer(p: Props) {
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
       : d.kind === 'polygon' && p.tool === 'floorDisc' ? (() => { const dc = discAt(drag.from, [x, y]); return dc && p.floor ? { ...d, points: discOutline(p.floor, dc).side, disc: { ...dc, part: 'top' as const } } : d })()
+      : d.kind === 'polygon' && p.tool === 'floorFan' ? { ...d, points: fanAt(drag.from, [x, y]) ?? d.points }
       : d.kind === 'polygon' ? { ...d, points: p.tool === 'floorRect' ? onFloor(drag.from, [x, y]) : trianglePoints(drag.from, [x, y]) }
       : d
     setDrag({ ...drag, draft: next })

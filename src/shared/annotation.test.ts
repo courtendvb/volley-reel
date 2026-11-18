@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanHeadline, applyStyle, styleMany, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
+import { asOneObject, sameChange, cleanHeadline, applyStyle, styleMany, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
 
 // Enough of a 2D context for hit testing: text width = 0.5 * font px per character.
 const fake = { font: '', measureText: (t: string) => ({ width: t.length * 0.5 * parseFloat(/(\d+(\.\d+)?)px/.exec(fake.font)![1]) }) }
@@ -121,5 +121,24 @@ describe('a text font from the format panel', () => {
     expect(set.kind === 'text' && set.font).toBe('Bahnschrift')
     expect('font' in applyStyle(set, { font: null })).toBe(false)
     expect(applyStyle(set, { size: 20 })).toMatchObject({ font: 'Bahnschrift', size: 20 })
+  })
+})
+
+describe('zone paint as one object', () => {
+  const cell = (i: number, g?: string): Annotation => ({ id: `z${i}`, kind: 'polygon', color: '#EF4444', width: 0, points: [[0, 0], [1, 0], [1, 1]], fill: '#EF4444', fillOpacity: 0.5, cell: { row: i, col: 0, div: 9 }, ...(g ? { groupId: g } : {}) })
+  const arrow: Annotation = { id: 'a', kind: 'arrow', color: '#FFFFFF', x1: 0, y1: 0, x2: 1, y2: 1, width: 4, groupId: 'g' }
+  const list = [cell(0, 'g'), cell(1, 'g'), cell(2, 'g'), arrow, cell(3, 'other')]
+  it('takes in every painted cell of its group, and nothing else', () => {
+    expect(asOneObject(list, 'z1')).toEqual(['z0', 'z1', 'z2'])
+    expect(asOneObject(list, 'a')).toEqual(['a']) // a grouped object that isn't zone paint stays itself
+    expect(asOneObject([cell(5)], 'z5')).toEqual(['z5'])
+  })
+  it('makes the same change on the others, keeping their own shape', () => {
+    const before = list[0], after = { ...before, fadeIn: 0.5, showFrom: 3, fill: '#3B82F6', points: [[9, 9], [8, 8], [7, 7]] } as Annotation
+    const other = sameChange(before, after, list[1]) as Extract<Annotation, { kind: 'polygon' }>
+    expect(other).toMatchObject({ fadeIn: 0.5, showFrom: 3, fill: '#3B82F6', cell: { row: 1 } })
+    expect(other.points).toEqual(list[1].kind === 'polygon' ? list[1].points : null)
+    const { fadeIn: _f, ...cleared } = { ...list[1], fadeIn: 1 } as Annotation & { fadeIn?: number }
+    expect(sameChange({ ...before, fadeIn: 1 } as Annotation, before, { ...list[1], fadeIn: 1 } as Annotation)).toEqual(cleared)
   })
 })

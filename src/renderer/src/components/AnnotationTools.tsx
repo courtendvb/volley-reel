@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { ZonePainter } from './ZonePainter'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
-  COLORS, DEFAULT_TEXT_BOX, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
+  COLORS, DEFAULT_TEXT_BOX, asOneObject, isZonePaint, sameChange, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
   type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, setCurved, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
@@ -59,10 +59,14 @@ export function AnnotationTools(p: Props) {
   const [zonesOpen, setZonesOpen] = useState(false) // the zone painter under the tools
   const [zoneColor, setZoneColor] = useState('#EF4444')
   const sel = p.annotations.find(a => a.id === p.selectedId) ?? null
-  const update = (a: Annotation) => p.onChange(p.annotations.map(x => (x.id === a.id ? a : x)))
+  // On a painted zone the change goes to the whole zone paint (asOneObject); otherwise to the one object.
+  const update = (a: Annotation) => {
+    const before = p.annotations.find(x => x.id === a.id), all = asOneObject(p.annotations, a.id)
+    p.onChange(p.annotations.map(x => (x.id === a.id ? a : before && all.includes(x.id) ? sameChange(before, a, x) : x)))
+  }
   // Several picked (Shift+click): the format applies to all of them and their groups, each taking
   // what suits its kind. The controls show the selected one's values.
-  const many = sel && p.extraIds?.length ? withGroups(p.annotations, [sel.id, ...p.extraIds]) : sel ? [sel.id] : []
+  const many = sel && p.extraIds?.length ? withGroups(p.annotations, [sel.id, ...p.extraIds]) : sel ? asOneObject(p.annotations, sel.id) : []
   const picked = p.annotations.filter(a => many.includes(a.id))
   // A disc's look is its top's: a picked side stands for its top, and the sides follow.
   const discTop = (id: string) => {
@@ -98,7 +102,8 @@ export function AnnotationTools(p: Props) {
   const fillKinds = kinds.some(k => k === null || k === 'rect' || k === 'circle' || k === 'polygon')
   const textKinds = kinds.some(k => k === null || k === 'text')
   const setBox = (patch: Partial<TextBox>) => set({ box: { ...(v.box ?? DEFAULT_TEXT_BOX), ...patch } }, isText)
-  const deleteButton = sel && <button onClick={() => { p.onChange(p.annotations.filter(a => a.id !== sel.id)); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
+  // As the Delete key does: the picked ones and their groups (a zone paint goes whole).
+  const deleteButton = sel && <button onClick={() => { const ids = withGroups(p.annotations, [sel.id, ...(p.extraIds ?? [])]); p.onChange(p.annotations.filter(a => !ids.includes(a.id))); p.onSelect(null) }} title={t('削除 (Delete)')}>{t('削除')}</button>
   const rel = (at: number | undefined, fallback: string) => (at === undefined ? fallback : t('{0}秒', (at - p.clip.in).toFixed(1)))
 
   return (
@@ -130,7 +135,7 @@ export function AnnotationTools(p: Props) {
               p.onChange(p.annotations.map(a => (ids.includes(a.id) ? { ...a, groupId: g } : a)))
             }}>{t('グループ化')}</button>
         )}
-        {sel?.groupId && !(p.extraIds?.length) && (
+        {sel?.groupId && !(p.extraIds?.length) && !isZonePaint(sel) && (
           <button title={t('グループを解いて、図形を一つずつ扱う')} disabled={p.disabled}
             onClick={() => p.onChange(p.annotations.map(a => {
               if (a.groupId !== sel.groupId) return a

@@ -27,7 +27,7 @@ import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
 import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
 import { assetImage, packAssetId } from './assets'
-import type { ImageLookup } from '../../shared/annotation'
+import { isZonePaint, type ImageLookup } from '../../shared/annotation'
 import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type CardInserts, type SlideMark } from './components/CardEditor'
 import { cardPlayers, cardTeams, fillPlanFrames, topPhoto } from '../../shared/cardPeople'
 import { FadeLayer } from './components/FadeLayer'
@@ -545,8 +545,9 @@ export function App() {
   const activeServe = active && activeInfo?.ref ? serveInfo(matches[active.matchId], activeInfo.ref.play, active) : null
   const listServe = match && selectedPlay && !(active && activeInfo?.range && active.matchId === match.id && active.playId === selectedPlay.id) ? serveInfo(match, selectedPlay, null) : null
   // The clip's own objects on the timelines under 編集 and 図形.
-  const timelineObjects = active && activeInfo?.range ? active.annotations.map(a => ({
-    id: a.id, label: a.kind === 'text' ? `T ${a.text}` : a.kind === 'polygon' && a.cell ? t('ゾーン {0}', zoneOfCell(a.cell)) : a.kind === 'polygon' && a.disc ? (a.disc.part === 'top' ? t('円柱') : t('円柱（側面）')) : KIND_LABEL[a.kind],
+  // A zone paint is one lane, however many cells it has.
+  const timelineObjects = active && activeInfo?.range ? active.annotations.filter((a, i, all) => !(isZonePaint(a) && a.groupId && all.findIndex(x => isZonePaint(x) && x.groupId === a.groupId) < i)).map(a => ({
+    id: a.id, label: a.kind === 'text' ? `T ${a.text}` : isZonePaint(a) && a.groupId ? t('ゾーン塗り（{0}）', active.annotations.filter(x => isZonePaint(x) && x.groupId === a.groupId).length) : a.kind === 'polygon' && a.cell ? t('ゾーン {0}', zoneOfCell(a.cell)) : a.kind === 'polygon' && a.disc ? (a.disc.part === 'top' ? t('円柱') : t('円柱（側面）')) : KIND_LABEL[a.kind],
     from: a.showFrom ?? activeInfo.range!.in, to: a.showTo ?? activeInfo.range!.out, set: a.showFrom !== undefined || a.showTo !== undefined,
   })) : []
   const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out

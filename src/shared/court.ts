@@ -484,7 +484,7 @@ const END_COLOR = '#EF4444'
 // The style without anything drawn from the player's other plays (the 選手の全本数 marks and the ripple):
 // the grid and the selected play's own zones stay. For a clip that hides them (overlayOverride.courtMarks).
 export function withoutPlayerMarks(style: GridStyle): GridStyle {
-  const { bySkill: _b, heat: _h, ripple: _r, serveFlights: _s, landings: _a, cones: _c, chart: _ch, setChart: _sc, setCourt: _co, setFilter: _f, range: _g, ...rest } = style
+  const { bySkill: _b, heat: _h, ripple: _r, serveFlights: _s, serveWedge: _w, landings: _a, cones: _c, chart: _ch, setChart: _sc, setCourt: _co, setFilter: _f, range: _g, ...rest } = style
   return rest
 }
 
@@ -501,6 +501,50 @@ export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0
   if (!impact) return
   drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec, impact, color: style0.rippleColor }) // the ring only: the heatmap is on the court's own layer
   drawRipplePin(ctx, w, h, fit, impact, sec, style0.rippleColor)
+}
+
+// The selected serve's direction as an isosceles triangle laid on the floor: the apex where it was
+// hit, the base across the landing point. Its sides bow outward and its base is an arc, so it reads as
+// a fan rather than a wedge; it fades in from the apex.
+export const WEDGE_COLOR = '#FB923C'
+const WEDGE_STEPS = 14
+export function drawServeWedge(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones): void {
+  const a = zones.points?.start, b = zones.points?.end
+  if (!a || !b) return
+  const H = homography(inPixels(fit, w, h))
+  const ax = a.x * COURT_W_M, ay = a.y * COURT_L_M, bx = b.x * COURT_W_M, by = b.y * COURT_L_M
+  const len = Math.hypot(bx - ax, by - ay)
+  if (len < 1) return
+  const dx = (bx - ax) / len, dy = (by - ay) / len, nx = -dy, ny = dx
+  const half = Math.min(3, Math.max(1.2, len * 0.16)), bow = half * 0.3, belly = half * 0.35
+  const at = (m: number, side: number): Pt => project(H, (ax + dx * m + nx * side) / COURT_W_M, (ay + dy * m + ny * side) / COURT_L_M)
+  const edge = (sign: number) => Array.from({ length: WEDGE_STEPS + 1 }, (_, k) => {
+    const t = k / WEDGE_STEPS
+    return at(len * t, sign * (half * t + bow * Math.sin(Math.PI * t)))
+  })
+  const left = edge(-1), right = edge(1)
+  const arc = Array.from({ length: WEDGE_STEPS + 1 }, (_, k) => {
+    const s = 1 - (2 * k) / WEDGE_STEPS // from the left tip to the right: -1 .. 1 reversed below
+    return at(len + belly * (1 - s * s), -half * s)
+  })
+  const tip = at(0, 0), end = at(len, 0)
+  const grad = ctx.createLinearGradient(tip.x, tip.y, end.x, end.y)
+  grad.addColorStop(0, 'rgba(251,146,60,0.05)'); grad.addColorStop(1, 'rgba(251,146,60,0.6)')
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(left[0].x, left[0].y)
+  for (const p of left.slice(1)) ctx.lineTo(p.x, p.y)
+  for (const p of arc.slice(1)) ctx.lineTo(p.x, p.y)
+  for (const p of right.slice().reverse()) ctx.lineTo(p.x, p.y)
+  ctx.closePath()
+  ctx.fillStyle = grad
+  ctx.fill()
+  ctx.strokeStyle = WEDGE_COLOR
+  ctx.globalAlpha = 0.85
+  ctx.lineWidth = Math.max(2, w / 480)
+  ctx.lineJoin = 'round'
+  ctx.stroke()
+  ctx.restore()
 }
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
@@ -553,6 +597,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     ctx.restore()
   }
 
+  if (style0.serveWedge && zones?.skill === 'S') drawServeWedge(ctx, w, h, fit, zones)
   if (zones?.player?.landings) drawLandings(ctx, w, h, zones.player.landings)
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
   if (hasFlight(style, zones) && courtCamera(inPixels(fit, w, h), w, h)) {

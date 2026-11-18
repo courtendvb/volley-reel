@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART } from './chart'
-import { withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { drawServeWedge, withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -578,5 +578,18 @@ describe('withoutPlayerMarks', () => {
     const play = { id: 0, skill: 'S', side: '*', playerKey: 'P', code: '*01SM+', startZone: 1, endZone: 5, startSub: null, endSub: null, setNum: 1, score: { home: 0, away: 0 }, rallyId: 0, startClick: null, endClick: null } as never
     expect(playMarks(play, fit, null, style, () => [play]).player).toBeDefined()
     expect(playMarks(play, fit, null, withoutPlayerMarks(style), () => [play]).player).toBeUndefined()
+  })
+})
+
+describe('drawServeWedge', () => {
+  it('draws a closed fan from the hit to the landing, and nothing without both points', () => {
+    const calls: string[] = []
+    const ctx = new Proxy({}, { get: (_t, k) => k === 'createLinearGradient' ? () => ({ addColorStop() {} }) : (..._a: unknown[]) => { calls.push(String(k)) }, set: () => true }) as unknown as Parameters<typeof drawServeWedge>[0]
+    const zones = { start: null, end: null, skill: 'S', points: { start: { x: 0.3, y: 1.05 }, end: { x: 0.7, y: 0.25 } } } as unknown as Parameters<typeof drawServeWedge>[4]
+    drawServeWedge(ctx, 1280, 720, fit, zones)
+    expect(calls).toContain('fill')
+    calls.length = 0
+    drawServeWedge(ctx, 1280, 720, fit, { ...zones, points: { start: { x: 0.3, y: 1.05 } } } as unknown as Parameters<typeof drawServeWedge>[4])
+    expect(calls).toEqual([])
   })
 })

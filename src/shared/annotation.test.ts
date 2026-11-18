@@ -142,11 +142,3 @@ describe('zone paint as one object', () => {
     expect(sameChange({ ...before, fadeIn: 1 } as Annotation, before, { ...list[1], fadeIn: 1 } as Annotation)).toEqual(cleared)
   })
 })
-
-describe('fan arrow', () => {
-  it('takes its spread from the style and keeps it through a style change', () => {
-    const fan = applyStyle({ ...arrow, heads: 'fan', spread: 40 } as Annotation, { spread: 90 })
-    expect(fan).toMatchObject({ heads: 'fan', spread: 90 })
-    expect(applyStyle(arrow, { heads: 'fan' })).toMatchObject({ heads: 'fan' })
-  })
-})

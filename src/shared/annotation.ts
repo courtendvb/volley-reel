@@ -16,7 +16,7 @@ import type { DiscPart } from './disc'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
-export type Heads = 'end' | 'both' | 'none' | 'fan' // fan: no head; the line widens from its start to a fan at its end (spread)
+export type Heads = 'end' | 'both' | 'none'
 export type Emphasis = 'pulse' | 'blink' | 'ripple'
 
 interface Base {
@@ -72,7 +72,7 @@ export type Annotation = Base & (
   // align center: x is the middle of the text. quick: the clip's headline from the text field in the tools.
   | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean; font?: string }
   // c1 / c2: a curved arrow, a cubic Bézier from (x1, y1) to (x2, y2) pulled toward these two points.
-  | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads; spread?: number; c1?: [number, number]; c2?: [number, number] }
+  | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads; c1?: [number, number]; c2?: [number, number] }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number; cell?: ZoneCell; disc?: DiscPart } & Fillable) // cell: a court zone painted from the zone panel; disc: part of a disc on the court
@@ -103,10 +103,6 @@ export function cubicAt(p: Cubic, t: number): Pt {
 }
 
 // The arrow's line as points: its two ends, or a curve cut into n straight pieces.
-// How wide a fan arrow's far end is, as half its width in pixels at the usual picture height.
-export const FAN_SPREAD = 60
-export const FAN_SPREAD_MAX = 200
-
 export function arrowPath(a: ArrowAnnotation, n = 32): Pt[] {
   if (!a.c1 || !a.c2) return [[a.x1, a.y1], [a.x2, a.y2]]
   const q: Cubic = [[a.x1, a.y1], a.c1, a.c2, [a.x2, a.y2]]
@@ -319,7 +315,6 @@ export interface StylePatch {
   fill?: string | null
   fillOpacity?: number
   heads?: Heads
-  spread?: number
   bold?: boolean
   outline?: boolean
   box?: TextBox | null
@@ -339,7 +334,7 @@ export function applyStyle(a: Annotation, s: StylePatch): Annotation {
   }
   const lined = { ...common, width: s.width ?? common.width, ...(s.dash !== undefined ? { dash: s.dash } : {}),
     ...(s.lineOpacity !== undefined ? { lineOpacity: s.lineOpacity } : {}) }
-  if (lined.kind === 'arrow') return { ...lined, ...(s.heads !== undefined ? { heads: s.heads } : {}), ...(s.spread !== undefined ? { spread: s.spread } : {}) }
+  if (lined.kind === 'arrow') return s.heads !== undefined ? { ...lined, heads: s.heads } : lined
   if (lined.kind === 'rect' || lined.kind === 'circle' || lined.kind === 'polygon') {
     return { ...lined, ...(s.fill !== undefined ? { fill: s.fill } : {}), ...(s.fillOpacity !== undefined ? { fillOpacity: s.fillOpacity } : {}) }
   }
@@ -461,7 +456,6 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       break
     }
     case 'arrow': {
-      if (a.heads === 'fan') { drawFan(ctx, a, W, H, s); break }
       if (a.c1 && a.c2) { drawCurve(ctx, a, W, H, s); break }
       const x1 = a.x1 * W, y1 = a.y1 * H, x2 = a.x2 * W, y2 = a.y2 * H, lw = a.width * s
       const ang = Math.atan2(y2 - y1, x2 - x1), head = Math.max(lw * 3.2, 10 * s)
@@ -525,14 +519,13 @@ function drawRipple(ctx: Ctx, a: Annotation, W: number, H: number, s: number, t:
 // head and all; a freehand line or polyline cut there.
 function partOf<T extends ArrowAnnotation | PointsAnnotation>(a: T, share: number, W: number, H: number): T {
   if (a.kind === 'arrow') {
-    const sp = a.heads === 'fan' ? { spread: (a.spread ?? FAN_SPREAD) * share } : {} // a fan grows with its line
-    if (!(a.c1 && a.c2)) return { ...a, ...sp, x2: a.x1 + (a.x2 - a.x1) * share, y2: a.y1 + (a.y2 - a.y1) * share }
+    if (!(a.c1 && a.c2)) return { ...a, x2: a.x1 + (a.x2 - a.x1) * share, y2: a.y1 + (a.y2 - a.y1) * share }
     // The curve's t at that share of its length, found on the curve cut into small pieces.
     const q: Cubic = [[a.x1, a.y1], a.c1, a.c2, [a.x2, a.y2]], n = 64
     const pts = Array.from({ length: n + 1 }, (_, i) => cubicAt(q, i / n))
     const at = cutAt(pts, share, W, H), t = (at.i + at.f) / n
     const p = subCubic(q, 0, t)
-    return { ...a, ...sp, c1: p[1], c2: p[2], x2: p[3][0], y2: p[3][1] }
+    return { ...a, c1: p[1], c2: p[2], x2: p[3][0], y2: p[3][1] }
   }
   const pa = a as PointsAnnotation
   return { ...pa, points: cutPoints(pa.points, share, W, H) } as T
@@ -725,50 +718,6 @@ function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash; lin
 function tint(a: string, b: string, t: number): string {
   const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16)
   return '#' + [0, 1, 2].map(i => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, '0')).join('')
-}
-
-// A fan: the arrow's line (straight or curved) as the middle of a shape that is a point at the start
-// and `spread` pixels either side at the end, its far edge an arc. The fill fades in from the
-// point; the outline is the arrow's line style.
-function drawFan(ctx: Ctx, a: ArrowAnnotation, W: number, H: number, s: number): void {
-  const px = (q: Pt): Pt => [q[0] * W, q[1] * H]
-  const q: Cubic = a.c1 && a.c2 ? [px([a.x1, a.y1]), px(a.c1), px(a.c2), px([a.x2, a.y2])]
-    : [px([a.x1, a.y1]), px([a.x1 + (a.x2 - a.x1) / 3, a.y1 + (a.y2 - a.y1) / 3]), px([a.x1 + ((a.x2 - a.x1) * 2) / 3, a.y1 + ((a.y2 - a.y1) * 2) / 3]), px([a.x2, a.y2])]
-  const n = 40, spread = (a.spread ?? FAN_SPREAD) * s
-  const mid = Array.from({ length: n + 1 }, (_, i) => cubicAt(q, i / n))
-  const side = (sign: number): Pt[] => mid.map((m, i) => {
-    const p0 = mid[Math.max(0, i - 1)], p1 = mid[Math.min(n, i + 1)]
-    const ang = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) + Math.PI / 2
-    const w = (spread * i) / n
-    return [m[0] + Math.cos(ang) * w * sign, m[1] + Math.sin(ang) * w * sign] as Pt
-  })
-  const left = side(-1), right = side(1), tip = mid[n], endAng = Math.atan2(tip[1] - mid[n - 1][1], tip[0] - mid[n - 1][0])
-  const arc = Array.from({ length: 13 }, (_, k) => { // the far edge, bulging past the tip: left to right
-    const f = (k / 12) * 2 - 1, bulge = spread * 0.3 * (1 - f * f), ang = endAng + Math.PI / 2
-    return [tip[0] + Math.cos(ang) * spread * f + Math.cos(endAng) * bulge, tip[1] + Math.sin(ang) * spread * f + Math.sin(endAng) * bulge] as Pt
-  })
-  ctx.save()
-  const grad = ctx.createLinearGradient(mid[0][0], mid[0][1], tip[0], tip[1])
-  grad.addColorStop(0, withAlpha(a.color, 0.05)); grad.addColorStop(1, withAlpha(a.color, 0.6))
-  ctx.beginPath()
-  ctx.moveTo(left[0][0], left[0][1])
-  for (const p of left.slice(1)) ctx.lineTo(p[0], p[1])
-  for (const p of arc) ctx.lineTo(p[0], p[1])
-  for (const p of right.slice(0, -1).reverse()) ctx.lineTo(p[0], p[1])
-  ctx.closePath()
-  ctx.fillStyle = grad
-  ctx.fill()
-  ctx.globalAlpha *= a.lineOpacity ?? 1
-  ctx.lineWidth = a.width * s
-  ctx.lineJoin = 'round'
-  setDash(ctx, a.dash, a.width * s)
-  ctx.stroke()
-  ctx.restore()
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const p = (i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) || 0
-  return `rgba(${p(0)},${p(1)},${p(2)},${alpha})`
 }
 
 // A curved arrow: the curve stops short of each head (so the line's end doesn't poke out past its

@@ -45,9 +45,15 @@ export interface SetCourtStyle { layer: SetCourtLayer }
 export const DEFAULT_SET_COURT: SetCourtStyle = { layer: 'shares' }
 export const cleanSetCourt = (x: unknown): SetCourtStyle => ({ layer: (x as Partial<SetCourtStyle> | null)?.layer === 'spots' ? 'spots' : 'shares' })
 
-// Where an attack came from, as a place to set to; the setter's own is a dump.
-export function setTarget(attack: Pick<Play, 'startZone' | 'playerKey'>, setter: string): SetTarget | null {
+// Where a set went, as a place: the set's own target attacker (the 9th character of its code, as the
+// scout coded it: F the front-row attacker on the left, C the centre, B the one behind the setter on
+// the right, P the pipe), else where the attack after it came from. The setter's own attack is a dump.
+// B is the right side, or the back right when the attack came from there (zone 1 or 9).
+const TARGET_ATTACKER: Record<string, SetTarget> = { F: 'left', C: 'middle', B: 'right', P: 'pipe' }
+export function setTarget(attack: Pick<Play, 'startZone' | 'playerKey'>, setter: string, set?: Pick<Play, 'code' | 'skill'> | null): SetTarget | null {
   if (attack.playerKey === setter) return 'dump'
+  const coded = set?.skill === 'E' ? TARGET_ATTACKER[set.code.charAt(8).toUpperCase()] : undefined
+  if (coded) return coded === 'right' && (attack.startZone === 1 || attack.startZone === 9) ? 'back' : coded
   const z = attack.startZone
   return z === 4 || z === 5 || z === 7 ? 'left' : z === 3 ? 'middle' : z === 2 ? 'right' : z === 1 || z === 9 ? 'back' : z === 8 || z === 6 ? 'pipe' : null
 }
@@ -137,7 +143,7 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     // A set and the attack after it, or the setter attacking themself (not after a set of their own).
     const attack = attackOfContact(plays, i)
     if (!attack) return
-    const target = setTarget(attack, setter)
+    const target = setTarget(attack, setter, p)
     if (!target) return
     const result = resultOf(attack.effect)
     by[target].n++

@@ -490,10 +490,10 @@ export class Library {
         unreadable.push(p)
       }
     }
-    // The same match as a .dvw and a .vsm (VolleyStation writes both): the .dvw only.
+    // The same match as a .dvw and a .vsm (VolleyStation writes both): the .vsm only.
     const key = (i: DvwInfo) => `${i.date}|${i.home}|${i.away}`
-    const dvwKeys = new Set(infos.filter(i => extname(i.path).toLowerCase() === '.dvw').map(key))
-    for (let k = infos.length - 1; k >= 0; k--) if (extname(infos[k].path).toLowerCase() === '.vsm' && dvwKeys.has(key(infos[k]))) infos.splice(k, 1)
+    const vsmKeys = new Set(infos.filter(i => extname(i.path).toLowerCase() === '.vsm').map(key))
+    for (let k = infos.length - 1; k >= 0; k--) if (extname(infos[k].path).toLowerCase() === '.dvw' && vsmKeys.has(key(infos[k]))) infos.splice(k, 1)
     const inLibrary = new Set(this.list().map(m => norm(m.dvwPath)))
     const pairs = pairFiles(infos, videos).map(p => ({
       dvwPath: p.dvw.path, date: p.dvw.date, home: p.dvw.home, away: p.dvw.away,

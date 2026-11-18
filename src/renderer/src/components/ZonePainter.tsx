@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { Annotation } from '../../../shared/annotation'
+import { isZonePaint, type Annotation } from '../../../shared/annotation'
 import { ZONE_NUMBERS, zoneCellQuad, type CourtFit, type ZoneCell, type ZoneDiv } from '../../../shared/court'
 import { t } from '../../../shared/i18n'
 
@@ -33,7 +33,13 @@ export function ZonePainter({ annotations, onChange, court, color, picker, disab
   // The list as last changed here: a fast drag paints several cells before the new list comes back.
   const latest = useRef(annotations)
   latest.current = annotations
-  const commit = (list: Annotation[]) => { latest.current = list; onChange(list) }
+  // All the painted cells are one object (one group), however many there are; cells painted before
+  // there were groups join it.
+  const commit = (list: Annotation[]) => {
+    const g = list.find(a => isZonePaint(a) && a.groupId)?.groupId ?? crypto.randomUUID()
+    const next = list.map(a => (isZonePaint(a) && a.groupId !== g ? { ...a, groupId: g } : a))
+    latest.current = next; onChange(next)
+  }
 
   const apply = (list: Annotation[], cell: ZoneCell, erase: boolean): Annotation[] => {
     const rest = list.filter(a => !(isPainted(a) && same(a.cell, cell)))

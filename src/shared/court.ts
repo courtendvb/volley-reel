@@ -481,11 +481,13 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 
-// Where the play landed, when a ripple is to spread from there (the 波紋 box); with the heatmap on, the
-// heatmap comes with it, else the ripple shows alone.
+// Where the selected serve or attack landed, when a ripple is to spread from there (選んだプレー's 波紋
+// box); with that kind's heatmap on, the heatmap comes with it, else the ripple shows alone.
 export function rippleImpact(style0: GridStyle, zones: PlayZones | null | undefined): Pt | null {
-  return markStyle(style0, zones?.skill).ripple ? zones?.points?.end ?? null : null
+  return style0.ripple && (zones?.skill === 'S' || zones?.skill === 'A') ? zones.points?.end ?? null : null
 }
+// When the ripple starts, in video time: the landing (the end of the ball's flight), moved earlier by rippleLead.
+export const rippleStart = (flight: Flight, style0: GridStyle): number => flight.startSec + flight.sec - (style0.rippleLead ?? 0)
 // The ripple's heatmap and the landing mark at `sec` seconds from the landing, on a layer of their own (the export's).
 export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
   const impact = rippleImpact(style0, zones), style = markStyle(style0, zones.skill)

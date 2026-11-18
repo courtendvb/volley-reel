@@ -1,7 +1,7 @@
 import { PaletteColor } from './PaletteColor'
 import { useEffect, useState } from 'react'
 import { DEFAULT_CHART, type ChartCorner, type ChartScope } from '../../../shared/chart'
-import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, RIPPLE_COLOR, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
+import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, RIPPLE_COLOR, RIPPLE_LEAD_MAX, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilterCount, type SetChartView, type SetCourtLayer, type SetFilter, type SetPhase } from '../../../shared/setChart'
 import { effectName } from '../../../shared/labels'
@@ -133,6 +133,15 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               <input type="checkbox" checked={!s.noLift} onChange={e => onStyle({ ...s, noLift: !e.target.checked })} /> {t('打点の高さの線')}</label>
           </>
         )}
+        <label className="check" title={t('選んだサーブ・アタックの着弾点から光の波紋が床に広がる（0.8 秒）。その選手のヒートマップを入れていると、波紋が通ったところにヒートマップが浮かび、1.5 秒見せて 0.7 秒で消える。入れていなければ波紋だけ（書き出しも同じ）')}>
+          <input type="checkbox" checked={!!s.ripple} onChange={e => { const { ripple: _r, ...rest } = s; onStyle(e.target.checked ? { ...rest, ripple: true } : rest) }} /> {t('着弾の波紋')}</label>
+        {s.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}
+        {s.ripple && (
+          <label className="check" title={t('波紋を着弾の何秒前に出すか。着弾の時刻は DVW の秒単位からの推定なので、映像に合わせて調整する。0 で推定の着弾と同時、マイナスにすると着弾のあと（書き出しも同じ）')}>{t('着弾の')}
+            <input type="number" className="num-short" min={-RIPPLE_LEAD_MAX} max={RIPPLE_LEAD_MAX} step={0.1} value={s.rippleLead ?? 0} aria-label={t('波紋を着弾の何秒前に出すか')}
+              onChange={e => { const n = parseFloat(e.target.value); if (!Number.isFinite(n)) return; const { rippleLead: _l, ...rest } = s; const v = Math.round(Math.max(-RIPPLE_LEAD_MAX, Math.min(RIPPLE_LEAD_MAX, n)) * 10) / 10; onStyle(v ? { ...rest, rippleLead: v } : rest) }} />
+            {t('秒前に出す')}</label>
+        )}
       </div>
       <div className="ann-row mark-tabs-row">
         <span className="court-row-label" title={t('選んだプレーの選手の、全試合の分を重ねる。サーブ・アタック・セットで別々に決める')}>{t('選手の全本数')}</span>
@@ -167,11 +176,6 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           <label className="check" title={tab === 'S' ? t('その選手のサーブの落下点の多さを、同じスタートゾーンのものから色で出す。コートをクリックすると近い 5 本を出す（書き出しも同じ）') : t('その選手のアタックの落下点の多さを、同じアタックコードのものから色で出す。コートをクリックすると近い 5 本を出す（書き出しも同じ）')}>
             <input type="checkbox" checked={!!m.heat} onChange={e => put('heat', e.target.checked || undefined)} /> {t('ヒートマップ')}</label>
         )}
-        {tab !== 'E' && (
-          <label className="check" title={t('着弾の瞬間から光の波紋が床に広がる（0.8 秒）。ヒートマップも入れると、波紋が通ったところにヒートマップが浮かび、1.5 秒見せて 0.7 秒で消える。ヒートマップなしなら波紋だけ。着弾のあと 3 秒間だけ（書き出しも同じ）')}>
-            <input type="checkbox" checked={!!m.ripple} onChange={e => put('ripple', e.target.checked || undefined)} /> {t('着弾の波紋')}</label>
-        )}
-        {tab !== 'E' && m.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}
         {tab !== 'E' && m.heat && (
           <label className="check" title={t('ヒートマップの濃さ。下げると透けて床や選手が見えます。スライドのヒートマップも同じ（書き出しも同じ）')}>{t('濃さ')}
             <input type="range" min={0.1} max={1} step={0.05} value={s.heatOpacity ?? HEAT_OPACITY} aria-label={t('ヒートマップの濃さ')} onChange={e => onStyle({ ...s, heatOpacity: +e.target.value })} /> {Math.round((s.heatOpacity ?? HEAT_OPACITY) * 100)}%</label>

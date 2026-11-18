@@ -481,6 +481,13 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 
+// The style without anything drawn from the player's other plays (the 選手の全本数 marks and the ripple):
+// the grid and the selected play's own zones stay. For a clip that hides them (overlayOverride.courtMarks).
+export function withoutPlayerMarks(style: GridStyle): GridStyle {
+  const { bySkill: _b, heat: _h, ripple: _r, serveFlights: _s, landings: _a, cones: _c, chart: _ch, setChart: _sc, setCourt: _co, setFilter: _f, range: _g, ...rest } = style
+  return rest
+}
+
 // Where the play landed, when a ripple is to spread from there (the 波紋 box); with the heatmap on, the
 // heatmap comes with it, else the ripple shows alone.
 export function rippleImpact(style0: GridStyle, zones: PlayZones | null | undefined): Pt | null {

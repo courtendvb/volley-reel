@@ -32,7 +32,8 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
     const sb = next.scoreboard?.hidden ? { hidden: true } : undefined
     const pc = next.playerCaption
     const cap = pc && (pc.hidden || pc.name || pc.line) ? { ...(pc.hidden ? { hidden: true } : {}), ...(pc.name ? { name: pc.name } : {}), ...(pc.line ? { line: pc.line } : {}) } : undefined
-    onChange(sb || cap ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}) } : undefined)
+    const marks = next.courtMarks?.hidden ? { hidden: true } : undefined
+    onChange(sb || cap || marks ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}), ...(marks ? { courtMarks: marks } : {}) } : undefined)
   }
   const commit = () => {
     const n = name.trim() || undefined
@@ -58,6 +59,8 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       </select>
       <label className="check"><input type="checkbox" checked={!o?.playerCaption?.hidden}
         onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> {t('テロップ')}</label>
+      <label className="check" title={t('ヒートマップ・落下点・軌道・コーン・チャート・トスのチャート・着弾の波紋を、このクリップでは出さない。グリッドと選んだプレーのゾーンは出たまま（書き出しも同じ）。ほかのクリップは変わらない')}>
+        <input type="checkbox" checked={!o?.courtMarks?.hidden} onChange={e => write({ ...o, courtMarks: { hidden: !e.target.checked } })} /> {t('選手の表示')}</label>
       <ServeSpeedCheck overlay={s} onOverlay={onOverlay} />
       <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />

@@ -755,6 +755,10 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .banner.court-guide.missing { background: var(--warn-bg); color: var(--warn-text); }
 .banner.court-guide button { padding: 2px 12px; }
 .card-title-field textarea { width: 200px; min-height: 26px; padding: 2px 6px; font: inherit; resize: vertical; }
+.card-row { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+/* A marker group's secondary buttons stay faint until the header is hovered or focused. */
+.group-head .tag-sort, .group-head .gear { opacity: 0.45; transition: opacity 0.12s; }
+.group-head:hover .tag-sort, .group-head:hover .gear, .group-head:focus-within .tag-sort, .group-head:focus-within .gear { opacity: 1; }
 .card-edit-bar input[type="color"] { width: 32px; height: 24px; padding: 0 2px; }
 
 /* The objects' show times on the 図形 tab: a lane each over the clip, IN to OUT. */

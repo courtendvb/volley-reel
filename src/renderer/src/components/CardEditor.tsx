@@ -1,4 +1,5 @@
 import { PaletteColor } from './PaletteColor'
+import { Help } from './CourtControls'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
@@ -143,8 +144,14 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
   }
   return (
     <div className="card-edit-bar">
+      <div className="card-row">
       <b>{what}{t('のタイトルカード')}{card.name ? t('「{0}」', card.name) : ''}</b>
       <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> {t('このカードを出す')}</label>
+      <span className="spacer" />
+      {onAlign && <button onClick={() => setAligning(true)} title={t('このカードのタイトルの位置・ロゴの位置・図形を、ほかの種類のカード（動画・シーン・マーカー）にも同じにする')}>{t('ほかのカードにも揃える…')}</button>}
+      <button className="primary" onClick={onDone}>{t('完了')}</button>
+      </div>
+      <div className="card-row">
       <label className="check card-title-field" title={t('カードに出す文字。改行（Enter）で 2 段になる。空にすると名前を出す')}>{t('文字')}
         <textarea aria-label={t('カードの文字')} rows={Math.max(1, Math.min(3, (title || nameTitle).split('\n').length))} value={title} placeholder={nameTitle || t('（名前）')}
           onChange={e => onTitle(e.target.value)} /></label>
@@ -153,6 +160,8 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
           onChange={c => onChange({ ...settings, titleCard: { ...settings.titleCard, background: c } })} /></label>
       {settings.titleCard.background && <button className="link" title={t('配色（テーマ）から決まる色に戻す')}
         onClick={() => { const { background: _bg, ...rest } = settings.titleCard; onChange({ ...settings, titleCard: rest }) }}>{t('配色に戻す')}</button>}
+      </div>
+      <div className="card-row">
       <div className="segmented" role="radiogroup" aria-label={t('カードの編集')}>
         <button role="radio" aria-checked={tool === 'objects'} className={tool === 'objects' ? 'on' : ''} onClick={() => onTool('objects')}
           title={t('このカードに文字・画像・図形を置く')}>{t('図形・文字')}</button>
@@ -165,7 +174,8 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
       </div>
       {tool === 'objects' && inserts && (
         <>
-          <button onClick={inserts.onFrame} title={t('写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ')}>{t('＋ 写真枠')}</button>
+          <button onClick={inserts.onFrame} title={t('写真枠を置く（ドラッグで位置と大きさ）')}>{t('＋ 写真枠')}</button>
+          <Help text={[t('写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ')]} />
           {inserts.photos.length > 0 && (
             <select value="" aria-label={t('選手の写真を入れる')} title={t('パックの選手の顔写真を、このカードに画像として入れる（あとで動かせる）')}
               onChange={e => { const c = inserts.photos.find(x => x.key === e.target.value); if (c) inserts.onPhoto(c.pack, c.photo) }}>
@@ -217,9 +227,7 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
         <span className="muted">{t('すべての{0}のカードの図形 {1} 個を、このカードでは出していません', what, hiddenCount)}
           {' '}<button className="link" onClick={onShowHidden}>{t('出す')}</button></span>
       )}
-      <span className="spacer" />
-      {onAlign && <button onClick={() => setAligning(true)} title={t('このカードのタイトルの位置・ロゴの位置・図形を、ほかの種類のカード（動画・シーン・マーカー）にも同じにする')}>{t('ほかのカードにも揃える…')}</button>}
-      <button className="primary" onClick={onDone}>{t('完了')}</button>
+      </div>
       {aligning && onAlign && (
         <AlignCardsDialog from={cardKind(card)} objects={card.annotations?.length ?? 0} onClose={() => setAligning(false)}
           onAlign={c => { onAlign(c); setAligning(false) }} />

@@ -89,7 +89,7 @@ function lineShape(a: ArrowAnnotation, o: Ctx2): Built {
   const box = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) }
   const heads = a.heads ?? 'end', id = o.id()
   return { box, xml: `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Arrow ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
-    + `<p:spPr>${xfrm(box, x2 < x1, y2 < y1)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${line(o, a, { start: heads === 'both', end: heads !== 'none' })}</p:spPr></p:cxnSp>` }
+    + `<p:spPr>${xfrm(box, x2 < x1, y2 < y1)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${line(o, a, { start: heads === 'both', end: heads !== 'none' && heads !== 'fan' })}</p:spPr></p:cxnSp>` }
 }
 
 // A freeform through points (normalized): a polyline, a polygon (closed), or a curved arrow (the
@@ -101,7 +101,7 @@ function pathShape(a: Annotation & { color: string; width: number }, pts: [numbe
   const pt = (i: number) => `<a:pt x="${int(xs[i] - box.x)}" y="${int(ys[i] - box.y)}"/>`
   const segs = curve ? `<a:cubicBezTo>${pt(1)}${pt(2)}${pt(3)}</a:cubicBezTo>` : pts.slice(1).map((_, i) => `<a:lnTo>${pt(i + 1)}</a:lnTo>`).join('')
   const filled = closed && a.kind === 'polygon' && !!a.fill
-  const heads = a.kind === 'arrow' ? { start: (a.heads ?? 'end') === 'both', end: (a.heads ?? 'end') !== 'none' } : undefined
+  const heads = a.kind === 'arrow' ? { start: (a.heads ?? 'end') === 'both', end: (a.heads ?? 'end') !== 'none' && a.heads !== 'fan' } : undefined
   const id = o.id()
   return { box, xml: `<p:sp>${nv(id, `${a.kind === 'arrow' ? 'Arrow' : 'Freeform'} ${id}`)}<p:spPr>${xfrm(box)}`
     + `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="${w}" h="${h}"${filled ? '' : ' fill="none"'}>`

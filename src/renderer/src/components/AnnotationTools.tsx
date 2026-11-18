@@ -5,7 +5,7 @@ import { ZonePainter } from './ZonePainter'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
   COLORS, DEFAULT_TEXT_BOX, asOneObject, isZonePaint, sameChange, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
-  type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
+  FAN_SPREAD, FAN_SPREAD_MAX, type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, setCurved, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
 import { forgetColor, usePalette } from '../palette'
@@ -45,7 +45,7 @@ interface Props {
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')], ['curve', '⤴', 'B', t('曲線の矢印（ベジェ曲線。ドラッグで始点から終点へ。青い点を動かして曲げる）')],
-  ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['floorDisc', '⬭', '', t('コート上の円柱（中心から外へドラッグ。コートの遠近と厚みで立体に見える。厚みと半径は後から変えられる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
+  ['fan', '◥', '', t('扇（サーブの方向などに。始点から終点へドラッグ。青い点を動かして曲げる。広がりは右の設定で）')], ['circle', '○', 'C', t('円')], ['rect', '□', 'R', t('四角')], ['triangle', '△', 'G', t('三角形')], ['floorRect', '▱', '', t('コート上の四角（コートの遠近に合わせて台形になる。頂点は後から動かせる）')], ['floorDisc', '⬭', '', t('コート上の円柱（中心から外へドラッグ。コートの遠近と厚みで立体に見える。厚みと半径は後から変えられる）')], ['polyline', '⌇', 'L', t('折れ線（クリックで頂点）')],
   ['number', '①', '', t('丸付き数字（クリックするごとに 1、2、3…。ダブルクリックで数字を直す）')],
   ['polygon', '⬠', 'P', t('多角形（クリックで頂点）')], ['freehand', '✎', '', t('フリーハンド')], // no key: F and D step through the scene's clips
 ]
@@ -82,7 +82,7 @@ export function AnnotationTools(p: Props) {
 
   // What the controls show: the selection's values with the old-look defaults filled in.
   const scope = sel ? p.scopeOf(sel.id) ?? 'clip' : 'clip'
-  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool === 'curve' ? 'arrow' : p.tool)
+  const kind = sel?.kind ?? (p.tool === 'select' ? null : p.tool === 'triangle' || p.tool === 'floorRect' || p.tool === 'floorDisc' ? 'polygon' : p.tool === 'number' ? 'text' : p.tool === 'curve' || p.tool === 'fan' ? 'arrow' : p.tool)
   const v = {
     color: sel?.color ?? p.style.color,
     width: sel && 'width' in sel ? sel.width : p.style.width,
@@ -91,7 +91,8 @@ export function AnnotationTools(p: Props) {
     lineOpacity: (sel ? sel.lineOpacity : p.style.lineOpacity) ?? 1,
     fill: sel && hasFill(sel) ? (sel as { fill?: string | null }).fill ?? null : p.style.fill ?? null,
     fillOpacity: sel && hasFill(sel) ? (sel as { fillOpacity?: number }).fillOpacity ?? 1 : p.style.fillOpacity ?? 1,
-    heads: (sel?.kind === 'arrow' ? sel.heads : p.style.heads) ?? 'end',
+    heads: (sel?.kind === 'arrow' ? sel.heads : p.tool === 'fan' ? 'fan' : p.style.heads) ?? 'end',
+    spread: (sel?.kind === 'arrow' ? sel.spread : p.style.spread) ?? FAN_SPREAD,
     bold: (sel?.kind === 'text' ? sel.bold : p.style.bold) ?? true,
     outline: (sel?.kind === 'text' ? sel.outline : p.style.outline) ?? true,
     box: (sel?.kind === 'text' ? sel.box : p.style.box) ?? null,
@@ -200,8 +201,12 @@ export function AnnotationTools(p: Props) {
             </select>
             {(kind === null || kind === 'arrow') && (
               <select aria-label={t('矢印の先')} value={v.heads} onChange={e => set({ heads: e.target.value as Heads })} disabled={p.disabled}>
-                <option value="end">{t('矢印: 終点')}</option><option value="both">{t('矢印: 両端')}</option><option value="none">{t('矢印: なし')}</option>
+                <option value="end">{t('矢印: 終点')}</option><option value="both">{t('矢印: 両端')}</option><option value="none">{t('矢印: なし')}</option><option value="fan">{t('扇')}</option>
               </select>
+            )}
+            {(kind === null || kind === 'arrow') && v.heads === 'fan' && (
+              <label className="check" title={t('扇の終点の広さ（半分の幅）')}>{t('扇の広がり')}
+                <input type="range" min={10} max={FAN_SPREAD_MAX} value={v.spread} disabled={p.disabled} onChange={e => set({ spread: +e.target.value })} /></label>
             )}
             {(kind === 'rect' || kind === 'circle' || kind === 'polygon') && (
               // Fill only: no outline (turns the fill on, so the shape doesn't vanish).

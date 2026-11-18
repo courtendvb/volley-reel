@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type 
 import { composing } from '../keys'
 import {
   animAt, applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, isAnimated, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
-  type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
+  type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, FAN_SPREAD, nextNumber, numberCircle } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
@@ -26,7 +26,7 @@ function editColors(color: string): { color: string; background: string; caretCo
   return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
 }
 
-export type Tool = 'select' | AnnotationKind | 'curve' | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
+export type Tool = 'select' | AnnotationKind | 'curve' | 'fan' | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
 export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string; discHeight?: number } // discHeight: metres, for new discs on the court
@@ -291,13 +291,15 @@ export function AnnotationLayer(p: Props) {
     playback.pause()
     const base = { id: uid(), color: p.style.color }
     const draft: Annotation = p.tool === 'arrow' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width }
+      : p.tool === 'fan' ? { ...base, kind: 'arrow', heads: 'fan', spread: p.style.spread ?? FAN_SPREAD, x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width, ...curveControls(pt[0], pt[1], pt[0], pt[1]) }
       : p.tool === 'curve' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width, ...curveControls(pt[0], pt[1], pt[0], pt[1]) }
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
       : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
       : p.tool === 'floorRect' ? { ...base, kind: 'polygon', points: onFloor(pt, pt), width: p.style.width }
       : p.tool === 'floorDisc' ? { ...base, kind: 'polygon', points: [pt, pt, pt], width: p.style.width, fill: discFill(), fillOpacity: p.style.fillOpacity ?? 1 }
       : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
-    setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
+    const styled = applyStyle(draft, p.style)
+    setDrag({ mode: 'draw', draft: p.tool === 'fan' && styled.kind === 'arrow' ? { ...styled, heads: 'fan' } : styled, from: pt })
   }
 
   const onMove = (e: PointerEvent) => {

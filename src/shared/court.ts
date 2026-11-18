@@ -8,11 +8,13 @@ import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartD
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
 import { rangePlays, type RangeSource } from './markRange'
+import { drawLandingFx, landingFxStill, type FxTrack } from './courtFx'
 import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
 export * from './courtHeat'
+export * from './courtFx'
 export interface PlayZones {
   start: Spot | null
   end: Spot | null
@@ -499,9 +501,13 @@ export const rippleStart = (flight: Flight, style0: GridStyle): number => flight
 export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
   const impact = rippleImpact(style0, zones), style = markStyle(style0, zones.skill)
   if (!impact) return
+  const fx = style0.rippleKind ?? 'ripple'
+  if (fx !== 'ripple') { drawLandingFx(ctx, w, h, fit, fx, impact, sec, style0.rippleColor, trackOf(zones)); return }
   drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec, impact, color: style0.rippleColor }) // the ring only: the heatmap is on the court's own layer
   drawRipplePin(ctx, w, h, fit, impact, sec, style0.rippleColor)
 }
+// The ball's track on the floor, for the trail effect: from where it was hit, when the scout clicked it.
+const trackOf = (zones: PlayZones | null | undefined): FxTrack | null => (zones?.points?.start ? { start: zones.points.start } : null)
 
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
 // ripple: seconds since the ripple starts (rippleImpact, rippleStart); undefined shows it as it
@@ -524,7 +530,8 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   const impact = rippleImpact(style0, zones), still = (RIPPLE_REVEAL_SEC + RIPPLE_HOLD_SEC) / 2
   // The heatmap as it is, whether or not a ripple comes; the ripple is only light over the floor.
   if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
-  if (impact && ripple !== null) drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
+  const fxKind = style0.rippleKind ?? 'ripple'
+  if (impact && ripple !== null && fxKind === 'ripple') drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
   if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
@@ -573,7 +580,10 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
     if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
   }
-  if (impact && ripple !== null) drawRipplePin(ctx, w, h, fit, impact, ripple ?? still, style0.rippleColor)
+  if (impact && ripple !== null) {
+    if (fxKind === 'ripple') drawRipplePin(ctx, w, h, fit, impact, ripple ?? still, style0.rippleColor)
+    else drawLandingFx(ctx, w, h, fit, fxKind, impact, ripple ?? landingFxStill[fxKind], style0.rippleColor, trackOf(zones))
+  }
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }

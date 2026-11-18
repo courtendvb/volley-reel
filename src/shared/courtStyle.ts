@@ -2,6 +2,7 @@
 import { cleanSetChart, cleanSetCourt, cleanSetFilter, setFilterCount, type SetFilter, type SetChartStyle, type SetCourtStyle } from './setChart'
 import { cleanChart, type ChartStyle } from './chart'
 import { isMarkRange, type MarkRange } from './markRange'
+import { isLandingFx, type LandingFx } from './courtFx'
 
 export interface GridStyle {
   grid: boolean
@@ -13,6 +14,7 @@ export interface GridStyle {
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
   ripple?: boolean // on the selected serve or attack: a ripple of light from where it landed, for 3 s (courtHeat.ts); a heatmap shows as it always does
+  rippleKind?: LandingFx // what plays at the landing when `ripple` is on: the ripple (default), lock, flash or trail (courtFx.ts)
   rippleLead?: number // how many seconds before the landing the ripple starts (the landing is the DVW's, to the second); below 0, after it
   rippleColor?: string // the ripple's colour, unless the usual gold
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
@@ -71,6 +73,7 @@ export function cleanGridStyle(x: unknown): GridStyle {
   const by = o.bySkill as Record<string, Record<string, unknown>> | undefined
   // The ripple was set per kind of play before it moved to the selected play's row: on for one is on.
   if (o.ripple || (by && typeof by === 'object' && Object.values(by).some(m => m?.ripple))) base.ripple = true
+  if (isLandingFx(o.rippleKind) && o.rippleKind !== 'ripple') base.rippleKind = o.rippleKind
   if (typeof o.rippleLead === 'number' && Number.isFinite(o.rippleLead) && o.rippleLead !== 0) base.rippleLead = Math.max(-RIPPLE_LEAD_MAX, Math.min(RIPPLE_LEAD_MAX, o.rippleLead))
   return by && typeof by === 'object'
     ? { ...base, bySkill: { S: marks(by.S), A: marks(by.A), E: marks(by.E) } }

@@ -354,6 +354,19 @@ button.link { border: 0; background: none; color: var(--primary); padding: 2px 4
 .court-bar select { margin-left: 4px; }
 .court-bar .near-team { max-width: 150px; }
 .court-row-label { flex: none; width: 84px; font-size: 12px; font-weight: 600; color: var(--sub); }
+/* The court bar's three groups (set up, the selected play, the player's marks), set apart by a rule. */
+.court-group { display: flex; flex-direction: column; gap: 6px; }
+.court-group + .court-group { border-top: 1px solid var(--border); padding-top: 8px; }
+/* A setting that only applies to the choice above it: indented under it, with what it belongs to. */
+.court-sub { margin-left: 94px; padding-left: 10px; border-left: 2px solid var(--primary-light); min-height: 26px; }
+.court-sub-label { flex: none; font-size: 11.5px; color: var(--sub); }
+/* "?": the long explanation of a setting, opened on demand. */
+.help-wrap { position: relative; display: inline-flex; }
+.help-btn { width: 17px; height: 17px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--sub); font-size: 11px; line-height: 1; }
+.help-btn:hover, .help-btn[aria-expanded="true"] { color: var(--primary); border-color: var(--primary); }
+.help-pop { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 20; width: 320px; max-width: 80vw; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18); font-size: 12px; line-height: 1.55; color: var(--text); }
+.help-pop p { margin: 0; }
+.help-pop p + p { margin-top: 6px; }
 .overlay-modal { width: min(1060px, 96vw); }
 .ov-body { display: flex; gap: 18px; min-height: 0; overflow-y: auto; }
 .ov-preview { flex: none; display: flex; flex-direction: column; gap: 8px; }
@@ -742,6 +755,10 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .banner.court-guide.missing { background: var(--warn-bg); color: var(--warn-text); }
 .banner.court-guide button { padding: 2px 12px; }
 .card-title-field textarea { width: 200px; min-height: 26px; padding: 2px 6px; font: inherit; resize: vertical; }
+.card-row { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+/* A marker group's secondary buttons stay faint until the header is hovered or focused. */
+.group-head .tag-sort, .group-head .gear { opacity: 0.45; transition: opacity 0.12s; }
+.group-head:hover .tag-sort, .group-head:hover .gear, .group-head:focus-within .tag-sort, .group-head:focus-within .gear { opacity: 1; }
 .card-edit-bar input[type="color"] { width: 32px; height: 24px; padding: 0 2px; }
 
 /* The objects' show times on the 図形 tab: a lane each over the clip, IN to OUT. */

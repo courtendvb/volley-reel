@@ -2,6 +2,7 @@ import { PaletteColor } from './PaletteColor'
 import { FONTS } from '../fonts'
 import { useState, type ReactNode } from 'react'
 import { ZonePainter } from './ZonePainter'
+import { Help } from './CourtControls'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
   COLORS, DEFAULT_TEXT_BOX, asOneObject, isZonePaint, sameChange, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
@@ -143,6 +144,17 @@ export function AnnotationTools(p: Props) {
               return rest as Annotation
             }))}>{t('グループ解除')}</button>
         )}
+        <span className="muted small">{picked.length > 1 ? t('{0} 個をまとめて編集中', picked.length) : sel ? t('{0}{1} を編集中', KIND_LABEL[sel.kind], sel.kind === 'text' ? t('「{0}」', sel.text) : '') : t('次に描く図形の書式')}</span>
+      </div>
+
+      {p.court && zonesOpen && (
+        <ZonePainter annotations={p.annotations} onChange={p.onChange} court={p.court} color={zoneColor} disabled={p.disabled} onClose={() => setZonesOpen(false)}
+          picker={<ColorPick label={t('ゾーンの色')} value={zoneColor} onChange={setZoneColor} disabled={p.disabled} />} />
+      )}
+
+      <div className="fmt-grid">
+        {sel?.kind === 'image' && (
+          <Group title={t('画像')}>
         {sel?.kind === 'image' && (
           <button className={p.cropping ? 'on' : ''} aria-pressed={p.cropping} disabled={p.disabled || !!sel.quad}
             title={sel.quad ? t('遠近をつけた画像はトリミングできません（遠近なしに戻してから）') : t('枠のつまみで切り取る範囲、画像のドラッグで位置、ホイールか ＋／− で拡大・縮小')}
@@ -160,7 +172,7 @@ export function AnnotationTools(p: Props) {
           <>
             {/* Perspective: the picture's four corners dragged one by one, or laid on the fitted court. */}
             <select className="persp" value={sel.quad ? 'on' : 'off'} disabled={p.disabled} aria-label={t('遠近')}
-              title={p.court ? t('画像の四隅を別々に動かして遠近をつけます。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）') : t('画像の四隅を別々に動かして遠近をつけます。コートのグリッドを合わせてあれば、コートにも合わせられます')}
+              title={t('遠近')}
               onChange={e => {
                 const v = e.target.value
                 if (v === 'off') update(withQuad(sel, null))
@@ -173,6 +185,7 @@ export function AnnotationTools(p: Props) {
               <option value="near" disabled={!p.court}>{t('手前のコートに合わせる')}</option>
               <option value="far" disabled={!p.court}>{t('奥のコートに合わせる')}</option>
             </select>
+            <Help text={[p.court ? t('画像の四隅を別々に動かして遠近をつけます。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）') : t('画像の四隅を別々に動かして遠近をつけます。コートのグリッドを合わせてあれば、コートにも合わせられます')]} />
             {sel.quad && (
               <button disabled={p.disabled} title={t('画像を上下左右逆にする（反対側から見た図のとき）')}
                 onClick={() => { const q = sel.quad!; update(withQuad(sel, [q[3], q[2], q[1], q[0]])) }}>{t('180°回転')}</button>
@@ -181,15 +194,8 @@ export function AnnotationTools(p: Props) {
               onChange={x => update(x > 0 ? { ...sel, opacity: Math.round((1 - x) * 100) / 100 } : (({ opacity: _o, ...rest }) => rest)(sel))} />
           </>
         )}
-        <span className="muted small">{picked.length > 1 ? t('{0} 個をまとめて編集中', picked.length) : sel ? t('{0}{1} を編集中', KIND_LABEL[sel.kind], sel.kind === 'text' ? t('「{0}」', sel.text) : '') : t('次に描く図形の書式')}</span>
-      </div>
-
-      {p.court && zonesOpen && (
-        <ZonePainter annotations={p.annotations} onChange={p.onChange} court={p.court} color={zoneColor} disabled={p.disabled} onClose={() => setZonesOpen(false)}
-          picker={<ColorPick label={t('ゾーンの色')} value={zoneColor} onChange={setZoneColor} disabled={p.disabled} />} />
-      )}
-
-      <div className="fmt-grid">
+          </Group>
+        )}
         {lineKinds && (
           <Group title={kind === 'rect' || kind === 'circle' || kind === 'polygon' ? t('枠線') : t('線')}>
             <ColorPick label={t('線の色')} value={v.color} onChange={color => set({ color }, notText)} disabled={p.disabled} />
@@ -256,7 +262,7 @@ export function AnnotationTools(p: Props) {
             <Num label={t('余白')} value={v.box.padding} min={0} max={60} step={2} onChange={padding => setBox({ padding })} disabled={p.disabled} />
           </Group>
         )}
-        <Group title={t('全体')}>
+        {sel && !p.cardMode && <Group title={t('表示')}>
           {sel && !p.cardMode && (
             <span className="fade-fields" title={t('出るときに透明から、消えるときに透明へ（秒）。0 でなし')}>
               <Num label={t('フェードイン')} value={sel.fadeIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled || !!sel.drawIn}
@@ -267,10 +273,11 @@ export function AnnotationTools(p: Props) {
             </span>
           )}
           {sel && !p.cardMode && (
-            <span className="fade-fields" title={t('出るときに、線は始点から伸び、枠は一周して描かれる（秒）。三角形（コーン）は先端の打点から開きながら浮かび上がる。文字と画像は浮かび上がる。0 でなし')}>
+            <span className="fade-fields" title={t('描くアニメーションの秒数。0 でなし')}>
               <Num label={t('描くアニメーション')} value={sel.drawIn ?? 0} min={0} max={5} step={0.1} disabled={p.disabled}
                 onChange={v => { const { drawIn: _d, ...rest } = sel; update((v > 0 ? { ...rest, drawIn: v } : rest) as Annotation) }} />
               <span className="muted">{t('秒')}</span>
+              <Help text={[t('出るときに、線は始点から伸び、枠は一周して描かれる（秒）。三角形（コーン）は先端の打点から開きながら浮かび上がる。文字と画像は浮かび上がる。0 でなし')]} />
               <select aria-label={t('目立たせる')} value={emphasisOf(sel) ?? ''} disabled={p.disabled}
                 title={t('表示中くり返して目を引く。パルス: ふくらんで戻る／点滅: 消えてまた出る／波紋: 輪が広がって消える（矢印は先から）')}
                 onChange={e => update(withEmphasis(sel, (e.target.value || undefined) as Emphasis | undefined))}>
@@ -291,6 +298,8 @@ export function AnnotationTools(p: Props) {
               {(p.canVideo || scope === 'video') && <option value="video">{t('表示: 動画全体')}</option>}
             </select>
           )}
+        </Group>}
+        {sel && ((isPoints(sel) && sel.points.length > MAX_EDIT_POINTS) || ((sel.kind === 'polyline' || sel.kind === 'freehand') && sel.points.length >= 3) || sel.kind === 'polygon' || sel.kind === 'arrow') && <Group title={t('形')}>
           {sel && isPoints(sel) && sel.points.length > MAX_EDIT_POINTS && (
             <button onClick={() => update(simplify(sel, 2, 1280, 720))} title={t('形を保ったまま点を減らし、頂点を編集できるようにする')}>{t('点を減らす（')}{sel.points.length}{t('点）')}</button>
           )}
@@ -301,7 +310,7 @@ export function AnnotationTools(p: Props) {
           {sel?.kind === 'arrow' && (sel.c1
             ? <button onClick={() => update(setCurved(sel, false))} title={t('曲線の矢印をまっすぐに戻す')}>{t('まっすぐにする')}</button>
             : <button onClick={() => update(setCurved(sel, true))} title={t('矢印を曲線にする（青い点を動かして曲げる）')}>{t('曲線にする')}</button>)}
-        </Group>
+        </Group>}
       </div>
 
       <div className="ann-row">

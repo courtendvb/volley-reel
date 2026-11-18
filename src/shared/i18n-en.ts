@@ -1055,6 +1055,7 @@ export const EN: Record<string, string> = {
   "日付とチーム": "Date and teams",
   "日付と片方のチーム": "Date and one team",
   "日付のみ（要確認）": "Date only (check it)",
+  "同じフォルダ": "Same folder",
   "動画なし": "No video",
   "SyncScout Video Editor パック": "SyncScout Video Editor pack",
   "{0} の写真を入れる": "Put in the photo of {0}",

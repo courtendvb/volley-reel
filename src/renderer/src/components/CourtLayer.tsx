@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { drawCourt, flightMoves, handleAt, rippleImpact, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { drawCourt, flightMoves, handleAt, landingMoves, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
 import { playback } from '../playback'
 import { prepareCanvas } from '../canvas'
 
@@ -32,8 +32,8 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
     return playback.subscribe(s => setProgress(Math.round(Math.max(0, Math.min(1, (s.time - flight.startSec) / flight.sec)) * 40) / 40))
   }, [flies, flight?.startSec, flight?.sec])
 
-  // The ripple from the landing: seconds since it, in 40ths (the burst is quick), only while it shows (-1: not yet, 4: over).
-  const rippling = !fitting && !!flight && !!rippleImpact(style, zones)
+  // What moves with the landing (the ripple, the territory's judgement): seconds since it, in 40ths (the burst is quick), -1 before it, 4 well after.
+  const rippling = !fitting && !!flight && landingMoves(style, zones)
   const [rippleSec, setRippleSec] = useState<number | undefined>(undefined)
   useEffect(() => {
     if (!rippling || !flight) { setRippleSec(undefined); return }

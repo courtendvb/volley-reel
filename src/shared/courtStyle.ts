@@ -13,6 +13,7 @@ export interface GridStyle {
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
   ripple?: boolean // a ripple of light from where the play landed, for 3 s (courtHeat.ts); with the heatmap, the heatmap shows only behind it
+  territory?: boolean // on a serve or attack (and its reception or dig): the defending team's areas on the floor, and where the ball came down judged (territory.ts)
   rippleColor?: string // the ripple's colour, unless the usual gold
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
   noLift?: boolean // no dashed line from the floor up to a point in the air
@@ -32,7 +33,7 @@ export interface GridStyle {
 }
 
 export type MarkSkill = 'S' | 'A' | 'E'
-const MARK_KEYS = ['heat', 'ripple', 'serveFlights', 'landings', 'cones', 'chart', 'setChart', 'setCourt', 'setFilter', 'range'] as const
+const MARK_KEYS = ['heat', 'ripple', 'territory', 'serveFlights', 'landings', 'cones', 'chart', 'setChart', 'setCourt', 'setFilter', 'range'] as const
 export type PlayerMarkStyle = Pick<GridStyle, typeof MARK_KEYS[number]>
 export const markSkill = (skill: string | null | undefined): MarkSkill | null => (skill === 'S' || skill === 'A' || skill === 'E' ? skill : null)
 // The style for a play of this skill: its own marks, none for other skills. A style without bySkill
@@ -57,7 +58,7 @@ export function marksBySkill(style: GridStyle): GridStyle {
 export function cleanGridStyle(x: unknown): GridStyle {
   const o = { ...DEFAULT_GRID_STYLE, ...(x && typeof x === 'object' ? x : {}) } as GridStyle & Record<string, unknown>
   const marks = (m: Record<string, unknown> | undefined): PlayerMarkStyle => ({
-    ...(m?.heat ? { heat: true } : {}), ...(m?.ripple ? { ripple: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
+    ...(m?.heat ? { heat: true } : {}), ...(m?.ripple ? { ripple: true } : {}), ...(m?.territory ? { territory: true } : {}), ...(m?.serveFlights ? { serveFlights: true } : {}), ...(m?.landings ? { landings: true } : {}), ...(m?.cones ? { cones: true } : {}),
     ...(isMarkRange(m?.range) && m.range !== 'all' ? { range: m.range } : {}),
     ...(m?.chart ? { chart: cleanChart(m.chart) } : {}), ...(m?.setChart ? { setChart: cleanSetChart(m.setChart) } : {}), ...(m?.setCourt ? { setCourt: cleanSetCourt(m.setCourt) } : {}), ...(m?.setFilter && setFilterCount(cleanSetFilter(m.setFilter)) ? { setFilter: cleanSetFilter(m.setFilter) } : {}),
   })

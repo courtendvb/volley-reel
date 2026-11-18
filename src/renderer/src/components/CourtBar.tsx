@@ -171,6 +171,10 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           <label className="check" title={t('着弾の瞬間から光の波紋が床に広がる（0.8 秒）。ヒートマップも入れると、波紋が通ったところにヒートマップが浮かび、1.5 秒見せて 0.7 秒で消える。ヒートマップなしなら波紋だけ。着弾のあと 3 秒間だけ（書き出しも同じ）')}>
             <input type="checkbox" checked={!!m.ripple} onChange={e => put('ripple', e.target.checked || undefined)} /> {t('着弾の波紋')}</label>
         )}
+        {tab !== 'E' && (
+          <label className="check" title={tab === 'S' ? t('レシーブ側の床を、ローテーションと標準のレセプション隊形（3人）から選手ごとの担当エリアに分け、境界線と背番号を出す。サーブが境界線から 30 cm 以内に落ちたら赤く点滅（お見合い）。レシーブした選手が自分のエリアなら IN ZONE、隣のエリアまで取りに行ったら COVERED BY と矢印を出す（レセプションを選んでも同じ。書き出しも同じ）') : t('守備側の床を、ローテーションとアタックの位置（レフト・センター・ライト）に応じた標準のディグ隊形（ブロック 2 枚、センターには 1 枚）から担当エリアに分け、境界線と背番号を出す。境界線から 30 cm 以内なら赤く点滅、ディグした選手が自分のエリアなら IN ZONE、隣のエリアなら COVERED BY（ディグを選んでも同じ。書き出しも同じ）')}>
+            <input type="checkbox" checked={!!m.territory} onChange={e => put('territory', e.target.checked || undefined)} /> {t('守備テリトリー')}</label>
+        )}
         {tab !== 'E' && m.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}
         {tab !== 'E' && m.heat && (
           <label className="check" title={t('ヒートマップの濃さ。下げると透けて床や選手が見えます。スライドのヒートマップも同じ（書き出しも同じ）')}>{t('濃さ')}

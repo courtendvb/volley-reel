@@ -5,10 +5,11 @@
 import type { PlacedChart } from './board'
 import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_NAMES, SET_TARGETS, drawSetChart, setChart, setChartBox, setExtremes, type SetChart, type SetCourtLayer } from './setChart'
 import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
-import type { ClickPoint, Play } from './types'
+import type { ClickPoint, ParsedDVW, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
 import { rangePlays, type RangeSource } from './markRange'
-import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
+import { buildTerritory, drawTerritory, judgeBoundaries, type Territory } from './territory'
+import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin, rippleSteps } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
@@ -19,6 +20,7 @@ export interface PlayZones {
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
   skill?: string // the play's, for the style of its player marks (markStyle)
+  territory?: Territory // the defending team's areas and the judgement of the ball (territory.ts)
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
 interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
@@ -155,7 +157,7 @@ function scattered(c: ClickPoint, i: number): ClickPoint {
 // this play is on: where their shots of the same kind landed (shotKind), all their serves' flights,
 // and the landings as points: all their serves, or their attacks of the same code.
 // source: for the direction chart, the plays of the search and the player's name.
-export interface ChartSource { filtered?: () => Play[]; name?: string; setterName?: (set: Play) => string; ranges?: RangeSource } // setterName: the set chart's title; ranges: where the 範囲 choices look (markRange.ts)
+export interface ChartSource { filtered?: () => Play[]; name?: string; setterName?: (set: Play) => string; ranges?: RangeSource; dvw?: ParsedDVW } // setterName: the set chart's title; ranges: where the 範囲 choices look (markRange.ts); dvw: the play's match, for the territory
 export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, all: () => Play[], source?: ChartSource): PlayerMarks | null {
   const style = markStyle(style0, play.skill)
   const plays = () => rangePlays(style.range, play, all, source?.ranges)
@@ -209,7 +211,10 @@ export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>):
 // plays and style: for the player's other shots (playerMarks), when the court tab shows them.
 export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[], source?: ChartSource): PlayZones {
   const player = style && plays ? playerMarks(play, fit, style, plays, source) : null
-  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, ...(player ? { player } : {}) }
+  // A reception goes with its serve, a dig with its attack: the territory is set on their tabs.
+  const territoryOn = style && source?.dvw && markStyle(style, play.skill === 'R' ? 'S' : play.skill === 'D' ? 'A' : play.skill).territory
+  const territory = territoryOn ? buildTerritory(play, source!.dvw!, fit, playClicks) : null
+  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, ...(player ? { player } : {}), ...(territory ? { territory } : {}) }
 }
 
 // An attacker's cones: from where they hit, five equal angles over the other half, each with its share
@@ -481,6 +486,24 @@ const START_COLOR = '#22C55E'
 const END_COLOR = '#EF4444'
 
 
+// Whether anything moves with the landing (the ripple, the territory's judgement): the player redraws
+// it as the clip plays, and the export puts it on layers of its own.
+export function landingMoves(style0: GridStyle, zones: PlayZones | null | undefined): boolean {
+  return !!rippleImpact(style0, zones) || !!zones?.territory?.impact
+}
+// The moments (seconds from the landing) where what moves with it changes, for the export's layers.
+export function landingBoundaries(style0: GridStyle, zones: PlayZones | null | undefined): number[] {
+  const at = new Set<number>([0])
+  if (rippleImpact(style0, zones)) for (const s of rippleSteps()) { at.add(s.from); at.add(s.to) }
+  if (zones?.territory?.impact) for (const s of judgeBoundaries()) at.add(s)
+  return [...at].sort((a, b) => a - b)
+}
+// The ripple and the territory's judgement at `sec` seconds from the landing, on a layer of their own (the export's).
+export function drawLanding(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
+  drawRipple(ctx, w, h, fit, style0, zones, sec)
+  if (zones.territory) drawTerritory(ctx, w, h, fit, zones.territory, sec, false)
+}
+
 // Where the play landed, when a ripple is to spread from there (the 波紋 box); with the heatmap on, the
 // heatmap comes with it, else the ripple shows alone.
 export function rippleImpact(style0: GridStyle, zones: PlayZones | null | undefined): Pt | null {
@@ -517,6 +540,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   else if (impact && ripple !== null) drawRippleFloor(ctx, w, h, fit, zones?.player?.heat ?? null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
   if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
+  if (zones?.territory) drawTerritory(ctx, w, h, fit, zones.territory, ripple)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()

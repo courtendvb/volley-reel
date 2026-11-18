@@ -15,7 +15,6 @@ export interface GridStyle {
   ripple?: boolean // on the selected serve or attack: a ripple of light from where it landed, for 3 s (courtHeat.ts); a heatmap shows as it always does
   rippleLead?: number // how many seconds before the landing the ripple starts (the landing is the DVW's, to the second); below 0, after it
   rippleColor?: string // the ripple's colour, unless the usual gold
-  serveWedge?: boolean // on the selected serve: a curved fan from where it was hit towards where it landed (court.ts drawServeWedge)
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
   noLift?: boolean // no dashed line from the floor up to a point in the air
   serveFlights?: boolean // on a serve: all the player's serves flying with it
@@ -66,7 +65,7 @@ export function cleanGridStyle(x: unknown): GridStyle {
   const base: GridStyle = {
     grid: o.grid !== false, color: typeof o.color === 'string' ? o.color : DEFAULT_GRID_STYLE.color, opacity: typeof o.opacity === 'number' ? o.opacity : DEFAULT_GRID_STYLE.opacity,
     lineWidth: typeof o.lineWidth === 'number' ? o.lineWidth : DEFAULT_GRID_STYLE.lineWidth, playZones: o.playZones !== false,
-    flight: !!o.flight, ...(o.serveWedge ? { serveWedge: true } : {}), flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
+    flight: !!o.flight, flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
     ...(typeof o.heatOpacity === 'number' ? { heatOpacity: o.heatOpacity } : {}), ...(typeof o.coneColor === 'string' ? { coneColor: o.coneColor } : {}), ...(typeof o.rippleColor === 'string' && /^#[0-9a-f]{6}$/i.test(o.rippleColor) ? { rippleColor: o.rippleColor } : {}),
   }
   const by = o.bySkill as Record<string, Record<string, unknown>> | undefined

@@ -49,7 +49,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_GRID_STYLE, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -184,6 +184,29 @@ export function App() {
       setError(String(e))
     }
   }
+  // A match on screen without a court grid, the first time this computer shows it: the court is looked for
+  // in the video and, when found, left in fitting mode with a bar asking to check it; when not, the bar
+  // offers to fit it by hand. Only once per match (vr.courtAsked), so "later" stays later.
+  const [courtGuide, setCourtGuide] = useState<{ matchId: string; status: 'finding' | 'found' | 'missing' } | null>(null)
+  const shownMatch = useRef<string | null>(null)
+  shownMatch.current = matchId
+  useEffect(() => {
+    if (SMOKE || !match || match.court || project?.missing[match.id]?.includes('video')) return
+    const id = match.id
+    let asked: string[] = []
+    try { asked = JSON.parse(localStorage.getItem('vr.courtAsked') ?? '[]') } catch { /* none kept */ }
+    if (asked.includes(id)) return
+    try { localStorage.setItem('vr.courtAsked', JSON.stringify([...asked, id].slice(-500))) } catch { /* not kept */ }
+    setCourtGuide({ matchId: id, status: 'finding' })
+    api.detectCourt(id).then(corners => {
+      if (!corners) { setCourtGuide({ matchId: id, status: 'missing' }); return }
+      setCourt(id, { corners, nearSet1: '*' })
+      if (shownMatch.current === id) setCourtFitting(true)
+      setCourtGuide({ matchId: id, status: 'found' })
+    }).catch(() => setCourtGuide({ matchId: id, status: 'missing' }))
+  }, [match?.id, !!match?.court])
+  const fitByHand = (id: string) => { setCourt(id, { corners: DEFAULT_CORNERS, nearSet1: '*' }); setCourtFitting(true); setCourtGuide(null) }
+
   // A serve's hit or touch (serveMark.ts): shown at once, saved with the match a moment after the last
   // change, so dragging a line doesn't write the match on every move.
   const markSaves = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; patch: { hit?: number | null; touch?: number | null } }>())
@@ -729,6 +752,24 @@ export function App() {
           {project.matches.filter(m => project.missing[m.id]).map(m => (
             <span key={m.id}><b>{m.name}</b> <MissingNote parts={project.missing[m.id]} busy={!!progress} onRelocate={part => void relocate(m.id, part)} /></span>
           ))}
+        </div>
+      )}
+      {project && match && courtGuide?.matchId === match.id && (courtGuide.status !== 'found' || courtFitting) && (
+        <div className={`banner court-guide ${courtGuide.status}`} role="status">
+          {courtGuide.status === 'finding' && <span>{t('この試合のコートの線を、動画から探しています…（初めての試合だけ）')}</span>}
+          {courtGuide.status === 'found' && (
+            <>
+              <span>{t('コートのグリッドを自動で合わせました。動画のコートの線に合っているか確かめてください。ずれていれば四隅の丸をドラッグして直し、手前のチームも確かめて「完了」')}</span>
+              <button className="primary" onClick={() => { setCourtFitting(false); setCourtGuide(null) }}>{t('完了')}</button>
+            </>
+          )}
+          {courtGuide.status === 'missing' && (
+            <>
+              <span>{t('この試合のコートを自動では見つけられませんでした。グリッドを合わせると、ゾーン・軌道・ヒートマップなどを動画に重ねられます')}</span>
+              <button className="primary" onClick={() => fitByHand(match.id)}>{t('手で合わせる')}</button>
+              <button className="link" onClick={() => setCourtGuide(null)} title={t('あとで合わせるときは、動画の下の「表示」タブの「グリッドを合わせる」から')}>{t('あとで')}</button>
+            </>
+          )}
         </div>
       )}
       {!project ? (

@@ -71,6 +71,7 @@ export function sceneTopLeft(L: CardLayout): CardLayout {
 export interface ClipOverlayOverride {
   scoreboard?: { hidden?: boolean }
   playerCaption?: { hidden?: boolean; name?: string; line?: string }
+  courtMarks?: { hidden?: boolean } // the player's marks on the court (heatmap, landings, flights, cones, charts, the ripple) are left off this clip
 }
 
 export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [

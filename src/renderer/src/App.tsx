@@ -49,7 +49,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -245,9 +245,13 @@ export function App() {
   // The scene and marker group of the clip on screen (while 通し plays, the one playing), for the 範囲 of the marks.
   const rangeScene = (playingClipId ? reels.find(r => r.clips[playingClipId]) : null) ?? reel ?? null
   const rangeGroup = rangeScene && playingClipId && rangeScene.clips[playingClipId] ? groupOf(rangeScene, playingClipId) : activeGroup
+  // A clip can leave the player's marks off (自動表示's 選手の表示): the clip on screen, or while 通し plays, the one playing.
+  const courtClip = (playingClipId ? rangeScene?.clips[playingClipId] : null) ?? (reel && activeClipId ? reel.clips[activeClipId] : null) ?? null
+  const hideMarks = !!courtClip?.overlayOverride?.courtMarks?.hidden
+  const courtStyle = useMemo(() => (hideMarks ? withoutPlayerMarks(gridStyle) : gridStyle), [hideMarks, gridStyle])
   const courtZones = useMemo(() => (match?.court && courtPlay
-    ? playMarks(courtPlay, match.court, nextPlay, gridStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set), ranges: clipRangeSource(rangeScene, rangeGroup, match.id, dvws) })
-    : null), [match?.court, courtPlay, nextPlay, rangeScene, rangeGroup, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
+    ? playMarks(courtPlay, match.court, nextPlay, courtStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set), ranges: clipRangeSource(rangeScene, rangeGroup, match.id, dvws) })
+    : null), [match?.court, courtPlay, nextPlay, rangeScene, rangeGroup, courtStyle, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
 
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
   // How many of the scenes' clips come from each match (the match picker says so), and whether a
@@ -829,7 +833,7 @@ export function App() {
                   )
                 }
                 const court = match.court && (
-                  <CourtLayer key={lineKey} size={size} fit={match.court} style={gridStyle} zones={courtZones} flight={courtPlay ? flightTiming(courtPlay, match.offsetSec, playTimes(serveMarkOf(match, courtPlay), active?.matchId === match.id && active.playId === courtPlay.id ? active : null)) : null} fitting={courtFitting}
+                  <CourtLayer key={lineKey} size={size} fit={match.court} style={courtStyle} zones={courtZones} flight={courtPlay ? flightTiming(courtPlay, match.offsetSec, playTimes(serveMarkOf(match, courtPlay), active?.matchId === match.id && active.playId === courtPlay.id ? active : null)) : null} fitting={courtFitting}
                     onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
                     onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
                 )

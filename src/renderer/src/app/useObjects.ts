@@ -2,7 +2,7 @@
 // (表示範囲), merged for the editor and split back to where each lives; when they show; pictures put
 // in or pasted; the palette; and Ctrl+C / Ctrl+V of objects.
 import { useCallback, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { freshIds, pasteCopies, shiftTimes, withGroups, type Annotation } from '../../../shared/annotation'
+import { asOneObject, freshIds, pasteCopies, shiftTimes, withGroups, type Annotation } from '../../../shared/annotation'
 import { changed, mergeScoped, moveToScope, splitScoped, type AnnScope, type ScopedAnnotations } from '../../../shared/annotationScope'
 import { keyName } from '../../../shared/keys'
 import { setAnnotations, type Reel } from '../../../shared/reel'
@@ -66,14 +66,15 @@ export function useObjects({ latest, updateReel, updateVideo, cardEditRef, cardA
   }, [applyScoped])
   const setAnnScope = useCallback((annId: string, to: AnnScope) => {
     const prev = scopedNow()
-    if (prev) applyScoped(moveToScope(prev, annId, to))
+    if (prev) applyScoped(asOneObject(mergeScoped(prev), annId).reduce((l, id) => moveToScope(l, id, to), prev))
   }, [applyScoped])
   // When an object shows (video times; null = the clip's edge), from the timeline under 編集 or 図形.
   const setObjectSpan = useCallback((id: string, span: { from?: number | null; to?: number | null }) => {
     const now = scopedNow()
     if (!now) return
+    const ids = asOneObject(mergeScoped(now), id)
     setAnns(mergeScoped(now).map(a => {
-      if (a.id !== id) return a
+      if (!ids.includes(a.id)) return a
       let next: Annotation = a
       for (const [edge, v] of Object.entries(span) as ['from' | 'to', number | null | undefined][]) {
         if (v === undefined) continue

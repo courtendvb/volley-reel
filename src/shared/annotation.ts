@@ -168,6 +168,27 @@ export function withGroups(list: Annotation[], ids: string[]): string[] {
   return list.filter(a => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map(a => a.id)
 }
 
+// Zone paint (cells painted from the zone panel) is one object: its cells share a group, and what is set
+// on one of them (when it shows, its fades, its format, where it lives) is set on all. The ids that
+// go with this one: the whole zone paint for a painted cell, else just itself.
+export const isZonePaint = (a: Annotation | undefined): boolean => a?.kind === 'polygon' && !!a.cell
+export function asOneObject(list: Annotation[], id: string): string[] {
+  const a = list.find(x => x.id === id)
+  return a && isZonePaint(a) && a.groupId ? list.filter(x => x.groupId === a.groupId && isZonePaint(x)).map(x => x.id) : [id]
+}
+// The same change made on one object on the others: the keys it changed, set or removed (never its
+// id, place or shape).
+const OWN_KEYS = new Set(['id', 'kind', 'points', 'cell', 'groupId', 'x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2'])
+export function sameChange(before: Annotation, after: Annotation, on: Annotation): Annotation {
+  const b = before as unknown as Record<string, unknown>, a = after as unknown as Record<string, unknown>
+  const next = { ...on } as unknown as Record<string, unknown>
+  for (const k of new Set([...Object.keys(b), ...Object.keys(a)])) {
+    if (OWN_KEYS.has(k) || JSON.stringify(b[k]) === JSON.stringify(a[k])) continue
+    if (k in a) next[k] = a[k]; else delete next[k]
+  }
+  return next as unknown as Annotation
+}
+
 // How opaque an object is at time t from its own fades (1 when it has none or is past them).
 // Drawing it in replaces the fade-in.
 export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: number }): number {

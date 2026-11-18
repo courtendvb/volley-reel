@@ -1430,6 +1430,8 @@ export const EN: Record<string, string> = {
   "波紋を着弾の何秒前に出すか": "Seconds before the landing the ripple starts",
   "波紋の色": "Ripple colour",
   "ゾーン塗り（{0}）": "Zone paint ({0})",
+  "選手の表示": "Player marks",
+  "ヒートマップ・落下点・軌道・コーン・チャート・トスのチャート・着弾の波紋を、このクリップでは出さない。グリッドと選んだプレーのゾーンは出たまま（書き出しも同じ）。ほかのクリップは変わらない": "Leaves the heatmap, landings, flights, cones, charts, set chart and landing ripple off this clip. The grid and the selected play's zones stay (exports too). Other clips are unchanged",
   "どの動画にも入っていない": "In no video",
   "\n{0} 個のプロジェクトがこの試合を使っています（{1}）。そこでは検索の対象から外れ、シーンのクリップは再生できなくなります。": "\n{0} project(s) use this match ({1}). They stop searching it, and scene clips from it can no longer play.",
   "試合「{0}」を倉庫から削除しますか？{1}\n動画と DVW のファイルは消えません。（matches/deleted/ に移動します）": "Delete the match \"{0}\" from the library?{1}\nThe video and DVW files are kept. (It moves to matches/deleted/.)",

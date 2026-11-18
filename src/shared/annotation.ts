@@ -727,9 +727,9 @@ function tint(a: string, b: string, t: number): string {
   return '#' + [0, 1, 2].map(i => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, '0')).join('')
 }
 
-// A fan: the arrow's line (straight or curved) as the middle of a shape that is a point at the start
-// and `spread` pixels either side at the end, its far edge an arc. The fill fades in from the
-// point; the outline is the arrow's line style.
+// A fan: a flat isosceles triangle bent along its long axis. The arrow's line (straight or curved) is
+// the axis; the shape is a point at the start and `spread` pixels either side at the end, its base
+// straight across. The outline is the arrow's line style.
 function drawFan(ctx: Ctx, a: ArrowAnnotation, W: number, H: number, s: number): void {
   const px = (q: Pt): Pt => [q[0] * W, q[1] * H]
   const q: Cubic = a.c1 && a.c2 ? [px([a.x1, a.y1]), px(a.c1), px(a.c2), px([a.x2, a.y2])]
@@ -742,21 +742,14 @@ function drawFan(ctx: Ctx, a: ArrowAnnotation, W: number, H: number, s: number):
     const w = (spread * i) / n
     return [m[0] + Math.cos(ang) * w * sign, m[1] + Math.sin(ang) * w * sign] as Pt
   })
-  const left = side(-1), right = side(1), tip = mid[n], endAng = Math.atan2(tip[1] - mid[n - 1][1], tip[0] - mid[n - 1][0])
-  const arc = Array.from({ length: 13 }, (_, k) => { // the far edge, bulging past the tip: left to right
-    const f = (k / 12) * 2 - 1, bulge = spread * 0.3 * (1 - f * f), ang = endAng + Math.PI / 2
-    return [tip[0] + Math.cos(ang) * spread * f + Math.cos(endAng) * bulge, tip[1] + Math.sin(ang) * spread * f + Math.sin(endAng) * bulge] as Pt
-  })
+  const left = side(-1), right = side(1)
   ctx.save()
-  const grad = ctx.createLinearGradient(mid[0][0], mid[0][1], tip[0], tip[1])
-  grad.addColorStop(0, withAlpha(a.color, 0.05)); grad.addColorStop(1, withAlpha(a.color, 0.6))
-  ctx.beginPath()
+  ctx.beginPath() // a flat isosceles triangle, bent along its long axis: the base stays straight
   ctx.moveTo(left[0][0], left[0][1])
   for (const p of left.slice(1)) ctx.lineTo(p[0], p[1])
-  for (const p of arc) ctx.lineTo(p[0], p[1])
   for (const p of right.slice(0, -1).reverse()) ctx.lineTo(p[0], p[1])
   ctx.closePath()
-  ctx.fillStyle = grad
+  ctx.fillStyle = withAlpha(a.color, 0.45)
   ctx.fill()
   ctx.globalAlpha *= a.lineOpacity ?? 1
   ctx.lineWidth = a.width * s

@@ -8,7 +8,7 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
+import { drawGravity, gravityOf, gravitySteps, FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
@@ -150,11 +150,13 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const always = anns.filter(whole)
   const flies = !!court?.flight && flightMoves(courtStyle!, court.zones)
   const ripples = !!court?.flight && !!rippleImpact(courtStyle!, court.zones)
+  const gravityField = court?.flight ? gravityOf(courtStyle!, court.zones) : null
+  const gravityOn = !!gravityField
   if (court || showSb || showCap || always.length) {
     layers.push({
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
-        if (court) drawCourt(ctx, W, H, court.fit, courtStyle!, court.zones, flies ? null : 1, ripples ? null : undefined)
+        if (court) drawCourt(ctx, W, H, court.fit, courtStyle!, court.zones, flies ? null : 1, ripples ? null : undefined, gravityOn ? null : undefined)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, lookTheme(overlay))
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, lookTheme(overlay), packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
@@ -185,6 +187,17 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
       const from = playedOf(land + st.from), to = playedOf(land + st.to)
       if (land + st.from >= r.out || to - from < 0.001) continue
       layers.push({ from, to, png: await png(ctx => drawRipple(ctx, W, H, court!.fit, courtStyle!, court!.zones!, st.at)) })
+    }
+  }
+  // The gravity field, in steps round the landing (from 2 s before it): each its own layer.
+  if (gravityField) {
+    const land = court!.flight!.startSec + court!.flight!.sec
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of gravitySteps()) {
+      if (land + st.from >= r.out || land + st.to <= r.in) continue
+      const from = playedOf(land + st.from), to = playedOf(land + st.to)
+      if (to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawGravity(ctx, W, H, court!.fit, gravityField, st.at)) })
     }
   }
   // A serve's speed plate, from the reception's touch to the end of the clip.

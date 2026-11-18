@@ -133,6 +133,8 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               <input type="checkbox" checked={!s.noLift} onChange={e => onStyle({ ...s, noLift: !e.target.checked })} /> {t('打点の高さの線')}</label>
           </>
         )}
+        <label className="check" title={t('選んだサーブ・アタックの前に、その選手の過去の着弾点が光り、その重心（重力コア）へ光の糸が引き寄せられる。着弾でコアに吸い込まれたか、振り切ったかが分かる。散らばりが小さいほど赤く強く、大きいほど淡くなる。線と点だけなので床や選手は隠れない（書き出しも同じ）。過去の着弾が3つ以上あるとき')}>
+          <input type="checkbox" checked={!!s.gravity} onChange={e => { const { gravity: _g, ...rest } = s; onStyle(e.target.checked ? { ...rest, gravity: true } : rest) }} /> {t('重力場')}</label>
         <label className="check" title={t('選んだサーブ・アタックの着弾点から光の波紋が床に広がり（0.8 秒）、着弾の印を残して 3 秒で消える。ヒートマップとは別に動き、ヒートマップはいつもどおり出たまま（書き出しも同じ）')}>
           <input type="checkbox" checked={!!s.ripple} onChange={e => { const { ripple: _r, ...rest } = s; onStyle(e.target.checked ? { ...rest, ripple: true } : rest) }} /> {t('着弾の波紋')}</label>
         {s.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}

@@ -249,6 +249,8 @@ export const EN: Record<string, string> = {
   "矢印: 終点": "Arrow: end",
   "矢印: 両端": "Arrow: both ends",
   "矢印: なし": "Arrow: none",
+  "重力場": "Gravity field",
+  "選んだサーブ・アタックの前に、その選手の過去の着弾点が光り、その重心（重力コア）へ光の糸が引き寄せられる。着弾でコアに吸い込まれたか、振り切ったかが分かる。散らばりが小さいほど赤く強く、大きいほど淡くなる。線と点だけなので床や選手は隠れない（書き出しも同じ）。過去の着弾が3つ以上あるとき": "Before the selected serve or attack, the player's past landings light up and threads are pulled from them to their centre (the gravity core). When the ball lands you see whether it was drawn into the core or broke away. The tighter the past landings, the redder and stronger it is; the more scattered, the fainter. Only lines and points, so the floor and the players stay visible (the export too). Needs three or more past landings",
   "線なし": "No line",
   "塗り": "Fill",
   "塗りつぶす": "Fill it",

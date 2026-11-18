@@ -13,6 +13,7 @@ export interface GridStyle {
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
   ripple?: boolean // on the selected serve or attack: a ripple of light from where it landed, for 3 s (courtHeat.ts); a heatmap shows as it always does
+  gravity?: boolean // on the selected serve or attack: the player's past landings drawn to their centre as threads, then this landing: caught or broken away (courtGravity.ts)
   rippleLead?: number // how many seconds before the landing the ripple starts (the landing is the DVW's, to the second); below 0, after it
   rippleColor?: string // the ripple's colour, unless the usual gold
   heatOpacity?: number // 0..1, the heatmap at its thickest; on slides too
@@ -65,7 +66,7 @@ export function cleanGridStyle(x: unknown): GridStyle {
   const base: GridStyle = {
     grid: o.grid !== false, color: typeof o.color === 'string' ? o.color : DEFAULT_GRID_STYLE.color, opacity: typeof o.opacity === 'number' ? o.opacity : DEFAULT_GRID_STYLE.opacity,
     lineWidth: typeof o.lineWidth === 'number' ? o.lineWidth : DEFAULT_GRID_STYLE.lineWidth, playZones: o.playZones !== false,
-    flight: !!o.flight, flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
+    flight: !!o.flight, ...(o.gravity ? { gravity: true } : {}), flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
     ...(typeof o.heatOpacity === 'number' ? { heatOpacity: o.heatOpacity } : {}), ...(typeof o.coneColor === 'string' ? { coneColor: o.coneColor } : {}), ...(typeof o.rippleColor === 'string' && /^#[0-9a-f]{6}$/i.test(o.rippleColor) ? { rippleColor: o.rippleColor } : {}),
   }
   const by = o.bySkill as Record<string, Record<string, unknown>> | undefined

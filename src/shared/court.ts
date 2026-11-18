@@ -8,11 +8,13 @@ import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartD
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
 import { rangePlays, type RangeSource } from './markRange'
+import { GRAVITY_HOLD_SEC, drawGravity, gravityField } from './courtGravity'
 import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
 export * from './courtHeat'
+export * from './courtGravity'
 export interface PlayZones {
   start: Spot | null
   end: Spot | null
@@ -21,7 +23,7 @@ export interface PlayZones {
   skill?: string // the play's, for the style of its player marks (markStyle)
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
-interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
+interface PlayerMarks { gravity?: Pt[]; heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
 // The setter's distribution on the court in the picture, on their team's half (near: by the camera).
 interface SetCourt { chart: SetChart; near: boolean; layer: SetCourtLayer }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
@@ -169,7 +171,8 @@ export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & Z
   if (play.skill !== 'S' && play.skill !== 'A') return sets
   const heatOn = !!style.heat, flightsOn = !!style.serveFlights && play.skill === 'S'
   const landingsOn = !!style.landings, conesOn = !!style.cones && play.skill === 'A', chartOn = !!style.chart && (play.skill === 'A' || play.skill === 'S')
-  if (!heatOn && !flightsOn && !landingsOn && !conesOn && !chartOn) return sets
+  const gravityOn = !!style0.gravity
+  if (!heatOn && !flightsOn && !landingsOn && !conesOn && !chartOn && !gravityOn) return sets
   const on = clickOn(nearSide(fit, play) === play.side)
   const shots = plays().filter(p => p.skill === play.skill && p.playerKey === play.playerKey && playClicks(p).end)
   const flying = shots.filter(p => playClicks(p).start), kind = shotKind(play)
@@ -187,6 +190,7 @@ export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & Z
     }
   }
   return {
+    ...(gravityOn ? { gravity: marks((play.skill === 'S' ? shots : same).filter(p => { const e = playClicks(p).end, own = playClicks(play).end; return !(e && own && e.u === own.u && e.v === own.v) }), true).points } : {}), // not this shot itself
     ...(heatOn ? { heat: marks(same, false) } : {}),
     ...(landingsOn ? { landings: marks(play.skill === 'S' ? shots : same, true) } : {}),
     ...(flightsOn ? { flights: { fit, paths: flying.map(path) } } : {}),
@@ -484,7 +488,7 @@ const END_COLOR = '#EF4444'
 // The style without anything drawn from the player's other plays (the 選手の全本数 marks and the ripple):
 // the grid and the selected play's own zones stay. For a clip that hides them (overlayOverride.courtMarks).
 export function withoutPlayerMarks(style: GridStyle): GridStyle {
-  const { bySkill: _b, heat: _h, ripple: _r, serveFlights: _s, landings: _a, cones: _c, chart: _ch, setChart: _sc, setCourt: _co, setFilter: _f, range: _g, ...rest } = style
+  const { bySkill: _b, heat: _h, ripple: _r, serveFlights: _s, gravity: _g2, landings: _a, cones: _c, chart: _ch, setChart: _sc, setCourt: _co, setFilter: _f, range: _g, ...rest } = style
   return rest
 }
 
@@ -506,7 +510,13 @@ export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
 // ripple: seconds since the ripple starts (rippleImpact, rippleStart); undefined shows it as it
 // stays after it has spread; null leaves it out (the export draws it on its own layers).
-export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null): void {
+// gravity: seconds from the landing for the gravity field (negative, before it); undefined shows it as
+// it stays after it has settled; null leaves it out (the export draws it on its own layers).
+export function gravityOf(style0: GridStyle, zones: PlayZones | null | undefined) {
+  const impact = zones?.points?.end
+  return style0.gravity && zones?.player?.gravity && impact && (zones.skill === 'S' || zones.skill === 'A') ? gravityField(zones.player.gravity, impact) : null
+}
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null, gravity?: number | null): void {
   const style = markStyle(style0, zones?.skill)
   const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
@@ -526,6 +536,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   if (zones?.player?.heat) drawHeat(ctx, w, h, zones.player.heat, style.heatOpacity) // on the floor, under everything
   if (impact && ripple !== null) drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
+  if (gravity !== null) { const gf = gravityOf(style0, zones); if (gf) drawGravity(ctx, w, h, fit, gf, gravity ?? GRAVITY_HOLD_SEC - 0.1) }
   if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {

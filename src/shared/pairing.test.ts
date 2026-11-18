@@ -60,3 +60,17 @@ describe('pairing', () => {
     expect(pairFiles([dvw('&260314HTH-SAK_0-3_5th.dvw', null, 'HTH', 'SAK')], ['260314HTH-SAK.mp4'])[0].score).toBe(5)
   })
 })
+
+describe('folder and trailing dates', () => {
+  it('pairs the only scout file and the only video in a folder', () => {
+    const r = pairFiles([dvw('D:/m/a/x.vsm', '2026-01-01', 'AAA', 'BBB')], ['D:/m/a/anything.mp4', 'D:/m/b/261011.mp4'])
+    expect(r[0]).toMatchObject({ video: 'D:/m/a/anything.mp4', note: '同じフォルダ' })
+  })
+
+  it('reads a date written after other numbers', () => {
+    expect(dateFromName('C0123 000045 HTH-SMT 261011.mp4')).toBe('2026-10-11')
+    expect(dateFromName('HTH-SMT_11-10-2026.mp4')).toBe('2026-10-11')
+    const r = pairFiles([dvw('a.dvw', '2026-10-11', 'HTH', 'SMT')], ['HTH-SMT_0001_261011.mp4', 'HTH-SMT_0002_261012.mp4'])
+    expect(r[0].video).toBe('HTH-SMT_0001_261011.mp4')
+  })
+})

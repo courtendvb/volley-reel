@@ -29,6 +29,7 @@ export interface PlaybackState {
   loop: SeqItem | null // the clip being trimmed: playback wraps from OUT back to IN
   card: CardItem['card'] | null // title card on screen during a through-play
   cardSec: number // how long that card stays up (0 without one)
+  holdAt: number | null // the video time the picture is held at right now (a hold), else null
 }
 
 type Listener = (s: PlaybackState) => void
@@ -39,13 +40,15 @@ class Playback {
   private pending: { key: string; t: number; play: boolean } | null = null
   private fps = 30
   private listeners = new Set<Listener>()
-  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null, card: null, cardSec: 0 }
+  private state: PlaybackState = { time: 0, duration: 0, paused: true, ready: false, seq: null, loop: null, card: null, cardSec: 0, holdAt: null }
   private detachEvents: (() => void) | null = null
   private seq: { items: SequenceItem[]; index: number; onIndex: (i: number | null) => void } | null = null
   private cardTimer = 0
   // Slow and hold (shared/timing.ts): the hold running now, and the holds already done in this pass.
   private holdTimer = 0
   private held = new Set<number>()
+  // 通し in the list (no clip): stops of its own, in video times of one match's video.
+  private listHolds: { key: string; holds: { at: number; sec: number }[] } | null = null
 
   attach(video: HTMLVideoElement | null, fps: number, key: string | null = null): void {
     if (video === this.video) { this.fps = fps || 30; return }
@@ -118,6 +121,11 @@ class Playback {
     if (!items.length) return
     this.seq = { items, index: -1, onIndex }
     this.startItem(Math.max(0, Math.min(startAt, items.length - 1)))
+  }
+
+  // Stops for the list's 通し: the picture stops at each `at` for `sec`, once per pass. Null for none.
+  setListHolds(h: { key: string; holds: { at: number; sec: number }[] } | null): void {
+    this.listHolds = h && h.holds.length ? h : null
   }
 
   // Loop bounds for trimming (design §3.5). Setting them doesn't move the playhead; while playing,
@@ -232,17 +240,21 @@ class Playback {
     const inside = !!it && t >= it.in - 0.05 && t <= it.out + 0.05
     const rate = inside ? rateAt(it!.timing, t) : 1
     if (v.playbackRate !== rate) v.playbackRate = rate
-    if (!inside || v.paused || this.holdTimer) return
-    const h = it!.timing?.holds?.find(x => x.at - 0.02 <= t && t < x.at + 0.3 && !this.held.has(x.at))
+    const lh = this.listHolds
+    const holds = inside ? it!.timing?.holds : lh && lh.key === this.key ? lh.holds : undefined
+    if (!holds || v.paused || this.holdTimer) return
+    const h = holds.find(x => x.at - 0.02 <= t && t < x.at + 0.3 && !this.held.has(x.at))
     if (!h) return
     this.held.add(h.at)
     v.pause()
     v.currentTime = h.at
-    this.holdTimer = window.setTimeout(() => { this.holdTimer = 0; void this.video?.play() }, h.sec * 1000)
+    this.set({ ...this.state, holdAt: h.at })
+    this.holdTimer = window.setTimeout(() => { this.holdTimer = 0; this.set({ ...this.state, holdAt: null }); void this.video?.play() }, h.sec * 1000)
   }
 
   private endHold(): void {
     if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = 0 }
+    if (this.state.holdAt !== null) this.set({ ...this.state, holdAt: null })
   }
 
   private queueSeek(key: string, t: number, play: boolean): void {

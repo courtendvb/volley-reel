@@ -21,6 +21,7 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
+import { courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
 import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
@@ -79,6 +80,7 @@ const SPEED_LIST_SEC = 4 // how long the serve speed plate stays after the touch
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
 const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
+const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the scene's 終わりの余白 a rally stays up before the next one
 
 
 
@@ -230,7 +232,7 @@ export function App() {
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
   // rally, the serve, reception or attack on screen (the list staying on the play picked).
-  const [followPlay, setFollowPlay] = useState<PlayKey | null>(null)
+  const [followPlay, setFollowPlay] = useState<(PlayKey & { shares?: boolean }) | null>(null) // shares: the set distribution, over the stop before a set
   const courtPlay = (match && followPlay?.matchId === match.id ? dvws[match.id]?.plays[followPlay.playId] : null) ?? selectedPlay
   const nextPlay = courtPlay && match ? dvws[match.id]?.plays[courtPlay.id + 1] ?? null : null
 
@@ -248,7 +250,14 @@ export function App() {
   // A clip can leave the player's marks off (自動表示's 選手の表示): the clip on screen, or while 通し plays, the one playing.
   const courtClip = (playingClipId ? rangeScene?.clips[playingClipId] : null) ?? (reel && activeClipId ? reel.clips[activeClipId] : null) ?? null
   const hideMarks = !!courtClip?.overlayOverride?.courtMarks?.hidden
-  const courtStyle = useMemo(() => (hideMarks ? withoutPlayerMarks(gridStyle) : gridStyle), [hideMarks, gridStyle])
+  const sharesNow = !!followPlay?.shares
+  const courtStyle = useMemo(() => {
+    const base = hideMarks ? withoutPlayerMarks(gridStyle) : gridStyle
+    // The stop before a set after a good reception (通し): that setter's set distribution in the rotation, whatever the 表示 tab has on.
+    if (!sharesNow) return base
+    const { setFilter: _f, ...e } = base.bySkill?.E ?? {}
+    return { ...base, bySkill: { ...base.bySkill, E: { ...e, setCourt: { layer: 'shares' as const } } } }
+  }, [hideMarks, gridStyle, sharesNow])
   const courtZones = useMemo(() => (match?.court && courtPlay
     ? playMarks(courtPlay, match.court, nextPlay, courtStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set), ranges: clipRangeSource(rangeScene, rangeGroup, match.id, dvws) })
     : null), [match?.court, courtPlay, nextPlay, rangeScene, rangeGroup, courtStyle, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
@@ -423,8 +432,9 @@ export function App() {
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
   const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number; rallyId?: number } | null>(null)
   // 通し: the display's windows (followData), for the court's marks to follow them; the play they last took.
-  const followDataRef = useRef<{ key: string; windows: FollowWindow[] } | null>(null)
+  const followDataRef = useRef<{ key: string; windows: FollowWindow[]; court: CourtWindow[] } | null>(null)
   const followSel = useRef<number | null>(null)
+  const sharesArmed = useRef(false) // the set distribution shows only once the picture has actually stopped, not on the frames before it
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
@@ -446,7 +456,7 @@ export function App() {
       followSel.current = r.play.id
       const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
       const start = Math.max(0, rally.serveTime - d.rallyLead + m.offsetSec)
-      listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + m.offsetSec, rallyId: r.play.rallyId! }
+      listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + LIST_RALLY_LINGER_SEC + m.offsetSec, rallyId: r.play.rallyId! }
       setListRun(true)
       playback.seekIn(r.matchId, start, { play: true })
       return
@@ -467,9 +477,11 @@ export function App() {
     const run = listRunRef.current
     // 通し: the court's marks follow the serve, reception or attack on screen; the list stays on the play picked.
     if (run?.rallyId !== undefined && playback.attachedKey === run.matchId && s.time >= run.start && s.time <= run.end) {
-      const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.windows, s.time) : -1
-      const pid = at >= 0 ? f!.windows[at].playId : null
-      if (pid !== null && pid !== followSel.current) { followSel.current = pid; setFollowPlay({ matchId: run.matchId, playId: pid }) }
+      const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.court, s.time) : -1
+      let w = at >= 0 ? f!.court[at] : null
+      if (w?.shares && !sharesArmed.current) { if (s.holdAt !== null) sharesArmed.current = true; else w = null }
+      else if (!w?.shares) sharesArmed.current = false
+      if (w && w.playId !== followSel.current) { followSel.current = w.playId; setFollowPlay({ matchId: run.matchId, playId: w.playId, ...(w.shares ? { shares: true } : {}) }) }
     }
     // Only inside this play's window: right after a jump the time can still be the old one.
     if (!run || s.paused || playback.attachedKey !== run.matchId || s.time < run.end || s.time > run.end + 3 || s.time < run.start) return
@@ -611,9 +623,12 @@ export function App() {
     const windows = listThrough
       ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
       : pick && selectedPlay ? [{ from: pick.in, to: pick.out, playId: selectedPlay.id }] : []
+    // The court's marks have windows of their own (a serve stays longer, a good reception's set gets a stop).
+    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter) : windows
+    const holds = listThrough ? setFreezes(d.plays, match.offsetSec).map(f => ({ at: f.at, sec: f.sec })) : []
     const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
     return {
-      key: match.id, windows,
+      key: match.id, windows, court, holds,
       data: (playId: number) => {
         const play = d.plays[playId]
         if (!play) return null
@@ -628,6 +643,11 @@ export function App() {
     }
   }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract])
   followDataRef.current = followData
+  // 通し stops the picture before a set after a good reception, for the set distribution to be read.
+  useEffect(() => {
+    playback.setListHolds(listThrough && listRun && followData ? { key: followData.key, holds: followData.holds } : null)
+    return () => playback.setListHolds(null)
+  }, [listThrough, listRun, followData])
   // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
   // seconds after it on a serve picked in the list.
   const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match

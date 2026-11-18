@@ -1535,4 +1535,8 @@ export const EN: Record<string, string> = {
   "数字のマスを 1 行おきに別の色にします": "Colors every other row of figures differently",
   "1 行おき": "Banded rows",
   "1 行おきの色": "Banded row color",
+  "説明": "Explanation",
+  "選んだサーブ・アタックの着弾点に演出を出す（書き出しも同じ）": "Shows an effect at where the selected serve or attack lands (exports too)",
+  "そのセッターのそのローテーションのトスを、動画の隅にチャートで出す（全試合の分。書き出しも同じ）": "Shows that setter's sets in that rotation as a chart in a corner of the video (all matches; exports too)",
+  "そのセッターのそのローテーションのトス配分を、動画のコートにそのまま重ねる（書き出しも同じ）": "Lays that setter's set distribution in that rotation over the court in the video (exports too)",
 }

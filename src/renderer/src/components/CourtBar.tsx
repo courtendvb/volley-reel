@@ -134,7 +134,12 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           </>
         )}
         <label className="check" title={t('選んだサーブ・アタックの着弾点から光の波紋が床に広がり（0.8 秒）、着弾の印を残して 3 秒で消える。ヒートマップとは別に動き、ヒートマップはいつもどおり出たまま（書き出しも同じ）')}>
-          <input type="checkbox" checked={!!s.ripple} onChange={e => { const { ripple: _r, ...rest } = s; onStyle(e.target.checked ? { ...rest, ripple: true } : rest) }} /> {t('着弾の波紋')}</label>
+          <input type="checkbox" checked={!!s.ripple} onChange={e => { const { ripple: _r, ...rest } = s; onStyle(e.target.checked ? { ...rest, ripple: true } : rest) }} /> {t('着弾の演出')}</label>
+        {s.ripple && (
+          <select aria-label={t('着弾の演出の種類')} value={s.rippleKind ?? 'ripple'} onChange={e => { const { rippleKind: _k, ...rest } = s; onStyle(e.target.value === 'ripple' ? rest : { ...rest, rippleKind: e.target.value as GridStyle['rippleKind'] }) }}>
+            <option value="ripple">{t('波紋')}</option><option value="lock">{t('ロックオン')}</option><option value="flash">{t('閃光')}</option><option value="trail">{t('軌跡の残光')}</option>
+          </select>
+        )}
         {s.ripple && <PaletteColor label={t('波紋の色')} value={s.rippleColor ?? RIPPLE_COLOR} onChange={c => onStyle({ ...s, rippleColor: c })} />}
         {s.ripple && (
           <label className="check" title={t('波紋を着弾の何秒前に出すか。着弾の時刻は DVW の秒単位からの推定なので、映像に合わせて調整する。0 で推定の着弾と同時、マイナスにすると着弾のあと（書き出しも同じ）')}>{t('着弾の')}

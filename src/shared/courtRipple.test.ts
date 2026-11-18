@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { cleanGridStyle } from './courtStyle'
+import { DEFAULT_GRID_STYLE, cleanGridStyle } from './courtStyle'
+import { rippleImpact, rippleStart } from './court'
 import { RIPPLE_END_SEC, ripplePhase, rippleSteps } from './courtHeat'
 
 describe('ripplePhase', () => {
@@ -38,11 +39,33 @@ describe('rippleSteps', () => {
 })
 
 describe('cleanGridStyle ripple', () => {
-  it('keeps the ripple with or without the heatmap, and a valid colour', () => {
-    const g = cleanGridStyle({ rippleColor: '#22D3EE', bySkill: { S: { heat: true, ripple: true }, A: { ripple: true }, E: {} } })
-    expect(g.bySkill?.S?.ripple).toBe(true)
-    expect(g.bySkill?.A?.ripple).toBe(true)
+  it('keeps one ripple for the selected play, on when it was on for a kind of play before', () => {
+    const g = cleanGridStyle({ rippleColor: '#22D3EE', bySkill: { S: { heat: true, ripple: true }, A: {}, E: {} } })
+    expect(g.ripple).toBe(true)
+    expect((g.bySkill?.S as Record<string, unknown>)?.ripple).toBeUndefined()
     expect(g.rippleColor).toBe('#22D3EE')
     expect(cleanGridStyle({ rippleColor: 'gold' }).rippleColor).toBeUndefined()
+    expect(cleanGridStyle({}).ripple).toBeUndefined()
+  })
+  it('keeps the lead within 3 s either way', () => {
+    expect(cleanGridStyle({ rippleLead: 0.5 }).rippleLead).toBe(0.5)
+    expect(cleanGridStyle({ rippleLead: -9 }).rippleLead).toBe(-3)
+    expect(cleanGridStyle({ rippleLead: 0 }).rippleLead).toBeUndefined()
+  })
+})
+
+describe('rippleStart', () => {
+  it('is the landing, moved earlier by the lead', () => {
+    expect(rippleStart({ startSec: 10, sec: 1.2 }, DEFAULT_GRID_STYLE)).toBeCloseTo(11.2)
+    expect(rippleStart({ startSec: 10, sec: 1.2 }, { ...DEFAULT_GRID_STYLE, rippleLead: 0.5 })).toBeCloseTo(10.7)
+  })
+})
+
+describe('rippleImpact', () => {
+  const zones = { start: null, end: null, points: { start: null, end: { x: 0.4, y: 0.2 } } }
+  it('is the selected serve or attack’s landing, with the ripple on', () => {
+    expect(rippleImpact({ ...DEFAULT_GRID_STYLE, ripple: true }, { ...zones, skill: 'S' })).toEqual({ x: 0.4, y: 0.2 })
+    expect(rippleImpact({ ...DEFAULT_GRID_STYLE, ripple: true }, { ...zones, skill: 'R' })).toBeNull()
+    expect(rippleImpact(DEFAULT_GRID_STYLE, { ...zones, skill: 'A' })).toBeNull()
   })
 })

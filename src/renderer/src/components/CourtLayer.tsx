@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { drawCourt, flightMoves, handleAt, rippleImpact, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
+import { drawCourt, flightMoves, handleAt, rippleImpact, rippleStart, type CourtFit, type Flight, type GridStyle, type PlayZones, type Pt } from '../../../shared/court'
 import { playback } from '../playback'
 import { prepareCanvas } from '../canvas'
 
@@ -37,9 +37,9 @@ export function CourtLayer({ size, fit, style, zones, flight, fitting, onCorners
   const [rippleSec, setRippleSec] = useState<number | undefined>(undefined)
   useEffect(() => {
     if (!rippling || !flight) { setRippleSec(undefined); return }
-    const land = flight.startSec + flight.sec
+    const land = rippleStart(flight, style)
     return playback.subscribe(s => setRippleSec(Math.round(Math.max(-1, Math.min(4, s.time - land)) * 40) / 40))
-  }, [rippling, flight?.startSec, flight?.sec])
+  }, [rippling, flight?.startSec, flight?.sec, style.rippleLead])
 
   useEffect(() => {
     const c = canvas.current

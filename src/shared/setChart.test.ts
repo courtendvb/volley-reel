@@ -15,6 +15,23 @@ describe('where a set went', () => {
     expect([4, 3, 2, 1, 9, 8, 7].map(z => setTarget({ startZone: z, playerKey: 'H' }, 'S'))).toEqual(['left', 'middle', 'right', 'back', 'back', 'pipe', 'left'])
     expect(setTarget({ startZone: 2, playerKey: 'S' }, 'S')).toBe('dump')
   })
+  it('takes the target attacker coded on the set, not the start zone of the attack', () => {
+    const at = (code: string, startZone: number | null) => setTarget({ startZone, playerKey: 'H' }, 'S', { skill: 'E', code })
+    expect(at('*09EHQKQF', 3)).toBe('left') // F: left, even if the attack came from the middle
+    expect(at('*09EHQKQC', 4)).toBe('middle')
+    expect(at('*09EHQKQB', 2)).toBe('right')
+    expect(at('*09EHQKQB', 9)).toBe('back') // B from the back right
+    expect(at('*09EHQKQP', 4)).toBe('pipe')
+    expect(at('*09EHQKQf', 3)).toBe('left') // either case
+  })
+  it('falls back to the attack when no target attacker was coded or it is not one of these', () => {
+    const at = (code: string, startZone: number | null) => setTarget({ startZone, playerKey: 'H' }, 'S', { skill: 'E', code })
+    expect(at('*09EHQ', 4)).toBe('left')
+    expect(at('*09EHQKQ~', 3)).toBe('middle')
+    expect(at('*09EHQKQS', 2)).toBe('right')
+    expect(setTarget({ startZone: 4, playerKey: 'H' }, 'S', { skill: 'A', code: '*09AHQKQC' })).toBe('left') // only a set code counts
+    expect(setTarget({ startZone: 3, playerKey: 'S' }, 'S', { skill: 'E', code: '*09EHQKQF' })).toBe('dump') // the setter's own attack
+  })
 })
 
 describe('the set chart', () => {
@@ -78,9 +95,9 @@ describe('the set chart', () => {
   })
   it('keeps to the rotations, setter calls and the other team rotations asked for', () => {
     const coded = [
-      set(10, { code: '*09EH+KAF~3B' }), hit(10, 4, '#'),
-      set(11, { code: '*09EH+K1F~3B', awayRot: 5 }), hit(11, 3, '#'),
-      set(12, { code: '*09EH+KAF~3B', homeRot: 4 }), hit(12, 2, '=', { homeRot: 4 }),
+      set(10, { code: '*09EH+KA~~3B' }), hit(10, 4, '#'),
+      set(11, { code: '*09EH+K1~~3B', awayRot: 5 }), hit(11, 3, '#'),
+      set(12, { code: '*09EH+KA~~3B', homeRot: 4 }), hit(12, 2, '=', { homeRot: 4 }),
       hit(13, 2, '#', { playerKey: 'S', jersey: 9 }), // a dump
     ]
     expect(setterCall(coded[0])).toBe('KA')

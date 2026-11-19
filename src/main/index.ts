@@ -7,7 +7,7 @@ import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
-import type { TeamAction } from '../shared/account'
+import { FREE_MATCHES, type TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
 import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pack'
@@ -51,9 +51,19 @@ const exporter = new Exporter()
 let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
 let account: Account // made when the app is ready (it needs the user data folder)
-// Every export asks first (main/account.ts); a yes until accounts are turned on.
+// Exports, imports and new projects ask first (shared/account.ts: gate); a yes until accounts are on.
 const mayExport = () => {
-  if (!account.canExport()) throw new Error(t('書き出すには SyncScout へのログイン（お試し中か契約中）が必要です。ホーム画面右上のボタンか、書き出し画面の案内からログインしてください'))
+  const r = account.refusal('export')
+  if (r === 'sign_in') throw new Error(t('書き出すには SyncScout へのログイン（お試し中か契約中）が必要です。ホーム画面右上のボタンか、書き出し画面の案内からログインしてください'))
+  if (r === 'plan') throw new Error(t('お試し期間か契約が終わっているため、書き出せません。ホーム画面右上のボタンから契約を確認してください'))
+}
+const mayImport = (adding: number) => {
+  const r = account.refusal('import', library?.info().matches.length ?? 0, adding)
+  if (r === 'sign_in') throw new Error(t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は30日間無料）制限なく取り込めます。ホーム画面右上のボタンからログインしてください', FREE_MATCHES))
+  if (r === 'plan') throw new Error(t('お試し期間か契約が終わっているため、試合を追加できません。作ったプロジェクトはこれまでどおり開いて編集できます'))
+}
+const mayCreateProject = () => {
+  if (account.refusal('newProject')) throw new Error(t('お試し期間か契約が終わっているため、新しいプロジェクトは作れません。作ったプロジェクトはこれまでどおり開いて編集できます'))
 }
 // What a failed account call says to the user.
 const accountMessage = (e: unknown): string => {
@@ -172,6 +182,7 @@ function registerIpc(): void {
 
   ipcMain.handle('library:scan', async () => {
     const l = lib()
+    mayImport(1) // before the folders are picked, when not even one more would go in
     const r = await dialog.showOpenDialog(win!, { title: t('動画と DVW があるフォルダを選択（複数可）'), properties: ['openDirectory', 'multiSelections'] })
     if (r.canceled || !r.filePaths.length) return null
     return l.scan(r.filePaths)
@@ -179,6 +190,7 @@ function registerIpc(): void {
 
   ipcMain.handle('library:importPairs', async (e, pairs: { dvwPath: string; video: string }[]) => {
     const l = lib()
+    mayImport(pairs.length)
     return importPairs(l, pairs, p => e.sender.send('import:progress', p))
   })
 
@@ -186,6 +198,7 @@ function registerIpc(): void {
 
   ipcMain.handle('project:create', async (_e, init: ProjectInit) => {
     const l = lib()
+    mayCreateProject()
     const name = init.name.trim() || t('{0} プロジェクト', init.ourTeamCodes[0] ?? '').trim()
     let dir: string
     if (init.chooseFolder) {
@@ -219,6 +232,7 @@ function registerIpc(): void {
         return project.info()
       } catch { /* not a project, or unreadable: look on */ }
     }
+    mayCreateProject() // its project made before opens above; a new one is a new project
     const opp = m.teams.find(x => x.code.toUpperCase() !== code.toUpperCase())?.code ?? ''
     const name = [code, m.date, opp && `vs ${opp}`].filter(Boolean).join(' ')
     const dir = join(root, uniqueName(folderName(name), n => existsSync(join(root, n))))
@@ -274,6 +288,7 @@ function registerIpc(): void {
 
   ipcMain.handle('match:import', async e => {
     const l = lib()
+    mayImport(1)
     const v = await dialog.showOpenDialog(win!, { title: t('試合の動画を選択'), properties: ['openFile'],
       filters: [videoFilter()] })
     if (v.canceled || !v.filePaths[0]) return null

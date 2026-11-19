@@ -132,3 +132,26 @@ export function daysUntil(date: string, at: number): number {
 export function refreshDue(p: LeasePayload, now: number): boolean {
   return now >= Math.min(p.iat + (p.exp - p.iat) / 2, p.exp - 86400)
 }
+
+// What the app allows by account state, decided in one place: the main process enforces it, the
+// screens explain it.
+//   signed in, trial or plan running: everything
+//   not signed in (or no team chosen): a "try it" mode — one match in the library, every editing and
+//     analysis feature on it, no exports. Signing in (free for 30 days) lifts the limit.
+//   trial or plan over: nothing new — no matches added, no new projects, no exports. What was made
+//     stays: existing projects open and edit as before.
+export const FREE_MATCHES = 1
+
+export type Gate = 'export' | 'import' | 'newProject'
+export type GateRefusal = 'sign_in' | 'plan'
+
+// null = allowed. `matches` = how many the library holds now; `adding` = how many this import adds.
+export function gate(enabled: boolean, s: AccountState, what: Gate, matches = 0, adding = 1): GateRefusal | null {
+  if (!enabled || s.kind === 'ok') return null
+  if (s.kind === 'signed_out' || s.kind === 'needs_team') {
+    if (what === 'export') return 'sign_in'
+    if (what === 'import') return matches + adding > FREE_MATCHES ? 'sign_in' : null
+    return null
+  }
+  return 'plan'
+}

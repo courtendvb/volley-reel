@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { LibraryInfo, Match, MissingPart, RecentProject } from '../../../shared/types'
 import { MatchCells } from './MatchPicker'
-import { AccountButton } from './AccountDialog'
+import { AccountButton, AccountNote } from './AccountDialog'
 import { t } from '../../../shared/i18n'
 
 interface Props {
@@ -45,6 +45,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
               <button className="primary" onClick={onScan} disabled={busy} title={t('フォルダを選ぶと、動画と DVW を日付とチームコードで組にします')}>{t('フォルダから一括取り込み')}</button>
               <button onClick={onImportOne} disabled={busy}>{t('1試合を取り込む')}</button>
             </div>
+            <AccountNote what="import" matches={library.matches.length} />
             <p className="count">{shown.length} / {library.matches.length} {t('試合')}</p>
             <div className="match-table" role="list">
               {shown.map(m => <MatchRow key={m.id} m={m} missing={library.missing[m.id]} busy={busy} onRelocate={part => onRelocate(m.id, part)} onOpen={code => onOpenMatch(m.id, code)} onDelete={() => onDeleteMatch(m)} />)}
@@ -60,6 +61,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
           <button className="primary" onClick={onNewProject} disabled={!library?.matches.length} title={library?.matches.length ? '' : t('先に倉庫に試合を入れてください')}>{t('新しいプロジェクト')}</button>
           <button onClick={() => onOpenProject()} disabled={!library}>{t('開く…')}</button>
         </div>
+        <AccountNote what="newProject" />
         <h3 className="muted small-head">{t('最近のプロジェクト')}</h3>
         {recent.length ? recent.map(r => (
           <div key={r.path} className="recent-row">

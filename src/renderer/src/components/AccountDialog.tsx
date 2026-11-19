@@ -218,7 +218,10 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
     : state.reason === 'payment_required' ? t('お支払いが確認できていません。カードの情報を確かめてください')
     : state.reason === 'licence_expired' ? t('お試し期間か契約が終わっています')
     : t('ログインの確認が切れています。インターネットにつないで「状態を更新」を押してください')
-  const canPay = state.kind !== 'ok' || state.status === 'trialing'
+  // A renewal that didn't go through: the contract still runs, so the way back is paying the unpaid
+  // invoice (any card), not a new plan. The server answers that case with the invoice page.
+  const unpaid = state.kind === 'expired' && state.reason === 'payment_required'
+  const canPay = !unpaid && (state.kind !== 'ok' || state.status === 'trialing')
   const leave = () => {
     if (!confirm(t('「{0}」から抜けますか？ もう一度入るには、チームID と合言葉が必要です。', state.team.name))) return
     void run(() => window.api.accountTeam({ action: 'leave', team_id: state.team.id }))
@@ -235,8 +238,10 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
           : state.team.name}</dd>
         <dt>{t('状態')}</dt><dd className={state.kind === 'ok' ? '' : 'error'}>{status}</dd>
       </dl>
-      {state.kind !== 'ok' && <p className="muted">{t('書き出し以外はこれまでどおり使えます。プロジェクトや書き出した動画はこのパソコンに残っています。')}</p>}
+      {state.kind !== 'ok' && <p className="muted">{t('作ったプロジェクトや書き出した動画は、このパソコンに残っています。')}</p>}
+      {unpaid && <p className="muted">{t('更新のお支払いが済んでいません。Stripe の請求書ページで支払うと、すぐに使えるようになります。別のカードでも支払えます。')}</p>}
       <div className="row">
+        {unpaid && <button className="primary" onClick={() => onPay('annual')} disabled={busy}>{t('未払いの請求を支払う')}</button>}
         {canPay && <button className="primary" onClick={() => onPay('annual')} disabled={busy}>{t('年額プランに申し込む')}</button>}
         {canPay && <button onClick={() => onPay('monthly')} disabled={busy}>{t('月額プランに申し込む')}</button>}
         <button onClick={() => void run(() => window.api.accountRefresh(state.team.id))} disabled={busy}>{t('状態を更新')}</button>

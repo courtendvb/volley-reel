@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { hostname } from 'node:os'
 import {
   EDITOR_APP, leaseState, refreshDue, splitLease,
-  type AccountError, type AccountState, type LeasePayload, type LeaseResponse, type LeaseTeam,
+  type AccountError, type AccountState, type LeasePayload, type LeaseResponse, type LeaseTeam, type TeamAction,
 } from '../shared/account'
 
 export const SUPABASE_URL = 'https://ciokifeakrkigonhwbyf.supabase.co'
@@ -35,6 +35,8 @@ interface Saved {
   enc?: boolean
   seen?: number // the latest time seen here, in seconds (shared/account.ts: CLOCK_SLACK_SEC)
   serverError?: AccountError // what the server said on the last refresh, if it refused
+  suggested?: LeaseTeam[] // teams with this address as their contact or payer email, not joined
+  needsTeam?: string // signed in but in no team yet: the account's email (then there is no lease)
 }
 
 export interface AccountDeps {
@@ -92,8 +94,12 @@ export class Account {
 
   state(): AccountState {
     const p = this.lease()
-    if (!p) return { kind: 'signed_out' }
-    return leaseState(p, this.saved.teams ?? [], this.now(), this.saved.seen ?? 0, this.saved.serverError)
+    if (!p) {
+      return this.saved.needsTeam && this.deviceToken()
+        ? { kind: 'needs_team', email: this.saved.needsTeam, suggested: this.saved.suggested ?? [] }
+        : { kind: 'signed_out' }
+    }
+    return leaseState(p, this.saved.teams ?? [], this.now(), this.saved.seen ?? 0, this.saved.serverError, this.saved.suggested ?? [])
   }
 
   // Whether an export may start. Always yes until accounts are turned on.
@@ -122,17 +128,23 @@ export class Account {
     if (path.startsWith('/auth/v1/verify')) throw new AccountFailure('invalid_code')
     if (res.status === 429) throw new AccountFailure('too_many_attempts')
     const code = typeof data.error === 'string' ? data.error : ''
-    const known: AccountError[] = ['invalid_code', 'invalid_device', 'licence_expired', 'payment_required', 'no_access', 'too_many_attempts', 'already_subscribed']
+    const known: AccountError[] = ['invalid_code', 'invalid_device', 'licence_expired', 'payment_required', 'no_access', 'too_many_attempts', 'already_subscribed', 'invalid_credentials', 'trial_used']
     throw new AccountFailure(known.includes(code as AccountError) ? code as AccountError : 'server', code || `HTTP ${res.status}`)
   }
 
   private keep(r: LeaseResponse): void {
+    const enc = !!this.deps.encrypt
+    const token = { token: enc ? this.deps.encrypt!(r.device_token) : r.device_token, enc }
+    if ('needs_team' in r) {
+      this.saved = { deviceId: this.saved.deviceId, seen: this.saved.seen, ...token, needsTeam: r.email, suggested: r.suggested }
+      this.save()
+      return
+    }
     const l = splitLease(r.lease)
     if (!l || !this.key || !verify(null, Buffer.from(l.signed), this.key, Buffer.from(l.sig)) || l.payload.device !== this.saved.deviceId) {
       throw new AccountFailure('server', 'bad lease')
     }
-    const enc = !!this.deps.encrypt
-    this.saved = { deviceId: this.saved.deviceId, seen: this.saved.seen, lease: r.lease, teams: r.teams, token: enc ? this.deps.encrypt!(r.device_token) : r.device_token, enc }
+    this.saved = { deviceId: this.saved.deviceId, seen: this.saved.seen, lease: r.lease, teams: r.teams, suggested: r.suggested ?? [], ...token }
     this.save()
   }
 
@@ -143,7 +155,8 @@ export class Account {
     await this.call('/auth/v1/otp', { email: email.trim(), create_user: true })
   }
 
-  // Step 2: the code from the mail. Leaves this computer signed in (a new account gets its trial).
+  // Step 2: the code from the mail. Leaves this computer signed in; an account in no team yet comes
+  // back as needs_team, and the person picks with teamAction.
   async signIn(email: string, code: string): Promise<AccountState> {
     const s = await this.call<{ access_token?: string }>('/auth/v1/verify', { type: 'email', email: email.trim(), token: code.trim() })
     if (!s.access_token) throw new AccountFailure('invalid_code')
@@ -165,6 +178,20 @@ export class Account {
       if (e.code === 'invalid_device') this.forget()
       else if (e.code === 'licence_expired' || e.code === 'payment_required' || e.code === 'no_access') { this.saved.serverError = e.code; this.save() }
       else if (teamId !== undefined) throw e // asked for by the user: say why it failed
+    }
+    return this.state()
+  }
+
+  // Joins a team (its ID and passcode, or one of the suggested teams), starts the trial, or leaves a
+  // team. The answer is a lease for that team, or needs_team when none is left.
+  async teamAction(a: TeamAction): Promise<AccountState> {
+    const token = this.deviceToken()
+    if (!token) throw new AccountFailure('invalid_device')
+    try {
+      this.keep(await this.call<LeaseResponse>('/functions/v1/account-lease', { ...this.who(), device_token: token, ...a }))
+    } catch (e) {
+      if (e instanceof AccountFailure && e.code === 'invalid_device') this.forget()
+      throw e
     }
     return this.state()
   }

@@ -15,10 +15,15 @@
 //        Authorization: Bearer <access_token>  { device_id, device_name, app, app_version, team_id? }
 //     or no Authorization                      { device_token, device_id, app, app_version, team_id? }
 //     → 200 LeaseResponse, also when the team can't use the app now (the lease says why: `denied`).
-//       A new account gets a team of its own with the 30-day trial; an address that is a team's
-//       contact or payer email is joined to that team as its admin.
 //       Before answering it asks Stripe directly when the team's last checkout isn't reflected yet, so a
 //       payment counts at once, without waiting for the webhook.
+//     → 200 { needs_team: true, … } when the account belongs to no team yet. The server never picks one
+//       on its own (an old test team, or a trial of their own for a coach whose team already pays): the
+//       person chooses, and the app calls again with the device token and an `action`:
+//         join  { slug, passcode }  the team ID and passcode of a SyncScout team
+//         claim { team_id }         one of `suggested`: a team whose contact or payer email is this address
+//         trial {}                  a team of their own with the 30-day trial, once per account
+//         leave { team_id }
 //     → 4xx { error: AccountError }
 //   POST {SUPABASE_URL}/functions/v1/account-checkout  { device_token, device_id, team_id }
 //     → { url }: a Stripe Checkout page for the team, opened in the browser.
@@ -45,11 +50,19 @@ export interface LeasePayload {
   denied?: 'licence_expired' | 'payment_required' | 'no_access'
 }
 
-export interface LeaseResponse {
+export type LeaseResponse = {
   lease: string // base64url(payload JSON) + '.' + base64url(Ed25519 signature over the first part)
   device_token: string
   teams: LeaseTeam[] // every team the account belongs to; the lease is for one of them
+  suggested?: LeaseTeam[] // teams with this address as their contact or payer email, not joined yet
+} | {
+  needs_team: true
+  email: string
+  device_token: string
+  suggested: LeaseTeam[]
 }
+
+export type TeamAction = { action: 'join'; slug: string; passcode: string } | { action: 'claim'; team_id: number } | { action: 'trial' } | { action: 'leave'; team_id: number }
 
 export type AccountError =
   | 'invalid_code' // the mailed code is wrong or expired
@@ -59,13 +72,17 @@ export type AccountError =
   | 'no_access' // the team's plan doesn't include this app
   | 'too_many_attempts'
   | 'already_subscribed' // account-checkout: the team's paid plan is still running
+  | 'invalid_credentials' // join: no team with that ID, or the wrong passcode
+  | 'trial_used' // trial: this account had its free trial already
 
 // What the app shows and allows.
+type Signed = { email: string; team: LeaseTeam; teams: LeaseTeam[]; suggested: LeaseTeam[] }
 export type AccountState =
   | { kind: 'signed_out' }
-  | { kind: 'ok'; email: string; team: LeaseTeam; teams: LeaseTeam[]; status: LeasePayload['status']; until: string | null; daysLeft: number | null }
-  | { kind: 'expired'; email: string; team: LeaseTeam; teams: LeaseTeam[]; reason: 'lease' | AccountError }
-  | { kind: 'no_access'; email: string; team: LeaseTeam; teams: LeaseTeam[] }
+  | { kind: 'needs_team'; email: string; suggested: LeaseTeam[] } // signed in, no team yet: join one or start the trial
+  | ({ kind: 'ok'; status: LeasePayload['status']; until: string | null; daysLeft: number | null } & Signed)
+  | ({ kind: 'expired'; reason: 'lease' | AccountError } & Signed)
+  | ({ kind: 'no_access' } & Signed)
 
 export function b64urlDecode(s: string): Uint8Array {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)
@@ -94,9 +111,9 @@ export const CLOCK_SLACK_SEC = 24 * 3600
 
 // The state a verified lease gives, at `now` (seconds). `seen` = the latest time this computer has seen
 // (main/account.ts keeps it); `serverError` = what the server said on the last refresh, when it refused.
-export function leaseState(p: LeasePayload, teams: LeaseTeam[], now: number, seen: number, serverError?: AccountError): AccountState {
+export function leaseState(p: LeasePayload, teams: LeaseTeam[], now: number, seen: number, serverError?: AccountError, suggested: LeaseTeam[] = []): AccountState {
   const at = Math.max(now, seen - CLOCK_SLACK_SEC)
-  const base = { email: p.email, team: p.team, teams: teams.length ? teams : [p.team] }
+  const base = { email: p.email, team: p.team, teams: teams.length ? teams : [p.team], suggested }
   const refused = serverError ?? p.denied
   if (refused === 'licence_expired' || refused === 'payment_required') return { kind: 'expired', ...base, reason: refused }
   if (!p.apps.includes(EDITOR_APP) || refused === 'no_access') return { kind: 'no_access', ...base }

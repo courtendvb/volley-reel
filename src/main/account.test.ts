@@ -147,6 +147,37 @@ describe('Account', () => {
     expect(s.calls.at(-1)!.body).toMatchObject({ device_token: 'dev-1', team_id: 7, plan: 'monthly' })
   })
 
+  it('lets an account in no team pick one: a suggested team, a team ID and passcode, or the trial', async () => {
+    const member = new Set<number>()
+    const lease = (b: Record<string, unknown>, id: number) => [200, { lease: makeLease({ device: String(b.device_id), team: { id, name: `T${id}` } }), device_token: 'dev-1', teams: [...member].map(i => ({ id: i, name: `T${i}` })), suggested: member.has(30) ? [] : [{ id: 30, name: 'Old' }] }] as [number, unknown]
+    const s = signedIn({ '/functions/v1/account-lease': b => {
+      if (b.action === 'join') {
+        if (b.passcode !== 'abcd') return [401, { error: 'invalid_credentials' }]
+        member.add(41); return lease(b, 41)
+      }
+      if (b.action === 'claim') { member.add(Number(b.team_id)); return lease(b, Number(b.team_id)) }
+      if (b.action === 'trial') { if (member.has(50)) return [409, { error: 'trial_used' }]; member.add(50); return lease(b, 50) }
+      if (b.action === 'leave') member.delete(Number(b.team_id))
+      if (!member.size) return [200, { needs_team: true, email: 'a@example.com', device_token: 'dev-1', suggested: [{ id: 30, name: 'Old' }] }]
+      return lease(b, [...member][0])
+    } })
+    const { a } = account({ fetch: s.f })
+    expect(await a.signIn('a@example.com', '123456')).toEqual({ kind: 'needs_team', email: 'a@example.com', suggested: [{ id: 30, name: 'Old' }] })
+    expect(a.canExport()).toBe(false)
+    expect(await a.refresh()).toMatchObject({ kind: 'needs_team' }) // still none after a restart's refresh
+
+    await expect(a.teamAction({ action: 'join', slug: 'hth', passcode: 'nope' })).rejects.toMatchObject({ code: 'invalid_credentials' })
+    expect(await a.teamAction({ action: 'join', slug: 'hth', passcode: 'abcd' })).toMatchObject({ kind: 'ok', team: { id: 41 } })
+    expect(s.calls.at(-1)!.body).toMatchObject({ action: 'join', slug: 'hth', passcode: 'abcd', device_token: 'dev-1' })
+    expect(a.state()).toMatchObject({ suggested: [{ id: 30, name: 'Old' }] })
+
+    expect(await a.teamAction({ action: 'claim', team_id: 30 })).toMatchObject({ kind: 'ok', team: { id: 30 }, suggested: [] })
+    expect(await a.teamAction({ action: 'leave', team_id: 30 })).toMatchObject({ kind: 'ok', team: { id: 41 } })
+    expect(await a.teamAction({ action: 'leave', team_id: 41 })).toMatchObject({ kind: 'needs_team' })
+    expect(await a.teamAction({ action: 'trial' })).toMatchObject({ kind: 'ok', status: 'trialing', team: { id: 50 } })
+    await expect(a.teamAction({ action: 'trial' })).rejects.toMatchObject({ code: 'trial_used' })
+  })
+
   it('says no for an app the plan does not cover', async () => {
     const { a } = account({ fetch: signedIn({}, { apps: ['viewer'] }).f })
     expect(await a.signIn('a@example.com', '123456')).toMatchObject({ kind: 'no_access' })

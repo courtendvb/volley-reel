@@ -19,11 +19,12 @@ import {
 export const SUPABASE_URL = 'https://ciokifeakrkigonhwbyf.supabase.co'
 // The project's public key for anonymous calls; it is in every SyncScout web page as well.
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpb2tpZmVha3JraWdvbmh3YnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5ODQxNjgsImV4cCI6MjA5MDU2MDE2OH0.NYqH52Rl7Gn9SKeF3mnDioEphpoKpCDrxv6NifU69Po'
-// The Ed25519 public key that leases are signed with (32 bytes, base64url). Empty until the server's
-// account-lease function is live: till then the app doesn't ask anyone to sign in (ENFORCED below).
-export const LEASE_PUBLIC_KEY = ''
-// Turned on in the release that starts asking for an account. VR_ACCOUNTS=1 turns it on for a try,
-// with VR_LEASE_KEY standing in for LEASE_PUBLIC_KEY.
+// The Ed25519 public key that leases are signed with (32 bytes, base64url); its private half is the
+// server's secret APP_LEASE_PRIVATE_KEY (syncscout scripts/generate-lease-key.mjs). Changing it signs
+// every computer out, since the leases they hold stop verifying.
+export const LEASE_PUBLIC_KEY = 'tcNHvwLDqypi-uIzt1ED9qXNcRRyQsJbrdyD4WS1LEo'
+// Turned on in the release that starts asking for an account; till then nobody is asked to sign in.
+// VR_ACCOUNTS=1 turns it on for a try (VR_LEASE_KEY stands in for the key above, for a test server).
 export const ENFORCED = false
 
 interface Saved {

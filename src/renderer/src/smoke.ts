@@ -1882,12 +1882,16 @@ export function installSmoke(h: SmokeHost): void {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(own, first.value)
       own.dispatchEvent(new Event('change', { bubbles: true }))
       const make = await waitFor(() => { const b = button(dialog, t('作成')); return b && !b.disabled ? b : null }, 15000, 'own team loaded')
+      // A figure added to the default eleven: POSS%.
+      const poss = [...dialog.querySelectorAll<HTMLLabelElement>('.compare-rows label')].find(l => l.textContent?.trim() === 'POSS%')?.querySelector('input')
+      if (!poss || poss.checked) throw new Error('no POSS% to pick, or picked already')
+      poss.click()
       await sleep(600); await api.smokeShot!('compare-preview.png')
       make.click()
       const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'C') ?? null, 10000, 'comparison slide')
       const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
-      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !slide.board?.config.compareProject) throw new Error(`comparison: ${texts.join(' | ')}`)
-      return { project: slide.board.config.compareProject, texts }
+      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !texts.includes('POSS%') || texts.includes('BLOCKED%') || !slide.board?.config.compareProject || !slide.board.config.compareRows?.includes('poss')) throw new Error(`comparison: ${texts.join(' | ')}`)
+      return { project: slide.board.config.compareProject, rows: slide.board.config.compareRows, texts }
     }
     if (layout === 'rot') {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.

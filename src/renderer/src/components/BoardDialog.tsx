@@ -7,7 +7,7 @@ import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import { ATTACKER_CARDS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
 import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
-import { compareSide, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
+import { compareRows as rowsOf, compareSide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
 import { MOST_ROWS, STAT_COLUMNS, STAT_KINDS, STAT_LOOK, STAT_ROWS, STAT_STRIPE, type StatKind, type StatLook } from '../../../shared/statsBoard'
 import { t } from '../../../shared/i18n'
 
@@ -26,7 +26,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; attackers: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; stat: StatKind; statTop: number; statLook: StatLook } // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; attackers: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook } // marker 'head': the scene's head, in no marker
 
 // The choices of tables on a rotation slide.
 const TABLE_NAMES: Record<RotationTables, string> = {
@@ -45,6 +45,9 @@ const STAT_NAMES: Record<StatKind, [string, string]> = {
 // A comparison's own team: another project (its target team over its matches), remembered for the next slide.
 const loadOwnProject = () => { try { return localStorage.getItem('vr.compareProject') ?? '' } catch { return '' } }
 const saveOwnProject = (p: string) => { try { localStorage.setItem('vr.compareProject', p) } catch { /* not kept */ } }
+// And the figures picked last, for the next comparison.
+const loadCompareRows = () => { try { const v = JSON.parse(localStorage.getItem('vr.compareRows') ?? 'null') as unknown; return Array.isArray(v) && v.length ? v.filter((x): x is string => typeof x === 'string') : DEFAULT_COMPARE_ROWS } catch { return DEFAULT_COMPARE_ROWS } }
+const saveCompareRows = (ids: string[]) => { try { localStorage.setItem('vr.compareRows', JSON.stringify(ids)) } catch { /* not kept */ } }
 function useOwnTeam(on: boolean, initial: string | undefined) {
   const [path, setPath0] = useState(initial ?? loadOwnProject)
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
@@ -118,6 +121,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const ownTeam = useOwnTeam(skill === 'C', initial?.compareProject)
   const right = useMemo(() => (skill === 'C' && open ? compareSide(dvws, open) : null), [skill, open, dvws])
   const compare = ownTeam.own && right ? { left: ownTeam.own.side, right } : undefined
+  const [rowIds, setRowIds0] = useState<string[]>(() => rowsOf(initial?.skill === 'C' ? initial.compareRows : loadCompareRows()).map(r => r.id)) // the figures on a comparison
+  const setRowIds = (ids: string[]) => { setRowIds0(ids); if (ids.length) saveCompareRows(ids) }
+  const isDefaultRows = rowIds.length === DEFAULT_COMPARE_ROWS.length && DEFAULT_COMPARE_ROWS.every(id => rowIds.includes(id))
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, starts: true, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
   // no place yet. A change of team or skill starts again.
@@ -217,7 +223,16 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           {ownTeam.error && <p className="muted small">{ownTeam.error}</p>}
           {ownTeam.own && !ownTeam.own.side.counts.matches && <p className="muted small">{t('そのプロジェクトに {0} の試合の DVW がありません', ownTeam.own.side.code || '?')}</p>}
           {ownTeam.own && ownTeam.own.failed.length > 0 && <p className="muted small">{t('読めなかった試合: {0}', ownTeam.own.failed.join(' / '))}</p>}
-          <p className="hint" title={SKILL_ROWS.map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます')}</p>
+          <div className="filter-row compare-rows" role="group" aria-label={t('スライドに入れる数字')}>
+            <span className="field-label">{t('数字')}</span>
+            {SKILL_ROWS.map(r => (
+              <label key={r.id} className="check" title={t(r.title)}><input type="checkbox" checked={rowIds.includes(r.id)}
+                onChange={e => setRowIds(SKILL_ROWS.filter(x => (x.id === r.id ? e.target.checked : rowIds.includes(x.id))).map(x => x.id))} /> {r.label}</label>
+            ))}
+            <button className="link" disabled={isDefaultRows} title={t('最初から入っている 11 項目に戻します')} onClick={() => setRowIds(DEFAULT_COMPARE_ROWS)}>{t('既定に戻す')}</button>
+          </div>
+          {!rowIds.length && <p className="muted small">{t('数字を 1 つ以上選んでください')}</p>}
+          <p className="hint" title={rowsOf(rowIds).map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます')}</p>
         </>}
         {skill === 'P' && (
           <div className="filter-row">
@@ -270,7 +285,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos && skill !== 'P'}
-          opts={{ ...(compare ? { compare } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, attackers, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, attackers, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
         {!oneSetter && skill !== 'T' && skill !== 'C' && skill !== 'P' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           {skill !== 'P' && <label className="check" title={skill === 'C' ? t('倉庫にあるチームのロゴを入れます') : t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {skill === 'C' ? t('ロゴ') : t('写真')}</label>}
@@ -304,7 +319,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={skill === 'C' ? !compare : !columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, attackers, stat, statTop, statLook })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, attackers, stat, statTop, statLook })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

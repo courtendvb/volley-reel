@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { better, SKILL_ROWS, skillCounts } from './compare'
+import { better, compareRows, compareSlide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, skillCounts } from './compare'
 
 // Five rallies: a home serve received and killed by the away team; an away serve error; a home ace;
 // a reception error (=) by the away team; an away attack error; an away attack blocked by the home team.
@@ -40,11 +40,29 @@ a09AQ/PA~36BH1;;;;;;;;1;1;2;1;194;;
 describe('the skill comparison', () => {
   const d = parseDVW(DVW)
   const home = skillCounts([{ d, side: '*', label: '' }]), away = skillCounts([{ d, side: 'a', label: '' }])
-  const show = (c: typeof home) => Object.fromEntries(SKILL_ROWS.map(r => { const v = r.value(c); return [r.label, v === null ? '' : r.format(v)] }))
+  const show = (c: typeof home) => Object.fromEntries(compareRows().map(r => { const v = r.value(c); return [r.label, v === null ? '' : r.format(v)] }))
   it('counts each team over its own matches', () => {
     expect(home).toMatchObject({ matches: 1, sets: 1, oppServe: 1, soWon: 1, serve: 5, bpWon: 4, ace: 1, serveErr: 0, blockPts: 1, attack: 0, rec: 0 })
     expect(show(home)).toEqual({ 'SO%': '100.0%', '1ST BALL SO%': '', 'BP%': '80.0%', 'ATTACK KILL%': '', 'ATTACK EFF': '', 'SERVE INDEX': '0.529', 'ACE%': '20.0%', 'ERR%': '0.0%', 'RECEPTION#+%': '', 'BLOCK PTS/SET': '1.00', 'ERR PTS/SET': '0.00' })
     expect(show(away)).toEqual({ 'SO%': '20.0%', '1ST BALL SO%': '25.0%', 'BP%': '0.0%', 'ATTACK KILL%': '33.3%', 'ATTACK EFF': '-33.3%', 'SERVE INDEX': '0.000', 'ACE%': '0.0%', 'ERR%': '100.0%', 'RECEPTION#+%': '75.0%', 'BLOCK PTS/SET': '0.00', 'ERR PTS/SET': '3.00' })
+  })
+  it('counts the figures that can be added: possibilities, kills by phase, attack and reception errors', () => {
+    const all = (c: typeof home) => Object.fromEntries(SKILL_ROWS.filter(r => !DEFAULT_COMPARE_ROWS.includes(r.id)).map(r => { const v = r.value(c); return [r.label, v === null ? '' : r.format(v)] }))
+    // Home: five serves, the away team attacked out of four of them, and home never attacked.
+    expect(all(home)).toMatchObject({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'ATTACK ERR%': '', 'RECEPTION#%': '' })
+    // Away: its serve error gave no possibility; three attacks after # or + receptions: a kill, an error, one blocked.
+    expect(SKILL_ROWS.find(r => r.id === 'possSet')!.format(SKILL_ROWS.find(r => r.id === 'possSet')!.value({ ...home, poss: 3, sets: 2 })!)).toBe('1.50')
+    expect(all(away)).toEqual({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'KILL% #+ REC': '33.3%', 'KILL% -! REC': '', 'TRANSITION KILL%': '', 'ATTACK ERR%': '33.3%', 'BLOCKED%': '33.3%', 'RECEPTION#%': '50.0%' })
+  })
+  it("shows the rows picked in the table's order, the default when none are", () => {
+    expect(compareRows().map(r => r.id)).toEqual(DEFAULT_COMPARE_ROWS)
+    expect(compareRows([]).map(r => r.id)).toEqual(DEFAULT_COMPARE_ROWS)
+    expect(compareRows(['errPts', 'poss', 'gone', 'so']).map(r => r.id)).toEqual(['so', 'poss', 'errPts'])
+    const side = { code: 'HTH', name: '', counts: home }, other = { code: 'OPP', name: '', counts: away }
+    const labels = (ids?: string[]) => compareSlide(side, other, {}, '#000', ids).flatMap(a => (a.kind === 'text' ? [a.text] : []))
+    expect(labels(['poss', 'so'])).toEqual(expect.arrayContaining(['SO%', 'POSS%']))
+    expect(labels(['poss', 'so'])).not.toContain('BP%')
+    expect(labels()).toContain('ERR PTS/SET')
   })
   it('weighs each serve by its evaluation for the serve index', () => {
     // - 0.281, # 1, + 0.455 three times: 2.646 over five serves.

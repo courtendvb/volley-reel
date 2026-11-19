@@ -205,6 +205,8 @@ button.link { border: 0; background: none; color: var(--primary); padding: var(-
 .filter-row.two { gap: var(--space-6); }
 .filter-row.actions { flex-wrap: wrap; row-gap: var(--space-2); } /* a long count pushes the buttons to a second line */
 .filter-row.actions button { white-space: nowrap; }
+.filter-row.compare-rows { flex-wrap: wrap; row-gap: var(--space-2); } /* the comparison's figures to pick, on as many lines as they take */
+.filter-row.compare-rows .check { white-space: nowrap; }
 .filter-row select { flex: 1; min-width: 0; }
 .field-label { flex: none; width: 44px; font-size: var(--fs-label); color: var(--sub); }
 .filters .field-label { width: 60px; } /* fits 相手ローテ, the longest filter label */

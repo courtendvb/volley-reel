@@ -48,6 +48,7 @@ const api: Api = {
   accountRefresh: teamId => ipcRenderer.invoke('account:refresh', teamId),
   accountCheckout: plan => ipcRenderer.invoke('account:checkout', plan),
   accountSignOut: () => ipcRenderer.invoke('account:signOut'),
+  accountTeam: a => ipcRenderer.invoke('account:team', a),
   lang: ipcRenderer.sendSync('app:lang'),
   setLanguage: l => ipcRenderer.invoke('app:setLang', l),
   onExportEvent: cb => {

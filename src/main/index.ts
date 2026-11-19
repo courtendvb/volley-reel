@@ -7,6 +7,7 @@ import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
+import type { TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
 import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pack'
@@ -65,6 +66,8 @@ const accountMessage = (e: unknown): string => {
     no_access: t('このチームの契約には Video Editor が含まれていません'),
     too_many_attempts: t('試行が多すぎます。少し待ってからもう一度試してください'),
     already_subscribed: t('このチームはすでに有料プランを契約しています。「状態を更新」を押してください'),
+    invalid_credentials: t('チームID か合言葉が違います'),
+    trial_used: t('このアカウントの無料お試しは使用済みです。チームに参加するか、有料プランをお申し込みください'),
     network: t('サーバーにつながりません。インターネットの接続を確かめてください'),
     server: t('サーバーでエラーが起きました。少し待ってからもう一度試してください'),
   } as Record<string, string>)[code]
@@ -370,6 +373,7 @@ function registerIpc(): void {
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
   ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
+  ipcMain.handle('account:team', (_e, a: TeamAction) => withAccount(() => account.teamAction(a)))
   // The preload reads the language synchronously, so the interface's text is right from its first paint.
   ipcMain.on('app:lang', e => { e.returnValue = getLang() })
   ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })

@@ -1,6 +1,6 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState } from './account'
+import type { AccountState, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
 import type { SavedFilter } from './filter'
@@ -240,6 +240,7 @@ export interface Api {
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
   accountSignOut(): Promise<AccountState>
+  accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads
   setLanguage(l: Lang): Promise<void> // kept for the next start; the window reloads to show it
   showInFolder(path: string): Promise<void>

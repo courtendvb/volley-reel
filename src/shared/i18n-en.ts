@@ -1567,7 +1567,6 @@ export const EN: Record<string, string> = {
   "ログインの確認が切れています。インターネットにつないで「状態を更新」を押してください": "Your sign-in needs checking. Connect to the internet and press Refresh",
   "アカウント": "Account",
   "状態": "Status",
-  "書き出し以外はこれまでどおり使えます。プロジェクトや書き出した動画はこのパソコンに残っています。": "Everything but exporting works as before. Your projects and exported videos stay on this computer.",
   "状態を更新": "Refresh",
   "年額プランに申し込む": "Subscribe yearly",
   "月額プランに申し込む": "Subscribe monthly",
@@ -1618,4 +1617,7 @@ export const EN: Record<string, string> = {
   "{0} 試合の取り込み": "Importing {0} match",
   "その試合でのプロジェクト・シーン・動画の作成と編集": "Making and editing projects, scenes and videos with it",
   "{0} 試合目からの取り込み": "Importing a match beyond the first ({0} and on)",
+  "作ったプロジェクトや書き出した動画は、このパソコンに残っています。": "Your projects and exported videos stay on this computer.",
+  "更新のお支払いが済んでいません。Stripe の請求書ページで支払うと、すぐに使えるようになります。別のカードでも支払えます。": "The renewal hasn't been paid. Pay it on Stripe's invoice page and you're back at once — any card works.",
+  "未払いの請求を支払う": "Pay the unpaid invoice",
 }

@@ -25,8 +25,10 @@
 //         trial {}                  a team of their own with the 30-day trial, once per account
 //         leave { team_id }
 //     → 4xx { error: AccountError }
-//   POST {SUPABASE_URL}/functions/v1/account-checkout  { device_token, device_id, team_id }
-//     → { url }: a Stripe Checkout page for the team, opened in the browser.
+//   POST {SUPABASE_URL}/functions/v1/account-checkout  { device_token, device_id, team_id, plan }
+//     → { url }: a Stripe Checkout page for the team, opened in the browser. For a team whose renewal
+//       didn't go through, the page of its unpaid invoice instead ({ url, kind: 'invoice' }); paying it
+//       counts at the next refresh, which reads the subscription from Stripe.
 // This file holds the parts both sides agree on and the checks that need no network or key.
 
 export const EDITOR_APP = 'editor'

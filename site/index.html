@@ -24,6 +24,8 @@
         <a href="#finish">Your message</a>
         <a href="#how">How it works</a>
         <a href="#numbers">Reports</a>
+        <a href="#pricing">Pricing</a>
+        <a href="guide.html">Guide</a>
         <a href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download</a>
         <a class="lang" href="ja.html" hreflang="ja" lang="ja">日本語</a>
       </nav>
@@ -66,9 +68,16 @@
         </figure>
         <figure>
           <span class="tag on">The same clip, finished</span>
-          <img src="img/hero.jpg" width="1280" height="720" alt="The frame with the score, the attacker's caption, a heatmap of his attacks on the near court, a headline, a circle around the block and a note at the open spot." loading="lazy">
+          <img src="img/hero.jpg" width="1280" height="720" alt="The frame with the score, the attacker's caption, a heatmap of his attacks on the near court, a headline, a circle around the block and a note at the open lane." loading="lazy">
           <figcaption>The score, the player and where his attacks usually land, with the point the coach wants made.</figcaption>
         </figure>
+      </div>
+      <div class="gain">
+        <h3>Why put the data on the video</h3>
+        <ul>
+          <li><b>Practice reading the play</b><span>Where this attacker usually hits is already on the court before the ball is played. Players watch the clip asking where the ball will go, so every clip becomes practice in reading the play.</span></li>
+          <li><b>Notice the small habits</b><span>When players already know what is likely to happen, they no longer have to chase the ball with their eyes. That frees them to notice the small things, like how the attacker runs in or turns his shoulders, the habits that give the shot away.</span></li>
+        </ul>
       </div>
       <div class="source">
         <div>
@@ -110,11 +119,22 @@
         <img data-layer="cones" src="img/court-cones.jpg" alt="Five cones fanning out from the attacker's spot over the near court, each with its share of attacks.">
       </div>
       <div class="tabs" role="tablist" aria-label="What to draw on the court">
-        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>Landings and heatmap</b><span>Where a player's attacks with the same code landed, as dots and colour.</span></button>
+        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>Landings and heatmap</b><span>Where a player's attacks with the same code landed, across all your matches, as dots and colour.</span></button>
         <button class="tab" id="tab-flight" role="tab" aria-selected="false" aria-controls="stage" data-layer="flight"><b>Points and flight</b><span>The scout's clicks joined from contact height, as an arrow or a curve.</span></button>
         <button class="tab" id="tab-zone" role="tab" aria-selected="false" aria-controls="stage" data-layer="zone"><b>Zones</b><span>Start and end zones, or sub-zones, on the court grid.</span></button>
         <button class="tab" id="tab-serve" role="tab" aria-selected="false" aria-controls="stage" data-layer="serve"><b>Serve paths</b><span>A player's serves from every match in the project.</span></button>
         <button class="tab" id="tab-cones" role="tab" aria-selected="false" aria-controls="stage" data-layer="cones"><b>Cones</b><span>Five cones with the share of attacks that went each way.</span></button>
+      </div>
+      <div class="align">
+        <div class="align-head">
+          <h3>Why many matches fit on one court</h3>
+          <p>The app reads the court in the picture, so a scout click is no longer a spot on a diagram but a place on a real 9 &times; 18 m floor. That floor is the same in every match, so plays from other matches, other halls and other camera angles all land on the court of the clip you are showing.</p>
+        </div>
+        <ol class="align-steps">
+          <li><b>Find the court</b><span>The four corners of the court in the video, found by the app or set by hand.</span></li>
+          <li><b>Put the clicks on the floor</b><span>Each start and end click becomes a point in metres on the court.</span></li>
+          <li><b>Stack every match</b><span>The points of every match in the project are drawn on this video's floor, so a heatmap shows a whole season, not one game.</span></li>
+        </ol>
       </div>
       <p class="note">Also on the court: a direction chart in the corner, the setter's set distribution, painted zones, and cylinders that stand on the floor. Flight curves explain the play; scout times are to the second, so they won't follow the real ball exactly.</p>
     </div>
@@ -139,12 +159,27 @@
           <figcaption>Then the clip plays with your notes on it.</figcaption>
         </figure>
       </div>
+      <div class="floor">
+        <div class="floor-head">
+          <h3>Draw on the floor, not over it</h3>
+          <p>The app knows where the court is, so a box or a painted zone lies flat on the floor in the court's perspective, under the players' feet.</p>
+        </div>
+        <figure>
+          <img src="img/finish-court-rect.jpg" width="1651" height="929" alt="A rectangle drawn on the near court's deep right corner, slanted to match the court's perspective." loading="lazy">
+          <figcaption><b>Rectangle on the court.</b> Drag a box and it takes the court's perspective. Move its corners afterwards.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/finish-paint.jpg" width="1651" height="929" alt="The near court's back row painted: zones 5 and 1 in blue, zone 6 in red." loading="lazy">
+          <figcaption><b>Paint the court.</b> Click zones on a small court, 9 zones or 81 cells, and they are painted on the floor of the video.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
   <section class="flow" id="how" aria-label="How it works">
     <div class="wrap">
       <h2 class="flow-head">Easy enough to do every week.</h2>
+      <p class="flow-more"><a href="guide.html">How videos, scenes and markers fit together →</a></p>
       <ul class="steps">
         <li><b>Load</b><span>Pair each match video with its .dvw or .vsm. Point a folder at it and the app pairs them by date and team.</span></li>
         <li><b>Find</b><span>Filter every play by player, skill, rotation, zone, combination or setter call, across all your matches. Save the searches you use.</span></li>
@@ -207,10 +242,14 @@
         </div>
         <p>Pick a team and the app draws the slide. Text and photos stay movable, and you can add arrows and shapes. They play inside the video, or go out as PNG or PDF.</p>
       </div>
-      <div class="slides">
+      <div class="slides three">
         <figure class="frame lead-slide">
-          <img src="img/slide-rotation.jpg" width="1651" height="922" alt="A rotation slide for P1: the serve-receive formation on a court in perspective, cones for the top attackers, the share per attack zone, and the setter's tables by pass and by setter call." loading="lazy">
-          <figcaption>Rotation: one slide per rotation, with the formation, where the attacks go, and the setter's choices by pass and call.</figcaption>
+          <img src="img/slide-serve.jpg" width="1920" height="1080" alt="Serve cards for three players, each with a photo, break point and error rates and a chart of their serves." loading="lazy">
+          <figcaption>Serve and attack cards: up to six players, each with rates and a chart.</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/slide-serve-target.jpg" width="1920" height="1080" alt="A serve target slide: a team's receptions by receiver and by target zone, jump and float apart, with good pass and first-attack kill rates." loading="lazy">
+          <figcaption>Serve targets: which serves bring the opponent's pass and side-out down.</figcaption>
         </figure>
         <figure class="frame">
           <img src="img/slide-compare.jpg" width="1651" height="922" alt="A skill comparison of two teams: side-out, first-ball side-out, break point, attack, serve, reception, block and errors." loading="lazy">
@@ -219,14 +258,6 @@
         <figure class="frame">
           <img src="img/slide-setter.jpg" width="1651" height="922" alt="A setter slide: set distribution to zone 4, zone 3, zone 2/1 and pipe after each reception quality and each setter call." loading="lazy">
           <figcaption>Setter: the set distribution by reception and by setter call, or by rotation.</figcaption>
-        </figure>
-        <figure class="frame">
-          <img src="img/slide-serve.jpg" width="1651" height="922" alt="Serve cards for three players, each with break point and error rates and a chart of their serves." loading="lazy">
-          <figcaption>Serve and attack cards: up to six players, each with rates and a chart.</figcaption>
-        </figure>
-        <figure class="frame">
-          <img src="img/slide-serve-target.jpg" width="1651" height="922" alt="A serve target slide: a team's receptions by receiver and by target zone, jump and float apart, with good pass and first-attack kill rates." loading="lazy">
-          <figcaption>Serve targets: which serves bring the opponent's pass and side-out down.</figcaption>
         </figure>
       </div>
     </div>
@@ -263,6 +294,14 @@
           </tbody>
         </table>
       </div>
+      <div class="plan" id="pricing">
+        <h3>One subscription for both</h3>
+        <p class="price"><b>$5</b><span>/ month</span><i>or</i><b>$48</b><span>/ year</span></p>
+        <ul>
+          <li>Already subscribed to SyncScout? Video Editor comes with it at no extra cost.</li>
+          <li>Subscribe to Video Editor and SyncScout is included.</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -279,8 +318,8 @@
 
 <footer>
   <div class="wrap">
-    <p>The video at the top was exported from the app as it is, then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK.</p>
-    <p>Report, analysis and slide screens use a made-up team and made-up scout data.</p>
+    <p>The video at the top was exported from the app as it is, then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK. To show what a season looks like, its heatmap also holds made-up attacks for the same player.</p>
+    <p>Report, analysis and slide screens use a made-up team and made-up scout data. Its player photos are AI-generated, not real people.</p>
   </div>
 </footer>
 

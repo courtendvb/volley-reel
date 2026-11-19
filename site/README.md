@@ -2,16 +2,19 @@
 
 A static page in two languages: `index.html` (English) and `ja.html` (Japanese), with a switch in the nav.
 Both share `site.css` and `site.js` (the court layer tabs). Open either file in a browser; nothing to build.
+`guide.html` and `guide-ja.html` explain how a video is built (video, scene, marker, clip), the path from scout file to MP4, and how the app sits alongside DataVolley and VolleyStation. They share `site.css` and link from the nav and the How it works band.
 
 ## Images
 
 - `img/`: screenshots shared by both pages (court layers, data slides) and the English UI screens.
 - `img/ja/`: the same screens taken with the app in Japanese (`VR_LANG=ja`). Data slides keep their English labels in either language, so they are shared.
 - Video screens show Croatia vs Denmark (2022-05-28) as recorded; the DVW was copied with the team codes changed to CRO and DNK.
-- `media/hero-en.mp4` and `media/hero-ja.mp4` are the app's own MP4 export of one clip (set 3, 06-07, #10 attack; IN 4232.0 s, OUT 4240.0 s), re-encoded smaller without sound. The scoreboard, caption and the attacker's landings and heatmap (表示 tab: Attack, Heatmap, Landings) come from the scout file; the headline, circle and note are clip objects. `img/hero.jpg` and `img/ja/hero.jpg` are frames at 5.0 s, and `img/plain.jpg` is the same moment (4237.0 s) cut straight from the source video.
-- Report, analysis and slide screens use made-up data from `source/make_demo_dvw.py`, with match video made from the AI stills `source/still-*.jpg` (`source/make_video.sh`).
+- `media/hero-en.mp4` and `media/hero-ja.mp4` are the app's own MP4 export of one clip (set 3, 06-07, #10 attack; IN 4232.0 s, OUT 4240.0 s), re-encoded smaller without sound. The scoreboard, caption and the attacker's heatmap (表示 tab: Attack, Heatmap on, Landings off) come from the scout files; the headline, circle and note are clip objects. So the heatmap reads as a season rather than one match, the project also holds two made-up matches (2022-05-21 and 2022-05-25) made by `source/make_hero_fakes.py`: copies of the real DVW in which every CRO attack becomes a #10 X6 with a made-up landing, paired with the same video. The page's footer says so. `img/hero.jpg` and `img/ja/hero.jpg` are frames at 5.0 s, and `img/plain.jpg` is the same moment (4237.0 s) cut straight from the source video.
+- Report, analysis and slide screens use made-up data from `source/make_demo_dvw.py`. The serve card slide has player photos from `source/riverside-demo.vrpack`, a photo pack of AI-generated faces of the made-up RSH players (#12 NOGUCHI, #11 KUDO, #3 HAYASHI); read it in from Player photos before making the slide with Photo on, with match video made from the AI stills `source/still-*.jpg` (`source/make_video.sh`).
 
 ## Taking screenshots again
+
+The court tab shots are frames of the source video, paused at a chosen time rather than at a scout time (those are to the second): landings and cones at 873.25 s (S1 09-09, #7 attack X5), flight and zones at 455.5 s (S1 01-02, #11 attack V6), serve paths at 1013.0 s (S1 12-09, #11 serve). Shoot them with only the real match in the project, so the made-up hero matches stay out of the heatmaps.
 
 `source/shoot-2026-11/` holds the scripts. Start the built app with its own library and profile so your own settings stay untouched:
 

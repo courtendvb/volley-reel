@@ -23,6 +23,8 @@
         <a href="#finish">伝えたい一言</a>
         <a href="#how">使い方</a>
         <a href="#numbers">レポート</a>
+        <a href="#pricing">料金</a>
+        <a href="guide-ja.html">ガイド</a>
         <a href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">ダウンロード</a>
         <a class="lang" href="index.html" hreflang="en" lang="en">English</a>
       </nav>
@@ -69,6 +71,13 @@
           <figcaption>点数、選手、いつも打ち込む場所。そこにコーチの伝えたい一言。</figcaption>
         </figure>
       </div>
+      <div class="gain">
+        <h3>データを映像に載せる理由</h3>
+        <ul>
+          <li><b>プレーを予測する練習になる</b><span>その選手がいつも打つ場所が、ボールが打たれる前からコートに出ています。選手は「このボールはどこに来るか」を考えながら見るので、クリップを見ることがプレーを読む練習になります。</span></li>
+          <li><b>ちょっとした癖に気づきやすくなる</b><span>何が起こりそうかを先に知っているので、ボールを目で追うことに追われません。そのぶん、助走の入り方や肩の向きなど、打つコースが表れるちょっとした癖に目が向きやすくなります。</span></li>
+        </ul>
+      </div>
       <div class="source">
         <div>
           <h3>データが自動で入れるもの</h3>
@@ -109,11 +118,22 @@
         <img data-layer="cones" src="img/court-cones.jpg" alt="アタッカーの打った位置から手前のコートへ広がる 5 つのコーンと、それぞれの割合。">
       </div>
       <div class="tabs" role="tablist" aria-label="コートに描くもの">
-        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>落下点とヒートマップ</b><span>同じコードのアタックが落ちた位置を、点と色で。</span></button>
+        <button class="tab" id="tab-landing" role="tab" aria-selected="true" aria-controls="stage" data-layer="landing"><b>落下点とヒートマップ</b><span>同じコードのアタックが落ちた位置を、全試合分、点と色で。</span></button>
         <button class="tab" id="tab-flight" role="tab" aria-selected="false" aria-controls="stage" data-layer="flight"><b>座標と軌道</b><span>スカウトのクリック位置を打点の高さから結ぶ。矢印か放物線で。</span></button>
         <button class="tab" id="tab-zone" role="tab" aria-selected="false" aria-controls="stage" data-layer="zone"><b>ゾーン</b><span>開始と終了のゾーン（サブゾーンも）をグリッドに。</span></button>
         <button class="tab" id="tab-serve" role="tab" aria-selected="false" aria-controls="stage" data-layer="serve"><b>サーブ軌道</b><span>その選手のサーブを、プロジェクトの全試合から。</span></button>
         <button class="tab" id="tab-cones" role="tab" aria-selected="false" aria-controls="stage" data-layer="cones"><b>コーン</b><span>アタックの向きを 5 つのコーンと割合で。</span></button>
+      </div>
+      <div class="align">
+        <div class="align-head">
+          <h3>なぜ何試合分も 1 つのコートに重なるのか</h3>
+          <p>アプリは映像の中のコートを認識します。そのためスカウトのクリックは図の上の点ではなく、9 &times; 18 m の実際の床の上の位置になります。床はどの試合でも同じなので、別の試合、別の会場、別のカメラ位置のプレーも、いま見せているクリップのコートに重ねられます。</p>
+        </div>
+        <ol class="align-steps">
+          <li><b>コートを見つける</b><span>映像の中のコートの四隅を、アプリが探すか手で合わせます。</span></li>
+          <li><b>クリックを床に置く</b><span>開始と終了のクリックが、コート上のメートル単位の位置になります。</span></li>
+          <li><b>全試合を重ねる</b><span>プロジェクトの全試合の位置をこの映像の床に描くので、ヒートマップは 1 試合ではなくシーズン全体を表します。</span></li>
+        </ol>
       </div>
       <p class="note">ほかにも、隅に出すディレクションチャート、セッターのトス配分、ゾーンの塗り、床に立つ円柱をコートに置けます。軌道は説明用です。スカウトの時刻は秒単位なので、実際のボールとは少しずれます。</p>
     </div>
@@ -138,12 +158,27 @@
           <figcaption>続いて、書き込みの入ったクリップ。</figcaption>
         </figure>
       </div>
+      <div class="floor">
+        <div class="floor-head">
+          <h3>画面の上ではなく、床に描く</h3>
+          <p>アプリはコートの位置を知っているので、四角や塗ったゾーンは、コートの遠近に合わせて選手の足元の床に乗ります。</p>
+        </div>
+        <figure>
+          <img src="img/finish-court-rect.jpg" width="1651" height="929" alt="手前のコートの右奥に描いた四角。コートの遠近に合わせて台形になっている。" loading="lazy">
+          <figcaption><b>コート上の四角。</b>ドラッグするだけで、コートの遠近に合わせた形になります。頂点は後から動かせます。</figcaption>
+        </figure>
+        <figure>
+          <img src="img/finish-paint.jpg" width="1651" height="929" alt="手前のコートの後衛を塗ったコマ。5 と 1 のゾーンを青、6 のゾーンを赤。" loading="lazy">
+          <figcaption><b>コートを塗る。</b>小さなコートで 9 ゾーンか 81 マスを選ぶと、動画の床がその色に塗られます。</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
   <section class="flow" id="how" aria-label="使い方の流れ">
     <div class="wrap">
       <h2 class="flow-head">毎週の準備でも続けられる手間で。</h2>
+      <p class="flow-more"><a href="guide-ja.html">動画・シーン・マーカーのしくみ →</a></p>
       <ul class="steps">
         <li><b>読み込む</b><span>試合動画と .dvw / .vsm を組にして倉庫へ。フォルダを選べば、日付とチームで自動で組にします。</span></li>
         <li><b>探す</b><span>選手・スキル・ローテ・ゾーン・コンビ・セッターコールで、全試合のプレーを絞り込み。よく使う条件は保存できます。</span></li>
@@ -206,10 +241,14 @@
         </div>
         <p>チームを選ぶと、アプリがスライドを描きます。文字や写真はあとから動かせ、矢印や図形も足せます。動画の中で流すことも、PNG や PDF に書き出すこともできます。</p>
       </div>
-      <div class="slides">
+      <div class="slides three">
         <figure class="frame lead-slide">
-          <img src="img/slide-rotation.jpg" width="1651" height="922" alt="P1 のローテーションのスライド。遠近のコートにレセプションのフォーメーション、主なアタッカーのコーン、攻撃場所ごとの割合、パスとセッターコールごとのセッターの表。" loading="lazy">
-          <figcaption>ローテーション：ローテごとに 1 枚。フォーメーション、攻撃の行き先、パスとコールごとのセッターの選択。</figcaption>
+          <img src="img/slide-serve.jpg" width="1920" height="1080" alt="3 人のサーブのカード。それぞれに選手の写真、ブレイク率・ミス率とサーブのチャート。" loading="lazy">
+          <figcaption>サーブ・アタックのカード：1 枚に 6 人まで。数字とチャート付き。</figcaption>
+        </figure>
+        <figure class="frame">
+          <img src="img/slide-serve-target.jpg" width="1920" height="1080" alt="サーブの狙いのスライド。受けた選手と狙ったゾーンごと、ジャンプとフローター別に、良いパスとレセプション後の決定率。" loading="lazy">
+          <figcaption>サーブの狙い：どのサーブが相手のパスとサイドアウトを下げるか。</figcaption>
         </figure>
         <figure class="frame">
           <img src="img/slide-compare.jpg" width="1651" height="922" alt="2 チームのスキル比較。サイドアウト、1 本目のサイドアウト、ブレイク、アタック、サーブ、レセプション、ブロック、ミス。" loading="lazy">
@@ -218,14 +257,6 @@
         <figure class="frame">
           <img src="img/slide-setter.jpg" width="1651" height="922" alt="セッターのスライド。レセプションの質とセッターコールごとの、Zone4・Zone3・Zone2/1・Pipe へのトス配分。" loading="lazy">
           <figcaption>セッター：レセプション別・コール別、またはローテ別のトス配分。</figcaption>
-        </figure>
-        <figure class="frame">
-          <img src="img/slide-serve.jpg" width="1651" height="922" alt="3 人のサーブのカード。それぞれにブレイク率・ミス率とサーブのチャート。" loading="lazy">
-          <figcaption>サーブ・アタックのカード：1 枚に 6 人まで。数字とチャート付き。</figcaption>
-        </figure>
-        <figure class="frame">
-          <img src="img/slide-serve-target.jpg" width="1651" height="922" alt="サーブの狙いのスライド。受けた選手と狙ったゾーンごと、ジャンプとフローター別に、良いパスとレセプション後の決定率。" loading="lazy">
-          <figcaption>サーブの狙い：どのサーブが相手のパスとサイドアウトを下げるか。</figcaption>
         </figure>
       </div>
     </div>
@@ -262,6 +293,14 @@
           </tbody>
         </table>
       </div>
+      <div class="plan" id="pricing">
+        <h3>1 つのサブスクで両方使えます</h3>
+        <p class="price"><span>月</span><b>5 ドル</b><i>または</i><span>年</span><b>48 ドル</b></p>
+        <ul>
+          <li>SyncScout をお使いなら、追加料金なしで Video Editor を使えます。</li>
+          <li>Video Editor のサブスクを始めると、SyncScout も使えます。</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -278,8 +317,8 @@
 
 <footer>
   <div class="wrap">
-    <p>ページ上部の映像は、アプリから書き出したものをそのまま、ウェブ用に軽くしただけです。動画の画面は Croatia 対 Denmark（2022 年 5 月 28 日）の映像を加工せずに使っています。チームコードは CRO・DNK に短くしています。</p>
-    <p>レポート・分析・スライドの画面は、架空のチームと架空のスカウトデータです。</p>
+    <p>ページ上部の映像は、アプリから書き出したものをそのまま、ウェブ用に軽くしただけです。動画の画面は Croatia 対 Denmark（2022 年 5 月 28 日）の映像を加工せずに使っています。チームコードは CRO・DNK に短くしています。シーズン分のデータがあるときの見え方を示すため、ヒートマップには同じ選手の架空のアタックも含めています。</p>
+    <p>レポート・分析・スライドの画面は、架空のチームと架空のスカウトデータです。選手の写真は AI で生成したもので、実在の人物ではありません。</p>
   </div>
 </footer>
 <script src="site.js"></script>

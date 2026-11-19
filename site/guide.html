@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How a Video Is Built</title>
+<meta name="description" content="How SyncScout Video Editor builds a video: videos, scenes and markers, the path from your scout file to an MP4, and how it works alongside DataVolley and VolleyStation.">
+<link rel="alternate" hreflang="en" href="guide.html">
+<link rel="alternate" hreflang="ja" href="guide-ja.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="hero guide-hero">
+  <div class="wrap">
+    <div class="bar">
+      <a class="brand" href="index.html">SyncScout <small>Video Editor</small></a>
+      <nav class="nav" aria-label="On this page">
+        <a href="#layers">Video, scene, marker</a>
+        <a href="#path">From file to MP4</a>
+        <a href="#example">An example</a>
+        <a href="#alongside">DataVolley and VolleyStation</a>
+        <a href="index.html">Product page</a>
+        <a class="lang" href="guide-ja.html" hreflang="ja" lang="ja">日本語</a>
+      </nav>
+    </div>
+    <div class="pitch">
+      <div class="telop"><i></i><span><b>Guide</b></span></div>
+      <h1>How a video is built. <span class="mark">Three layers, one MP4.</span></h1>
+      <p class="lead">A video is a list of scenes. A scene is a set of clips sorted under up to five markers. Learn these three and you know how every video in the app is put together.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="axis" id="layers">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>The three layers</b></span></div>
+          <h2>Video, scene, marker.</h2>
+        </div>
+        <p>Each layer answers one question. The video: what do we show today? The scene: which topic? The marker: which kind of play inside that topic? The clips are the plays themselves.</p>
+      </div>
+
+      <div class="tree" role="img" aria-label="A video named CRO side-out holds six scenes, one per rotation. The open scene, Rotation 1, has marker 1, After a good reception, with four clips and marker 2, After a poor reception, with three clips. Unmarked clips sit below and are left out unless you include them.">
+        <div class="tree-video">
+          <div class="tree-label"><span class="kind">Video</span><b>CRO side-out</b><span class="card-chip">Title card</span></div>
+          <div class="tree-scenes">
+            <div class="tree-scene open">
+              <div class="tree-label"><span class="kind">Scene</span><b>Rotation 1</b><span class="card-chip">Title card</span></div>
+              <div class="tree-marker m1">
+                <div class="tree-label"><span class="num">1</span><b>After a good reception</b><span class="card-chip">Title card</span></div>
+                <div class="clips"><i></i><i></i><i class="slide"></i><i></i><i></i></div>
+              </div>
+              <div class="tree-marker m2">
+                <div class="tree-label"><span class="num">2</span><b>After a poor reception</b><span class="card-chip">Title card</span></div>
+                <div class="clips"><i></i><i></i><i></i></div>
+              </div>
+              <div class="tree-marker none">
+                <div class="tree-label"><span class="num">–</span><b>Unmarked</b><span class="muted">left out unless you include them</span></div>
+                <div class="clips"><i></i><i></i></div>
+              </div>
+            </div>
+            <div class="tree-scene"><div class="tree-label"><span class="kind">Scene</span><b>Rotation 2</b></div></div>
+            <div class="tree-scene"><div class="tree-label"><span class="kind">Scene</span><b>Rotation 3</b></div></div>
+            <div class="tree-scene more"><div class="tree-label"><b>… Rotation 6</b></div></div>
+          </div>
+        </div>
+        <p class="tree-key"><span><i class="clip-key"></i>Clip: one play</span><span><i class="clip-key slide"></i>Slide: a still page between clips</span></p>
+      </div>
+
+      <ul class="layers">
+        <li>
+          <b>Video</b>
+          <p>What you export and play in the meeting: scenes in the order you set. Each video has its own look, with colours, scoreboard, captions and title cards. A project can hold as many videos as you like, such as one for the players and a shorter one for the staff.</p>
+        </li>
+        <li>
+          <b>Scene</b>
+          <p>One topic, like a rotation, a player or an opponent's setter. A scene can sit in more than one video. Fix a clip once and every video that uses the scene shows the change.</p>
+        </li>
+        <li>
+          <b>Marker</b>
+          <p>Up to five coloured groups inside a scene, each with a name and its own title card. Press 1 to 5 on a play to put it under that marker. One clip can carry two markers, and a marker can be switched off without losing its clips.</p>
+        </li>
+        <li>
+          <b>Clip</b>
+          <p>One play from the scout file, cut around the moment. Trim it, slow it down, hold a frame, and draw on it. Slides sit between clips as still pages: a frame, a PDF page or a data slide.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="axis alt" id="path">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>The path</b></span></div>
+          <h2>From the scout file to the MP4.</h2>
+        </div>
+        <p>Matches go into the library once. Everything after that reuses them, so next week's video starts from the same files.</p>
+      </div>
+      <ol class="chain">
+        <li><b>Library</b><span>Import each match once: the video with its .dvw or .vsm.</span></li>
+        <li><b>Project</b><span>Pick your team and the matches to use. Add more as the season goes on.</span></li>
+        <li><b>Search</b><span>Filter every play across those matches by player, skill, rotation, zone or call.</span></li>
+        <li><b>Scene</b><span>Press 1 to 5 on a play to add it under that marker, or add all results at once.</span></li>
+        <li><b>Video</b><span>Put scenes in order, name the markers, turn title cards on, add slides.</span></li>
+        <li><b>Export</b><span>The whole video, each scene, one scene or one marker, as MP4 with chapters.</span></li>
+      </ol>
+      <p class="note">Short on time? Make from a preset builds the whole video in one step, with a scene per rotation, player or middle and markers by reception or result. You can still change anything afterwards.</p>
+    </div>
+  </section>
+
+  <section class="axis" id="example">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>An example</b></span></div>
+          <h2>A side-out video, layer by layer.</h2>
+        </div>
+        <p>The coach wants to show how the team sides out in each rotation, and what changes after a poor pass.</p>
+      </div>
+      <div class="example">
+        <figure>
+          <img src="img/preset.jpg" width="1100" height="880" alt="The Make from a preset dialog: a side-out video for CRO, split by reception quality, with the shots for each rotation." loading="lazy">
+        </figure>
+        <ol class="example-steps">
+          <li><b>One video</b><span>"CRO side-out", with a title card that opens it.</span></li>
+          <li><b>Six scenes</b><span>One per rotation, so the players see one rotation at a time.</span></li>
+          <li><b>Two markers in each</b><span>Marker 1, after a good reception. Marker 2, after a poor one. Each opens with its own title card.</span></li>
+          <li><b>The clips</b><span>The attacks themselves, with the scoreboard, the attacker's caption and where they landed drawn on.</span></li>
+        </ol>
+      </div>
+      <figure class="example-card">
+        <img src="img/finish-card.jpg" width="1651" height="929" alt="A title card reading 1, After a good reception, versus DNK, 2022-05-28." loading="lazy">
+        <figcaption>Marker 1's title card, right before its clips. The players always know which part they are watching.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="series" id="alongside">
+    <div class="wrap">
+      <div class="telop"><i></i><span><b>Alongside your scouting software</b></span></div>
+      <h2>DataVolley and VolleyStation scout. This app tells.</h2>
+      <p class="series-lead">Keep scouting the way you do. The app reads the .dvw or .vsm file they write and starts where their job ends: turning the scouted plays into video made for players.</p>
+      <div class="vs">
+        <div>
+          <h3>A play list</h3>
+          <p>Plays in match order, one after another. Right for the analyst at the desk, looking for something.</p>
+        </div>
+        <div class="me">
+          <h3>A video</h3>
+          <p>Plays grouped by topic, titled, with the point drawn on them. Right for players in the room, who need to see it once and get it.</p>
+        </div>
+      </div>
+      <div class="best">
+        <h3>Built on what each does well</h3>
+        <ul>
+          <li><span class="src">From DataVolley</span><b>Deep search, and several searches in one video</b><p>Filter by player, skill, rotation, zone, tempo, combination and more, and save the filters for one click. A scene's five markers hold different kinds of plays in one video, across matches.</p></li>
+          <li><span class="src">From VolleyStation</span><b>Picking plays quickly, dragging them into order</b><p>A 1 to 5 button on every row of the results puts the play straight in. Clips and markers move by dragging.</p></li>
+          <li><span class="src">From VolleyStation</span><b>The score on the picture</b><p>A broadcast-style scoreboard, with player captions and title cards on top of it.</p></li>
+        </ul>
+      </div>
+      <div class="gripes">
+        <h3>Where making the video tends to take time, and what changes here</h3>
+        <p class="gripes-lead">Both are excellent at scouting and we keep using them. These are the spots where, over several seasons with both, the video work took us the most time. Versions differ, so yours may already handle some of them.</p>
+        <ol>
+          <li><div><span class="src">DataVolley montage</span><b>Starting from everything, then taking clips out</b><p>Widen the matches so a player with few plays has enough, and a busy player can end up with around a hundred clips to go through one by one.</p></div><div class="here"><b>Here: add what you want</b><p>Press 1 to 5 on the plays as you look down the list. When taking everything and trimming is quicker, add all results at once.</p></div></li>
+          <li><div><span class="src">DataVolley montage</span><b>Coming back to a finished video</b><p>The choices made along the way aren't always there when you want to change one clip a week later.</p></div><div class="here"><b>Here: every step is kept</b><p>Which plays, their IN and OUT, the order and the drawings all save as you go. Open the project, change the clip, export again. Undo works, and deleted scenes are kept.</p></div></li>
+          <li><div><span class="src">VolleyStation export</span><b>One length for every clip</b><p>The seconds before and after the play are set once, for all clips together.</p></div><div class="here"><b>Here: each clip its own</b><p>Trim IN and OUT clip by clip, and add slow motion or a hold where it matters.</p></div></li>
+          <li><div><span class="src">VolleyStation export</span><b>Notes made in another program</b><p>Text or an arrow means exporting, opening a video editor and exporting again.</p></div><div class="here"><b>Here: draw on the clip</b><p>Text, arrows, circles and shapes on the court go on in the app and into the same export.</p></div></li>
+          <li><div><span class="src">VolleyStation export</span><b>Different topics in one video</b><p>Montages come out per search or preset, and putting them together takes extra steps.</p></div><div class="here"><b>Here: scenes and markers</b><p>Side-out, serve and one player's attacks sit in one MP4, each opening with its own title card.</p></div></li>
+        </ol>
+      </div>
+      <div class="table">
+        <table>
+          <thead>
+            <tr><td></td><th scope="col">DataVolley / VolleyStation</th><th scope="col" class="me">SyncScout Video Editor</th></tr>
+          </thead>
+          <tbody>
+            <tr class="one"><th scope="row">Job</th><td>Scout the match and analyse it</td><td class="me">Turn the scouted plays into video for players</td></tr>
+            <tr><th scope="row">When</th><td>During and right after the match</td><td class="me">Before the meeting</td></tr>
+            <tr><th scope="row">Scout file</th><td>Writes the .dvw / .vsm</td><td class="me">Reads it: nothing is scouted again</td></tr>
+            <tr><th scope="row">Video</th><td>Finds and plays the scouted plays</td><td class="me">Builds a video: scenes, markers, title cards, slides, with the data drawn on the court</td></tr>
+            <tr><th scope="row">Comes out as</th><td>Statistics, reports, play lists</td><td class="me">An MP4 with chapters, slides as PNG or PDF</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note on-dark">The app doesn't scout and doesn't replace them. It needs their file to work. DataVolley and VolleyStation are trademarks of their owners.</p>
+    </div>
+  </section>
+
+  <section class="get">
+    <div class="wrap">
+      <div>
+        <h2>Build your first video</h2>
+        <p>Available for Windows. Mac version coming soon.</p>
+      </div>
+      <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download for Windows</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK. <a href="index.html">Back to the product page</a>.</p>
+  </div>
+</footer>
+</body>
+</html>

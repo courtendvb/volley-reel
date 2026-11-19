@@ -5,7 +5,8 @@ import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
-import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, shell } from 'electron'
+import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
+import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
 import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pack'
@@ -48,6 +49,29 @@ let project: Project | null = null
 const exporter = new Exporter()
 let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
+let account: Account // made when the app is ready (it needs the user data folder)
+// Every export asks first (main/account.ts); a yes until accounts are turned on.
+const mayExport = () => {
+  if (!account.canExport()) throw new Error(t('書き出すには SyncScout の契約が必要です。ホーム画面の「アカウント」で確認できます'))
+}
+// What a failed account call says to the user.
+const accountMessage = (e: unknown): string => {
+  const code = e instanceof AccountFailure ? e.code : 'server'
+  return ({
+    invalid_code: t('コードが違うか、期限が切れています。もう一度送ってください'),
+    invalid_device: t('このパソコンのログインが取り消されました。もう一度ログインしてください'),
+    licence_expired: t('お試し期間か契約が終わっています'),
+    payment_required: t('お支払いが確認できていません。カードの情報を確かめてください'),
+    no_access: t('このチームの契約には Video Editor が含まれていません'),
+    too_many_attempts: t('試行が多すぎます。少し待ってからもう一度試してください'),
+    already_subscribed: t('このチームはすでに有料プランを契約しています。「状態を更新」を押してください'),
+    network: t('サーバーにつながりません。インターネットの接続を確かめてください'),
+    server: t('サーバーでエラーが起きました。少し待ってからもう一度試してください'),
+  } as Record<string, string>)[code]
+}
+const withAccount = async <T>(f: () => Promise<T>): Promise<T> => {
+  try { return await f() } catch (e) { throw new Error(accountMessage(e)) }
+}
 const lib = () => { if (!library) throw new Error(t('先に倉庫を選んでください')); return library }
 const proj = () => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project }
 const assetsDir = () => join(proj().dir, 'assets')
@@ -67,6 +91,17 @@ app.whenReady().then(async () => {
   // The interface language (設定 → Language); the first start follows Windows' display language.
   // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
   setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
+  account = new Account({
+    dir: app.getPath('userData'),
+    appVersion: app.getVersion(),
+    // Off in self-checks; VR_ACCOUNTS=1 (+ VR_LEASE_KEY) tries it before the release that turns it on.
+    enabled: !process.env.VR_SMOKE && (ENFORCED || process.env.VR_ACCOUNTS === '1'),
+    publicKey: process.env.VR_LEASE_KEY || LEASE_PUBLIC_KEY,
+    ...(safeStorage.isEncryptionAvailable() ? {
+      encrypt: (s: string) => safeStorage.encryptString(s).toString('base64'),
+      decrypt: (s: string) => safeStorage.decryptString(Buffer.from(s, 'base64')),
+    } : {}),
+  })
   protocol.handle('media', serveMedia)
   if (process.platform === 'darwin') setMacMenu()
   registerIpc()
@@ -112,6 +147,9 @@ app.whenReady().then(async () => {
     await runSmoke(smokeContext, win, process.env.VR_SMOKE)
   }
   startUpdates(win)
+  // A fresh lease once half of it has run; checked at start and every few hours after.
+  void account.refreshIfDue()
+  setInterval(() => void account.refreshIfDue(), 6 * 3600 * 1000).unref()
 })
 
 app.on('window-all-closed', () => app.quit())
@@ -292,6 +330,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('export:choosePath', async (_e, name: string) => {
+    mayExport()
     const dir = (await startFolder('video'))!
     const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'reel'
     const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
@@ -303,6 +342,7 @@ function registerIpc(): void {
   // One MP4 per scene: a folder, then a path in it for each file name (names come safe and unique
   // from sceneFileNames). Returns which of them are already there, so the user can say whether to overwrite.
   ipcMain.handle('export:chooseFolder', async (_e, names: string[]) => {
+    mayExport()
     const dir = (await startFolder('video'))!
     const r = await dialog.showOpenDialog(win!, { title: t('シーンごとに書き出すフォルダ'), defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
@@ -314,6 +354,7 @@ function registerIpc(): void {
   // Starts in the background and returns at once; progress and the result arrive as export:event.
   ipcMain.handle('export:start', (e, job: ExportJob) => {
     const p = proj()
+    mayExport()
     if (exporter.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
     void exporter.run(job, join(p.dir, 'export-work'), id => p.getMatch(id)?.videoPath, ev => {
       if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
@@ -323,6 +364,12 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
   ipcMain.handle('app:version', () => app.getVersion())
+  ipcMain.handle('account:get', () => ({ enabled: account.enabled, state: account.state() }))
+  ipcMain.handle('account:sendCode', (_e, email: string) => withAccount(() => account.sendCode(email)))
+  ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
+  ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
+  ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
+  ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
   // The preload reads the language synchronously, so the interface's text is right from its first paint.
   ipcMain.on('app:lang', e => { e.returnValue = getLang() })
   ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })
@@ -374,6 +421,7 @@ function registerIpc(): void {
   })
   // A card as a picture, or the cards as a PDF: to a file the user names; the path, or null.
   ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf' | 'pptx', data: Uint8Array) => {
+    mayExport()
     const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`, dir = await startFolder('docs')
     const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: ext === 'pptx' ? 'PowerPoint' : ext.toUpperCase(), extensions: [ext] }] })
     if (r.canceled || !r.filePath) return null
@@ -383,6 +431,7 @@ function registerIpc(): void {
   })
   // The match report as an A4 PDF: its page drawn in a hidden window, printed, saved where the user says.
   ipcMain.handle('report:pdf', async (_e, html: string, name: string) => {
+    mayExport()
     const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.pdf`, dir = await startFolder('docs')
     const r = await dialog.showSaveDialog(win!, { title: t('マッチレポートを PDF に書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
     if (r.canceled || !r.filePath) return null

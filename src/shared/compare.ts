@@ -51,9 +51,9 @@ export function skillCounts(list: ReportMatch[]): SkillCounts {
 // VolleyStation sheet weighs them.
 export const SERVE_WEIGHTS: Record<string, number> = { '#': 1, '/': 0.752, '+': 0.455, '!': 0.344, '-': 0.281, '=': 0 }
 
-// The rows a slide can show, in order: the label, the figure ('' when there is nothing to count) and
-// whether a higher figure is the better one (for marking the better team). A slide shows those picked
-// (compareRows), DEFAULT_COMPARE_ROWS when none were.
+// The rows a slide can show, in the order they are offered: the label, the figure ('' when there is nothing to count) and
+// whether a higher figure is the better one (for marking the better team). A slide shows those picked,
+// in the order picked (compareRows), DEFAULT_COMPARE_ROWS when none were.
 export interface SkillRow { id: string; label: string; value: (c: SkillCounts) => number | null; format: (v: number) => string; higher: boolean; title: string }
 const ratio = (n: number, of: number) => (of ? n / of : null)
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
@@ -81,11 +81,9 @@ export const SKILL_ROWS: SkillRow[] = [
 ]
 // What a slide shows unless other rows are picked: the rows it always had.
 export const DEFAULT_COMPARE_ROWS = ['so', 'fbso', 'bp', 'kill', 'eff', 'serveIndex', 'ace', 'err', 'rec', 'block', 'errPts']
-// The rows picked, in the table's order (unknown ids left out); none picked: the default.
-export const compareRows = (ids?: string[]): SkillRow[] => {
-  const on = new Set(ids?.length ? ids : DEFAULT_COMPARE_ROWS)
-  return SKILL_ROWS.filter(r => on.has(r.id))
-}
+// The rows picked, top to bottom as picked (unknown ids and repeats left out); none picked: the default.
+export const compareRows = (ids?: string[]): SkillRow[] =>
+  [...new Set(ids?.length ? ids : DEFAULT_COMPARE_ROWS)].flatMap(id => SKILL_ROWS.filter(r => r.id === id))
 
 // Which side is better on a row: 'a', 'b', or null (a tie, or a side with nothing to count).
 export function better(row: SkillRow, a: SkillCounts, b: SkillCounts): 'a' | 'b' | null {

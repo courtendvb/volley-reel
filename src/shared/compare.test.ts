@@ -54,15 +54,18 @@ describe('the skill comparison', () => {
     expect(SKILL_ROWS.find(r => r.id === 'possSet')!.format(SKILL_ROWS.find(r => r.id === 'possSet')!.value({ ...home, poss: 3, sets: 2 })!)).toBe('1.50')
     expect(all(away)).toEqual({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'KILL% #+ REC': '33.3%', 'KILL% -! REC': '', 'TRANSITION KILL%': '', 'ATTACK ERR%': '33.3%', 'BLOCKED%': '33.3%', 'RECEPTION#%': '50.0%' })
   })
-  it("shows the rows picked in the table's order, the default when none are", () => {
+  it('shows the rows picked in the order picked, the default when none are', () => {
     expect(compareRows().map(r => r.id)).toEqual(DEFAULT_COMPARE_ROWS)
     expect(compareRows([]).map(r => r.id)).toEqual(DEFAULT_COMPARE_ROWS)
-    expect(compareRows(['errPts', 'poss', 'gone', 'so']).map(r => r.id)).toEqual(['so', 'poss', 'errPts'])
+    expect(compareRows(['errPts', 'poss', 'gone', 'so', 'poss']).map(r => r.id)).toEqual(['errPts', 'poss', 'so'])
     const side = { code: 'HTH', name: '', counts: home }, other = { code: 'OPP', name: '', counts: away }
     const labels = (ids?: string[]) => compareSlide(side, other, {}, '#000', ids).flatMap(a => (a.kind === 'text' ? [a.text] : []))
     expect(labels(['poss', 'so'])).toEqual(expect.arrayContaining(['SO%', 'POSS%']))
     expect(labels(['poss', 'so'])).not.toContain('BP%')
     expect(labels()).toContain('ERR PTS/SET')
+    // Top to bottom as picked.
+    const rows = labels(['errPts', 'so']).filter(x => x === 'SO%' || x === 'ERR PTS/SET')
+    expect(rows).toEqual(['ERR PTS/SET', 'SO%'])
   })
   it('weighs each serve by its evaluation for the serve index', () => {
     // - 0.281, # 1, + 0.455 three times: 2.646 over five serves.

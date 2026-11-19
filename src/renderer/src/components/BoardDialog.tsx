@@ -65,6 +65,53 @@ function useOwnTeam(on: boolean, initial: string | undefined) {
   return { path: projects?.some(p => p.path === path) ? path : '', setPath, projects, own: own?.path === path ? own : null, error }
 } // '': no one, or all their attacks
 
+// The figures on a comparison, top to bottom: each picked one a chip in its place, dragged (or moved
+// with its arrows) to another, taken off with ×; the rest below, to add at the bottom.
+function CompareRowPicker({ ids, onChange }: { ids: string[]; onChange: (ids: string[]) => void }) {
+  const [dragged, setDragged] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null)
+  const picked = ids.flatMap(id => SKILL_ROWS.filter(r => r.id === id)), rest = SKILL_ROWS.filter(r => !ids.includes(r.id))
+  const isDefault = ids.length === DEFAULT_COMPARE_ROWS.length && DEFAULT_COMPARE_ROWS.every((id, i) => ids[i] === id)
+  const move = (id: string, to: number) => { const list = ids.filter(x => x !== id); list.splice(Math.max(0, Math.min(list.length, to)), 0, id); onChange(list) }
+  const drop = () => {
+    if (dragged && dropAt && dragged !== dropAt.id) {
+      const list = ids.filter(x => x !== dragged), at = list.indexOf(dropAt.id) + (dropAt.after ? 1 : 0)
+      move(dragged, at)
+    }
+    setDragged(null); setDropAt(null)
+  }
+  return (
+    <div className="compare-rows">
+      <div className="filter-row">
+        <span className="field-label">{t('数字')}</span>
+        <ol className="compare-picked" aria-label={t('スライドに入れる数字（上から順）')} title={t('スライドに上から並ぶ順です。ドラッグか矢印で並べ替え、× で外します')}>
+          {picked.map((r, i) => (
+            <li key={r.id} draggable title={t(r.title)}
+              className={`compare-chip${dragged === r.id ? ' dragging' : ''}${dropAt?.id === r.id ? (dropAt.after ? ' drop-after' : ' drop-before') : ''}`}
+              onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragged(r.id) }}
+              onDragOver={e => { if (!dragged) return; e.preventDefault(); const b = e.currentTarget.getBoundingClientRect(); setDropAt({ id: r.id, after: e.clientX > b.left + b.width / 2 }) }}
+              onDrop={e => { e.preventDefault(); drop() }}
+              onDragEnd={() => { setDragged(null); setDropAt(null) }}>
+              <span className="compare-chip-no">{i + 1}</span>
+              <button className="compare-chip-move" disabled={i === 0} aria-label={t('{0} を前へ', r.label)} onClick={() => move(r.id, i - 1)}>‹</button>
+              <span className="compare-chip-label">{r.label}</span>
+              <button className="compare-chip-move" disabled={i === picked.length - 1} aria-label={t('{0} を後ろへ', r.label)} onClick={() => move(r.id, i + 1)}>›</button>
+              <button className="compare-chip-off" aria-label={t('{0} を外す', r.label)} onClick={() => onChange(ids.filter(x => x !== r.id))}>×</button>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div className="filter-row">
+        <span className="field-label">{t('追加')}</span>
+        <div className="chips" aria-label={t('足せる数字')}>
+          {rest.map(r => <button key={r.id} className="chip" title={t(r.title)} onClick={() => onChange([...ids, r.id])}>＋ {r.label}</button>)}
+          <button className="link" disabled={isDefault} title={t('最初から入っている 11 項目と、その順に戻します')} onClick={() => onChange(DEFAULT_COMPARE_ROWS)}>{t('既定に戻す')}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Sets out a comparison card: how many players, then who goes in each place, from left to right.
 export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle, onCreate, onImport, onClose }: {
   dvws: ParsedDVW[]
@@ -123,7 +170,6 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const compare = ownTeam.own && right ? { left: ownTeam.own.side, right } : undefined
   const [rowIds, setRowIds0] = useState<string[]>(() => rowsOf(initial?.skill === 'C' ? initial.compareRows : loadCompareRows()).map(r => r.id)) // the figures on a comparison
   const setRowIds = (ids: string[]) => { setRowIds0(ids); if (ids.length) saveCompareRows(ids) }
-  const isDefaultRows = rowIds.length === DEFAULT_COMPARE_ROWS.length && DEFAULT_COMPARE_ROWS.every(id => rowIds.includes(id))
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, starts: true, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
   // no place yet. A change of team or skill starts again.
@@ -223,14 +269,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           {ownTeam.error && <p className="muted small">{ownTeam.error}</p>}
           {ownTeam.own && !ownTeam.own.side.counts.matches && <p className="muted small">{t('そのプロジェクトに {0} の試合の DVW がありません', ownTeam.own.side.code || '?')}</p>}
           {ownTeam.own && ownTeam.own.failed.length > 0 && <p className="muted small">{t('読めなかった試合: {0}', ownTeam.own.failed.join(' / '))}</p>}
-          <div className="filter-row compare-rows" role="group" aria-label={t('スライドに入れる数字')}>
-            <span className="field-label">{t('数字')}</span>
-            {SKILL_ROWS.map(r => (
-              <label key={r.id} className="check" title={t(r.title)}><input type="checkbox" checked={rowIds.includes(r.id)}
-                onChange={e => setRowIds(SKILL_ROWS.filter(x => (x.id === r.id ? e.target.checked : rowIds.includes(x.id))).map(x => x.id))} /> {r.label}</label>
-            ))}
-            <button className="link" disabled={isDefaultRows} title={t('最初から入っている 11 項目に戻します')} onClick={() => setRowIds(DEFAULT_COMPARE_ROWS)}>{t('既定に戻す')}</button>
-          </div>
+          <CompareRowPicker ids={rowIds} onChange={setRowIds} />
           {!rowIds.length && <p className="muted small">{t('数字を 1 つ以上選んでください')}</p>}
           <p className="hint" title={rowsOf(rowIds).map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます')}</p>
         </>}

@@ -1882,15 +1882,21 @@ export function installSmoke(h: SmokeHost): void {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(own, first.value)
       own.dispatchEvent(new Event('change', { bubbles: true }))
       const make = await waitFor(() => { const b = button(dialog, t('作成')); return b && !b.disabled ? b : null }, 15000, 'own team loaded')
-      // A figure added to the default eleven: POSS%.
-      const poss = [...dialog.querySelectorAll<HTMLLabelElement>('.compare-rows label')].find(l => l.textContent?.trim() === 'POSS%')?.querySelector('input')
-      if (!poss || poss.checked) throw new Error('no POSS% to pick, or picked already')
-      poss.click()
+      // A figure added to the default eleven (POSS%, at the bottom), then moved up to the top.
+      const add = [...dialog.querySelectorAll<HTMLButtonElement>('.compare-rows .chip')].find(b => b.textContent?.includes('POSS%') && !b.textContent.includes('/SET'))
+      if (!add) throw new Error('no POSS% to add')
+      add.click(); await sleep(200)
+      const chips = () => [...dialog.querySelectorAll('.compare-picked .compare-chip-label')].map(x => x.textContent)
+      for (let i = 0; i < 11; i++) {
+        const li = [...dialog.querySelectorAll('.compare-picked li')].find(x => x.querySelector('.compare-chip-label')?.textContent === 'POSS%')
+        li?.querySelector<HTMLButtonElement>('.compare-chip-move')?.click(); await sleep(50)
+      }
+      await waitFor(() => (chips()[0] === 'POSS%' ? chips() : null), 3000, 'POSS% moved to the top')
       await sleep(600); await api.smokeShot!('compare-preview.png')
       make.click()
       const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'C') ?? null, 10000, 'comparison slide')
       const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
-      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !texts.includes('POSS%') || texts.includes('BLOCKED%') || !slide.board?.config.compareProject || !slide.board.config.compareRows?.includes('poss')) throw new Error(`comparison: ${texts.join(' | ')}`)
+      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !texts.includes('POSS%') || texts.indexOf('POSS%') > texts.indexOf('SO%') || texts.includes('BLOCKED%') || !slide.board?.config.compareProject || slide.board.config.compareRows?.[0] !== 'poss') throw new Error(`comparison: ${texts.join(' | ')}`)
       return { project: slide.board.config.compareProject, rows: slide.board.config.compareRows, texts }
     }
     if (layout === 'rot') {

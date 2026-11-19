@@ -897,3 +897,8 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .account-join { display: flex; align-items: flex-end; gap: var(--space-4); flex-wrap: wrap; }
 .account-join label { flex: 1; min-width: 140px; }
 .account-teams-toggle { align-self: flex-start; }
+.export-account-note { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--amber-soft); color: var(--text); font-size: var(--fs-body); }
+.export-account-note span { flex: 1; }
+.account-scope { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); padding: var(--space-4); border-radius: var(--radius-md); background: var(--soft); font-size: var(--fs-body); }
+.account-scope h3 { margin: 0 0 var(--space-2); font-size: var(--fs-label); color: var(--sub); }
+.account-scope ul { margin: 0; padding-left: 1.2em; }

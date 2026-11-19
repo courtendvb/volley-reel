@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AccountState, LeaseTeam } from '../../../shared/account'
 import { t } from '../../../shared/i18n'
 import { errorText } from '../format'
+import { setAccountState, useAccount } from '../account'
 
 // The SyncScout account on the home screen (main/account.ts). Shown only once accounts are turned on.
 // Signing in is an email address and the code mailed to it: no password. Which team the account uses is
@@ -10,17 +11,61 @@ import { errorText } from '../format'
 // Stripe in the browser, and coming back to the app picks the payment up at once (the server asks
 // Stripe, it doesn't wait for the webhook).
 export function AccountButton() {
-  const [info, setInfo] = useState<{ enabled: boolean; state: AccountState } | null>(null)
+  const info = useAccount()
   const [open, setOpen] = useState(false)
-  useEffect(() => { void window.api.account().then(setInfo) }, [])
   if (!info?.enabled) return null
   const s = info.state
   const label = s.kind === 'signed_out' ? t('ログイン') : s.kind === 'needs_team' ? t('チームを選ぶ') : s.kind === 'ok' ? s.email : t('契約を確認')
   return (
     <>
       <button className={s.kind === 'ok' || s.kind === 'signed_out' ? '' : 'warn'} onClick={() => setOpen(true)} title={t('SyncScout アカウント')}>{label}</button>
-      {open && <AccountDialog state={s} onState={state => setInfo({ enabled: true, state })} onClose={() => setOpen(false)} />}
+      {open && <AccountDialog state={s} onState={setAccountState} onClose={() => setOpen(false)} />}
     </>
+  )
+}
+
+// Beside an export button: says plainly that exporting needs a signed-in account with a trial or a
+// plan, and opens the account dialog. Nothing while accounts are off or exports are allowed.
+export function ExportAccountNote() {
+  const info = useAccount()
+  const [open, setOpen] = useState(false)
+  if (!info?.enabled || info.state.kind === 'ok') return null
+  const s = info.state
+  const [text, button] = s.kind === 'signed_out'
+    ? [t('書き出すには SyncScout へのログインが必要です。初めての方は30日間無料で使えます。'), t('ログイン')]
+    : s.kind === 'needs_team'
+      ? [t('書き出すには、使うチームを選んでください。'), t('チームを選ぶ')]
+      : [t('お試し期間か契約が終わっているため、書き出せません。編集はこれまでどおりできます。'), t('契約を確認')]
+  return (
+    <div className="export-account-note" role="note">
+      <span>{text}</span>
+      <button className="primary" onClick={() => setOpen(true)}>{button}</button>
+      {open && <AccountDialog state={s} onState={setAccountState} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
+
+// What works without an account and what needs one. Shown until the account can export.
+function WhatNeedsSignIn() {
+  return (
+    <div className="account-scope">
+      <div>
+        <h3>{t('ログインしなくてもできること')}</h3>
+        <ul>
+          <li>{t('試合（動画と DVW）の取り込み')}</li>
+          <li>{t('プロジェクト・シーン・動画の作成と編集')}</li>
+          <li>{t('注釈・スライド・ボードの作成とプレビュー')}</li>
+        </ul>
+      </div>
+      <div>
+        <h3>{t('ログイン（お試し中・契約中）が必要なこと')}</h3>
+        <ul>
+          <li>{t('動画（MP4）の書き出し')}</li>
+          <li>{t('スライドの書き出し（PNG・PDF・PowerPoint）')}</li>
+          <li>{t('マッチレポートの PDF 書き出し')}</li>
+        </ul>
+      </div>
+    </div>
   )
 }
 
@@ -51,6 +96,7 @@ export function AccountDialog({ state, onState, onClose }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal account-modal" role="dialog" aria-label={t('SyncScout アカウント')} onClick={e => e.stopPropagation()}>
         <h2>{t('SyncScout アカウント')}</h2>
+        {state.kind !== 'ok' && <WhatNeedsSignIn />}
         {state.kind === 'signed_out' ? <SignIn busy={busy} run={run} />
           : state.kind === 'needs_team' ? <ChooseTeam email={state.email} suggested={state.suggested} busy={busy} run={run} />
           : <Signed state={state} busy={busy} run={run} onPay={plan => { setPaying(true); void run(() => window.api.accountCheckout(plan)) }} />}

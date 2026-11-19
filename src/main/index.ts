@@ -53,7 +53,7 @@ let win: BrowserWindow | null = null
 let account: Account // made when the app is ready (it needs the user data folder)
 // Every export asks first (main/account.ts); a yes until accounts are turned on.
 const mayExport = () => {
-  if (!account.canExport()) throw new Error(t('書き出すには SyncScout の契約が必要です。ホーム画面の「アカウント」で確認できます'))
+  if (!account.canExport()) throw new Error(t('書き出すには SyncScout へのログイン（お試し中か契約中）が必要です。ホーム画面右上のボタンか、書き出し画面の案内からログインしてください'))
 }
 // What a failed account call says to the user.
 const accountMessage = (e: unknown): string => {

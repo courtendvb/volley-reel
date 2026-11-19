@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hostname } from 'node:os'
 import {
-  EDITOR_APP, leaseState, refreshDue, splitLease,
+  EDITOR_APP, gate, leaseState, refreshDue, splitLease, type Gate, type GateRefusal,
   type AccountError, type AccountState, type LeasePayload, type LeaseResponse, type LeaseTeam, type TeamAction,
 } from '../shared/account'
 
@@ -102,8 +102,10 @@ export class Account {
     return leaseState(p, this.saved.teams ?? [], this.now(), this.saved.seen ?? 0, this.saved.serverError, this.saved.suggested ?? [])
   }
 
-  // Whether an export may start. Always yes until accounts are turned on.
-  canExport(): boolean { return !this.enabled || this.state().kind === 'ok' }
+  // Why an export, an import or a new project isn't allowed now, or null (shared/account.ts: gate).
+  // Always null until accounts are turned on.
+  refusal(what: Gate, matches = 0, adding = 1): GateRefusal | null { return gate(this.enabled, this.state(), what, matches, adding) }
+  canExport(): boolean { return this.refusal('export') === null }
 
   private deviceToken(): string | null {
     const t = this.saved.token

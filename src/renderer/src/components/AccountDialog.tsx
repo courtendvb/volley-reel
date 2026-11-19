@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AccountState, LeaseTeam } from '../../../shared/account'
+import { FREE_MATCHES, gate, type AccountState, type Gate, type LeaseTeam } from '../../../shared/account'
 import { t } from '../../../shared/i18n'
 import { errorText } from '../format'
 import { setAccountState, useAccount } from '../account'
@@ -24,18 +24,24 @@ export function AccountButton() {
   )
 }
 
-// Beside an export button: says plainly that exporting needs a signed-in account with a trial or a
-// plan, and opens the account dialog. Nothing while accounts are off or exports are allowed.
-export function ExportAccountNote() {
+// Beside an export, an import or "new project": says plainly why it isn't allowed now (the same rule
+// the main process enforces: shared/account.ts gate) and opens the account dialog. Nothing while
+// accounts are off or the action is allowed. `matches`: how many the library holds (for imports).
+export function AccountNote({ what, matches = 0 }: { what: Gate; matches?: number }) {
   const info = useAccount()
   const [open, setOpen] = useState(false)
-  if (!info?.enabled || info.state.kind === 'ok') return null
+  if (!info) return null
+  const refused = gate(info.enabled, info.state, what, matches, 1)
+  if (!refused) return null
   const s = info.state
-  const [text, button] = s.kind === 'signed_out'
-    ? [t('書き出すには SyncScout へのログインが必要です。初めての方は30日間無料で使えます。'), t('ログイン')]
-    : s.kind === 'needs_team'
-      ? [t('書き出すには、使うチームを選んでください。'), t('チームを選ぶ')]
-      : [t('お試し期間か契約が終わっているため、書き出せません。編集はこれまでどおりできます。'), t('契約を確認')]
+  const text = refused === 'plan'
+    ? what === 'export' ? t('お試し期間か契約が終わっているため、書き出せません。編集はこれまでどおりできます。')
+      : what === 'import' ? t('お試し期間か契約が終わっているため、試合を追加できません。作ったプロジェクトはこれまでどおり開いて編集できます。')
+      : t('お試し期間か契約が終わっているため、新しいプロジェクトは作れません。作ったプロジェクトはこれまでどおり開いて編集できます。')
+    : s.kind === 'needs_team' ? (what === 'export' ? t('書き出すには、使うチームを選んでください。') : t('2試合目からは、使うチームを選ぶと取り込めます。'))
+    : what === 'export' ? t('書き出すには SyncScout へのログインが必要です。初めての方は30日間無料で使えます。')
+    : t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は30日間無料）制限なく取り込めます。', FREE_MATCHES)
+  const button = refused === 'plan' ? t('契約を確認') : s.kind === 'needs_team' ? t('チームを選ぶ') : t('ログイン')
   return (
     <div className="export-account-note" role="note">
       <span>{text}</span>
@@ -45,21 +51,42 @@ export function ExportAccountNote() {
   )
 }
 
-// What works without an account and what needs one. Shown until the account can export.
-function WhatNeedsSignIn() {
+// What each account state allows (shared/account.ts gate). Shown until the account can do everything.
+function WhatNeedsSignIn({ state }: { state: AccountState }) {
+  if (state.kind === 'expired' || state.kind === 'no_access') {
+    return (
+      <div className="account-scope">
+        <div>
+          <h3>{t('お試し・契約が終わってもできること')}</h3>
+          <ul>
+            <li>{t('作ったプロジェクトを開いて、見る・編集する')}</li>
+          </ul>
+        </div>
+        <div>
+          <h3>{t('契約すると再びできること')}</h3>
+          <ul>
+            <li>{t('試合の追加')}</li>
+            <li>{t('新しいプロジェクトの作成')}</li>
+            <li>{t('動画・スライド・マッチレポートの書き出し')}</li>
+          </ul>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="account-scope">
       <div>
         <h3>{t('ログインしなくてもできること')}</h3>
         <ul>
-          <li>{t('試合（動画と DVW）の取り込み')}</li>
-          <li>{t('プロジェクト・シーン・動画の作成と編集')}</li>
+          <li>{t('{0} 試合の取り込み', FREE_MATCHES)}</li>
+          <li>{t('その試合でのプロジェクト・シーン・動画の作成と編集')}</li>
           <li>{t('注釈・スライド・ボードの作成とプレビュー')}</li>
         </ul>
       </div>
       <div>
         <h3>{t('ログイン（お試し中・契約中）が必要なこと')}</h3>
         <ul>
+          <li>{t('{0} 試合目からの取り込み', FREE_MATCHES + 1)}</li>
           <li>{t('動画（MP4）の書き出し')}</li>
           <li>{t('スライドの書き出し（PNG・PDF・PowerPoint）')}</li>
           <li>{t('マッチレポートの PDF 書き出し')}</li>
@@ -96,7 +123,7 @@ export function AccountDialog({ state, onState, onClose }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal account-modal" role="dialog" aria-label={t('SyncScout アカウント')} onClick={e => e.stopPropagation()}>
         <h2>{t('SyncScout アカウント')}</h2>
-        {state.kind !== 'ok' && <WhatNeedsSignIn />}
+        {state.kind !== 'ok' && <WhatNeedsSignIn state={state} />}
         {state.kind === 'signed_out' ? <SignIn busy={busy} run={run} />
           : state.kind === 'needs_team' ? <ChooseTeam email={state.email} suggested={state.suggested} busy={busy} run={run} />
           : <Signed state={state} busy={busy} run={run} onPay={plan => { setPaying(true); void run(() => window.api.accountCheckout(plan)) }} />}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { LibraryInfo, Match, MissingPart, RecentProject } from '../../../shared/types'
 import { MatchCells } from './MatchPicker'
+import { AccountButton } from './AccountDialog'
 import { t } from '../../../shared/i18n'
 
 interface Props {
@@ -54,7 +55,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
       </section>
 
       <section className="home-projects">
-        <header className="home-head"><h2>{t('プロジェクト')}</h2></header>
+        <header className="home-head"><h2>{t('プロジェクト')}</h2><span className="spacer" /><AccountButton /></header>
         <div className="home-actions">
           <button className="primary" onClick={onNewProject} disabled={!library?.matches.length} title={library?.matches.length ? '' : t('先に倉庫に試合を入れてください')}>{t('新しいプロジェクト')}</button>
           <button onClick={() => onOpenProject()} disabled={!library}>{t('開く…')}</button>

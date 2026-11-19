@@ -879,3 +879,14 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 }
 /* Chips in a list row: the memo sort and the card switch share one small height. */
 .tag-sort, .card-toggle { box-sizing: border-box; height: var(--control-xs); padding-block: 0; line-height: calc(var(--control-xs) - 2px); }
+
+/* SyncScout account (components/AccountDialog.tsx) */
+.account-modal { width: min(520px, 92vw); }
+.account-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.account-form label { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--fs-label); color: var(--sub); }
+.account-form .row { display: flex; gap: var(--space-4); }
+.account-facts { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-5); margin: 0; }
+.account-facts dt { color: var(--sub); }
+.account-facts dd { margin: 0; }
+.account-modal .error { color: var(--danger-text); }
+button.warn { border-color: var(--amber); color: var(--danger-text); }

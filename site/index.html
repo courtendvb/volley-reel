@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SyncScout Video Editor</title>
-<meta name="description" content="Make match video your players understand at a glance. A desktop app that draws your DataVolley or VolleyStation scout data onto the match video, so you only add the message. Offline on Windows.">
+<meta name="description" content="Before a word is said, the video gets it across. A desktop app that draws your DataVolley or VolleyStation scout data onto the match video automatically, so all you add is the message. Offline, for Windows and Mac.">
 <link rel="alternate" hreflang="en" href="index.html">
 <link rel="alternate" hreflang="ja" href="ja.html">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,37 +19,145 @@
     <div class="bar">
       <span class="brand">SyncScout <small>Video Editor</small></span>
       <nav class="nav" aria-label="On this page">
+        <a href="#film">In the film</a>
         <a href="#difference">Before and after</a>
         <a href="#court">On the court</a>
         <a href="#finish">Your message</a>
         <a href="#how">How it works</a>
         <a href="#numbers">Reports</a>
-        <a href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download</a>
+        <a href="#download">Download</a>
         <a class="lang" href="ja.html" hreflang="ja" lang="ja">日本語</a>
       </nav>
     </div>
     <div class="pitch">
-      <h1>Video your players get at a glance. <span class="mark">Built from your scout file.</span></h1>
-      <p class="lead">Your scout file already knows the score, the player, the result and where every ball landed. The app draws it onto the match video, so all you add is the message.</p>
+      <h1>The video says it first. <span class="mark">One look, and the aim is clear.</span></h1>
+      <p class="lead">Everything in your scout file is drawn onto the match video automatically. All you add is the message.</p>
       <div class="pitch-side">
-        <p>A desktop app for volleyball staff. Load your DataVolley or VolleyStation files with the match video and turn the plays you care about into meeting-ready video, offline on your own computer.</p>
-        <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download for Windows</a>
+        <p>A desktop app for volleyball staff. Load your DataVolley or VolleyStation files with the match video and turn the plays you care about into meeting-ready video, offline on your own Windows or Mac computer.</p>
+        <div class="dl-hero">
+          <a class="btn" data-dl-main href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download for Windows</a>
+          <p class="dl-note" data-dl-note></p>
+        </div>
       </div>
     </div>
     <figure class="shot">
-      <video class="hero-video" autoplay muted loop playsinline preload="auto" poster="img/hero.jpg" width="1280" height="720" aria-label="An attack from Croatia vs Denmark, exported from the app. The scoreboard, the attacker's caption and a heatmap of where his attacks landed come from the scout file; a headline, a circle around the block and a note were added by hand.">
-        <source src="media/hero-en.mp4" type="video/mp4">
+      <video class="hero-video" id="film" controls muted playsinline preload="metadata" poster="img/film-poster.jpg" width="1280" height="720" aria-label="A 70-second sample film made and exported with the app: real match video of Croatia vs Denmark with a serve ace, a block, an attack and a set, then data slides from ten matches of sample data. No sound.">
+        <source src="media/film-en.mp4" type="video/mp4">
       </video>
+      <ol class="chapters" aria-label="Jump to a moment in the film">
+        <li><button type="button" data-t="2"><i>0:02</i>Serve</button></li>
+        <li><button type="button" data-t="11"><i>0:11</i>Block</button></li>
+        <li><button type="button" data-t="20"><i>0:20</i>Attack</button></li>
+        <li><button type="button" data-t="29"><i>0:29</i>Set</button></li>
+        <li><button type="button" data-t="38"><i>0:38</i>Ten matches</button></li>
+        <li><button type="button" data-t="65"><i>1:05</i>Team comparison</button></li>
+      </ol>
       <figcaption class="legend">
-        <span><i class="dot data"></i>From the scout file: score, player caption, where his attacks landed</span>
-        <span><i class="dot you"></i>Added by hand: headline, circle, note</span>
+        <span><i class="dot data"></i>From the scout file: score, captions, hit and landing points, flights, heatmaps, cones, set distribution, slides</span>
+        <span><i class="dot you"></i>Added by hand: the headline and the circle</span>
+        <span>A 70-second sample made with the app. No sound.</span>
       </figcaption>
     </figure>
   </div>
 </header>
 
 <main>
-  <section class="axis alt" id="difference">
+  <section class="axis alt" id="film">
+    <div class="wrap">
+      <div class="head">
+        <div class="title">
+          <div class="telop"><i></i><span><b>In the film</b></span></div>
+          <h2>Real match video, then a season of numbers.</h2>
+        </div>
+        <p>The film above is one export. The first half is Croatia vs Denmark (28 May 2022), with overlays chosen for each part: a heatmap and a painted zone on the serve, a rectangle on the court on the block, cones on the attack, the set distribution on the set. The second half is data slides from ten matches of sample data for a made-up team, the Riverside Herons. Here is what is on screen, and what put it there.</p>
+      </div>
+      <div class="moments">
+        <article class="moment">
+          <img src="img/film-serve.jpg" width="960" height="540" alt="A serve ace by number 11: the serve's flight from its hit point to its landing point, a ripple where it landed, a heatmap of serve landings and the landing zone painted blue." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="2"><i>0:02</i>Play from here</button>
+            <h3>An ace, drawn where it landed</h3>
+            <p>The serve's flight from the hit point to the landing point, a ripple that starts 1.5 seconds before it comes down, the heat of the player's other serves, and the zone it landed in painted in a colour of your choice.</p>
+            <ul class="tags"><li>Hit and landing points</li><li>Landing ripple</li><li>Heatmap</li><li>Zone paint</li><li>Caption</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-block.jpg" width="960" height="540" alt="A block kill with the headline Take away the line, a red circle around the block and a white rectangle laid on the court along the sideline." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="11"><i>0:11</i>Play from here</button>
+            <h3>Hold the line, on the video</h3>
+            <p>A rectangle laid on the court along the line, keeping the court's perspective, plus a headline and a circle that shows only while the block is up, all added by hand in a few clicks. Each marker opens with its own title card.</p>
+            <ul class="tags"><li>Rectangle on the court</li><li>Headline</li><li>Timed circle</li><li>Title card</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-attack.jpg" width="960" height="540" alt="An attack by number 11 with its flight, five cones showing 64, 9, 0, 27 and 0 percent of his attacks, a direction chart in the corner and a ripple where it came down." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="20"><i>0:20</i>Play from here</button>
+            <h3>Where his attacks go</h3>
+            <p>Five cones with the share of his attacks that went each way (64, 9, 0, 27 and 0 percent here), a direction chart in the corner, and a ripple where this one came down.</p>
+            <ul class="tags"><li>Cones</li><li>Direction chart</li><li>Landing ripple</li><li>Flight</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-set.jpg" width="960" height="540" alt="A set by number 6 with the share of sets to zones 1, 3 and 4 painted on the court." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="29"><i>0:29</i>Play from here</button>
+            <h3>Where the setter sets</h3>
+            <p>The setter's distribution painted on the court: how often each zone gets the ball. Press a marker's number on any play and it joins the film with the same look.</p>
+            <ul class="tags"><li>Set distribution</li><li>Hit points</li><li>Caption</li><li>Markers</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-data-serve.jpg" width="960" height="540" alt="Serve cards for three players: 150, 111 and 106 serves from ten matches, each drawn from where it started to where it landed, with break-point and error rates." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="40"><i>0:40</i>Play from here</button>
+            <h3>Ten matches in one slide</h3>
+            <p>Every serve of three players over ten matches, drawn from where it started to where it landed, with break-point and error rates. From here the film uses made-up data.</p>
+            <ul class="tags"><li>Serve cards</li><li>Ten matches</li><li>Rates</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-data-rotation.jpg" width="960" height="540" alt="A rotation slide for P5: the serve-receive formation in perspective, cones for the top attackers, the share per attack zone and tables by pass and setter call." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="45"><i>0:45</i>Play from here</button>
+            <h3>A rotation, on a page</h3>
+            <p>The serve-receive formation, where the attacks go and the setter's choices for rotation P5, from the whole season.</p>
+            <ul class="tags"><li>Data slide</li><li>Rotation</li><li>Setter tables</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-data-targets.jpg" width="960" height="540" alt="A serve-target slide: receptions by receiver and by target zone, jump and float apart, with good-pass and first-attack kill rates." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="55"><i>0:55</i>Play from here</button>
+            <h3>Which serves hurt the pass</h3>
+            <p>Receptions by receiver and by zone, jump and float apart, with the good-pass and first-attack kill rates: which serves bring the opponent's side-out down.</p>
+            <ul class="tags"><li>Serve targets</li><li>Jump and float</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-data-stats.jpg" width="960" height="540" alt="A table of the team's players' attacks over the last ten matches: attempts, kills, kill rate and efficiency." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="60"><i>1:00</i>Play from here</button>
+            <h3>The team in a table</h3>
+            <p>A table of the team's players' attacks (or serves, or receptions) over the last ten matches, as a slide.</p>
+            <ul class="tags"><li>Player stats</li><li>Table</li></ul>
+          </div>
+        </article>
+        <article class="moment">
+          <img src="img/film-compare.jpg" width="960" height="540" alt="A skill comparison slide of RSH (10 matches, 35 sets) and HCF (4 matches, 12 sets) with the better figure in red." loading="lazy">
+          <div class="moment-body">
+            <button type="button" class="seek" data-t="65"><i>1:05</i>Play from here</button>
+            <h3>Your team against theirs</h3>
+            <p>The skill comparison of two teams over all their matches, the better figure in red, made from two projects.</p>
+            <ul class="tags"><li>Data slide</li><li>Team comparison</li></ul>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="axis" id="difference">
     <div class="wrap">
       <div class="head">
         <div class="title">
@@ -61,13 +169,13 @@
       <div class="pair">
         <figure>
           <span class="tag">The clip</span>
-          <img src="img/plain.jpg" width="1280" height="720" alt="The same frame of the attack with nothing on it." loading="lazy">
+          <img src="img/before.jpg" width="1280" height="720" alt="The same moment of a block at the net, cut straight from the match video with nothing on it." loading="lazy">
           <figcaption>Players see a rally. Which one it is, and what to watch, is up to them.</figcaption>
         </figure>
         <figure>
           <span class="tag on">The same clip, finished</span>
-          <img src="img/hero.jpg" width="1280" height="720" alt="The frame with the score, the attacker's caption, a heatmap of his attacks on the near court, a headline, a circle around the block and a note at the open spot." loading="lazy">
-          <figcaption>The score, the player and where his attacks usually land, with the point the coach wants made.</figcaption>
+          <img src="img/after.jpg" width="1280" height="720" alt="The same moment with the score, the blocker's caption, the scout's hit points, a headline and a circle around the block." loading="lazy">
+          <figcaption>The score, the player and the scout's points, with the point the coach wants made.</figcaption>
         </figure>
       </div>
       <div class="source">
@@ -76,14 +184,14 @@
           <dl>
             <dt>Scoreboard</dt><dd>The score and sets of that rally, in one of four designs.</dd>
             <dt>Captions</dt><dd>Number, name, skill and evaluation, with the player's photo from a photo pack.</dd>
-            <dt>On the court</dt><dd>Landings and heatmaps, flight, zones, serve paths and cones, drawn on the floor of the video.</dd>
+            <dt>On the court</dt><dd>Landings and heatmaps, flight, zones, serve paths and cones, with a ripple, lock-on, flash or trail where a ball came down, drawn on the floor of the video.</dd>
             <dt>Serve speed</dt><dd>Mark the hit and the touch, and the clip shows the serve's speed.</dd>
           </dl>
         </div>
         <div>
           <h3>You add, in a few clicks</h3>
           <dl>
-            <dt>Your point</dt><dd>Text, arrows and curved arrows, shapes, freehand and numbered circles, each with its own timing and fade.</dd>
+            <dt>Your point</dt><dd>Text, arrows and curved arrows, shapes, freehand and numbered circles, each with its own timing and fade, and a draw-in, pulse, blink or ripple to pull the eye.</dd>
             <dt>Title cards</dt><dd>For the video, each scene and each marker, with a player photo or a team logo if you have them.</dd>
             <dt>Slides</dt><dd>A still frame, a page from a PDF, or a data slide, between the clips.</dd>
             <dt>Timing</dt><dd>Trim IN and OUT clip by clip, and add slow motion or a freeze.</dd>
@@ -116,7 +224,24 @@
         <button class="tab" id="tab-serve" role="tab" aria-selected="false" aria-controls="stage" data-layer="serve"><b>Serve paths</b><span>A player's serves from every match in the project.</span></button>
         <button class="tab" id="tab-cones" role="tab" aria-selected="false" aria-controls="stage" data-layer="cones"><b>Cones</b><span>Five cones with the share of attacks that went each way.</span></button>
       </div>
-      <p class="note">Also on the court: a direction chart in the corner, the setter's set distribution, painted zones, and cylinders that stand on the floor. Flight curves explain the play; scout times are to the second, so they won't follow the real ball exactly.</p>
+      <p class="note">Also on the court: a direction chart in the corner, the setter's set distribution, painted zones, and cylinders that stand on the floor. Flight curves explain the play; scout times are to the second, so they won't follow the real ball exactly, and a ball that touched a block or a receiver lands somewhere the scout's end point can't tell. The clips in the film were picked with that in mind.</p>
+    </div>
+  </section>
+
+  <section class="axis" id="fit">
+    <div class="wrap split">
+      <figure class="frame">
+        <img src="img/court-autofit.jpg" width="1600" height="844" alt="The app right after a match is opened: the court grid already laid on the lines of the court in the video, with four corner dots and a note asking to check it." loading="lazy">
+      </figure>
+      <div class="title">
+        <div class="telop"><i></i><span><b>The court</b></span></div>
+        <h2>The court fits itself.</h2>
+        <ul class="points">
+          <li><b>It finds the court</b><span>Open a match and the app looks for the court's four corners and lays the grid on its lines. If a corner is off, drag its dot, then say which team is near.</span></li>
+          <li><b>Shapes that sit on the court</b><span>A rectangle drawn on the floor keeps the court's perspective, so a lane or a zone stays square to the lines. You can move its corners afterwards.</span></li>
+          <li><b>Paint the zones</b><span>Pick cells on a small court, 9 zones or 81 cells, and the floor is painted in your colour at the strength you choose.</span></li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -127,7 +252,7 @@
           <div class="telop"><i></i><span><b>Your message</b></span></div>
           <h2>Say it on the video, not after it.</h2>
         </div>
-        <p>Type a headline, circle the block, point at the open court. A title card tells the room what comes next. What you see in the preview is what you get in the MP4.</p>
+        <p>Type a headline, circle the block, point at the open court, and let it draw in, pulse or blink. A title card tells the room what comes next. What you see in the preview is what you get in the MP4.</p>
       </div>
       <div class="cut">
         <figure>
@@ -149,7 +274,7 @@
         <li><b>Load</b><span>Pair each match video with its .dvw or .vsm. Point a folder at it and the app pairs them by date and team.</span></li>
         <li><b>Find</b><span>Filter every play by player, skill, rotation, zone, combination or setter call, across all your matches. Save the searches you use.</span></li>
         <li><b>Build</b><span>Send plays to scenes with one key, or make a whole video from a preset. Drag them into order under named markers.</span></li>
-        <li><b>Show</b><span>Finish with overlays, annotations and slides, then export MP4, PNG or PDF.</span></li>
+        <li><b>Show</b><span>Finish with overlays, annotations and slides, then export MP4, PNG, PDF or PowerPoint. Or watch the list play through, rally by rally.</span></li>
       </ul>
     </div>
   </section>
@@ -205,7 +330,7 @@
           <div class="telop"><i></i><span><b>Data slides</b></span></div>
           <h2>Slides made from the data.</h2>
         </div>
-        <p>Pick a team and the app draws the slide. Text and photos stay movable, and you can add arrows and shapes. They play inside the video, or go out as PNG or PDF.</p>
+        <p>Pick a team and the app draws the slide. Text and photos stay movable, and you can add arrows and shapes. They play inside the video, or go out as PNG, PDF or PowerPoint, with shapes you can still move. A table of a team's players' serves, attacks or receptions is there too.</p>
       </div>
       <div class="slides">
         <figure class="frame lead-slide">
@@ -240,6 +365,9 @@
         <li><b>A library for every match</b><span>Import once, then build any number of projects from the same matches.</span></li>
         <li><b>Player photo packs</b><span>Add a team's photos once; captions, title cards and slides pick them up.</span></li>
         <li><b>Your work stays editable</b><span>Everything saves as you go, with undo and redo.</span></li>
+        <li><b>Play through</b><span>Watch the play list rally by rally, with the court's marks following the serve, reception and attack on screen.</span></li>
+        <li><b>PowerPoint export</b><span>Save a scene's slides as a .pptx whose text and shapes you can still edit.</span></li>
+        <li><b>Bulk import</b><span>Point at folders and the app pairs the videos with their scout files, VolleyStation .vsm included.</span></li>
         <li><b>English and Japanese</b><span>Switch the language in Settings.</span></li>
         <li><b>Updates itself</b><span>New versions download in the background and install on restart.</span></li>
       </ul>
@@ -266,21 +394,30 @@
     </div>
   </section>
 
-  <section class="get">
+  <section class="get" id="download">
     <div class="wrap">
       <div>
         <h2>Try it with your own video and scout file</h2>
-        <p>Available for Windows. Mac version coming soon.</p>
+        <p>Available for Windows and Mac. <span data-dl-version></span></p>
       </div>
-      <a class="btn" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download for Windows</a>
+      <div class="dl">
+        <a class="btn" data-dl-main href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Download for Windows</a>
+        <p class="dl-note" data-dl-note></p>
+        <ul class="dl-all">
+          <li><a data-dl="win" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Windows<small>Installer</small></a></li>
+          <li><a data-dl="arm" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Mac, Apple silicon<small>M1 or later</small></a></li>
+          <li><a data-dl="x64" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Mac, Intel<small>Disk image</small></a></li>
+        </ul>
+        <p class="dl-help">Not sure which Mac you have? In the Apple menu, choose About This Mac: a chip named Apple M… is Apple silicon, a processor named Intel is Intel. The app is not signed by Apple yet, so the first time, open it from System Settings, Privacy &amp; Security, Open Anyway. On Mac, new versions are installed by hand from this page.</p>
+      </div>
     </div>
   </section>
 </main>
 
 <footer>
   <div class="wrap">
-    <p>The video at the top was exported from the app as it is, then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK.</p>
-    <p>Report, analysis and slide screens use a made-up team and made-up scout data.</p>
+    <p>The film at the top was exported from the app as it is (the Croatia vs Denmark clips, then data slides, joined), then made smaller for the web. Video screens show Croatia vs Denmark (28 May 2022) as recorded, with the team codes shortened to CRO and DNK.</p>
+    <p>Report, analysis and slide screens use a made-up team and made-up scout data, and so does the film from 0:38 on: ten made-up matches of the Riverside Herons.</p>
   </div>
 </footer>
 

@@ -14,6 +14,7 @@ import { FilterPanel } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
+import { setStopSec } from './keys'
 import { TrimBar } from './components/TrimBar'
 import { RIGHT_TABS, RightTabs, type RightTab } from './components/RightTabs'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
@@ -21,7 +22,7 @@ import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
-import { courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
+import { FORECAST_AHEAD_SEC, courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
 import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
@@ -434,7 +435,7 @@ export function App() {
   // 通し: the display's windows (followData), for the court's marks to follow them; the play they last took.
   const followDataRef = useRef<{ key: string; windows: FollowWindow[]; court: CourtWindow[] } | null>(null)
   const followSel = useRef<number | null>(null)
-  const sharesArmed = useRef(false) // the set distribution shows only once the picture has actually stopped, not on the frames before it
+  const sharesOn = useRef(false) // the set distribution shows only while the picture is stopped, not on the frames before or after it
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
@@ -479,8 +480,9 @@ export function App() {
     if (run?.rallyId !== undefined && playback.attachedKey === run.matchId && s.time >= run.start && s.time <= run.end) {
       const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.court, s.time) : -1
       let w = at >= 0 ? f!.court[at] : null
-      if (w?.shares && !sharesArmed.current) { if (s.holdAt !== null) sharesArmed.current = true; else w = null }
-      else if (!w?.shares) sharesArmed.current = false
+      if (w?.shares && s.holdAt === null) w = null
+      if (!w?.shares && sharesOn.current) { sharesOn.current = false; if (!w) setFollowPlay(null) } // gone as the picture runs again
+      if (w?.shares) sharesOn.current = true
       if (w && w.playId !== followSel.current) { followSel.current = w.playId; setFollowPlay({ matchId: run.matchId, playId: w.playId, ...(w.shares ? { shares: true } : {}) }) }
     }
     // Only inside this play's window: right after a jump the time can still be the old one.
@@ -624,8 +626,9 @@ export function App() {
       ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
       : pick && selectedPlay ? [{ from: pick.in, to: pick.out, playId: selectedPlay.id }] : []
     // The court's marks have windows of their own (a serve stays longer, a good reception's set gets a stop).
-    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter) : windows
-    const holds = listThrough ? setFreezes(d.plays, match.offsetSec).map(f => ({ at: f.at, sec: f.sec })) : []
+    const stop = setStopSec()
+    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter, stop, gridStyle.forecast === false ? 0 : FORECAST_AHEAD_SEC) : windows
+    const holds = listThrough ? setFreezes(d.plays, match.offsetSec, stop).map(f => ({ at: f.at, sec: f.sec })) : []
     const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
     return {
       key: match.id, windows, court, holds,
@@ -641,7 +644,7 @@ export function App() {
         return v
       },
     }
-  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract])
+  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract, settingsOpen, gridStyle.forecast]) // settingsOpen: the set stop's length is read again once the settings close
   followDataRef.current = followData
   // 通し stops the picture before a set after a good reception, for the set distribution to be read.
   useEffect(() => {

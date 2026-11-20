@@ -248,7 +248,7 @@ export function App() {
   // The scene and marker group of the clip on screen (while 通し plays, the one playing), for the 範囲 of the marks.
   const rangeScene = (playingClipId ? reels.find(r => r.clips[playingClipId]) : null) ?? reel ?? null
   const rangeGroup = rangeScene && playingClipId && rangeScene.clips[playingClipId] ? groupOf(rangeScene, playingClipId) : activeGroup
-  // A clip can leave the player's marks off (自動表示's 選手の表示): the clip on screen, or while 通し plays, the one playing.
+  // A clip can leave the player's marks off (自動表示's 分析表示): the clip on screen, or while 通し plays, the one playing.
   const courtClip = (playingClipId ? rangeScene?.clips[playingClipId] : null) ?? (reel && activeClipId ? reel.clips[activeClipId] : null) ?? null
   const hideMarks = !!courtClip?.overlayOverride?.courtMarks?.hidden
   const sharesNow = !!followPlay?.shares

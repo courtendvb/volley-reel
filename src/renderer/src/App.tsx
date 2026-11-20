@@ -25,7 +25,7 @@ import { courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFo
 import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
-import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
+import { ClipOverlayRow, LineupCheck, ServeSpeedCheck } from './components/ClipOverlayRow'
 import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
 import { assetImage, packAssetId } from './assets'
 import { isZonePaint, type ImageLookup } from '../../shared/annotation'
@@ -929,7 +929,7 @@ export function App() {
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
-                <div className="ann-row clip-overlay"><span className="field-label">{t('自動表示')}</span><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /></div>
+                <div className="ann-row clip-overlay"><span className="field-label">{t('自動表示')}</span><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} /></div>
               )}
               <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />

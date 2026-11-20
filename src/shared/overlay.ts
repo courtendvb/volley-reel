@@ -31,6 +31,8 @@ export interface OverlaySettings {
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean; showStats?: boolean }
   // A serve's measured speed (hit to the reception's touch, serveMark.ts) on its own plate, from the touch on.
   serveSpeed: { enabled: boolean; anchor: Anchor; scale: number }
+  // The six players of each team on a small court, as a broadcast shows them (drawLineup).
+  lineup: { enabled: boolean; anchor: Anchor; scale: number }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
@@ -92,6 +94,7 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   scoreboard: { enabled: true, anchor: 'tl', scale: 1, showSets: true }, // top left: the headline sits at the top middle
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true, photo: false },
   serveSpeed: { enabled: true, anchor: 'tr', scale: 1 },
+  lineup: { enabled: false, anchor: 'br', scale: 1 },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
@@ -110,6 +113,7 @@ export function overlaySettings(saved: OverlayPatch | undefined): OverlaySetting
     scoreboard: { ...DEFAULT_OVERLAY.scoreboard, ...(s.scoreboard ?? {}) },
     playerCaption: { ...DEFAULT_OVERLAY.playerCaption, ...(s.playerCaption ?? {}) },
     serveSpeed: { ...DEFAULT_OVERLAY.serveSpeed, ...(s.serveSpeed ?? {}) },
+    lineup: { ...DEFAULT_OVERLAY.lineup, ...(s.lineup ?? {}) },
     titleCard: { ...DEFAULT_OVERLAY.titleCard, ...(s.titleCard ?? {}) },
     transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
     court: { ...DEFAULT_OVERLAY.court, ...(s.court ?? {}) },
@@ -122,7 +126,11 @@ export interface ScoreboardData {
   ptsL: number; ptsR: number
   setsL: number; setsR: number
   winner: 'L' | 'R' | null // who took this rally
+  lineup?: LineupData | null // who is on court (the lineups at the serve); missing: the file has none
 }
+
+// Both teams' six on court, left and right as in the scoreboard: jerseys P1 to P6 (liberos are not in them).
+export interface LineupData { left: { code: string; jerseys: number[] }; right: { code: string; jerseys: number[] } }
 
 // A serve's measured speed and when its plate comes up: the reception's touch (a video time).
 export interface SpeedData { kmh: number; touchSec: number }
@@ -164,6 +172,9 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
     ptsL: homeLeft ? play.score.home : play.score.away, ptsR: homeLeft ? play.score.away : play.score.home,
     setsL: homeLeft ? play.setsBefore.home : play.setsBefore.away, setsR: homeLeft ? play.setsBefore.away : play.setsBefore.home,
     winner: won === null ? null : (won === '*') === homeLeft ? 'L' : 'R',
+    ...(rally?.court?.home.length === 6 && rally.court.away.length === 6
+      ? { lineup: { left: { code: (homeLeft ? home : away).code, jerseys: homeLeft ? rally.court.home : rally.court.away }, right: { code: (homeLeft ? away : home).code, jerseys: homeLeft ? rally.court.away : rally.court.home } } }
+      : {}),
   }
 }
 

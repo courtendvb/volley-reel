@@ -3,7 +3,7 @@
 import { BLINK_ON, drawAnnotation, emphasisOf, emphasisSec, isAnimated, type Anim, type Annotation, type Emphasis } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
 import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
-import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
+import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
@@ -130,6 +130,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const courtStyle = d.courtStyle && o?.courtMarks?.hidden ? withoutPlayerMarks(d.courtStyle) : d.courtStyle // the clip can leave the player's marks off
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
+  const lineup = data && overlay.lineup.enabled && !o?.scoreboard?.hidden ? data.scoreboard.lineup ?? null : null
   // The court as the player shows it (grid, zones, the player's marks and charts, as set on the 表示
   // tab), on every clip of a match whose court is fitted.
   const court = courtStyle ? d.court?.(c, sceneId, group) ?? null : null
@@ -150,12 +151,13 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const always = anns.filter(whole)
   const flies = !!court?.flight && flightMoves(courtStyle!, court.zones)
   const ripples = !!court?.flight && !!rippleImpact(courtStyle!, court.zones)
-  if (court || showSb || showCap || always.length) {
+  if (court || showSb || showCap || lineup || always.length) {
     layers.push({
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
         if (court) drawCourt(ctx, W, H, court.fit, courtStyle!, court.zones, flies ? null : 1, ripples ? null : undefined)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, lookTheme(overlay))
+        if (lineup) drawLineup(ctx, W, H, lineup, overlay.lineup, lookTheme(overlay))
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, lookTheme(overlay), packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),

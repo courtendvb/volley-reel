@@ -104,3 +104,11 @@ export function ServeSpeedCheck({ overlay: s, onOverlay }: { overlay: OverlaySet
       <input type="checkbox" checked={s.serveSpeed.enabled} onChange={e => onOverlay({ ...s, serveSpeed: { ...s.serveSpeed, enabled: e.target.checked } })} /> {t('サーブ速度')}</label>
   )
 }
+
+// Both teams' six on a small court (the video's setting).
+export function LineupCheck({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <label className="check" title={t('両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）')}>
+      <input type="checkbox" checked={s.lineup.enabled} onChange={e => onOverlay({ ...s, lineup: { ...s.lineup, enabled: e.target.checked } })} /> {t('ローテーション')}</label>
+  )
+}

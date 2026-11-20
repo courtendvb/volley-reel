@@ -37,6 +37,25 @@ describe('scoreboard data', () => {
   })
 })
 
+describe('lineup data', () => {
+  it('has none when the rally has no lineups (this file has none)', () => {
+    expect(scoreboardData(D, D.plays[0], OURS).lineup).toBeUndefined()
+  })
+
+  it('puts our team on the left, each side\'s jerseys P1 to P6', () => {
+    const home = [1, 2, 3, 4, 5, 6], away = [11, 12, 13, 14, 15, 16]
+    const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home, away } })) }
+    // HTH is away here, so it is the left side with the away jerseys.
+    expect(scoreboardData(d, d.plays[0], OURS).lineup).toEqual({ left: { code: 'HTH', jerseys: away }, right: { code: 'OPP', jerseys: home } })
+    expect(scoreboardData(d, d.plays[0], []).lineup).toEqual({ left: { code: 'OPP', jerseys: home }, right: { code: 'HTH', jerseys: away } })
+  })
+
+  it('is off until switched on', () => {
+    expect(DEFAULT_OVERLAY.lineup.enabled).toBe(false)
+    expect(overlaySettings({ lineup: { enabled: true } }).lineup).toEqual({ enabled: true, anchor: 'br', scale: 1 })
+  })
+})
+
 describe('caption data', () => {
   const s = DEFAULT_OVERLAY.playerCaption
   it('builds number, name with initial on a clash, and an upper-case skill line', () => {

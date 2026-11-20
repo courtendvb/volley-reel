@@ -1,7 +1,7 @@
 import { PaletteColor } from './PaletteColor'
 import { useEffect, useRef } from 'react'
 import { TELOP_LOOKS, lookTheme, type Anchor, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
-import { cardBackground, drawCaption, drawScoreboard, drawServeSpeed, drawTitleCard } from '../../../shared/overlayDraw'
+import { cardBackground, drawCaption, drawLineup, drawScoreboard, drawServeSpeed, drawTitleCard } from '../../../shared/overlayDraw'
 import { t } from '../../../shared/i18n'
 import { packPhotoImage } from '../assets'
 
@@ -32,6 +32,7 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
     if (s.scoreboard.enabled) drawScoreboard(ctx, c.width, c.height, sample.scoreboard, s.scoreboard, lookTheme(s))
     if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, lookTheme(s), packPhotoImage(sample.caption.photo))
     if (s.serveSpeed.enabled) drawServeSpeed(ctx, c.width, c.height, 98, s.serveSpeed, lookTheme(s))
+    if (s.lineup.enabled) drawLineup(ctx, c.width, c.height, { left: { code: sample.scoreboard.left, jerseys: [1, 4, 7, 9, 11, 14] }, right: { code: sample.scoreboard.right, jerseys: [2, 5, 6, 8, 10, 12] } }, s.lineup, lookTheme(s))
     const t = card.current
     if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, lookTheme(s))
   }, [s, sample])
@@ -98,6 +99,12 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
               <div className="filter-row">{check(t('サーブ速度'), s.serveSpeed.enabled, v => set('serveSpeed', { enabled: v }))}<span className="spacer" />
                 {anchor(s.serveSpeed.anchor, v => set('serveSpeed', { anchor: v }), t('サーブ速度の位置'))}{scale(s.serveSpeed.scale, v => set('serveSpeed', { scale: v }), t('サーブ速度のサイズ'))}</div>
               <p className="hint">{t('ヒットとタッチを打ったサーブに、タッチのコマから出ます')}</p>
+            </section>
+
+            <section>
+              <div className="filter-row">{check(t('ローテーション（6人の並び）'), s.lineup.enabled, v => set('lineup', { enabled: v }))}<span className="spacer" />
+                {anchor(s.lineup.anchor, v => set('lineup', { anchor: v }), t('ローテーションの位置'))}{scale(s.lineup.scale, v => set('lineup', { scale: v }), t('ローテーションのサイズ'))}</div>
+              <p className="hint">{t('両チームのコート上の6人を、小さなコートに背番号で出します。左が自チーム（スコアボードと同じ並び）')}</p>
             </section>
 
             <section>

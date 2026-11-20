@@ -1625,4 +1625,9 @@ export const EN: Record<string, string> = {
   "コートの準備": "Court setup",
   "選んだ1本": "Selected play",
   "トスの対象": "Sets included",
+  "ローテーション（6人の並び）": "Rotation (the six on court)",
+  "ローテーションの位置": "Rotation position",
+  "ローテーションのサイズ": "Rotation size",
+  "両チームのコート上の6人を、小さなコートに背番号で出します。左が自チーム（スコアボードと同じ並び）": "Shows both teams' six on court by jersey number on a small court. Our team is on the left, as on the scoreboard",
+  "両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）": "Shows both teams' six on court by jersey number on a small court (for the whole video; position and size are in the video settings)",
 }

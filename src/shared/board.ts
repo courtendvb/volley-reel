@@ -229,6 +229,7 @@ export interface BoardConfig {
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
   attackers?: number // and with the attackers there, how many (missing: three)
   compareProject?: string // a comparison: our own team's project (its folder), whose figures go left
+  compareRows?: string[] // and the figures it shows, SKILL_ROWS ids (missing: DEFAULT_COMPARE_ROWS)
   stat?: StatKind // a table of figures: of which skill
   statTop?: number // and how many players, most plays first (missing: STAT_ROWS)
   statLook?: StatLook // and its colours (missing: STAT_LOOK)
@@ -253,6 +254,7 @@ export interface BoardOptions {
   tables?: RotationTables // and which tables (missing: all six)
   attackers?: number // and with the attackers' cards, how many (missing: three)
   compare?: { left: CompareSide; right: CompareSide } // a comparison: our team, and the team of this project
+  compareRows?: string[] // and which figures (missing: DEFAULT_COMPARE_ROWS)
   stat?: StatKind // a table of figures: of which skill (missing: attacks)
   statTop?: number // and how many players (missing: STAT_ROWS)
   statLook?: StatLook // and its colours (missing: STAT_LOOK)
@@ -354,7 +356,7 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[]; setCharts?: PlacedSetChart[] } {
   if (skill === 'C') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
-    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink) : [], charts: [], noteIds: [] }
+    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink, opts.compareRows) : [], charts: [], noteIds: [] }
   }
   if (skill === 'P') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', kind = opts.stat ?? 'attack'

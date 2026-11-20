@@ -2,7 +2,7 @@
 // scouted opponent) and ours from our own project (each project's target team), as a data slide
 // (compareSlide; made from the データスライド dialog). Each figure is the team's total over its matches.
 import { sideOutReport } from './analysis'
-import { matchReport, type ReportMatch } from './report'
+import { matchReport, type AttackLine, type ReportMatch } from './report'
 import type { Annotation } from './annotation'
 import type { ParsedDVW } from './types'
 
@@ -16,9 +16,15 @@ export interface SkillCounts {
   blockPts: number
   fbRec: number; fbKill: number // rallies received, and won by the first attack after the reception
   errPts: number // rallies the other team won with no point of its own: our errors and faults
+  poss: number // serves after which we got an attack of our own (a possibility)
+  recExc: number // receptions #
+  killPos: AttackLine; killNeg: AttackLine; killDig: AttackLine // the first attack after a #/+ or -/! reception, and after a dig
 }
 
-const zero = (): SkillCounts => ({ matches: 0, sets: 0, oppServe: 0, soWon: 0, serve: 0, bpWon: 0, attack: 0, kill: 0, attackErr: 0, blocked: 0, ace: 0, serveErr: 0, serveWeight: 0, rec: 0, recPos: 0, blockPts: 0, fbRec: 0, fbKill: 0, errPts: 0 })
+const attackZero = (): AttackLine => ({ tot: 0, err: 0, blo: 0, pts: 0 })
+const addLine = (a: AttackLine, b: AttackLine) => { a.tot += b.tot; a.err += b.err; a.blo += b.blo; a.pts += b.pts }
+const zero = (): SkillCounts => ({ matches: 0, sets: 0, oppServe: 0, soWon: 0, serve: 0, bpWon: 0, attack: 0, kill: 0, attackErr: 0, blocked: 0, ace: 0, serveErr: 0, serveWeight: 0, rec: 0, recPos: 0, blockPts: 0, fbRec: 0, fbKill: 0, errPts: 0,
+  poss: 0, recExc: 0, killPos: attackZero(), killNeg: attackZero(), killDig: attackZero() })
 
 export function skillCounts(list: ReportMatch[]): SkillCounts {
   const c = zero()
@@ -29,7 +35,10 @@ export function skillCounts(list: ReportMatch[]): SkillCounts {
     c.attack += t.att.tot; c.kill += t.att.pts; c.attackErr += t.att.err; c.blocked += t.att.blo
     c.ace += t.serve.pts; c.serveErr += t.serve.err
     for (const p of m.d.plays) if (p.side === m.side && p.skill === 'S') c.serveWeight += SERVE_WEIGHTS[p.effect] ?? 0
-    c.rec += t.rec.tot; c.recPos += t.rec.pos
+    c.poss += t.serve.poss
+    c.rec += t.rec.tot; c.recPos += t.rec.pos; c.recExc += t.rec.exc
+    const k = r.teams[i].kill
+    addLine(c.killPos, k.pos); addLine(c.killNeg, k.neg); addLine(c.killDig, k.dig)
     c.blockPts += t.blk
     for (const s of r.teams[1 - i].sets) c.errPts += s.won.opErr
   }
@@ -42,8 +51,9 @@ export function skillCounts(list: ReportMatch[]): SkillCounts {
 // VolleyStation sheet weighs them.
 export const SERVE_WEIGHTS: Record<string, number> = { '#': 1, '/': 0.752, '+': 0.455, '!': 0.344, '-': 0.281, '=': 0 }
 
-// The rows of the table, in order: the label, the figure ('' when there is nothing to count) and
-// whether a higher figure is the better one (for marking the better team).
+// The rows a slide can show, in the order they are offered: the label, the figure ('' when there is nothing to count) and
+// whether a higher figure is the better one (for marking the better team). A slide shows those picked,
+// in the order picked (compareRows), DEFAULT_COMPARE_ROWS when none were.
 export interface SkillRow { id: string; label: string; value: (c: SkillCounts) => number | null; format: (v: number) => string; higher: boolean; title: string }
 const ratio = (n: number, of: number) => (of ? n / of : null)
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
@@ -51,16 +61,29 @@ export const SKILL_ROWS: SkillRow[] = [
   { id: 'so', label: 'SO%', value: c => ratio(c.soWon, c.oppServe), format: pct, higher: true, title: 'SO 得点 ÷ 相手サーブ（相手のサーブミスを含む）' },
   { id: 'fbso', label: '1ST BALL SO%', value: c => ratio(c.fbKill, c.fbRec), format: pct, higher: true, title: 'レセプションからの最初の攻撃で決めた本数 ÷ レセプションしたラリー' },
   { id: 'bp', label: 'BP%', value: c => ratio(c.bpWon, c.serve), format: pct, higher: true, title: 'BP 得点 ÷ サーブ' },
+  { id: 'poss', label: 'POSS%', value: c => ratio(c.poss, c.serve), format: pct, higher: true, title: 'ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ サーブ' },
+  { id: 'possSet', label: 'POSSIBILITY/SET', value: c => ratio(c.poss, c.sets), format: v => v.toFixed(2), higher: true, title: 'ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ セット数' },
   { id: 'kill', label: 'ATTACK KILL%', value: c => ratio(c.kill, c.attack), format: pct, higher: true, title: 'アタック決定（#）÷ 打数' },
+  { id: 'killPos', label: 'KILL% #+ REC', value: c => ratio(c.killPos.pts, c.killPos.tot), format: pct, higher: true, title: '# + レセプションからのアタックの決定（#）÷ その打数' },
+  { id: 'killNeg', label: 'KILL% -! REC', value: c => ratio(c.killNeg.pts, c.killNeg.tot), format: pct, higher: true, title: '- ! レセプションからのアタックの決定（#）÷ その打数' },
+  { id: 'killDig', label: 'TRANSITION KILL%', value: c => ratio(c.killDig.pts, c.killDig.tot), format: pct, higher: true, title: 'ディグなどからの切り返し（トランジション）のアタックの決定（#）÷ その打数' },
   { id: 'eff', label: 'ATTACK EFF', value: c => ratio(c.kill - c.attackErr - c.blocked, c.attack), format: pct, higher: true, title: '（決定 − ミス − 被ブロック）÷ 打数' },
+  { id: 'attErr', label: 'ATTACK ERR%', value: c => ratio(c.attackErr, c.attack), format: pct, higher: false, title: 'アタックミス（=）÷ 打数' },
+  { id: 'blocked', label: 'BLOCKED%', value: c => ratio(c.blocked, c.attack), format: pct, higher: false, title: '被ブロック（/）÷ 打数' },
   // The team's serve index: each serve weighed by its evaluation (SERVE_WEIGHTS), per serve.
   { id: 'serveIndex', label: 'SERVE INDEX', value: c => ratio(c.serveWeight, c.serve), format: v => v.toFixed(3), higher: true, title: '（# × 1 ＋ / × 0.752 ＋ + × 0.455 ＋ ! × 0.344 ＋ - × 0.281）÷ サーブ' },
   { id: 'ace', label: 'ACE%', value: c => ratio(c.ace, c.serve), format: pct, higher: true, title: 'サーブエース（#）÷ サーブ' },
   { id: 'err', label: 'ERR%', value: c => ratio(c.serveErr, c.serve), format: pct, higher: false, title: 'サーブミス（=）÷ サーブ' },
   { id: 'rec', label: 'RECEPTION#+%', value: c => ratio(c.recPos, c.rec), format: pct, higher: true, title: 'レセプションの # と + ÷ レセプション' },
+  { id: 'recExc', label: 'RECEPTION#%', value: c => ratio(c.recExc, c.rec), format: pct, higher: true, title: 'レセプションの # ÷ レセプション' },
   { id: 'block', label: 'BLOCK PTS/SET', value: c => ratio(c.blockPts, c.sets), format: v => v.toFixed(2), higher: true, title: 'ブロック得点（#）÷ セット数' },
   { id: 'errPts', label: 'ERR PTS/SET', value: c => ratio(c.errPts, c.sets), format: v => v.toFixed(2), higher: false, title: '自チームのミスで相手に入った点 ÷ セット数（相手が得点のプレーなしで取ったラリー。サーブ・アタック・ブロック・セットのミスや反則。レセプションミスと被ブロックは相手のエース・ブロック得点なので入れない）' },
 ]
+// What a slide shows unless other rows are picked: the rows it always had.
+export const DEFAULT_COMPARE_ROWS = ['so', 'fbso', 'bp', 'kill', 'eff', 'serveIndex', 'ace', 'err', 'rec', 'block', 'errPts']
+// The rows picked, top to bottom as picked (unknown ids and repeats left out); none picked: the default.
+export const compareRows = (ids?: string[]): SkillRow[] =>
+  [...new Set(ids?.length ? ids : DEFAULT_COMPARE_ROWS)].flatMap(id => SKILL_ROWS.filter(r => r.id === id))
 
 // Which side is better on a row: 'a', 'b', or null (a tie, or a side with nothing to count).
 export function better(row: SkillRow, a: SkillCounts, b: SkillCounts): 'a' | 'b' | null {
@@ -99,7 +122,7 @@ export const COMPARE_COLORS = { label: '#1E293B', labelText: '#FFFFFF', value: '
 // is one) above its column, the matches and sets counted, then a row per figure — our team left, the
 // label in the middle, the other team right — the better figure in red on blue. The table is one
 // group; each heading moves on its own.
-export function compareSlide(left: CompareSide, right: CompareSide, photos: Record<string, { assetId: string; width: number; height: number }>, ink = '#0F172A'): Annotation[] {
+export function compareSlide(left: CompareSide, right: CompareSide, photos: Record<string, { assetId: string; width: number; height: number }>, ink = '#0F172A', ids?: string[]): Annotation[] {
   const out: Annotation[] = [], c = COMPARE_COLORS
   const valueW = 0.24, labelW = 0.26, gap = 0.006
   const mid = 0.5, lx = mid - labelW / 2 - gap - valueW / 2, rx = mid + labelW / 2 + gap + valueW / 2
@@ -118,14 +141,16 @@ export function compareSlide(left: CompareSide, right: CompareSide, photos: Reco
   }
   head(left, lx, true)
   head(right, rx, false)
-  const top = 0.255, rowH = (0.965 - top) / SKILL_ROWS.length, g = uid()
-  SKILL_ROWS.forEach((r, i) => {
+  // The more rows, the lower each and the smaller its type (eleven rows: as they always were).
+  const rows = compareRows(ids), top = 0.255, rowH = (0.965 - top) / rows.length, g = uid()
+  const valueSize = Math.min(30, Math.floor(rowH * REF * 0.66)), labelSize = Math.min(22, Math.floor(rowH * REF * 0.48))
+  rows.forEach((r, i) => {
     const y = top + i * rowH, h = rowH - gap * ASPECT, win = better(r, left.counts, right.counts)
     const value = (side: CompareSide) => { const v = r.value(side.counts); return v === null ? '–' : r.format(v) }
     const side = (x: number, s: CompareSide, mine: boolean) =>
-      out.push(cell(x, y, valueW, h, value(s), 30, mine ? c.betterText : c.valueText, mine ? c.better : c.value, { stroke: c.line, groupId: g }))
+      out.push(cell(x, y, valueW, h, value(s), valueSize, mine ? c.betterText : c.valueText, mine ? c.better : c.value, { stroke: c.line, groupId: g }))
     side(lx, left, win === 'a')
-    out.push(cell(mid, y, labelW, h, r.label, 22, c.labelText, c.label, { groupId: g }))
+    out.push(cell(mid, y, labelW, h, r.label, labelSize, c.labelText, c.label, { groupId: g }))
     side(rx, right, win === 'b')
   })
   return out

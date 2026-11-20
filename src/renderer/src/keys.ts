@@ -17,3 +17,11 @@ export const arrowSec = () => seconds('vr.arrowSec', 0.5)
 export const setArrowSec = (sec: number) => keep('vr.arrowSec', sec)
 export const ctrlArrowSec = () => seconds('vr.ctrlArrowSec', 5)
 export const setCtrlArrowSec = (sec: number) => keep('vr.ctrlArrowSec', sec)
+
+// 通し: how long the picture stops on a set after a good reception, for its set distribution; 0 = no stop.
+// Kept on this computer.
+export const SET_STOP_MAX_SEC = 10
+export const setStopSec = (): number => {
+  try { const v = localStorage.getItem('vr.setStopSec'); const n = Number(v); return v !== null && n >= 0 && n <= SET_STOP_MAX_SEC ? n : 2 } catch { return 2 }
+}
+export const setSetStopSec = (sec: number) => { try { localStorage.setItem('vr.setStopSec', String(sec)) } catch { /* not kept */ } }

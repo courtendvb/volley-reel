@@ -205,6 +205,22 @@ button.link { border: 0; background: none; color: var(--primary); padding: var(-
 .filter-row.two { gap: var(--space-6); }
 .filter-row.actions { flex-wrap: wrap; row-gap: var(--space-2); } /* a long count pushes the buttons to a second line */
 .filter-row.actions button { white-space: nowrap; }
+.compare-rows { display: flex; flex-direction: column; gap: var(--space-3); }
+.compare-rows .filter-row { align-items: flex-start; }
+.compare-rows .field-label { line-height: var(--control-sm); }
+.compare-picked { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; flex: 1; min-width: 0; }
+.compare-chip { display: inline-flex; align-items: center; height: var(--control-sm); padding: 0 var(--space-1) 0 var(--space-2); border: 1px solid var(--primary); border-radius: var(--radius-full); background: var(--primary-light); color: var(--primary); font-size: var(--fs-label); white-space: nowrap; cursor: grab; position: relative; }
+.compare-chip.dragging { opacity: 0.4; }
+.compare-chip.drop-before::before, .compare-chip.drop-after::after { content: ''; position: absolute; top: 2px; bottom: 2px; width: 2px; background: var(--primary); }
+.compare-chip.drop-before::before { left: -4px; }
+.compare-chip.drop-after::after { right: -4px; }
+.compare-chip-no { min-width: 14px; font-size: var(--fs-caption); opacity: 0.7; text-align: right; margin-right: var(--space-1); }
+.compare-chip-label { font-weight: 600; padding: 0 var(--space-1); }
+.compare-chip button { height: var(--control-xs); min-width: var(--control-xs); padding: 0; border: 0; background: transparent; color: inherit; border-radius: var(--radius-full); line-height: 1; }
+.compare-chip button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.compare-chip button:disabled { opacity: 0.25; }
+.compare-chip .compare-chip-move { visibility: hidden; }
+.compare-chip:hover .compare-chip-move, .compare-chip:focus-within .compare-chip-move { visibility: visible; }
 .filter-row select { flex: 1; min-width: 0; }
 .field-label { flex: none; width: 44px; font-size: var(--fs-label); color: var(--sub); }
 .filters .field-label { width: 60px; } /* fits 相手ローテ, the longest filter label */
@@ -506,6 +522,7 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .match-row .match-open { grid-column: -2; grid-row: 1; display: flex; gap: var(--space-2); justify-content: flex-end; }
 .match-row .match-open button { white-space: nowrap; }
 .match-row.pick.on { background: var(--primary-light); }
+.match-table .match-row:nth-child(even):not(.lost):not(.on) { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
 .warn-dot { color: var(--amber); }
 .project-name { font-size: var(--fs-title); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

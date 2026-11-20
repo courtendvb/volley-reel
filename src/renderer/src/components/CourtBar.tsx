@@ -94,6 +94,10 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
       <input type="checkbox" checked={!s.flightStill} onChange={e => onStyle({ ...s, flightStill: !e.target.checked })} /> {t('アニメーション')}</label>
   )
   const ripple = s.ripple
+  const forecast = (
+    <label className="check" title={t('サーブ・アタックの前に、放物線の予告線、着弾点とゾーン、打つ直前のカウントを出す。クリップの頭から、次に何が起こるかが分かる（書き出しも同じ）')}>
+      <input type="checkbox" checked={s.forecast !== false} onChange={e => { const { forecast: _f, ...rest } = s; onStyle(e.target.checked ? rest : { ...rest, forecast: false }) }} /> {t('先読み')}</label>
+  )
   return (
     <div className="court-bar">
       {/* 1. Set up once per match: the corners, whether the grid shows, which team is near. */}
@@ -104,6 +108,12 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
             title={t('四隅の丸をドラッグして、コートのエンドラインとサイドラインの交点に合わせます')}>{fitting ? t('完了') : t('四隅を合わせる')}</button>
           {fitting && <button onClick={() => onFit({ ...fit, corners: DEFAULT_CORNERS })} title={t('四隅を画面の中の初めの位置に戻します')}>{t('四隅をリセット')}</button>}
           <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッドを出す')}</label>
+          {s.grid && (
+            <select aria-label={t('グリッドを出す範囲')} title={t('グリッドを出す範囲。上半分は奥側（画面の上）、下半分は手前側（画面の下）だけ（書き出しも同じ）')} value={s.gridSide ?? ''}
+              onChange={e => { const { gridSide: _g, ...rest } = s; onStyle(e.target.value ? { ...rest, gridSide: e.target.value as 'top' | 'bottom' } : rest) }}>
+              <option value="">{t('コート全体')}</option><option value="top">{t('上半分')}</option><option value="bottom">{t('下半分')}</option>
+            </select>
+          )}
           <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前のチーム（第1セット）')}
           <select className="near-team" value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
             <option value="*">{home.name || home.code}</option>
@@ -142,6 +152,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               <label className="check" title={t('矢印の代わりに打点から着地までの軌道を放物線で描き、プレーに合わせて伸ばす。DVW の時刻は秒単位なので、実際のボールとは重なりません')}>
                 <input type="checkbox" checked={!!s.flight} onChange={e => onStyle({ ...s, flight: e.target.checked })} /> {t('軌道（放物線）')}</label>
               {s.flight && animate}
+              {s.flight && !s.flightStill && forecast}
               <label className="check" title={t('サーブ・アタックの打点は空中にあるので、真下の床からそこまで点線を引き、床に輪を出す（書き出しも同じ）')}>
                 <input type="checkbox" checked={!s.noLift} onChange={e => onStyle({ ...s, noLift: !e.target.checked })} /> {t('打点の高さの線')}</label>
             </>
@@ -159,6 +170,16 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               onChange={e => { const n = parseFloat(e.target.value); if (!Number.isFinite(n)) return; const { rippleLead: _l, ...rest } = s; const v = Math.round(Math.max(-RIPPLE_LEAD_MAX, Math.min(RIPPLE_LEAD_MAX, n)) * 10) / 10; onStyle(v ? { ...rest, rippleLead: v } : rest) }} />
             {t('秒前に出す')}</label>
         </Layer>
+        <div className="ann-row court-sub">
+          <span className="court-sub-label" title={t('選んだサーブ・アタックが着弾したあとに、DVW の評価から結果を出す（書き出しも同じ）')}>{t('着弾のあと')}</span>
+          {([
+            ['resultMark', '結果アイコン', '着弾点の上に結果を出す。エース・決定は星、ミスは×、ブロックされたは盾、続行は評価記号（+ ! − /）そのもの'],
+            ['resultTint', '色分け', '着弾の瞬間から、軌跡と着弾点を結果の色にする（エース・決定は緑、ミス・ブロックされたは赤。続行は変えない）'],
+          ] as const).map(([key, label, tip]) => (
+            <label key={key} className="check" title={t(tip)}>
+              <input type="checkbox" checked={s[key] !== false} onChange={e => { const { [key]: _k, ...rest } = s; onStyle(e.target.checked ? rest : { ...rest, [key]: false }) }} /> {t(label)}</label>
+          ))}
+        </div>
       </section>
 
       {/* 3. The selected play's player, over all their matches: per kind of play, and from which plays. */}

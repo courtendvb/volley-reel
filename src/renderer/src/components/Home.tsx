@@ -57,6 +57,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
 
       <section className="home-projects">
         <header className="home-head"><h2>{t('プロジェクト')}</h2><span className="spacer" /><AccountButton /></header>
+        <p className="muted small">{t('分析対象チームごとにプロジェクトを作るのがお勧めです')}</p>
         <div className="home-actions">
           <button className="primary" onClick={onNewProject} disabled={!library?.matches.length} title={library?.matches.length ? '' : t('先に倉庫に試合を入れてください')}>{t('新しいプロジェクト')}</button>
           <button onClick={() => onOpenProject()} disabled={!library}>{t('開く…')}</button>

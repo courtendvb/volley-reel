@@ -9,18 +9,23 @@ import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
 import { rangePlays, type RangeSource } from './markRange'
 import { drawLandingFx, landingFxStill, type FxTrack } from './courtFx'
-import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
+import { afterPhase, drawResultMark, playResult } from './courtResult'
+import { drawForecastCount, drawForecastGhost, drawForecastTarget, drawForecastZone, forecastPhase } from './courtForecast'
+import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_COLOR, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
 export * from './courtHeat'
 export * from './courtFx'
+export * from './courtForecast'
+export * from './courtResult'
 export interface PlayZones {
   start: Spot | null
   end: Spot | null
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
   skill?: string // the play's, for the style of its player marks (markStyle)
+  effect?: string // the play's evaluation, for what shows after it lands (courtResult.ts)
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
 interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
@@ -211,7 +216,7 @@ export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>):
 // plays and style: for the player's other shots (playerMarks), when the court tab shows them.
 export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[], source?: ChartSource): PlayZones {
   const player = style && plays ? playerMarks(play, fit, style, plays, source) : null
-  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, ...(player ? { player } : {}) }
+  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, effect: play.effect, ...(player ? { player } : {}) }
 }
 
 // An attacker's cones: from where they hit, five equal angles over the other half, each with its share
@@ -358,7 +363,7 @@ const FLIGHT_STEPS = 32
 
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
 // far with the ball at its tip, and the landing point once it is there.
-export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true): void {
+export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true, tint?: string): void {
   const p = zones.points
   if (!p?.start || !p.end || !p.startZ) return
   const camera = courtCamera(inPixels(fit, w, h), w, h)
@@ -371,7 +376,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   if (done > 0) {
     const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done))
     ctx.save()
-    ctx.strokeStyle = '#FACC15'
+    ctx.strokeStyle = tint ?? '#FACC15'
     ctx.lineWidth = lineW
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -386,7 +391,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   }
   drawPoint(ctx, air, START_COLOR, w, p.startRough)
   if (lift && done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
-  if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w, p.endRough)
+  if (done >= 1) drawPoint(ctx, at(1), tint ?? END_COLOR, w, p.endRough)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
 
@@ -509,11 +514,63 @@ export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0
 // The ball's track on the floor, for the trail effect: from where it was hit, when the scout clicked it.
 const trackOf = (zones: PlayZones | null | undefined): FxTrack | null => (zones?.points?.start ? { start: zones.points.start } : null)
 
+// 先読み: whether a serve or attack shows what comes next before it happens (courtForecast.ts). It goes
+// with the growing curve (the whole curve shown for the clip needs no preview) and is on unless turned off.
+export function forecastOn(style0: GridStyle, zones: PlayZones | null | undefined): boolean {
+  const style = markStyle(style0, zones?.skill)
+  return style.forecast !== false && !style.flightStill && hasFlight(style, zones) && (zones?.skill === 'S' || zones?.skill === 'A')
+}
+
+// 着弾のあと: whether a serve or an attack shows its result once it has landed (courtResult.ts); each part is on unless turned off.
+export function afterOn(style0: GridStyle, zones: PlayZones | null | undefined): boolean {
+  const style = markStyle(style0, zones?.skill)
+  return (zones?.skill === 'S' || zones?.skill === 'A') && (style.resultMark !== false || style.resultTint !== false)
+}
+// The colour the curve and the landing take after a landing at `after` seconds (a result with a colour, the tint on).
+export function resultTintOf(style: GridStyle, zones: PlayZones | null | undefined, after: number | null | undefined): string | undefined {
+  return after != null && after >= 0 && style.resultTint !== false ? playResult(zones?.skill, zones?.effect)?.color ?? undefined : undefined
+}
+// The result's badge `sec` seconds after the landing (over the court; the export draws it on a layer of its own).
+export function drawAfter(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
+  const phase = afterPhase(sec)
+  if (!phase || !afterOn(style0, zones)) return
+  const style = markStyle(style0, zones.skill), result = playResult(zones.skill, zones.effect), H = homography(inPixels(fit, w, h))
+  if (style.resultMark !== false && result) {
+    const e = zones.points?.end, mid = zones.end ? spotArea(zones.end, false) : null
+    const at = e ? project(H, e.x, e.y) : mid ? project(H, mid.u0 + mid.du / 2, mid.v0 + mid.dv / 2) : null
+    if (at) drawResultMark(ctx, at, result, phase, w)
+  }
+}
+
+// The forecast at `t` seconds from the hit (`dur`: the time in the air). 'under': the zone and the
+// dashed line, beneath the curve; 'over': the landing ring and the count-in, above it; 'both': on a layer of its own (the export's).
+export function drawForecast(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, fc: { t: number; dur: number }, part: 'under' | 'over' | 'both' = 'both'): void {
+  const p = zones.points, phase = forecastPhase(fc.t, fc.dur)
+  if (!phase || !forecastOn(style0, zones) || !p?.start || !p.end || !p.startZ) return
+  const style = markStyle(style0, zones.skill)
+  const H = homography(inPixels(fit, w, h)), camera = courtCamera(inPixels(fit, w, h), w, h)
+  if (!camera) return
+  const a = p.start, b = p.end
+  if (part !== 'over') {
+    // A zone the plain picture doesn't already light (it does when the landing is a zone, not a click).
+    if (zones.end && !p.endRough) {
+      const { u0, v0, du, dv } = spotArea(zones.end, style.detail === 'sub')
+      drawForecastZone(ctx, [project(H, u0, v0), project(H, u0 + du, v0), project(H, u0 + du, v0 + dv), project(H, u0, v0 + dv)], phase, END_COLOR)
+    }
+    const path = Array.from({ length: FLIGHT_STEPS + 1 }, (_, i) => { const s = i / FLIGHT_STEPS; return camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s)) })
+    drawForecastGhost(ctx, path, phase, w, fc.t)
+  }
+  if (part !== 'under') {
+    drawForecastTarget(ctx, (mx, my) => project(H, b.x + mx / COURT_W_M, b.y + my / COURT_L_M), phase, w, style0.rippleColor ?? RIPPLE_COLOR)
+    drawForecastCount(ctx, camera(a.x, a.y, flightZ(p, 0)), phase, w)
+  }
+}
+
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
 // ripple: seconds since the ripple starts (rippleImpact, rippleStart); undefined shows it as it
 // stays after it has spread; null leaves it out (the export draws it on its own layers).
-export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null): void {
-  const style = markStyle(style0, zones?.skill)
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null, forecast?: { t: number; dur: number } | null, after?: number | null): void {
+  const style = markStyle(style0, zones?.skill), tint = resultTintOf(style, zones, after)
   const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
   const area = (s: Spot) => spotArea(s, style.detail === 'sub')
@@ -549,8 +606,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     ctx.lineCap = 'round'
     const lw = (style.lineWidth * h) / 720
     ctx.lineWidth = lw
-    for (let col = 0; col <= COLS; col++) line(at(col / COLS, 0), at(col / COLS, 1))
-    for (let row = 0; row <= ROWS; row++) {
+    const r0 = style.gridSide === 'bottom' ? HALF : 0, r1 = style.gridSide === 'top' ? HALF : ROWS // the rows the grid spans (net to end line, or the other way)
+    for (let col = 0; col <= COLS; col++) line(at(col / COLS, r0 / ROWS), at(col / COLS, r1 / ROWS))
+    for (let row = r0; row <= r1; row++) {
       const net = row === HALF
       ctx.lineWidth = net ? lw * 2.5 : lw
       ctx.setLineDash(net ? [12, 6] : [])
@@ -561,9 +619,10 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   }
 
   if (zones?.player?.landings) drawLandings(ctx, w, h, zones.player.landings)
+  if (forecast && zones) drawForecast(ctx, w, h, fit, style0, zones, forecast, 'under')
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
   if (hasFlight(style, zones) && courtCamera(inPixels(fit, w, h), w, h)) {
-    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift)
+    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift, tint)
   } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
@@ -576,14 +635,16 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null
     if (pts?.end && endAir && !style.noLift) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
     const a = air ?? place(pts?.start, zones.start), b = endAir ?? place(pts?.end, zones.end)
-    if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
+    if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320), tint)
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
-    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
+    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), tint ?? END_COLOR, w, pts.endRough)
   }
+  if (forecast && zones) drawForecast(ctx, w, h, fit, style0, zones, forecast, 'over')
   if (impact && ripple !== null) {
     if (fxKind === 'ripple') drawRipplePin(ctx, w, h, fit, impact, ripple ?? still, style0.rippleColor)
     else drawLandingFx(ctx, w, h, fit, fxKind, impact, ripple ?? landingFxStill[fxKind], style0.rippleColor, trackOf(zones))
   }
+  if (after != null && zones) drawAfter(ctx, w, h, fit, style0, zones, after)
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
@@ -622,14 +683,14 @@ function ringOr(ctx: Ctx, rough: boolean, color: string): void {
   ctx.lineWidth = width; ctx.strokeStyle = '#FFFFFF'
 }
 
-function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {
+function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number, color = '#FACC15'): void {
   const len = Math.hypot(b.x - a.x, b.y - a.y)
   if (len < 1) return
   const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, head = Math.min(len * 0.4, width * 5)
   const base = { x: b.x - ux * head, y: b.y - uy * head }
   ctx.save()
-  ctx.strokeStyle = '#FACC15'
-  ctx.fillStyle = '#FACC15'
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
   ctx.lineWidth = width
   ctx.lineCap = 'round'
   ctx.shadowColor = 'rgba(0,0,0,0.6)'

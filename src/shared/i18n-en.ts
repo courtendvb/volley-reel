@@ -1620,4 +1620,9 @@ export const EN: Record<string, string> = {
   "作ったプロジェクトや書き出した動画は、このパソコンに残っています。": "Your projects and exported videos stay on this computer.",
   "更新のお支払いが済んでいません。Stripe の請求書ページで支払うと、すぐに使えるようになります。別のカードでも支払えます。": "The renewal hasn't been paid. Pay it on Stripe's invoice page and you're back at once — any card works.",
   "未払いの請求を支払う": "Pay the unpaid invoice",
+  "グリッドを出す": "Show grid",
+  "手前のチーム（第1セット）": "Near team (set 1)",
+  "コートの準備": "Court setup",
+  "選んだ1本": "Selected play",
+  "トスの対象": "Sets included",
 }

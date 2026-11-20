@@ -367,12 +367,15 @@ button.link { border: 0; background: none; color: var(--primary); padding: var(-
 .court-bar select { margin-left: var(--space-2); }
 .court-bar .near-team { max-width: 150px; }
 .court-row-label { flex: none; width: 84px; font-size: var(--fs-label); font-weight: 600; color: var(--sub); }
-/* The court bar's three groups (set up, the selected play, the player's marks), set apart by a rule. */
-.court-group { display: flex; flex-direction: column; gap: var(--space-3); }
+/* The court bar's three groups (set up, the selected play, the player's marks), each under a heading. */
+.court-group { display: flex; flex-direction: column; gap: var(--space-2); }
 .court-group + .court-group { border-top: 1px solid var(--border); padding-top: var(--space-4); }
-/* A setting that only applies to the choice above it: indented under it, with what it belongs to. */
-.court-sub { margin-left: 94px; padding-left: var(--space-4); border-left: 2px solid var(--primary-light); min-height: 26px; }
-.court-sub-label { flex: none; font-size: var(--fs-caption); color: var(--sub); }
+.court-group-head { margin: 0; font-size: var(--fs-label); font-weight: 700; color: var(--text); }
+/* One thing that can be shown: its checkbox in a fixed column, its own settings beside it. */
+.court-layer-row { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: var(--space-4); min-height: 30px; padding: 0 var(--space-2); border-radius: var(--radius-md); }
+.court-layer-row.on { background: color-mix(in srgb, var(--primary-light) 45%, transparent); }
+.court-layer-row .layer-main { font-weight: 600; }
+.layer-opts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 /* "?": the long explanation of a setting, opened on demand. */
 .help-wrap { position: relative; display: inline-flex; }
 .help-btn { width: 17px; height: 17px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--sub); font-size: var(--fs-caption); line-height: 1; }

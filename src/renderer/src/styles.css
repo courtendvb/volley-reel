@@ -605,6 +605,7 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .play-row .skill { overflow: hidden; text-overflow: ellipsis; }
 .logo-table { display: flex; flex-direction: column; gap: var(--space-2); max-height: 180px; overflow-y: auto; }
 .logo-row { display: flex; align-items: center; gap: var(--space-4); font-size: var(--fs-label); }
+.team-color { width: 32px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent; }
 .logo-row .logo-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logo-thumb { width: 64px; height: 40px; border-radius: var(--radius-sm); background: #1E293B; flex: none; }
 .pack-error { color: var(--danger-text); margin: 0; }

@@ -130,7 +130,16 @@ export interface ScoreboardData {
 }
 
 // Both teams' six on court, left and right as in the scoreboard: jerseys P1 to P6 (liberos are not in them).
-export interface LineupData { left: { code: string; jerseys: number[] }; right: { code: string; jerseys: number[] } }
+export interface LineupSide { code: string; jerseys: number[]; color?: string } // color: the team's (library), #RRGGBB
+export interface LineupData { left: LineupSide; right: LineupSide }
+
+// The scoreboard data with the teams' colors on its lineup (by team code; a team without one keeps none).
+export function withTeamColors(d: ScoreboardData, colors: Record<string, string>): ScoreboardData {
+  const l = d.lineup
+  if (!l) return d
+  const side = (s: LineupSide): LineupSide => (colors[s.code.toUpperCase()] ? { ...s, color: colors[s.code.toUpperCase()] } : s)
+  return { ...d, lineup: { left: side(l.left), right: side(l.right) } }
+}
 
 // A serve's measured speed and when its plate comes up: the reception's touch (a video time).
 export interface SpeedData { kmh: number; touchSec: number }

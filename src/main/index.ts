@@ -408,6 +408,8 @@ function registerIpc(): void {
   ipcMain.handle('palette:move', (_e, id: string, to: number) => lib().movePaletteItem(id, to))
   ipcMain.handle('palette:lock', (_e, id: string, locked: boolean) => lib().lockPaletteItem(id, locked))
   ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
+  ipcMain.handle('teamColor:list', () => library?.teamColors() ?? {})
+  ipcMain.handle('teamColor:set', (_e, code: string, color: string | null) => lib().setTeamColor(code, color))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {
     const l = lib()

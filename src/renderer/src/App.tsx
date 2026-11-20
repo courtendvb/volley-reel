@@ -22,7 +22,7 @@ import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
 import { courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
-import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { captionData, followAt, followWindows, overlaySettings, scoreboardData, withTeamColors, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
 import { ClipOverlayRow, LineupCheck, ServeSpeedCheck } from './components/ClipOverlayRow'
@@ -131,6 +131,8 @@ export function App() {
   const toggleExtra = useCallback((id: string) => setExtraSel(xs => (xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])), [])
   useEffect(() => { setEditPoints(false); setCropping(false) }, [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
+  // The teams' colors (library, by team code): the rotation lineup's discs.
+  const [teamColors, setTeamColors] = useState<Record<string, string>>({})
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -150,6 +152,7 @@ export function App() {
     latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
     setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
   })
+  useEffect(() => { if (library) void api.listTeamColors().then(setTeamColors).catch(() => undefined) }, [!!library])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
   const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
@@ -606,8 +609,8 @@ export function App() {
     const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
     const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
     const speed = kmh && tm.touchSec !== undefined ? { kmh, touchSec: tm.touchSec } : null
-    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
-  }, [dvws, settings, overlay, packs, video?.captionNames, matches])
+    return { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? []), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
+  }, [dvws, settings, overlay, packs, video?.captionNames, matches, teamColors])
   const activeOverlay = overlayData(active)
   // No clip on screen: the scoreboard and caption follow the playhead over the left list's plays in
   // this match (as the video's settings have them), each from its contact until the next listed play's,
@@ -635,7 +638,7 @@ export function App() {
         let v = cache.get(playId)
         if (!v) {
           const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
-          v = { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+          v = { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? []), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
           cache.set(playId, v)
         }
         return v
@@ -1075,7 +1078,7 @@ export function App() {
           onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
+        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} teamColors={teamColors} onTeamColors={setTeamColors} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
           onLanguage={l => void (async () => { await flushAll(); await api.setLanguage(l); location.reload() })()} />
       )}
     </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData } from './overlay'
+import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData, withTeamColors } from './overlay'
 
 // HTH away in this made-up match; SATO appears twice on HTH so names get an initial.
 const D = parseDVW(`[3TEAMS]
@@ -48,6 +48,14 @@ describe('lineup data', () => {
     // HTH is away here, so it is the left side with the away jerseys.
     expect(scoreboardData(d, d.plays[0], OURS).lineup).toEqual({ left: { code: 'HTH', jerseys: away }, right: { code: 'OPP', jerseys: home } })
     expect(scoreboardData(d, d.plays[0], []).lineup).toEqual({ left: { code: 'OPP', jerseys: home }, right: { code: 'HTH', jerseys: away } })
+  })
+
+  it('carries the teams\' library colors by team code', () => {
+    const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home: [1, 2, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] } })) }
+    const sb = scoreboardData(d, d.plays[0], OURS)
+    expect(withTeamColors(sb, { HTH: '#C8102E' }).lineup).toMatchObject({ left: { code: 'HTH', color: '#C8102E' }, right: { code: 'OPP' } })
+    expect(withTeamColors(sb, {}).lineup?.left.color).toBeUndefined()
+    expect(withTeamColors(scoreboardData(D, D.plays[0], OURS), { HTH: '#C8102E' }).lineup).toBeUndefined()
   })
 
   it('is off until switched on', () => {

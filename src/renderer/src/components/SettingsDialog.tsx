@@ -21,13 +21,15 @@ interface Props {
   settings: ProjectSettings
   theme: OverlayTheme // the overlay colors in use now
   teams: { code: string; name: string }[] // the teams in the project's matches, opponents first
+  teamColors: Record<string, string> // the library's, by team code
+  onTeamColors: (c: Record<string, string>) => void
   onSave: (s: ProjectSettings) => Promise<void>
   onClose: () => void
   onLanguage: (l: Lang) => void // saves the edits, then shows the app in that language
 }
 
 // 自チームのチームコード、オーバーレイの配色、チームのロゴ (design §3.2), add-on packs, and the app's own look.
-export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClose, onLanguage }: Props) {
+export function SettingsDialog({ settings, theme: themeNow, teams, teamColors, onTeamColors, onSave, onClose, onLanguage }: Props) {
   const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
   const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
   // The app's look shows at once and is kept at once, like the logos (it isn't part of the project).
@@ -135,9 +137,9 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
         </section>
 
         <section {...page('logos')}>
-          <span className="field-label wide">{t('チームのロゴ（タイトルカード）')}</span>
-          <TeamLogos teams={teams} />
-          <p className="hint">{t('1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。')}</p>
+          <span className="field-label wide">{t('チームのロゴ・色')}</span>
+          <TeamLogos teams={teams} colors={teamColors} onColors={onTeamColors} />
+          <p className="hint">{t('ロゴは、1 試合のクリップだけのタイトルカードに相手チームのものを出します。色は、動画のローテーション表示（6人の並び）のチームの色です。どちらも倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。')}</p>
         </section>
 
         <section {...page('addons')}>

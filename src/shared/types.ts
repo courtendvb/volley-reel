@@ -1,5 +1,6 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
+import type { AccountState, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
 import type { SavedFilter } from './filter'
@@ -232,6 +233,14 @@ export interface Api {
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
   updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
   appVersion(): Promise<string>
+  // The SyncScout account (shared/account.ts). enabled: false until the release that asks for one.
+  account(): Promise<{ enabled: boolean; state: AccountState }>
+  accountSendCode(email: string): Promise<void> // mails a one-time code
+  accountSignIn(email: string, code: string): Promise<AccountState>
+  accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
+  accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountSignOut(): Promise<AccountState>
+  accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads
   setLanguage(l: Lang): Promise<void> // kept for the next start; the window reloads to show it
   showInFolder(path: string): Promise<void>

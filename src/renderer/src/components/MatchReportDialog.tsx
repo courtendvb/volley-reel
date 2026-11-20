@@ -3,6 +3,7 @@ import { matchReport, seasonReport, type ReportMatch } from '../../../shared/rep
 import { matchLinks, reportHtml, seasonLinks, type ReportPick } from '../../../shared/reportHtml'
 import type { Match, ParsedDVW } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
+import { AccountNote } from './AccountDialog'
 
 const api = window.api
 
@@ -94,6 +95,7 @@ export function MatchReportDialog({ matches, dvws, initial, ourCodes, onClose, o
           <button className="primary" disabled={!html || busy} onClick={() => void save()}>{busy ? t('書き出しています…') : t('PDF に書き出す…')}</button>
           <button onClick={onClose}>{t('閉じる')}</button>
         </div>
+        <AccountNote what="export" />
         {html ? <iframe ref={frame} className="report-page" title={t('マッチレポート')} srcDoc={screen.replace('</head>', `<style>html { zoom: ${zoom}; }</style></head>`)} sandbox="allow-same-origin" onLoad={listen} />
           : <p className="muted">{t('DVW を読み込んだ試合がありません')}</p>}
         <p className="hint">{t('数字をクリックすると、そのプレーだけをプレー一覧に出します')}　{t('数字は DVW から計算します。Vote（評点）は入りません。会場・観客数・審判は DVW に入っているときだけ出ます')}</p>

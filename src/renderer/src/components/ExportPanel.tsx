@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { t } from '../../../shared/i18n'
+import { AccountNote } from './AccountDialog'
 
 export interface ExportTarget {
   key: string // 'video', 'scene', 'marker:<n>'
@@ -30,6 +31,7 @@ export function ExportPanel({ targets, info, chapters, onChapters, state, onExpo
   return (
     <section className="export-panel" data-export>
       <div className="export-body">
+        <AccountNote what="export" />
         <div className="export-targets" role="radiogroup" aria-label={t('書き出す範囲')}>
           {targets.map(t => (
             <label key={t.key} className={`export-target${t.key === chosen?.key ? ' on' : ''}${t.empty ? ' empty' : ''}`} title={t.hint}>

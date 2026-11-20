@@ -42,6 +42,13 @@ const api: Api = {
   installUpdate: () => ipcRenderer.invoke('update:install'),
   updateHelp: what => ipcRenderer.invoke('update:help', what),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  account: () => ipcRenderer.invoke('account:get'),
+  accountSendCode: email => ipcRenderer.invoke('account:sendCode', email),
+  accountSignIn: (email, code) => ipcRenderer.invoke('account:signIn', email, code),
+  accountRefresh: teamId => ipcRenderer.invoke('account:refresh', teamId),
+  accountCheckout: plan => ipcRenderer.invoke('account:checkout', plan),
+  accountSignOut: () => ipcRenderer.invoke('account:signOut'),
+  accountTeam: a => ipcRenderer.invoke('account:team', a),
   lang: ipcRenderer.sendSync('app:lang'),
   setLanguage: l => ipcRenderer.invoke('app:setLang', l),
   onExportEvent: cb => {

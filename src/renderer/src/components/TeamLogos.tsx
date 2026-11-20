@@ -6,7 +6,7 @@ const api = window.api
 
 // Team logos for title cards: one per team code, kept in the library so every project shares them.
 // Changes are saved at once (not with the dialog's save button).
-export function TeamLogos({ teams }: { teams: { code: string; name: string }[] }) {
+export function TeamLogos({ teams, colors, onColors }: { teams: { code: string; name: string }[]; colors: Record<string, string>; onColors: (c: Record<string, string>) => void }) {
   const [have, setHave] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   useEffect(() => { void api.listLogos().then(setHave) }, [])
@@ -25,6 +25,11 @@ export function TeamLogos({ teams }: { teams: { code: string; name: string }[] }
           <span className="muted logo-name">{tm.name}</span>
           <button disabled={busy === tm.code} onClick={() => void run(tm.code, () => api.pickLogo(tm.code))}>{have[tm.code] ? t('変える…') : t('ロゴを選ぶ…')}</button>
           {have[tm.code] && <button className="link" disabled={busy === tm.code} onClick={() => void run(tm.code, () => api.removeLogo(tm.code))}>{t('外す')}</button>}
+          <span className="spacer" />
+          <input type="color" className="team-color" aria-label={t('{0} のチームカラー', tm.code)} title={t('チームカラー（ローテーション表示の丸の色）')} value={colors[tm.code.toUpperCase()] ?? '#888888'}
+            style={colors[tm.code.toUpperCase()] ? undefined : { opacity: 0.35 }}
+            onChange={e => void api.setTeamColor(tm.code, e.target.value).then(onColors)} />
+          {colors[tm.code.toUpperCase()] ? <button className="link" onClick={() => void api.setTeamColor(tm.code, null).then(onColors)}>{t('色を外す')}</button> : <span className="muted small">{t('色なし')}</span>}
         </div>
       ))}
       {!teams.length && <p className="muted">{t('プロジェクトに試合がありません')}</p>}

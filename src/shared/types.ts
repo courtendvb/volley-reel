@@ -279,6 +279,8 @@ export interface Api {
   movePaletteItem(id: string, to: number): Promise<Palette>
   lockPaletteItem(id: string, locked: boolean): Promise<Palette>
   usePaletteItem(id: string): Promise<Annotation[]> // its objects, with their pictures now in the project
+  listTeamColors(): Promise<Record<string, string>> // library: #RRGGBB by team code, for the rotation lineup
+  setTeamColor(code: string, color: string | null): Promise<Record<string, string>>
   listLogos(): Promise<Record<string, string>>
   pickLogo(code: string): Promise<Record<string, string>>
   removeLogo(code: string): Promise<Record<string, string>>

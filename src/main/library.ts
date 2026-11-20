@@ -146,6 +146,23 @@ export class Library {
     return item.annotations
   }
 
+  // Team colors (the rotation lineup's discs): team-colors.json, #RRGGBB by team code, shared by every project.
+  async teamColors(): Promise<Record<string, string>> {
+    const f = join(this.dir, 'team-colors.json')
+    if (!existsSync(f)) return {}
+    const { data } = await readJSON<Record<string, unknown>>(f)
+    return Object.fromEntries(Object.entries(data).filter(([k, v]) => /^[A-Z0-9]{1,8}$/.test(k) && typeof v === 'string' && /^#[0-9A-F]{6}$/i.test(v)).map(([k, v]) => [k, (v as string).toUpperCase()]))
+  }
+
+  async setTeamColor(code: string, color: string | null): Promise<Record<string, string>> {
+    const c = cleanCode(code), all = await this.teamColors()
+    if (color === null) delete all[c]
+    else if (/^#[0-9A-F]{6}$/i.test(color)) all[c] = color.toUpperCase()
+    else throw new Error(t('色が不正です: {0}', color))
+    await writeJSON(join(this.dir, 'team-colors.json'), all)
+    return all
+  }
+
   // Team logos for title cards: logos/<CODE>.<ext>, one per three-letter code, shared by every project.
   async logos(): Promise<Record<string, string>> {
     const dir = join(this.dir, 'logos')

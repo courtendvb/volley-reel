@@ -519,6 +519,7 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .match-row .match-open { grid-column: -2; grid-row: 1; display: flex; gap: var(--space-2); justify-content: flex-end; }
 .match-row .match-open button { white-space: nowrap; }
 .match-row.pick.on { background: var(--primary-light); }
+.match-table .match-row:nth-child(even):not(.lost):not(.on) { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
 .warn-dot { color: var(--amber); }
 .project-name { font-size: var(--fs-title); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

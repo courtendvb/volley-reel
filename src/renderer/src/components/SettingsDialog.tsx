@@ -13,7 +13,7 @@ import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
 import { IS_MAC, keyName } from '../../../shared/keys'
 import { FONTS } from '../fonts'
-import { arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec } from '../keys'
+import { SET_STOP_MAX_SEC, arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec, setSetStopSec, setStopSec } from '../keys'
 
 // Fonts every computer of its kind has; the list a project's headline can pick from.
 
@@ -36,6 +36,9 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
   const [headline, setHeadline] = useState<HeadlineStyle>(settings.headline ?? {})
   const head = (patch: HeadlineStyle) => setHeadline({ ...headline, ...patch })
   const [saving, setSaving] = useState(false)
+  // 通し's stop on a set: kept at once, like the keys. The length is remembered while the stop is off.
+  const [stopOn, setStopOn] = useState(() => setStopSec() > 0)
+  const [stopLen, setStopLen] = useState(() => setStopSec() || 2)
   const [lines, setLines] = useState<ChartLineColors>(settings.lineColors ?? {})
   const [points, setPoints] = useState<ChartLineColors>(settings.pointColors ?? {})
   const [pointScale, setPointScale] = useState(settings.pointScale ?? 1)
@@ -46,7 +49,7 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
   const NAV: [string, [string, string][]][] = [
     [t('このプロジェクト'), [['team', t('対象チーム')], ['theme', t('配色')], ['headline', t('見出し')], ['lines', t('チャートの色と点')]]],
     [t('倉庫'), [['logos', t('チームのロゴ')], ['addons', t('アドオン')]]],
-    [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['look', t('アプリの見た目')]]],
+    [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['through', t('通しで見る')], ['look', t('アプリの見た目')]]],
   ]
 
   const save = async () => {
@@ -166,6 +169,18 @@ export function SettingsDialog({ settings, theme: themeNow, teams, onSave, onClo
               onChange={e => { const n = +e.target.value; if (n > 0 && n <= 60) setCtrlArrowSec(n) }} />
           </div>
           <p className="hint">{t('動画が動く秒数。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。Shift + ← → は 1 フレームのままです。')}</p>
+        </section>
+
+        <section {...page('through')}>
+          <span className="field-label wide">{t('通しで見る')}</span>
+          <div className="filter-row">
+            <label className="check"><input type="checkbox" checked={stopOn} onChange={e => { setStopOn(e.target.checked); setSetStopSec(e.target.checked ? stopLen : 0) }} /> {t('セット配分を出す')}</label>
+            <label className="field-label" htmlFor="set-stop-sec">{t('静止時間')}</label>
+            <input id="set-stop-sec" type="number" min={0.5} max={SET_STOP_MAX_SEC} step={0.5} value={stopLen} disabled={!stopOn} style={{ width: 64 }}
+              onChange={e => { const n = +e.target.value; setStopLen(n); if (n >= 0.5 && n <= SET_STOP_MAX_SEC) setSetStopSec(n) }} />
+            <span>{t('秒')}</span>
+          </div>
+          <p className="hint">{t('ラリーを通しで見るとき、Aパス（# + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。')}</p>
         </section>
 
         <section {...page('look')}>

@@ -6,11 +6,15 @@ import { isLandingFx, type LandingFx } from './courtFx'
 
 export interface GridStyle {
   grid: boolean
+  gridSide?: 'top' | 'bottom' // the grid on only the far half (top of the picture) or the near half (bottom); none: the whole court
   color: string
   opacity: number // 0..1
   lineWidth: number // px at 720p, scaled with the picture like the annotations
   playZones: boolean
   flight?: boolean // with the points: the ball's path as a curve
+  forecast?: boolean // 先読み (courtForecast.ts): before a serve or attack, the flight's dashed ghost, the landing's ring and zone and a count-in ring on the hit; on unless false
+  resultMark?: boolean // 着弾のあと (courtResult.ts): a badge over the landing with its result (ace / kill, error, blocked, or the evaluation symbol); on unless false
+  resultTint?: boolean // the curve and the landing point in the result's colour once it has landed; on unless false
   flightStill?: boolean // the whole curve shown for the clip, instead of growing as the play goes
   heat?: boolean // on a serve or attack: a heatmap of where the player's shots of that skill landed
   ripple?: boolean // on the selected serve or attack: a ripple of light from where it landed, for 3 s (courtHeat.ts); a heatmap shows as it always does
@@ -65,9 +69,9 @@ export function cleanGridStyle(x: unknown): GridStyle {
     ...(m?.chart ? { chart: cleanChart(m.chart) } : {}), ...(m?.setChart ? { setChart: cleanSetChart(m.setChart) } : {}), ...(m?.setCourt ? { setCourt: cleanSetCourt(m.setCourt) } : {}), ...(m?.setFilter && setFilterCount(cleanSetFilter(m.setFilter)) ? { setFilter: cleanSetFilter(m.setFilter) } : {}),
   })
   const base: GridStyle = {
-    grid: o.grid !== false, color: typeof o.color === 'string' ? o.color : DEFAULT_GRID_STYLE.color, opacity: typeof o.opacity === 'number' ? o.opacity : DEFAULT_GRID_STYLE.opacity,
+    grid: o.grid !== false, ...(o.gridSide === 'top' || o.gridSide === 'bottom' ? { gridSide: o.gridSide } : {}), color: typeof o.color === 'string' ? o.color : DEFAULT_GRID_STYLE.color, opacity: typeof o.opacity === 'number' ? o.opacity : DEFAULT_GRID_STYLE.opacity,
     lineWidth: typeof o.lineWidth === 'number' ? o.lineWidth : DEFAULT_GRID_STYLE.lineWidth, playZones: o.playZones !== false,
-    flight: !!o.flight, flightStill: !!o.flightStill, noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
+    flight: !!o.flight, flightStill: !!o.flightStill, ...(o.forecast === false ? { forecast: false } : {}), ...(o.resultMark === false ? { resultMark: false } : {}), ...(o.resultTint === false ? { resultTint: false } : {}), noLift: !!o.noLift, detail: o.detail === 'sub' || o.detail === 'point' ? o.detail : 'zone',
     ...(typeof o.heatOpacity === 'number' ? { heatOpacity: o.heatOpacity } : {}), ...(typeof o.coneColor === 'string' ? { coneColor: o.coneColor } : {}), ...(typeof o.rippleColor === 'string' && /^#[0-9a-f]{6}$/i.test(o.rippleColor) ? { rippleColor: o.rippleColor } : {}),
   }
   const by = o.bySkill as Record<string, Record<string, unknown>> | undefined

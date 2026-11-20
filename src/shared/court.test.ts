@@ -580,3 +580,12 @@ describe('withoutPlayerMarks', () => {
     expect(playMarks(play, fit, null, withoutPlayerMarks(style), () => [play]).player).toBeUndefined()
   })
 })
+
+describe('cleanGridStyle gridSide', () => {
+  it('keeps a half of the grid, and nothing for the whole court or a bad value', () => {
+    expect(cleanGridStyle({ gridSide: 'top' }).gridSide).toBe('top')
+    expect(cleanGridStyle({ gridSide: 'bottom' }).gridSide).toBe('bottom')
+    expect(cleanGridStyle({ gridSide: 'left' }).gridSide).toBeUndefined()
+    expect(cleanGridStyle({}).gridSide).toBeUndefined()
+  })
+})

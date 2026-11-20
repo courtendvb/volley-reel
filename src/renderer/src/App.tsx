@@ -611,7 +611,7 @@ export function App() {
     const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
     const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
     const speed = kmh && tm.touchSec !== undefined ? { kmh, touchSec: tm.touchSec } : null
-    return { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? []), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
+    return { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], matches[c.matchId]?.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches, teamColors])
   const activeOverlay = overlayData(active)
   // No clip on screen: the scoreboard and caption follow the playhead over the left list's plays in
@@ -641,7 +641,7 @@ export function App() {
         let v = cache.get(playId)
         if (!v) {
           const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
-          v = { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? []), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+          v = { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], match.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
           cache.set(playId, v)
         }
         return v

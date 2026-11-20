@@ -5,6 +5,8 @@ import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { effectName, skillName } from './labels'
 import type { ParsedDVW, Play } from './types'
+import type { CourtFit } from './court'
+import { nearSide } from './courtGeometry'
 import { matchReport, type MatchReport } from './report'
 import { t } from './i18n'
 
@@ -131,14 +133,16 @@ export interface ScoreboardData {
 
 // Both teams' six on court, left and right as in the scoreboard: jerseys P1 to P6 (liberos are not in them).
 export interface LineupSide { code: string; jerseys: number[]; color?: string } // color: the team's (library), #RRGGBB
-export interface LineupData { left: LineupSide; right: LineupSide }
+// near: the team by the camera in the video (the grid's 手前, swapped as the teams change ends), drawn
+// below the net; missing (no grid fitted): the left team is.
+export interface LineupData { left: LineupSide; right: LineupSide; near?: 'left' | 'right' }
 
 // The scoreboard data with the teams' colors on its lineup (by team code; a team without one keeps none).
 export function withTeamColors(d: ScoreboardData, colors: Record<string, string>): ScoreboardData {
   const l = d.lineup
   if (!l) return d
   const side = (s: LineupSide): LineupSide => (colors[s.code.toUpperCase()] ? { ...s, color: colors[s.code.toUpperCase()] } : s)
-  return { ...d, lineup: { left: side(l.left), right: side(l.right) } }
+  return { ...d, lineup: { ...l, left: side(l.left), right: side(l.right) } }
 }
 
 // A serve's measured speed and when its plate comes up: the reception's touch (a video time).
@@ -169,8 +173,8 @@ export function captionStats(dvw: ParsedDVW, play: Play): CaptionStat[] | null {
 }
 
 // Our team always on the left (design §3.7); scrimmages and all-home files keep home on the left.
-// The score is the one before the rally.
-export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): ScoreboardData {
+// The score is the one before the rally. fit: the match's court grid, for which team is by the camera.
+export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[], fit?: Pick<CourtFit, 'nearSet1'> | null): ScoreboardData {
   const side = dvw.allHome ? '*' : ourSide(dvw.teams, ourCodes) ?? '*'
   const homeLeft = side === '*'
   const [home, away] = dvw.teams
@@ -182,7 +186,8 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
     setsL: homeLeft ? play.setsBefore.home : play.setsBefore.away, setsR: homeLeft ? play.setsBefore.away : play.setsBefore.home,
     winner: won === null ? null : (won === '*') === homeLeft ? 'L' : 'R',
     ...(rally?.court?.home.length === 6 && rally.court.away.length === 6
-      ? { lineup: { left: { code: (homeLeft ? home : away).code, jerseys: homeLeft ? rally.court.home : rally.court.away }, right: { code: (homeLeft ? away : home).code, jerseys: homeLeft ? rally.court.away : rally.court.home } } }
+      ? { lineup: { left: { code: (homeLeft ? home : away).code, jerseys: homeLeft ? rally.court.home : rally.court.away }, right: { code: (homeLeft ? away : home).code, jerseys: homeLeft ? rally.court.away : rally.court.home },
+          ...(fit ? { near: (nearSide(fit as CourtFit, play) === '*') === homeLeft ? 'left' as const : 'right' as const } : {}) } }
       : {}),
   }
 }

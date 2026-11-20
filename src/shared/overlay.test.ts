@@ -50,6 +50,17 @@ describe('lineup data', () => {
     expect(scoreboardData(d, d.plays[0], []).lineup).toEqual({ left: { code: 'OPP', jerseys: home }, right: { code: 'HTH', jerseys: away } })
   })
 
+  it('says which team is by the camera, from the grid\'s near team and the set', () => {
+    const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home: [1, 2, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] } })) }
+    const play = (setNum: number) => ({ ...d.plays[0], setNum, score: { home: 0, away: 0 } })
+    // HTH (ours, left) is away; home near in set 1: the right-hand team is by the camera, then the left in set 2.
+    expect(scoreboardData(d, play(1), OURS, { nearSet1: '*' }).lineup?.near).toBe('right')
+    expect(scoreboardData(d, play(2), OURS, { nearSet1: '*' }).lineup?.near).toBe('left')
+    expect(scoreboardData(d, play(1), OURS, { nearSet1: 'a' }).lineup?.near).toBe('left')
+    expect(scoreboardData(d, play(1), OURS).lineup?.near).toBeUndefined() // no grid: ours below, as before
+    expect(withTeamColors(scoreboardData(d, play(1), OURS, { nearSet1: '*' }), { HTH: '#C8102E' }).lineup?.near).toBe('right') // kept with the colors
+  })
+
   it('carries the teams\' library colors by team code', () => {
     const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home: [1, 2, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] } })) }
     const sb = scoreboardData(d, d.plays[0], OURS)

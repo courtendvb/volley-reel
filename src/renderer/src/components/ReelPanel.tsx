@@ -489,10 +489,16 @@ function Legacy({ d, onChange }: { d: RangeDefaults; onChange: (d: RangeDefaults
   )
 }
 
+// Kept as typed while it is being typed, so the field can be cleared and typed again; a number from 0
+// to 30 takes effect at once, and leaving the field puts back the value in use.
 export function SecInput({ v, label, onChange, disabled }: { v: number; label: string; onChange: (n: number) => void; disabled?: boolean }) {
+  const [text, setText] = useState(String(v))
+  const [editing, setEditing] = useState(false)
+  useEffect(() => { if (!editing) setText(String(v)) }, [v, editing])
   return (
-    <input type="number" min={0} max={30} step={0.5} value={v} aria-label={label} disabled={disabled}
-      onChange={e => { const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0) onChange(n) }} />
+    <input type="number" min={0} max={30} step={0.5} value={editing ? text : v} aria-label={label} disabled={disabled}
+      onFocus={() => { setEditing(true); setText(String(v)) }} onBlur={() => setEditing(false)}
+      onChange={e => { setText(e.target.value); const n = parseFloat(e.target.value); if (isFinite(n) && n >= 0 && n <= 30) onChange(n) }} />
   )
 }
 

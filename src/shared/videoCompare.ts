@@ -46,6 +46,23 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 
 export const emptyPane = (): ComparePane => ({ source: null, view: { ...DEFAULT_VIEW }, time: 0 })
 
+// The name a comparison takes from its two videos, "2026-10-10 RSH-HCF × 2026-10-24 RSH-LKW" (one side alone
+// while the other is empty). label: a side's video as people know it (the match's name, the file's).
+export function autoCompareName(left: string | null, right: string | null): string | null {
+  return left && right ? `${left} × ${right}` : left || right || null
+}
+
+// The name after a side's video changes: it follows the videos while it is the default name, empty, or the one
+// the videos gave it; a name typed by hand stays.
+export function nameAfterSource(s: Pick<CompareSession, 'name' | 'left' | 'right'>, side: Side, source: CompareSource | null,
+  label: (src: CompareSource | null) => string | null, defaultName: string): string {
+  const name = s.name.trim()
+  const was = autoCompareName(label(s.left.source), label(s.right.source))
+  if (name && name !== defaultName && name !== was) return s.name
+  const next = { left: s.left.source, right: s.right.source, [side]: source }
+  return autoCompareName(label(next.left), label(next.right)) ?? defaultName
+}
+
 export function newCompare(name: string): CompareSession {
   return { id: uid(), name, left: emptyPane(), right: emptyPane(), offsetSec: 0, synced: false, zoomLocked: false, layout: 'side', overlayAlpha: DEFAULT_ALPHA, updatedAt: new Date().toISOString() }
 }

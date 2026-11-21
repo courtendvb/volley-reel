@@ -88,6 +88,7 @@ const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the 
 
 
 
+const NOTICE_SEC = 10
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
@@ -140,6 +141,8 @@ export function App() {
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // A notice says what just happened; it goes by itself after 10 seconds (a click closes it sooner).
+  useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), NOTICE_SEC * 1000); return () => clearTimeout(id) }, [notice])
   // The latest state for callbacks and steps in the same tick; filled in on every render below.
   const latest = useRef<AppLatest>({ overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null } as AppLatest)
   const {

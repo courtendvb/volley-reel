@@ -26,6 +26,19 @@ extraResources:
   # League player photos (shared/pack.ts), shipped with the app; not in the repository (vendor/).
   - from: vendor/packs
     to: packs
+  # The manual (site/manual/ja), opened from the settings in the computer's browser, with the site's styles and
+  # pictures it uses. Not the film (media/) nor the screenshot scripts.
+  - from: site
+    to: site
+    filter:
+      - manual/ja/**
+      - manual/img/**
+      - manual/manual.css
+      - img/**
+      - site.css
+      - site.js
+      - index.html
+      - ja.html
 asar: true
 win:
   target:

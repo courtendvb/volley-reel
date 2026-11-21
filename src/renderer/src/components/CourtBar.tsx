@@ -8,6 +8,7 @@ import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilt
 import { effectName } from '../../../shared/labels'
 import type { MarkRange } from '../../../shared/markRange'
 import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 interface Props {
   match: Match
@@ -69,6 +70,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
     onStyle({ ...s, bySkill: { ...s.bySkill, [tab]: value === undefined ? rest : { ...rest, [key]: value } } })
   }
   const [gear, setGear] = useState(false)
+  const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
   const [finding, setFinding] = useState(false)
   const autoButton = (after?: () => void) => (
     <button disabled={finding} title={t('動画の中のコートの線を探して、四隅の候補を置きます。少し時間がかかります。最後は線に合っているか確かめてください')}
@@ -120,10 +122,10 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
             <option value="a">{away.name || away.code}</option>
           </select></label>
           <span className="spacer" />
-          <span className="ov-gear-wrap">
+          <span className="ov-gear-wrap" ref={gearPop.anchor}>
             <button className="ov-gear" aria-label={t('グリッドの見た目')} aria-expanded={gear} onClick={() => setGear(g => !g)}>⚙</button>
             {gear && (
-              <div className="ov-gear-pop" role="dialog" aria-label={t('グリッドの見た目')}>
+              <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('グリッドの見た目')}>
                 <label className="check">{t('色')} <PaletteColor value={s.color} label={t('グリッドの色')} onChange={c => onStyle({ ...s, color: c })} /></label>
                 <label className="check">{t('濃さ')}
                   <input type="range" min={0.1} max={1} step={0.05} value={s.opacity} onChange={e => onStyle({ ...s, opacity: +e.target.value })} /> {Math.round(s.opacity * 100)}%</label>

@@ -915,6 +915,8 @@ export function App() {
                 <button className="link" aria-expanded={cardToolsOpen} onClick={() => setCardToolsOpen(o => !o)}>{cardToolsOpen ? '▾' : '▸'} {t('図形')}</button>
               </div>
             )}
+            {/* The work area takes only the room the video leaves, and scrolls: a tall panel never shrinks the video. */}
+            <div className="stage-work">
             {cardEditCard && cardTool === 'objects' && (
               <div className="stage-panel" hidden={!cardToolsOpen}>
               <AnnotationTools
@@ -927,6 +929,7 @@ export function App() {
               />
               </div>
             )}
+            </div>
             {!cardEdit && match && (
               <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting}>
                 {active && activeInfo?.range && active.matchId === matchId && (stagePanel === 'edit' || stagePanel === 'objects') && (
@@ -935,6 +938,7 @@ export function App() {
                 )}
               </StageTabs>
             )}
+            <div className="stage-work">
             {!cardEdit && match && listServe && selectedPlay && (
               <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
                 onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />
@@ -1009,6 +1013,7 @@ export function App() {
               />
               </div>
             )}
+            </div>
           </section>
           <div className="right-col" onPointerDownCapture={() => { focusPane.current = 'scene' }}>
             {(['head', 'list'] as const).map(part => {

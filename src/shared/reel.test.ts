@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
   addClips, copyClipTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
-  setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
+  setServeSpeed, setSkillTime, setClipCourt, setOverlayOverride, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits,
 } from './reel'
 
@@ -431,5 +431,29 @@ describe('a clip into another scene', () => {
     expect(markersOf(again.reel, tc[0])).toEqual([1, 3])
     expect(Object.keys(again.reel.clips)).toHaveLength(1)
     expect(copyClipTo(src.clips[c[1]], to0, []).reel.groups.none).toEqual([tc[0]])
+  })
+})
+
+describe('setClipCourt', () => {
+  const base = () => {
+    const { reel, ids } = addClips(newReel('r'), [{ matchId: 'M', play: parseDVW(DVW).plays[0] }])
+    return { r: reel, id: ids[0] }
+  }
+  it('pins a look to one clip and takes it away again', () => {
+    const { r, id } = base()
+    const pinned = setClipCourt(r, id, { detail: 'point', effect: { on: true } })
+    expect(pinned.clips[id].overlayOverride?.court).toEqual({ detail: 'point', effect: { on: true } })
+    const back = setClipCourt(pinned, id, undefined)
+    expect(back.clips[id].overlayOverride).toBeUndefined() // nothing else was set: no override left
+    expect(clipEdits(pinned.clips[id]).overlay).toBe(true)
+    expect(clipEdits(back.clips[id]).overlay).toBe(false)
+  })
+
+  it('keeps the clip\'s other exceptions', () => {
+    const { r, id } = base()
+    const hidden = setOverlayOverride(r, id, { scoreboard: { hidden: true } })
+    const pinned = setClipCourt(hidden, id, { effect: { on: false } })
+    expect(pinned.clips[id].overlayOverride).toEqual({ scoreboard: { hidden: true }, court: { effect: { on: false } } })
+    expect(setClipCourt(pinned, id, undefined).clips[id].overlayOverride).toEqual({ scoreboard: { hidden: true } })
   })
 })

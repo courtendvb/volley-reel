@@ -4,7 +4,7 @@ import { chartName } from '../../../shared/chart'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Clip, Group, Marker, Reel } from '../../../shared/reel'
 import type { OverlaySettings } from '../../../shared/overlay'
-import { flightTiming, playMarks, withoutPlayerMarks, type GridStyle } from '../../../shared/court'
+import { clipCourtStyle, flightTiming, playMarks, withoutPlayerMarks, type GridStyle } from '../../../shared/court'
 import { clipRangeSource } from '../../../shared/markRange'
 import { playTimes, serveMarkOf } from '../../../shared/serveMark'
 import type { ExportEvent, Match, ParsedDVW, ProjectSettings } from '../../../shared/types'
@@ -81,7 +81,10 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
           court: (c, sceneId, group) => {
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
             const dvws = latest.current.dvwsRef ?? {}, counted = latest.current.targetDvws ?? dvws // figures over the target matches only
-            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], c.overlayOverride?.courtMarks?.hidden ? withoutPlayerMarks(gridStyleRef.current) : gridStyleRef.current, () => Object.values(counted).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play), setterName: set => chartName(dvws[c.matchId], set), ranges: clipRangeSource(byId[sceneId], group, c.matchId, dvws) }), flight: flightTiming(play, ms[c.matchId].offsetSec, playTimes(serveMarkOf(ms[c.matchId], play), c)) } : null
+            // The clip's own look when it pins one, and without the player's marks when it leaves them off.
+            const pinned = play ? clipCourtStyle(gridStyleRef.current, play.skill, c.overlayOverride?.court) : gridStyleRef.current
+            const clipStyle = c.overlayOverride?.courtMarks?.hidden ? withoutPlayerMarks(pinned) : pinned
+            return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], clipStyle, () => Object.values(counted).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play), setterName: set => chartName(dvws[c.matchId], set), ranges: clipRangeSource(byId[sceneId], group, c.matchId, dvws) }), flight: flightTiming(play, ms[c.matchId].offsetSec, playTimes(serveMarkOf(ms[c.matchId], play), c)) } : null
           },
           courtStyle: gridStyleRef.current }, outPath,
         // Chapters always go into the MP4 (the whole video's scenes and markers, or a scene's markers);

@@ -6,6 +6,7 @@ import type { BoardMade, PlacedChart } from './board'
 import type { DirectionChart } from './chart'
 import type { PlacedSetChart, SlideCones, SlideFlights, SlideHeat, SlideZones } from './court'
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
+import type { ClipCourtStyle } from './courtStyle'
 import type { ParsedDVW, Play } from './types'
 
 export type Marker = 1 | 2 | 3 | 4 | 5
@@ -194,7 +195,7 @@ export function clipEdits(c: Clip): ClipEdits {
     headline: quick && quick.kind === 'text' ? quick.text : null,
     objects: c.annotations.filter(a => a !== quick).length,
     timing: hasTiming(c.timing),
-    overlay: !!(o?.scoreboard?.hidden || o?.playerCaption?.hidden || o?.playerCaption?.name || o?.playerCaption?.line),
+    overlay: !!(o?.scoreboard?.hidden || o?.playerCaption?.hidden || o?.playerCaption?.name || o?.playerCaption?.line || o?.court),
   }
 }
 
@@ -475,4 +476,15 @@ export function setServeSpeed(reel: Reel, clipId: string, kmh: number | null): R
 
 export function setOverlayOverride(reel: Reel, clipId: string, o: ClipOverlayOverride | undefined): Reel {
   return patchClip(reel, clipId, c => ({ ...c, overlayOverride: o }))
+}
+
+// A clip's own court look (what it pins of the 表示 tab), or none back on the tab's. The clip's other
+// per-clip exceptions stay, and a clip left with none has no override at all.
+export function setClipCourt(reel: Reel, clipId: string, court: ClipCourtStyle | undefined): Reel {
+  return patchClip(reel, clipId, c => {
+    const { court: _old, ...rest } = c.overlayOverride ?? {}
+    const next: ClipOverlayOverride = court ? { ...rest, court } : rest
+    const { overlayOverride: _o, ...clip } = c
+    return Object.keys(next).length ? { ...clip, overlayOverride: next } : clip
+  })
 }

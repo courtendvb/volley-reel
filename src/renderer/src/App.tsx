@@ -3,7 +3,7 @@ import { clipRangeSource } from '../../shared/markRange'
 import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setClipCourt, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
@@ -50,7 +50,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -251,13 +251,16 @@ export function App() {
   const courtClip = (playingClipId ? rangeScene?.clips[playingClipId] : null) ?? (reel && activeClipId ? reel.clips[activeClipId] : null) ?? null
   const hideMarks = !!courtClip?.overlayOverride?.courtMarks?.hidden
   const sharesNow = !!followPlay?.shares
+  // The clip's own court look, when it pins one (the clip on screen, or while 通し plays, the one playing).
+  const clipCourt = courtClip?.overlayOverride?.court
   const courtStyle = useMemo(() => {
-    const base = hideMarks ? withoutPlayerMarks(gridStyle) : gridStyle
+    const pinned = clipCourtStyle(gridStyle, courtPlay?.skill, clipCourt)
+    const base = hideMarks ? withoutPlayerMarks(pinned) : pinned
     // The stop before a set after a good reception (通し): that setter's set distribution in the rotation, whatever the 表示 tab has on.
     if (!sharesNow) return base
     const { setFilter: _f, ...e } = base.bySkill?.E ?? {}
     return { ...base, bySkill: { ...base.bySkill, E: { ...e, setCourt: { layer: 'shares' as const } } } }
-  }, [hideMarks, gridStyle, sharesNow])
+  }, [hideMarks, gridStyle, sharesNow, clipCourt, courtPlay?.skill])
   const courtZones = useMemo(() => (match?.court && courtPlay
     ? playMarks(courtPlay, match.court, nextPlay, courtStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set), ranges: clipRangeSource(rangeScene, rangeGroup, match.id, dvws) })
     : null), [match?.court, courtPlay, nextPlay, rangeScene, rangeGroup, courtStyle, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
@@ -573,6 +576,8 @@ export function App() {
 
   // ---- trimming (design §3.5) -----------------------------------------------------------------
   const active = reel && activeClipId ? reel.clips[activeClipId] ?? null : null
+  // The clip the 表示 tab can pin a look to: the clip on screen, when the play selected is its own.
+  const pinClip = match && active && selectedPlay && active.matchId === match.id && active.playId === selectedPlay.id ? active : null
   const activeInfo = active ? clipInfo(active) : null
   // A serve's hit and touch (on the match, by play) and the speed they give: for the open clip, and for
   // the play picked in the list when no clip of it is open.
@@ -931,7 +936,21 @@ export function App() {
               {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
                 <div className="ann-row clip-overlay"><span className="field-label">{t('自動表示')}</span><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /></div>
               )}
-              <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
+              <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} fitting={courtFitting} onFitting={setCourtFitting}
+                style={pinClip?.overlayOverride?.court ? clipCourtStyle(gridStyle, selectedPlay?.skill, pinClip.overlayOverride.court) : gridStyle}
+                onStyle={next => {
+                  const pin = pinClip?.overlayOverride?.court
+                  if (!pinClip || !pin) { setGridStyle(next); return }
+                  // Pinned: what the clip has of its own goes to the clip, the rest (the grid, its colour...) to the tab.
+                  const split = splitClipStyle(next, gridStyle, selectedPlay?.skill)
+                  setGridStyle(split.tab)
+                  const r = latest.current.reel
+                  if (r) updateReel(setClipCourt(r, pinClip.id, split.pin))
+                }}
+                pin={pinClip ? { on: !!pinClip.overlayOverride?.court, onChange: on => {
+                  const r = latest.current.reel
+                  if (r) updateReel(setClipCourt(r, pinClip.id, on ? pinClipStyle(gridStyle, selectedPlay?.skill) : undefined))
+                } } : undefined}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
               </div>
             )}

@@ -22,6 +22,7 @@ const api: Api = {
   otherProjects: () => ipcRenderer.invoke('project:others'),
   projectDvws: path => ipcRenderer.invoke('project:dvws', path),
   setMatchCourt: (id, court) => ipcRenderer.invoke('match:setCourt', id, court),
+  setCodeEdit: (id, line, from, to) => ipcRenderer.invoke('match:setCodeEdit', id, line, from, to),
   setMatchOffset: (id, offsetSec) => ipcRenderer.invoke('match:setOffset', id, offsetSec),
   setServeMark: (id, fingerprint, patch) => ipcRenderer.invoke('match:setServeMark', id, fingerprint, patch),
   saveSettings: s => ipcRenderer.invoke('project:saveSettings', s),

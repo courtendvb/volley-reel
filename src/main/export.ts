@@ -8,6 +8,7 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExportEvent, ExportItem, ExportJob, ExportLayer } from '../shared/types'
 import { chapterMetadata, chapterText } from '../shared/video'
+import { compareArgs, type CompareRun } from '../shared/compareExport'
 import { clipPlayedSec } from '../shared/timing'
 import { ffmpegBin } from './ffmpegPath'
 import { probe } from './media'
@@ -91,6 +92,28 @@ export class Exporter {
       this.running = false
       if (result) emit(result)
     }
+  }
+
+  // A video comparison (shared/compareExport.ts): one ffmpeg run, reported like any export.
+  async runCompare(run: CompareRun, emit: (e: ExportEvent) => void): Promise<void> {
+    if (this.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
+    this.running = true
+    this.cancelled = false
+    const t0 = Date.now()
+    const elapsed = () => (Date.now() - t0) / 1000
+    let result: ExportEvent
+    try {
+      emit({ type: 'progress', ratio: 0, item: 0, items: 1, elapsedSec: 0 })
+      await this.ffmpeg(compareArgs(run), sec => emit({ type: 'progress', ratio: Math.min(1, sec / run.durationSec), item: 0, items: 1, elapsedSec: elapsed() }))
+      result = { type: 'done', outPath: run.outPath, elapsedSec: elapsed(), footageSec: run.durationSec, sizeBytes: (await stat(run.outPath)).size }
+    } catch (e) {
+      if (e instanceof ExportCancelled || this.cancelled) { await rm(run.outPath, { force: true }); result = { type: 'cancelled' } }
+      else result = { type: 'error', message: (e as Error).message }
+    } finally {
+      this.child = null
+      this.running = false
+    }
+    emit(result)
   }
 
   cancel(): void {

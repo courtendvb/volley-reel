@@ -51,7 +51,17 @@ export interface OverlaySettings {
   court: { enabled: boolean }
   // YouTube chapters (a .txt beside the MP4) when the whole video is exported.
   chapters: { enabled: boolean }
+  // The MP4's height. 1080 is offered only when every video in the export is at least 1080 high (exportHeight):
+  // most volleyball footage is 720p, and a larger export would not be sharper than its source.
+  output: { height: ExportHeight }
 }
+
+export type ExportHeight = 720 | 1080
+// Whether 1080p can be picked: every match video in the export is at least 1080 high.
+export const can1080 = (heights: (number | undefined)[]): boolean => heights.length > 0 && heights.every(h => (h ?? 0) >= 1080)
+// The height the MP4 is made at: the one picked, when the sources allow it; else 720.
+export const exportHeight = (s: Pick<OverlaySettings, 'output'>, heights: (number | undefined)[]): ExportHeight =>
+  s.output.height === 1080 && can1080(heights) ? 1080 : 720
 
 // x / y: the title's top-left (0..1 of the frame), so a longer title only grows to the right and down;
 // scale: 1 = default size. A scene or video card's layout saved before origin was its title's centre:
@@ -101,6 +111,7 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
   chapters: { enabled: false },
+  output: { height: 720 },
 }
 
 // What gets saved: any part may be missing, and missing parts fall back to the defaults.
@@ -120,6 +131,7 @@ export function overlaySettings(saved: OverlayPatch | undefined): OverlaySetting
     transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
     court: { ...DEFAULT_OVERLAY.court, ...(s.court ?? {}) },
     chapters: { ...DEFAULT_OVERLAY.chapters, ...(s.chapters ?? {}) },
+    output: { height: s.output?.height === 1080 ? 1080 : 720 },
   }
 }
 

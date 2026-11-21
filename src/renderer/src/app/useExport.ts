@@ -3,7 +3,7 @@
 import { chartName } from '../../../shared/chart'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Clip, Group, Marker, Reel } from '../../../shared/reel'
-import type { OverlaySettings } from '../../../shared/overlay'
+import { can1080, exportHeight, type OverlaySettings } from '../../../shared/overlay'
 import { flightTiming, playMarks, withoutPlayerMarks, type GridStyle } from '../../../shared/court'
 import { clipRangeSource } from '../../../shared/markRange'
 import { playTimes, serveMarkOf } from '../../../shared/serveMark'
@@ -12,7 +12,7 @@ import { planChapters, planScene, planSceneWithCard, planVideoChapters, sceneFil
 import { fillPlanFrames } from '../../../shared/cardPeople'
 import type { ClipInfo } from '../components/ReelPanel'
 import type { ExportTarget } from '../components/ExportPanel'
-import { EXPORT_HEIGHT, buildExportJob } from '../exportRender'
+import { buildExportJob } from '../exportRender'
 import type { AppLatest } from './appState'
 import { clipPlayedSec } from '../../../shared/timing'
 import { t } from '../../../shared/i18n'
@@ -151,7 +151,11 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     }
     return out
   }, [video, reel, reels, overlay, matches, settings, dvws])
-  const exportInfo = t('{0}p・{1}・{2}', EXPORT_HEIGHT, overlay.transition.fade ? t('フェードあり') : t('フェードなし'), overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? t('タイトルカードあり') : t('タイトルカードなし'))
+  // The heights of the match videos in the open video, for the 720p / 1080p choice (1080p only when every one is that high).
+  const heights = useMemo(() => [...new Set(currentPlan('video').flatMap(p => (p.kind === 'clip' ? [p.clip.matchId] : [])))].map(id => matches[id]?.height),
+    [video, reels, matches]) // eslint-disable-line react-hooks/exhaustive-deps
+  const quality = { can1080: can1080(heights), height: exportHeight(overlay, heights) }
+  const exportInfo = t('{0}p・{1}・{2}', quality.height, overlay.transition.fade ? t('フェードあり') : t('フェードなし'), overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? t('タイトルカードあり') : t('タイトルカードなし'))
   const exportTarget = (key: string) => {
     if (key === 'video') { void startExport(); return }
     if (key === 'scenes') { void exportScenes(); return }
@@ -195,7 +199,7 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
     return startExport(outPath, { plan: [{ kind: 'clip', clip: c, sceneId, group: g }], name: `${v?.name ?? sc.name} - ${sc.name} - ${play}` })
   }
 
-  return { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget }
+  return { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget, quality }
 }
 
 function eta(ratio: number, elapsedSec: number): string {

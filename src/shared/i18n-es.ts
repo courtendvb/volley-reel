@@ -1756,4 +1756,6 @@ export const ES: Record<string, string> = {
   "両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）": "Muestra los seis en cancha de ambos equipos por número de camiseta en una cancha pequeña (para todo el video; la posición y el tamaño están en la configuración del video)",
   "この動画の設定です": "Esta es la configuración de este video",
   "動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）": "Configuración para cuando no hay un video abierto (se guarda en el proyecto; los videos nuevos empiezan con ella)",
+  "画質": "Calidad",
+  "元の動画がすべて 1080p 以上なので選べます。720p より大きいファイルになり、書き出しにも時間がかかります（この動画の設定）": "Puedes elegirlo porque todos los videos de origen son de 1080p o más. El archivo es más grande que en 720p y tarda más en exportarse (configuración de este video)",
 }

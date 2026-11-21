@@ -243,6 +243,7 @@ export interface Api {
   onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
   updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
+  openManual(page?: string): Promise<void> // the manual shipped with the app, in the browser (a chapter's file name, or the index)
   appVersion(): Promise<string>
   // The SyncScout account (shared/account.ts). enabled: false until the release that asks for one.
   account(): Promise<{ enabled: boolean; state: AccountState }>

@@ -573,6 +573,8 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .video-add { display: flex; gap: var(--space-3); padding: var(--space-1) var(--space-4) var(--space-4); }
 .video-add select { flex: 1; min-width: 0; }
 .field-label.wide { width: auto; }
+.manual-chapters { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.manual-chapters button.link { text-align: left; }
 .video-panel .count { padding: var(--space-2) var(--space-4) var(--space-4); }
 
 /* ---- object format panel (v3 step 3) ---- */

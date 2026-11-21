@@ -41,6 +41,7 @@ const api: Api = {
   },
   installUpdate: () => ipcRenderer.invoke('update:install'),
   updateHelp: what => ipcRenderer.invoke('update:help', what),
+  openManual: page => ipcRenderer.invoke('app:manual', page),
   appVersion: () => ipcRenderer.invoke('app:version'),
   account: () => ipcRenderer.invoke('account:get'),
   accountSendCode: email => ipcRenderer.invoke('account:sendCode', email),

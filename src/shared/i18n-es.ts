@@ -1756,4 +1756,8 @@ export const ES: Record<string, string> = {
   "両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）": "Muestra los seis en cancha de ambos equipos por número de camiseta en una cancha pequeña (para todo el video; la posición y el tamaño están en la configuración del video)",
   "この動画の設定です": "Esta es la configuración de este video",
   "動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）": "Configuración para cuando no hay un video abierto (se guarda en el proyecto; los videos nuevos empiezan con ella)",
+  "ヘルプ": "Ayuda",
+  "マニュアル": "Manual",
+  "マニュアルを開く": "Abrir el manual",
+  "使い方の説明を、パソコンのブラウザで開きます。アプリに入っているので、インターネットにつながっていなくても読めます（今は日本語だけです）。": "Abre la guía de uso en el navegador de tu computadora. Viene con la app, así que funciona sin conexión a internet (por ahora solo en japonés).",
 }

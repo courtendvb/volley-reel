@@ -1756,6 +1756,8 @@ export const EN: Record<string, string> = {
   "両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）": "Shows both teams' six on court by jersey number on a small court (for the whole video; position and size are in the video settings)",
   "この動画の設定です": "These are this video's settings",
   "動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）": "Settings for when no video is open (saved in the project; new videos start from them)",
+  "画質": "Quality",
+  "元の動画がすべて 1080p 以上なので選べます。720p より大きいファイルになり、書き出しにも時間がかかります（この動画の設定）": "You can pick this because every source video is 1080p or more. The file is larger than at 720p and takes longer to export (this video’s setting)",
   "時刻合わせ": "Timing",
   "ずれ {0}": "Offset {0}",
   "ずれなし": "No offset",

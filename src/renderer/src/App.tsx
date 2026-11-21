@@ -681,7 +681,7 @@ export function App() {
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
-  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget } = useExport(
+  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget, quality } = useExport(
     { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef, cardFramePhoto)
   latest.current.exportState = exportState
   const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
@@ -1069,7 +1069,7 @@ export function App() {
               onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
             </div>
             <div className="right-pane" hidden={rightTab !== 'export'}>
-            <ExportPanel targets={exportTargets} info={exportInfo} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} state={exportState} onExport={exportTarget}
+            <ExportPanel targets={exportTargets} info={exportInfo} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} quality={quality} onHeight={h => setOverlay({ ...overlay, output: { height: h } })} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { followAt, lookTheme, type CaptionData, type ClipOverlayOverride, type FollowWindow, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
-import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../../shared/overlayDraw'
+import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } from '../../../shared/overlayDraw'
 import { drawAnnotation } from '../../../shared/annotation'
 import { drawFlights, drawSlideMarks, flightsProgress } from '../../../shared/court'
 import { assetImage, logoImage, packPhotoImage, subscribeAssets } from '../assets'
@@ -84,6 +84,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     if (speed && settings.serveSpeed.enabled && inSpeed) drawServeSpeed(ctx, size.w, size.h, speed.kmh, settings.serveSpeed, lookTheme(settings))
     if (!inClip) return
     if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, lookTheme(settings))
+    if (scoreboard?.lineup && settings.lineup.enabled && !override?.scoreboard?.hidden) drawLineup(ctx, size.w, size.h, scoreboard.lineup, settings.lineup, lookTheme(settings))
     if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, lookTheme(settings), packPhotoImage(caption.photo))
   }, [size.w, size.h, settings, scoreboard, caption, override, inClip, inSpeed, speed, st.card, logoTick, flights, progress, heatOpacity, st.idx])
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData } from './overlay'
+import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData, withTeamColors } from './overlay'
 
 // HTH away in this made-up match; SATO appears twice on HTH so names get an initial.
 const D = parseDVW(`[3TEAMS]
@@ -34,6 +34,44 @@ describe('scoreboard data', () => {
 
   it('keeps home on the left when neither team is ours', () => {
     expect(scoreboardData(D, D.plays[0], [])).toMatchObject({ left: 'OPP', right: 'HTH', winner: 'R' })
+  })
+})
+
+describe('lineup data', () => {
+  it('has none when the rally has no lineups (this file has none)', () => {
+    expect(scoreboardData(D, D.plays[0], OURS).lineup).toBeUndefined()
+  })
+
+  it('puts our team on the left, each side\'s jerseys P1 to P6', () => {
+    const home = [1, 2, 3, 4, 5, 6], away = [11, 12, 13, 14, 15, 16]
+    const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home, away } })) }
+    // HTH is away here, so it is the left side with the away jerseys.
+    expect(scoreboardData(d, d.plays[0], OURS).lineup).toEqual({ left: { code: 'HTH', jerseys: away }, right: { code: 'OPP', jerseys: home } })
+    expect(scoreboardData(d, d.plays[0], []).lineup).toEqual({ left: { code: 'OPP', jerseys: home }, right: { code: 'HTH', jerseys: away } })
+  })
+
+  it('says which team is by the camera, from the grid\'s near team and the set', () => {
+    const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home: [1, 2, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] } })) }
+    const play = (setNum: number) => ({ ...d.plays[0], setNum, score: { home: 0, away: 0 } })
+    // HTH (ours, left) is away; home near in set 1: the right-hand team is by the camera, then the left in set 2.
+    expect(scoreboardData(d, play(1), OURS, { nearSet1: '*' }).lineup?.near).toBe('right')
+    expect(scoreboardData(d, play(2), OURS, { nearSet1: '*' }).lineup?.near).toBe('left')
+    expect(scoreboardData(d, play(1), OURS, { nearSet1: 'a' }).lineup?.near).toBe('left')
+    expect(scoreboardData(d, play(1), OURS).lineup?.near).toBeUndefined() // no grid: ours below, as before
+    expect(withTeamColors(scoreboardData(d, play(1), OURS, { nearSet1: '*' }), { HTH: '#C8102E' }).lineup?.near).toBe('right') // kept with the colors
+  })
+
+  it('carries the teams\' library colors by team code', () => {
+    const d = { ...D, rallies: D.rallies.map(r => ({ ...r, court: { home: [1, 2, 3, 4, 5, 6], away: [11, 12, 13, 14, 15, 16] } })) }
+    const sb = scoreboardData(d, d.plays[0], OURS)
+    expect(withTeamColors(sb, { HTH: '#C8102E' }).lineup).toMatchObject({ left: { code: 'HTH', color: '#C8102E' }, right: { code: 'OPP' } })
+    expect(withTeamColors(sb, {}).lineup?.left.color).toBeUndefined()
+    expect(withTeamColors(scoreboardData(D, D.plays[0], OURS), { HTH: '#C8102E' }).lineup).toBeUndefined()
+  })
+
+  it('is off until switched on', () => {
+    expect(DEFAULT_OVERLAY.lineup.enabled).toBe(false)
+    expect(overlaySettings({ lineup: { enabled: true } }).lineup).toEqual({ enabled: true, anchor: 'br', scale: 1 })
   })
 })
 

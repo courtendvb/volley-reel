@@ -166,8 +166,8 @@ export interface ChartSource { filtered?: () => Play[]; name?: string; setterNam
 export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, all: () => Play[], source?: ChartSource): PlayerMarks | null {
   const style = markStyle(style0, play.skill)
   const plays = () => rangePlays(style.range, play, all, source?.ranges)
-  // A set, or an attack after one: the setter's distribution in that rotation.
-  const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
+  // A set, an attack after one, or a reception: the setter's distribution in that rotation.
+  const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A' || play.skill === 'R') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
   const setMarks: PlayerMarks = setsAll ? {
     ...(style.setChart ? { setChart: setsAll } : {}),
     ...(style.setCourt ? { setCourt: { chart: setsAll, near: nearSide(fit, play) === play.side, layer: style.setCourt.layer } } : {}),

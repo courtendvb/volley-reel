@@ -41,7 +41,8 @@ export interface GridStyle {
 export type MarkSkill = 'S' | 'A' | 'E'
 const MARK_KEYS = ['heat', 'serveFlights', 'landings', 'cones', 'chart', 'setChart', 'setCourt', 'setFilter', 'range'] as const
 export type PlayerMarkStyle = Pick<GridStyle, typeof MARK_KEYS[number]>
-export const markSkill = (skill: string | null | undefined): MarkSkill | null => (skill === 'S' || skill === 'A' || skill === 'E' ? skill : null)
+// A reception takes the set's marks: the distribution of the set it was played for (setChart.ts setForReception).
+export const markSkill = (skill: string | null | undefined): MarkSkill | null => (skill === 'S' || skill === 'A' || skill === 'E' ? skill : skill === 'R' ? 'E' : null)
 // The style for a play of this skill: its own marks, none for other skills. A style without bySkill
 // (made in code, or saved before) is taken as it is.
 export function markStyle(style: GridStyle, skill: string | null | undefined): GridStyle {

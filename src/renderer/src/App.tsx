@@ -77,6 +77,7 @@ import { useShortcuts } from './app/useShortcuts'
 import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
 import { ServeMarkBar } from './components/ServeMarkBar'
+import { OffsetBar } from './components/OffsetBar'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -88,6 +89,7 @@ const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the 
 
 
 
+const NOTICE_SEC = 10
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
@@ -140,6 +142,8 @@ export function App() {
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // A notice says what just happened; it goes by itself after 10 seconds (a click closes it sooner).
+  useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), NOTICE_SEC * 1000); return () => clearTimeout(id) }, [notice])
   // The latest state for callbacks and steps in the same tick; filled in on every render below.
   const latest = useRef<AppLatest>({ overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null } as AppLatest)
   const {
@@ -233,6 +237,10 @@ export function App() {
   const setCourt = (id: string, court: CourtFit | null) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  const setOffset = (id: string, offsetSec: number) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
+    void api.setMatchOffset(id, offsetSec).then(p => p && setProject(p)).catch(err => setError(String(err)))
   }
   const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
   setChartColors(chartColors) // before anything below draws a chart
@@ -941,6 +949,9 @@ export function App() {
               </StageTabs>
             )}
             <div className="stage-work">
+            {!cardEdit && match && selectedPlay && stagePanel === 'edit' && (
+              <OffsetBar play={selectedPlay} offsetSec={match.offsetSec} onOffset={sec => setOffset(match.id, sec)} />
+            )}
             {!cardEdit && match && listServe && selectedPlay && (
               <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
                 onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />

@@ -227,6 +227,7 @@ export interface Api {
   otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
   projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
+  setMatchOffset(id: string, offsetSec: number): Promise<ProjectInfo | null> // DVW time + offset = video time, for every play of the match
   setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
@@ -243,6 +244,7 @@ export interface Api {
   onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
   updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
+  openManual(page?: string): Promise<void> // the manual shipped with the app, in the browser (a chapter's file name, or the index)
   appVersion(): Promise<string>
   // The SyncScout account (shared/account.ts). enabled: false until the release that asks for one.
   account(): Promise<{ enabled: boolean; state: AccountState }>

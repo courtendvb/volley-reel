@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>プレーを探す — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="プレー一覧と絞り込み">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html" aria-current="page">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><span class="soon">6. 動画に描く（準備中）</span></li>
+        <li><span class="soon">7. コートの表示（準備中）</span></li>
+        <li><span class="soon">8. データスライドとレポート（準備中）</span></li>
+        <li><span class="soon">9. 比較動画（準備中）</span></li>
+        <li><span class="soon">10. 書き出しの詳細（準備中）</span></li>
+        <li><span class="soon">11. 困ったとき（準備中）</span></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>4. プレーを探す</h1>
+<p class="m-lead">左のプレー一覧から、見せたいプレーを絞り込みます。プレーを押すと、その場面が動画で再生されます。</p>
+
+<h2 id="list">プレー一覧</h2>
+<p>1 行が DVW の 1 プレーです。左から、セット、そのときの得点、チーム、背番号と選手名、ボールの向き（↑↓）、スキルと評価、アタックのコンビやゾーンが並びます。</p>
+<ul class="dots">
+  <li>行を押すと、そのプレーの少し前から再生します（決まった範囲を繰り返します）。</li>
+  <li><kbd>↑</kbd> <kbd>↓</kbd> で前後のプレーへ、<kbd>Space</kbd> で再生と一時停止、<kbd>←</kbd> <kbd>→</kbd> で少し戻る・進む、<kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> で 1 フレームずつ動かせます。</li>
+  <li>右端の <b>1〜5</b> は、プレーをシーンに入れるボタンです（<a href="05-scene.html">5 章</a>）。</li>
+</ul>
+
+<h2 id="filter">絞り込み</h2>
+<figure class="m-shot narrow"><img src="../img/ja/filter.jpg" alt="チームを RSH、スキルを Attack、評価を # Kill にしたところ。3,222 プレーから 210 プレーに絞れています。" loading="lazy"><figcaption>チームを RSH、スキルを Attack、評価を # Kill にしたところ。3,222 プレーから 210 プレーに絞れています。</figcaption></figure>
+<div class="m-scroll"><table class="m-table">
+  <thead><tr><th>項目</th><th>使い方</th></tr></thead>
+  <tbody>
+    <tr><td>試合</td><td>一番上の欄で、全試合か 1 試合かを選びます。<span class="ui">古い試合から</span>・<span class="ui">新しい試合から</span>で並び順が変わります。</td></tr>
+    <tr><td>チーム</td><td>すべて、自チーム（対象チーム）、相手から選びます。</td></tr>
+    <tr><td>切り出し</td><td>クリップの長さです。<b>プレー前後</b>は選んだプレーの何秒前から何秒後まで（キープレー −3 〜 +4 秒など）、<b>ラリー終わりまで</b>はラリーの最後までです。<b>通しで見る</b>にすると、ラリー単位でサーブから最後まで続けて流します。</td></tr>
+    <tr><td>プレーの向き</td><td>画面でボールが上に向かうか下に向かうかで絞ります。コートのグリッドを合わせた試合だけで使えます。</td></tr>
+    <tr><td>選手</td><td>1 人でも、何人でも選べます。</td></tr>
+    <tr><td>スキル</td><td>Serve、Reception、Attack、Block、Dig、Set です。いくつ選んでもかまいません。</td></tr>
+    <tr><td>評価</td><td># + ! - / = の評価です。スキルを選ぶと、そのスキルでの意味（Kill、Error など）が出ます。</td></tr>
+    <tr><td>試合の状況</td><td>セット、ローテーション、相手ローテ、前衛にいる選手、局面（レセプションからか切り返しか）、レセプションの評価、直前・直後のプレーで絞ります。</td></tr>
+    <tr><td>詳細</td><td>テンポ、コンビ（アタックコンビとセッターコール）、打ち方、ゾーンで絞ります。</td></tr>
+  </tbody>
+</table></div>
+<p>何も選んでいない項目は「すべて」です。下に、絞り込んだ件数と全体の件数が出ます（例：210 / 3,222 プレー）。</p>
+<ul class="dots">
+  <li><span class="ui">条件をクリア</span>で、絞り込みをすべて外します。</li>
+  <li><span class="ui">＋ 今の条件を保存</span>で、よく使う条件に名前を付けて残せます。押すとその条件に戻ります。</li>
+  <li><span class="ui">結果をシーンに追加</span>で、絞り込んだプレーをまとめて今のシーンに入れます。</li>
+</ul>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="03-project.html"><small>前へ</small>プロジェクトを作る</a><a class="next" href="05-scene.html"><small>次へ</small>シーンと動画を作る</a></nav>
+  </main>
+</div>
+</body>
+</html>

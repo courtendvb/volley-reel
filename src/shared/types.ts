@@ -10,6 +10,8 @@ import type { PackInfo, PackManifest, PhotoTarget } from './pack'
 import type { RosterPlayer } from './packMaker'
 import type { Reel } from './reel'
 import type { Video } from './video'
+import type { CompareFile, CompareSession } from './videoCompare'
+import type { CompareExportJob } from './compareExport'
 import type { ClipTiming } from './timing'
 
 export type Side = '*' | 'a'
@@ -207,6 +209,14 @@ export interface Api {
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
+  pickCompareVideo(): Promise<CompareFile | null> // a video file for one side of a comparison (no DVW needed)
+  openCompareVideo(path: string): Promise<CompareFile> // the same file again, from a saved comparison
+  parseCompareMatch(id: string): Promise<ParsedDVW> // a library match's DVW, with no project open
+  listCompares(): Promise<CompareSession[]>
+  saveCompare(s: CompareSession): Promise<void>
+  removeCompare(id: string): Promise<void>
+  chooseCompareExportPath(defaultName: string): Promise<string | null> // the MP4's place; needs no project
+  exportCompare(job: CompareExportJob): Promise<void> // in the background; progress and the result arrive as export events
   createProject(init: ProjectInit): Promise<ProjectInfo | null> // in <library>/projects/<name>, or a folder the user picks
   openProject(path?: string): Promise<ProjectInfo | null> // asks for a folder when no path
   openMatchProject(matchId: string, code: string): Promise<ProjectInfo> // one match with that team as ours: its project made before, else a new one

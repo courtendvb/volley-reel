@@ -902,3 +902,60 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .account-scope { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); padding: var(--space-4); border-radius: var(--radius-md); background: var(--soft); font-size: var(--fs-body); }
 .account-scope h3 { margin: 0 0 var(--space-2); font-size: var(--fs-label); color: var(--sub); }
 .account-scope ul { margin: 0; padding-left: 1.2em; }
+
+/* ---- Video comparison (CompareView): two videos side by side, each with its own timeline and zoom */
+.compare { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4) var(--space-5); }
+.compare-bar { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.compare-name { width: 220px; font-weight: 600; }
+.compare-sync { display: inline-flex; align-items: center; gap: var(--space-3); }
+.sync-on { color: var(--ok-text); background: var(--ok-bg); padding: 0 var(--space-3); border-radius: var(--radius-sm); }
+.compare-panes { flex: 1; min-height: 0; display: grid; gap: var(--space-4); }
+.compare-panes.side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.compare-panes.stack { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.cmp-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.cmp-head { display: flex; align-items: center; gap: var(--space-3); }
+.cmp-title { min-width: 1.5em; }
+.cmp-pane.active > .cmp-box { box-shadow: 0 0 0 3px var(--accent); }
+.cmp-pane.active .cmp-title { background: var(--accent); color: #fff; border-radius: 4px; padding: 0 var(--space-3); }
+.cmp-zoom { font-variant-numeric: tabular-nums; color: var(--sub); min-width: 3.5em; text-align: center; font-size: var(--fs-label); }
+.cmp-box { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #000; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; touch-action: none; }
+.cmp-box.zoomed { cursor: grab; }
+.cmp-box.zoomed:active { cursor: grabbing; }
+.cmp-box video { width: 100%; height: 100%; object-fit: contain; transform-origin: center; user-select: none; -webkit-user-drag: none; }
+.cmp-empty { padding: var(--space-5); }
+.cmp-transport .time { min-width: 130px; }
+.cmp-source { position: relative; min-width: 0; }
+.cmp-source > button { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 420px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2); }
+.cmp-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.cmp-list button { flex: none; text-align: left; border: 0; background: transparent; padding: var(--space-2) var(--space-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-list button:hover { background: var(--soft); }
+.cmp-plays { width: 520px; max-width: calc(100vw - 32px); gap: var(--space-4); }
+.cmp-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-4); }
+.cmp-filters label, .cmp-near-ask { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-label); color: var(--sub); min-width: 0; }
+.cmp-filters select, .cmp-near-ask select { width: 100%; min-width: 0; }
+.cmp-position { display: flex; align-items: flex-end; gap: var(--space-4); flex-wrap: wrap; font-size: var(--fs-label); color: var(--sub); }
+.cmp-position > span { align-self: center; }
+.cmp-plays .cmp-list { height: 300px; max-height: 50vh; }
+.cmp-plays .cmp-list button { flex: none; padding: var(--space-2) var(--space-3); }
+.compare-export { display: inline-flex; align-items: center; gap: var(--space-2); }
+.compare-export input { width: 4.5em; }
+.compare-alpha { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--fs-label); color: var(--sub); }
+.compare-alpha input { width: 140px; accent-color: var(--primary); }
+.cmp-tswitch { min-width: 7.5em; }
+.cmp-tswitch.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+/* The overlay layout: both videos on one stage (the right one over the left, see-through); each side's head and transport keep their own rows. */
+.compare-panes.overlay { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.compare-panes.overlay .cmp-pane { display: contents; }
+.compare-panes.overlay .cmp-left > .cmp-head { grid-area: 1 / 1; }
+.compare-panes.overlay .cmp-right > .cmp-head { grid-area: 1 / 2; }
+.compare-panes.overlay .cmp-pane > .cmp-box { grid-area: 2 / 1 / 3 / 3; }
+.compare-panes.overlay .cmp-left > .cmp-transport { grid-area: 3 / 1 / 4 / 3; }
+.compare-panes.overlay .cmp-right > .cmp-transport { grid-area: 4 / 1 / 5 / 3; }
+.cmp-box.over { background: transparent; z-index: 1; }
+.cmp-box.under { z-index: 0; }
+.cmp-menu.right { left: auto; right: 0; }
+.cmp-saved { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; }
+.compare-fit { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
+.cmp-playbtn { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-list button.cur { background: var(--primary-light); font-weight: 600; box-shadow: inset 3px 0 0 var(--primary); }

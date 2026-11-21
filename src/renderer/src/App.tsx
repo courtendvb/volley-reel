@@ -40,6 +40,9 @@ import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { PresetDialog } from './components/PresetDialog'
 import { usePresetVideos } from './app/usePresetVideos'
 import { Home, MissingNote } from './components/Home'
+import { CompareView } from './components/CompareView'
+import { CompareMenu } from './components/CompareMenu'
+import { useCompare } from './app/useCompare'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
 import { VideoPane } from './components/VideoPane'
@@ -150,6 +153,7 @@ export function App() {
     latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
     setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
   })
+  const cmp = useCompare(setError)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
   const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
@@ -763,6 +767,7 @@ export function App() {
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         {project && <button onClick={() => setAnalysisOpen(true)} title={t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る')}>{t('分析')}</button>}
+        {!project && !cmp.open && <CompareMenu compares={cmp.compares} onOpenMenu={() => void cmp.refresh()} onNew={cmp.newCompare} onOpen={cmp.openCompare} onDelete={s => void cmp.deleteCompare(s)} />}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
@@ -797,7 +802,9 @@ export function App() {
           )}
         </div>
       )}
-      {!project ? (
+      {!project && cmp.open ? (
+        <CompareView key={cmp.open.id} initial={cmp.open} library={library} onExit={cmp.closeCompare} onError={setError} />
+      ) : !project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
           onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
           onRelocate={(id, part) => void relocate(id, part)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />

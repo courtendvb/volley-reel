@@ -1766,4 +1766,8 @@ export const EN: Record<string, string> = {
   "スカウトファイルの時刻が動画とずれているときに使います。動画をこのプレーの瞬間（サーブなら打った瞬間）に合わせて押すと、この試合のすべてのプレーが同じだけ動きます": "For a scout file whose times are off from the video. Put the video on this play’s moment (for a serve, the hit) and press: every play of this match moves by the same amount",
   "再生位置を、選んでいるプレーの時刻にします（この試合のすべてのプレーに効きます）": "Makes the playhead the selected play’s time (for every play of this match)",
   "ずれの秒数が不正です": "The offset is not valid",
+  "ヘルプ": "Help",
+  "マニュアル": "Manual",
+  "マニュアルを開く": "Open the manual",
+  "使い方の説明を、パソコンのブラウザで開きます。アプリに入っているので、インターネットにつながっていなくても読めます（今は日本語だけです）。": "Opens the how-to guide in your computer's browser. It comes with the app, so it works without an internet connection (Japanese only for now).",
 }

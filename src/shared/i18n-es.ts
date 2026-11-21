@@ -1766,4 +1766,8 @@ export const ES: Record<string, string> = {
   "スカウトファイルの時刻が動画とずれているときに使います。動画をこのプレーの瞬間（サーブなら打った瞬間）に合わせて押すと、この試合のすべてのプレーが同じだけ動きます": "Para un archivo de scouting cuyos tiempos no coinciden con el video. Pon el video en el momento de esta jugada (en un saque, el golpe) y presiona: todas las jugadas de este partido se mueven lo mismo",
   "再生位置を、選んでいるプレーの時刻にします（この試合のすべてのプレーに効きます）": "Hace que la posición de reproducción sea el momento de la jugada seleccionada (para todas las jugadas de este partido)",
   "ずれの秒数が不正です": "El desfase no es válido",
+  "ヘルプ": "Ayuda",
+  "マニュアル": "Manual",
+  "マニュアルを開く": "Abrir el manual",
+  "使い方の説明を、パソコンのブラウザで開きます。アプリに入っているので、インターネットにつながっていなくても読めます（今は日本語だけです）。": "Abre la guía de uso en el navegador de tu computadora. Viene con la app, así que funciona sin conexión a internet (por ahora solo en japonés).",
 }

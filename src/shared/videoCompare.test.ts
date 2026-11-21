@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGesture, clampView, cleanCompare, newCompare, offsetFor, panBy, partnerTime, stepTime, withZoom, zoomAt } from './videoCompare'
+import { applyGesture, autoCompareName, clampView, cleanCompare, nameAfterSource, newCompare, offsetFor, panBy, partnerTime, stepTime, withZoom, zoomAt } from './videoCompare'
 
 describe('view', () => {
   it('keeps the picture inside its box', () => {
@@ -87,5 +87,28 @@ describe('saved sessions', () => {
     expect(cleanCompare(null)).toBeNull()
     expect(cleanCompare({ id: '../x' })).toBeNull()
     expect(cleanCompare({})).toBeNull()
+  })
+})
+
+describe('name', () => {
+  const names: Record<string, string> = { a: '2026-10-10 RSH-HCF', b: '2026-10-24 RSH-LKW', c: '2026-10-31 HCF-RSH' }
+  const label = (src: { kind: string; matchId?: string } | null) => (src?.kind === 'match' ? names[src.matchId!] : null)
+  const m = (id: string) => ({ kind: 'match' as const, matchId: id })
+  it('joins the names of the two videos, or takes the one there is', () => {
+    expect(autoCompareName('A', 'B')).toBe('A × B')
+    expect(autoCompareName('A', null)).toBe('A')
+    expect(autoCompareName(null, null)).toBeNull()
+  })
+  it('follows the videos while it is the default or their name', () => {
+    const s = newCompare('New')
+    const one = { ...s, name: nameAfterSource(s, 'left', m('a'), label, 'New'), left: { ...s.left, source: m('a') } }
+    expect(one.name).toBe('2026-10-10 RSH-HCF')
+    const two = { ...one, name: nameAfterSource(one, 'right', m('b'), label, 'New'), right: { ...one.right, source: m('b') } }
+    expect(two.name).toBe('2026-10-10 RSH-HCF × 2026-10-24 RSH-LKW')
+    expect(nameAfterSource(two, 'right', m('c'), label, 'New')).toBe('2026-10-10 RSH-HCF × 2026-10-31 HCF-RSH')
+  })
+  it('keeps a name typed by hand', () => {
+    const s = { ...newCompare('New'), name: 'Spike approach' }
+    expect(nameAfterSource(s, 'left', m('a'), label, 'New')).toBe('Spike approach')
   })
 })

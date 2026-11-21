@@ -23,9 +23,10 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // server's secret APP_LEASE_PRIVATE_KEY (syncscout scripts/generate-lease-key.mjs). Changing it signs
 // every computer out, since the leases they hold stop verifying.
 export const LEASE_PUBLIC_KEY = 'tcNHvwLDqypi-uIzt1ED9qXNcRRyQsJbrdyD4WS1LEo'
-// Turned on in the release that starts asking for an account; till then nobody is asked to sign in.
-// VR_ACCOUNTS=1 turns it on for a try (VR_LEASE_KEY stands in for the key above, for a test server).
-export const ENFORCED = false
+// On: the app asks for an account, and the limits in shared/account.ts `gate` apply (no sign-in: one
+// match, no exports; trial or plan over: no imports, new projects or exports).
+// VR_LEASE_KEY stands in for the key above, for a test server.
+export const ENFORCED = true
 
 interface Saved {
   deviceId: string

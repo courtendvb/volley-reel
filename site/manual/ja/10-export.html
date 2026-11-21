@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>書き出しの詳細 — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="動画の設定、書き出しの範囲、スライドと PDF">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><a href="06-draw.html">6. 動画に描く</a></li>
+        <li><a href="07-court.html">7. コートの表示</a></li>
+        <li><a href="08-data.html">8. データスライドとレポート</a></li>
+        <li><a href="09-compare.html">9. 比較動画</a></li>
+        <li><a href="10-export.html" aria-current="page">10. 書き出しの詳細</a></li>
+        <li><a href="11-help.html">11. 困ったとき</a></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>10. 書き出しの詳細</h1>
+<p class="m-lead">MP4 の見た目を決める「動画の設定」と、書き出せる範囲、スライドやレポートの書き出し方です。書き出しにはログイン（お試し中か契約中）が必要です。</p>
+
+<h2 id="settings">動画の設定</h2>
+<p>右上の動画の名前の横にある ⚙ か、書き出しタブの<span class="ui">動画の設定</span>で開きます。動画ごとの設定で、左に見本が出ます。</p>
+<figure class="m-shot"><img src="../img/ja/video-settings.jpg" alt="「動画の設定」。デザインを 4 つから選び、スコアボード・テロップ・サーブ速度・ローテーションの位置と大きさを決めます。" loading="lazy"><figcaption>「動画の設定」。デザインを 4 つから選び、スコアボード・テロップ・サーブ速度・ローテーションの位置と大きさを決めます。</figcaption></figure>
+<div class="m-scroll"><table class="m-table">
+  <thead><tr><th>項目</th><th>中身</th></tr></thead>
+  <tbody>
+    <tr><td>デザイン</td><td>スラント・ボックス・ライト・フロートの 4 つです。色はプロジェクトの<span class="ui">設定</span>で決めます。</td></tr>
+    <tr><td>スコアボード</td><td>出すかどうか、位置、大きさ、セット数を出すかどうかです。</td></tr>
+    <tr><td>選手テロップ</td><td>位置、大きさと、背番号・名前・スキル・評価・統計・写真のどれを出すかです。</td></tr>
+    <tr><td>サーブ速度・ローテーション</td><td>位置と大きさです（<a href="07-court.html#auto">7 章</a>）。</td></tr>
+    <tr><td>タイトルカード</td><td>動画の頭・シーンの頭・マーカーの頭に出すかどうかと、秒数です。</td></tr>
+    <tr><td>フェード</td><td>クリップとカードの切り替わりをフェードにするかどうかと、その秒数です。</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="range">書き出す範囲</h2>
+<p>右の<span class="ui">書き出し</span>タブで選びます（<a href="05-scene.html#export">5 章</a>）。</p>
+<ul class="dots">
+  <li><b>すべて書き出し</b>：動画全体を 1 本の MP4 にします。</li>
+  <li><b>シーンごとに書き出し</b>：シーンごとに、シーンの名前のファイルにします。保存先のフォルダを選ぶと順に書き出します。</li>
+  <li><b>シーンだけ・マーカーだけ</b>：1 つのシーンか、1 つのマーカーだけを書き出します。</li>
+  <li><b>このクリップだけ</b>：シーンのクリップを右クリックして<span class="ui">このクリップだけ書き出す…</span>を選びます。タイトルカードは入りません。</li>
+</ul>
+<p>同じ名前のファイルがあるときは、上書きしてよいか聞きます。書き出しの途中でキャンセルもできます。</p>
+
+<h2 id="youtube">YouTube のチャプター</h2>
+<p><b>YouTube のチャプターも書き出す</b>にすると、シーンの始まりの時刻を並べたテキストファイル（.txt）が MP4 の横にできます。YouTube の説明欄に貼るとチャプターになります。YouTube は、チャプターが 3 つ以上あり、それぞれ 10 秒以上のときだけチャプターを出します。</p>
+
+<h2 id="slides">スライドとカードの書き出し</h2>
+<p>スライドかタイトルカードを開くと、書き出しのボタンが出ます。</p>
+<ul class="dots">
+  <li><span class="ui">PNG に書き出す…</span>：開いているスライドを画像にします。</li>
+  <li><span class="ui">PDF に書き出す…</span>：そのシーンのカードとスライドを、順に 1 つの PDF にします。</li>
+  <li><span class="ui">PowerPoint に書き出す…</span>：そのシーンのスライドから選んで、1 つの PowerPoint ファイルにします。図形を PowerPoint で動かせる形のまま入れることもできます。</li>
+</ul>
+<p>マッチレポートは、レポートの画面から PDF で保存します（<a href="08-data.html#report">8 章</a>）。</p>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="09-compare.html"><small>前へ</small>比較動画</a><a class="next" href="11-help.html"><small>次へ</small>困ったとき</a></nav>
+  </main>
+</div>
+</body>
+</html>

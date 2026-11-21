@@ -364,6 +364,15 @@ export class Library {
     await this.saveMatch(next)
   }
 
+  // How far the DVW's times sit from the video's (DVW time + offset = video time): set when the scout file's
+  // times are off for this video, so every play of the match moves by the same amount.
+  async setOffset(id: string, offsetSec: number): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!Number.isFinite(offsetSec) || Math.abs(offsetSec) > Math.max(m.durationSec, 1)) throw new Error(t('ずれの秒数が不正です'))
+    await this.saveMatch({ ...m, offsetSec: Math.round(offsetSec * 1000) / 1000 })
+  }
+
   // A serve's hit or touch on a match (serveMark.ts); null clears it.
   async setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> {
     const m = this.matches.get(id)

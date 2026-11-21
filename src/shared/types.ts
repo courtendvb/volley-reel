@@ -5,7 +5,7 @@ import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
-import type { OverlayTheme } from './overlay'
+import type { OverlayPatch, OverlayTheme } from './overlay'
 import type { PackInfo, PackManifest, PhotoTarget } from './pack'
 import type { RosterPlayer } from './packMaker'
 import type { Reel } from './reel'
@@ -134,6 +134,7 @@ export interface ProjectSettings {
   pointColors?: ChartLineColors // their points the same way
   pointScale?: number // their points' size, 1 = the usual
   roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
+  overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
 }
 
 export interface ProjectInfo {

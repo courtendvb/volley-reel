@@ -1754,4 +1754,6 @@ export const EN: Record<string, string> = {
   "ローテーションのサイズ": "Rotation size",
   "両チームのコート上の6人を、小さなコートに背番号で出します。左が自チーム（スコアボードと同じ並び）": "Shows both teams' six on court by jersey number on a small court. Our team is on the left, as on the scoreboard",
   "両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）": "Shows both teams' six on court by jersey number on a small court (for the whole video; position and size are in the video settings)",
+  "この動画の設定です": "These are this video's settings",
+  "動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）": "Settings for when no video is open (saved in the project; new videos start from them)",
 }

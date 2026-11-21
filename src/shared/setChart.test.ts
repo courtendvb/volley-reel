@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSetChart, cleanSetCourt, cleanSetFilter, setBefore, setChart, setChartShows, setExtremes, setTarget, setterCall } from './setChart'
+import { cleanSetChart, cleanSetCourt, cleanSetFilter, setBefore, setChart, setForReception, setChartShows, setExtremes, setTarget, setterCall } from './setChart'
 import type { Play } from './types'
 
 let id = 0
@@ -129,5 +129,27 @@ describe('the set chart', () => {
     expect([late.total, late.filtered]).toEqual([2, 'Pts 10–19, 20–'])
     expect(setChart(list[0], list, () => '', { phases: ['r'] })!.filtered).toBe('Rec')
     expect(cleanSetFilter({ phases: ['r', 'x'], recs: ['#', '?'], scores: ['late', 'soon'] })).toEqual({ phases: ['r'], recs: ['#'], scores: ['late'] })
+  })
+})
+
+describe('a reception\'s set distribution', () => {
+  const rec = (rallyId: number, over: Partial<Play> = {}) => play({ skill: 'R', rallyId, jersey: 7, playerKey: 'P', ...over })
+  it('is the chart of the set played after it, in its rotation', () => {
+    const r0 = rec(0), s0 = set(0), plays = [r0, s0, hit(0, 4, '#'), rec(1), set(1), hit(1, 3, '-'), rec(2, { homeRot: 2 }), set(2, { homeRot: 2 }), hit(2, 2, '#')]
+    expect(setForReception(plays, r0)).toBe(s0)
+    const c = setChart(r0, plays)!
+    expect(c.total).toBe(2) // rotation 1 only
+    expect(c.by.left.n).toBe(1)
+    expect(c.by.middle.n).toBe(1)
+  })
+  it('takes the setter who set most in that rotation when no set came after it', () => {
+    const err = rec(5, { effect: '=' }), other = set(6, { playerKey: 'S2', jersey: 3 })
+    const plays = [set(3), hit(3, 4, '#'), set(4), hit(4, 4, '-'), other, hit(6, 2, '#'), err]
+    expect(setForReception(plays, err)?.playerKey).toBe('S')
+    expect(setChart(err, plays)!.total).toBe(2)
+  })
+  it('none when the team set nothing in that rotation', () => {
+    const r = rec(9, { homeRot: 6 })
+    expect(setForReception([r, set(1)], r)).toBeNull()
   })
 })

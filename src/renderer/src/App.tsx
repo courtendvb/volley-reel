@@ -26,7 +26,7 @@ import { captionData, followAt, followWindows, overlaySettings, scoreboardData, 
 import { FORECAST_AHEAD_SEC, courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
-import { ClipOverlayRow, LineupCheck, ServeSpeedCheck } from './components/ClipOverlayRow'
+import { ClipOverlayRow, LineupCheck, ListOverlayChecks, ServeSpeedCheck } from './components/ClipOverlayRow'
 import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
 import { assetImage, packAssetId } from './assets'
 import { isZonePaint, type ImageLookup } from '../../shared/annotation'
@@ -421,10 +421,11 @@ export function App() {
   }, [withReel])
 
   // The project's colors win over the video's (videos made before project colors keep their own).
+  // No video open (the left list's plays only): the project's own display settings.
   const overlay = useMemo(() => {
-    const o = overlaySettings(video?.overlay)
+    const o = overlaySettings(video ? video.overlay : project?.settings.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
-  }, [video?.overlay, project?.settings.theme])
+  }, [video, project?.settings.overlay, project?.settings.theme])
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, targetDvws, library, activeGroup }
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
     latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
@@ -731,9 +732,10 @@ export function App() {
   }, [editingTitleCard, cardEdit, cardEditCard, reels, video, dvws, packs, logoCodes, placeImage, setCardAnns, setAnnTool])
 
   const setOverlay = useCallback((s: OverlaySettings) => {
-    const v = latest.current.video
+    const v = latest.current.video, st = latest.current.settings
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
-  }, [updateVideo])
+    else if (st) void saveSettings({ ...st, overlay: s })
+  }, [updateVideo, saveSettings])
 
   const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
     const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
@@ -946,7 +948,7 @@ export function App() {
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
-                <div className="ann-row clip-overlay"><span className="field-label">{t('自動表示')}</span><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} /></div>
+                <div className="ann-row clip-overlay"><span className="field-label" title={video ? t('この動画の設定です') : t('動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）')}>{t('自動表示')}</span><ListOverlayChecks overlay={overlay} onOverlay={setOverlay} /><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} /></div>
               )}
               <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />

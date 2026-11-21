@@ -7,7 +7,7 @@ import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { cleanSavedFilters, type SavedFilter } from '../shared/filter'
 import { cleanHeadline, type HeadlineStyle } from '../shared/annotation'
-import type { OverlayTheme } from '../shared/overlay'
+import { overlaySettings, type OverlayPatch, type OverlayTheme } from '../shared/overlay'
 import type { Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
 import type { Match, ParsedDVW, PlayerRole, ProjectInfo, ProjectSettings } from '../shared/types'
@@ -30,6 +30,7 @@ interface ProjectFile {
   pointColors?: ChartLineColors
   pointScale?: number
   roles?: Record<string, PlayerRole>
+  overlay?: OverlayPatch
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
@@ -155,7 +156,7 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.roles ? { roles: this.file.roles } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.roles ? { roles: this.file.roles } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}), ...(this.file.overlay ? { overlay: this.file.overlay } : {}) },
       missing: this.library.missing(matches),
     }
   }
@@ -185,6 +186,7 @@ export class Project {
     this.file.pointColors = cleanLineColors(s.pointColors)
     this.file.pointScale = cleanPointScale(s.pointScale)
     this.file.roles = cleanRoles(s.roles)
+    this.file.overlay = s.overlay && typeof s.overlay === 'object' ? overlaySettings(s.overlay) : undefined
     await this.save()
   }
 

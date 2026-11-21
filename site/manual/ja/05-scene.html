@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>シーンと動画を作る — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="マーカーで並べて、MP4 に書き出す">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html" aria-current="page">5. シーンと動画を作る</a></li>
+        <li><span class="soon">6. 動画に描く（準備中）</span></li>
+        <li><span class="soon">7. コートの表示（準備中）</span></li>
+        <li><span class="soon">8. データスライドとレポート（準備中）</span></li>
+        <li><span class="soon">9. 比較動画（準備中）</span></li>
+        <li><span class="soon">10. 書き出しの詳細（準備中）</span></li>
+        <li><span class="soon">11. 困ったとき（準備中）</span></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>5. シーンと動画を作る</h1>
+<p class="m-lead">見せたいプレーをシーンに入れてマーカーで分け、シーンを動画に並べて MP4 に書き出します。</p>
+
+<h2 id="scene">シーンにプレーを入れる</h2>
+<ol class="m-steps">
+  <li>はじめてのときは、右の<span class="ui">動画を作成</span>と<span class="ui">シーンを作成</span>を押します。「動画 1」と「シーン 1」ができます。</li>
+  <li>プレー一覧の右端の <b>1〜5</b> を押すと、そのプレーがそのマーカーで今のシーンに入ります。行を選んでから数字キー <kbd>1</kbd>〜<kbd>5</kbd> を押しても同じです。</li>
+  <li>右のシーンに、マーカーごとにクリップが並びます。</li>
+</ol>
+<figure class="m-shot"><img src="../img/ja/scene.jpg" alt="アタックの決定をマーカー 1 に 3 本、マーカー 2 に 2 本入れたところ。動画の上には、スコアボード、選手名、アタックの軌道が自動で出ます。" loading="lazy"><figcaption>アタックの決定をマーカー 1 に 3 本、マーカー 2 に 2 本入れたところ。動画の上には、スコアボード、選手名、アタックの軌道が自動で出ます。</figcaption></figure>
+<ul class="dots">
+  <li>同じ数字をもう一度押すとマーカーが外れます。<kbd>0</kbd> ですべて外れます。1 つのプレーに、いくつでもマーカーを付けられます。</li>
+  <li>マーカーの名前（「マーカー 1」など）は、押すと書き換えられます。タイトルカードにこの名前が出ます。</li>
+  <li>左の ⠿ をドラッグすると、クリップやマーカーの順番を変えられます。</li>
+  <li><b>マーカーなし</b>のクリップは、再生にも書き出しにも入りません。</li>
+  <li><kbd>D</kbd> <kbd>F</kbd> で、シーンの前後のクリップへ移ります。</li>
+</ul>
+
+<h2 id="clip">クリップの長さを変える</h2>
+<p>クリップを選ぶと、動画の下の<span class="ui">編集</span>タブに、そのクリップの範囲が出ます。紫の帯の両端をドラッグするか、IN・OUT の秒数を入れて変えます。秒数はキープレー（そのプレーの時刻）からの相対値です。<kbd>[</kbd> <kbd>]</kbd> で、今の再生位置を IN・OUT にできます。<span class="ui">＋ スロー</span>と<span class="ui">＋ 停止</span>で、クリップの一部をゆっくり流したり、止めたりできます。</p>
+
+<h2 id="video">シーンを動画に並べる</h2>
+<figure class="m-shot narrow"><img src="../img/ja/video-compose.jpg" alt="「動画の構成」タブ。動画 1 にシーン 1 が入っています。" loading="lazy"><figcaption>「動画の構成」タブ。動画 1 にシーン 1 が入っています。</figcaption></figure>
+<ol class="m-steps">
+  <li>右の<span class="ui">動画の構成</span>タブを開きます。</li>
+  <li><span class="ui">＋ 新しいシーン</span>で別のシーンを作るか、<span class="ui">作ったシーンを入れる…</span>から既にあるシーンを選んで入れます。</li>
+  <li>シーンをドラッグして順番を決めます。<span class="ui">カード</span>で、シーンの前のタイトルカードを出すかどうかを切り替えます。</li>
+</ol>
+<p>1 つのシーンは、いくつの動画に入れてもかまいません。シーンを直すと、そのシーンを使っているすべての動画に反映されます。</p>
+
+<h2 id="export">MP4 に書き出す</h2>
+<figure class="m-shot narrow"><img src="../img/ja/export.jpg" alt="「書き出し」タブ。すべて、シーンだけ、マーカーだけから選べます。" loading="lazy"><figcaption>「書き出し」タブ。すべて、シーンだけ、マーカーだけから選べます。</figcaption></figure>
+<ol class="m-steps">
+  <li>右の<span class="ui">書き出し</span>タブを開きます。</li>
+  <li>書き出す範囲を選びます。<b>すべて書き出し</b>は動画全体、ほかに 1 つのシーンだけ、1 つのマーカーだけも選べます。</li>
+  <li><span class="ui">↓ MP4 に書き出す</span>を押し、保存先を選びます。</li>
+</ol>
+<ul class="dots">
+  <li>動画の上に見えているもの（コートのグリッド、ゾーン、チャート、トス配分など）は、そのまま書き出しにも入ります。</li>
+  <li>画質（720p など）、フェード、タイトルカード、スコアボードの見た目は、<span class="ui">動画の設定</span>で変えます。</li>
+  <li><b>YouTube のチャプターも書き出す</b>にすると、シーンの始まりを YouTube のチャプターにしたテキストファイルが MP4 の横にできます。</li>
+  <li>書き出しにはログイン（お試し中か契約中）が必要です。</li>
+</ul>
+<div class="m-note">
+  <p>ここまでで、最初の動画ができました。図形やテキストを足す方法、コートの上のデータの出し方は、6 章以降で順に足していきます。</p>
+</div>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="04-find.html"><small>前へ</small>プレーを探す</a></nav>
+  </main>
+</div>
+</body>
+</html>

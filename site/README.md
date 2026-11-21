@@ -39,3 +39,7 @@ The two download buttons (top and bottom) and the list of builds are filled in b
 ## Editing the film's real-video part
 
 `C:\Users\heima\SyncScout-film-work\` (outside the repository) holds the library and app settings used for the film, `start-app.ps1` to open the app on them, `build-film.ps1` to turn an app export into `site/media/film-<lang>.mp4` and its stills, the three data-slide parts (`parts\`), and a short guide in Japanese (`はじめに.md`). The ten-match data slides were made in a separate throwaway library (not kept): rebuild it with `make_demo_dvw.py` and the games list in the film recipe above if they need changing.
+
+## Manual
+
+`manual/ja/` holds the Japanese manual, linked from the nav of `ja.html`: an index and one page per chapter (1-5 so far; 6-11 are listed as coming). The pages share `manual/manual.css` on top of `site.css`, and their screenshots are in `manual/img/ja/`. They were shot from the built app in Japanese with its own library and profile (as in "Taking screenshots again"), on four matches of the fictional Riverside Herons from `source/make_demo_dvw.py` with a stand-in video made from `source/still-*.jpg`. The accounts were off in that build so the library could hold four matches; the sign-in screen was shot with them on. The pages are plain HTML written by `manual/source/gen.py`, which holds each chapter's body and gives every page the same header, chapter list and previous / next links: edit the chapter there and run `python site/manual/source/gen.py`, rather than editing the HTML.

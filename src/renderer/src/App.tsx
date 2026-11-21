@@ -77,6 +77,7 @@ import { useShortcuts } from './app/useShortcuts'
 import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
 import { ServeMarkBar } from './components/ServeMarkBar'
+import { OffsetBar } from './components/OffsetBar'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -233,6 +234,10 @@ export function App() {
   const setCourt = (id: string, court: CourtFit | null) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  const setOffset = (id: string, offsetSec: number) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
+    void api.setMatchOffset(id, offsetSec).then(p => p && setProject(p)).catch(err => setError(String(err)))
   }
   const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
   setChartColors(chartColors) // before anything below draws a chart
@@ -941,6 +946,9 @@ export function App() {
               </StageTabs>
             )}
             <div className="stage-work">
+            {!cardEdit && match && selectedPlay && stagePanel === 'edit' && (
+              <OffsetBar play={selectedPlay} offsetSec={match.offsetSec} onOffset={sec => setOffset(match.id, sec)} />
+            )}
             {!cardEdit && match && listServe && selectedPlay && (
               <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
                 onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />

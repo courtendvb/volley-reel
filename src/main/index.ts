@@ -357,6 +357,10 @@ function registerIpc(): void {
     return project?.info() ?? null
   })
 
+  ipcMain.handle('match:setOffset', async (_e, id: string, offsetSec: number) => {
+    await lib().setOffset(id, offsetSec)
+    return project?.info() ?? null
+  })
   ipcMain.handle('match:setServeMark', (_e, id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => lib().setServeMark(id, fingerprint, patch))
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {

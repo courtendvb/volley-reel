@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
 import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 interface Props {
   override: ClipOverlayOverride | undefined
@@ -20,6 +21,7 @@ const SB_POSITIONS: [Anchor, string][] = [['tl', t('左上')], ['tc', t('中央�
 
 export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange, videoName, canVideo, onVideoName }: Props) {
   const [gear, setGear] = useState(false)
+  const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
   // Where a name typed here goes: the player's name in the whole video (the default), or this clip only.
   const ownName = o?.playerCaption?.name
   const [scope, setScope] = useState<'video' | 'clip'>(ownName || !canVideo ? 'clip' : 'video')
@@ -75,10 +77,10 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       <input className="ov-text wide" value={line} placeholder={autoLine} aria-label={t('テロップの2行目（空欄で自動）')}
         onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <span className="spacer" />
-      <span className="ov-gear-wrap">
+      <span className="ov-gear-wrap" ref={gearPop.anchor}>
         <button className="ov-gear" aria-label={t('タイトルカードとフェード')} aria-expanded={gear} title={t('タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」')} onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
-          <div className="ov-gear-pop" role="dialog" aria-label={t('タイトルカード')}>
+          <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('タイトルカード')}>
             <label className="check">{t('タイトルカード（シーン・マーカー）')}
               <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数（一括）')}
                 onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> {t('秒')}</label>

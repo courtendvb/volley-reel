@@ -590,7 +590,8 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   const fxKind = style0.rippleKind ?? 'ripple'
   if (impact && ripple !== null && fxKind === 'ripple') drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
-  if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
+  // The shares are put up last, over the arrows and flights that would otherwise cross them.
+  const shares = zones?.player?.setCourt ? drawSetCourt(ctx, w, h, fit, zones.player.setCourt) : []
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
@@ -645,6 +646,7 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     else drawLandingFx(ctx, w, h, fit, fxKind, impact, ripple ?? landingFxStill[fxKind], style0.rippleColor, trackOf(zones))
   }
   if (after != null && zones) drawAfter(ctx, w, h, fit, style0, zones, after)
+  if (shares.length) drawShareLabels(ctx, shares, Math.max(11, w / 55), courtCamera(inPixels(fit, w, h), w, h))
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
@@ -708,10 +710,12 @@ function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number, color = '#FACC15'): vo
 // The setter's distribution on the court in the picture, on their team's half: where each set was
 // given (coloured by where it went: filled a kill, open in play, a cross a point lost), or each place
 // painted by its share with its name and share, the most set to framed red and the least blue.
-function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt): void {
+// Returns the places' names and shares, for drawCourt to put up over everything else.
+function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt): ShareLabel[] {
   const H = homography(inPixels(fit, w, h))
   // The team's view (u from its left, v from its end line) as court units, then the picture.
-  const on = (u: number, v: number) => (s.near ? project(H, u, 1 - v) : project(H, 1 - u, v))
+  const unit = (u: number, v: number) => (s.near ? { x: u, y: 1 - v } : { x: 1 - u, y: v })
+  const on = (u: number, v: number) => { const c = unit(u, v); return project(H, c.x, c.y) }
   const c = s.chart
   ctx.save()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
@@ -729,7 +733,7 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
       }
     }
     ctx.restore()
-    return
+    return []
   }
   const top = Math.max(...SET_TARGETS.map(k => c.by[k].n), 1), { most, least } = setExtremes(c)
   const labels: ShareLabel[] = []
@@ -740,28 +744,40 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
     ctx.beginPath(); ring.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath()
     ctx.globalAlpha = 0.2 + 0.45 * (n / top); ctx.fillStyle = SET_COLORS[k]; ctx.fill(); ctx.globalAlpha = 1
     if (k === most || k === least) { ctx.strokeStyle = k === most ? '#DC2626' : '#2563EB'; ctx.lineWidth = Math.max(3.5, w / 220); ctx.stroke() }
-    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on((a.u[0] + a.u[1]) / 2, (a.v[0] + a.v[1]) / 2) })
+    const mu = (a.u[0] + a.u[1]) / 2, mv = (a.v[0] + a.v[1]) / 2
+    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on(mu, mv), court: unit(mu, mv), rise: n / top })
   }
-  drawShareLabels(ctx, labels, Math.max(11, w / 55))
   ctx.restore()
+  return labels
 }
 
-// A place's name and share, centred on the place. From a low camera the court is squashed and the
-// places lie close together on the picture (Zone3 and Pipe above all), so the labels are laid out
-// together: two lines when they clear one another, else one line, smaller and smaller, and last of
-// all pushed apart downward.
-interface ShareLabel { name: string; share: string; x: number; y: number }
-function drawShareLabels(ctx: Ctx, labels: ShareLabel[], fs: number): void {
-  type Box = { l: ShareLabel; text: [string, number, number][]; x0: number; x1: number; y0: number; y1: number }
+// A place's name and share. Where the corners give the camera, each stands on a pole over its place,
+// taller the more was set there (SHARE_POLE_M, plus up to SHARE_RISE_M for the most), so it reads
+// above the arrows and flights on the floor; else it lies on the place. On a dark plate either way.
+// From a low camera the places lie close together on the picture (Zone3 and Pipe above all), so the
+// labels are laid out together: two lines when they clear one another, else one line, smaller and
+// smaller, and last of all pushed apart upward.
+interface ShareLabel { name: string; share: string; x: number; y: number; court: Pt; rise: number }
+export const SHARE_POLE_M = 1.2, SHARE_RISE_M = 1.6
+function drawShareLabels(ctx: Ctx, floor: ShareLabel[], fs: number, camera: ((u: number, v: number, z: number) => Pt) | null): void {
+  // Standing: each label's bottom at the top of its pole. Lying: centred on the place.
+  const labels = floor.map(l => ({ ...l, foot: { x: l.x, y: l.y }, ...(camera ? camera(l.court.x, l.court.y, SHARE_POLE_M + SHARE_RISE_M * l.rise) : {}) }))
+  type Label = (typeof labels)[number]
+  type Box = { l: Label; text: [string, number, number][]; x0: number; x1: number; y0: number; y1: number }
   const width = (text: string, size: number) => { ctx.font = `bold ${size}px sans-serif`; return ctx.measureText(text).width }
+  const shift = (b: Box, dy: number): Box => ({ ...b, y0: b.y0 + dy, y1: b.y1 + dy, text: b.text.map(([t, y, f]) => [t, y + dy, f] as [string, number, number]) })
+  const pad = fs * 0.3
   const lay = (two: boolean, scale: number): Box[] => labels.map(l => {
     const f = fs * scale
+    let b: Box
     if (two) {
-      const half = Math.max(width(l.name, f * 0.8), width(l.share, f)) / 2
-      return { l, text: [[l.name, l.y - f * 0.55, f * 0.8], [l.share, l.y + f * 0.45, f]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 1.1, y1: l.y + f * 0.95 }
+      const half = Math.max(width(l.name, f * 0.8), width(l.share, f)) / 2 + pad
+      b = { l, text: [[l.name, l.y - f * 0.55, f * 0.8], [l.share, l.y + f * 0.45, f]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 1.1, y1: l.y + f * 0.95 }
+    } else {
+      const t = `${l.name} ${l.share}`, half = width(t, f * 0.9) / 2 + pad
+      b = { l, text: [[t, l.y, f * 0.9]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 0.6, y1: l.y + f * 0.6 }
     }
-    const t = `${l.name} ${l.share}`, half = width(t, f * 0.9) / 2
-    return { l, text: [[t, l.y, f * 0.9]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 0.55, y1: l.y + f * 0.55 }
+    return camera ? shift(b, l.y - b.y1) : b
   })
   const clash = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
   const clear = (bs: Box[]) => bs.every((a, i) => bs.every((b, j) => j <= i || !clash(a, b)))
@@ -769,20 +785,32 @@ function drawShareLabels(ctx: Ctx, labels: ShareLabel[], fs: number): void {
   let boxes: Box[] | null = null
   for (const [two, scale] of tries) { const bs = lay(two, scale); if (clear(bs)) { boxes = bs; break } }
   if (!boxes) {
-    boxes = lay(false, 0.55).sort((a, b) => a.l.y - b.l.y)
+    // Pushed apart: standing labels upward (on taller poles), lying ones downward.
+    boxes = lay(false, 0.55).sort((a, b) => (camera ? b.l.y - a.l.y : a.l.y - b.l.y))
     for (let i = 1; i < boxes.length; i++) {
       for (let j = 0; j < i; j++) {
-        if (!clash(boxes[i], boxes[j])) continue
-        const dy = boxes[j].y1 - boxes[i].y0
-        boxes[i] = { ...boxes[i], y0: boxes[i].y0 + dy, y1: boxes[i].y1 + dy, text: boxes[i].text.map(([t, y, f]) => [t, y + dy, f] as [string, number, number]) }
+        if (clash(boxes[i], boxes[j])) boxes[i] = shift(boxes[i], camera ? boxes[j].y0 - boxes[i].y1 : boxes[j].y1 - boxes[i].y0)
       }
     }
   }
-  ctx.lineJoin = 'round'; ctx.strokeStyle = '#000000'; ctx.fillStyle = '#FFFFFF'
-  for (const b of boxes) {
-    for (const [text, y, f] of b.text) {
-      ctx.font = `bold ${f}px sans-serif`; ctx.lineWidth = Math.max(2.5, f * 0.18)
-      ctx.strokeText(text, b.l.x, y); ctx.fillText(text, b.l.x, y)
+  ctx.save()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+  if (camera) {
+    // The poles first, all of them under every plate: a white line up from a dot on the floor.
+    const lw = Math.max(1.5, fs / 9)
+    ctx.strokeStyle = '#FFFFFF'; ctx.fillStyle = '#FFFFFF'; ctx.lineWidth = lw
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = lw * 2
+    for (const b of boxes) {
+      ctx.beginPath(); ctx.moveTo(b.l.foot.x, b.l.foot.y); ctx.lineTo(b.l.x, b.y1); ctx.stroke()
+      ctx.beginPath(); ctx.arc(b.l.foot.x, b.l.foot.y, lw * 1.8, 0, Math.PI * 2); ctx.fill()
     }
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0
   }
+  for (const b of boxes) {
+    ctx.fillStyle = 'rgba(15,23,42,0.78)'
+    ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, fs * 0.3); ctx.fill()
+    ctx.fillStyle = '#FFFFFF'
+    for (const [text, y, f] of b.text) { ctx.font = `bold ${f}px sans-serif`; ctx.fillText(text, b.l.x, y) }
+  }
+  ctx.restore()
 }

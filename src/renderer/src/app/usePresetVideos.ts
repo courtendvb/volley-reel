@@ -38,7 +38,7 @@ export function usePresetVideos(h: Host) {
   const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
     const scenes = presetReels(specs, prefix, preset.mode)
     if (!scenes.length) return
-    const v: Video = { ...newVideo(name, scenes.map(r => r.id)), preset }
+    const v: Video = { ...newVideo(name, scenes.map(r => r.id), h.latest.current.settings?.overlay), preset }
     h.record([{ kind: 'video', id: v.id, value: null }, ...scenes.map(r => ({ kind: 'scene', id: r.id, value: null }) as Snapshot)], false)
     h.addScenes(scenes)
     h.addVideo(v)

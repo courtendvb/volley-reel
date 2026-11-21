@@ -64,6 +64,7 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       <label className="check" title={t('ヒートマップ・落下点・軌道・コーン・チャート・トスのチャート・着弾の波紋を、このクリップでは出さない。グリッドと選んだプレーのゾーンは出たまま（書き出しも同じ）。ほかのクリップは変わらない')}>
         <input type="checkbox" checked={!o?.courtMarks?.hidden} onChange={e => write({ ...o, courtMarks: { hidden: !e.target.checked } })} /> {t('分析表示')}</label>
       <ServeSpeedCheck overlay={s} onOverlay={onOverlay} />
+      <LineupCheck overlay={s} onOverlay={onOverlay} />
       <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       {canVideo && (
@@ -104,6 +105,24 @@ export function ServeSpeedCheck({ overlay: s, onOverlay }: { overlay: OverlaySet
   return (
     <label className="check" title={t('ヒットとタッチを打ったサーブの速度を、タッチのコマから動画に出します（この動画のすべて）')}>
       <input type="checkbox" checked={s.serveSpeed.enabled} onChange={e => onOverlay({ ...s, serveSpeed: { ...s.serveSpeed, enabled: e.target.checked } })} /> {t('サーブ速度')}</label>
+  )
+}
+
+// With no clip open: the scoreboard and its place, and the caption, for every play followed in the
+// list (the video's settings, or the project's while no video is open).
+export function ListOverlayChecks({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <>
+      <label className="check"><input type="checkbox" checked={s.scoreboard.enabled}
+        onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, enabled: e.target.checked } })} /> {t('スコアボード')}</label>
+      <select className="ov-pos" aria-label={t('スコアボードの位置')} value={s.scoreboard.anchor}
+        onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, anchor: e.target.value as Anchor } })}>
+        {SB_POSITIONS.map(([a, l]) => <option key={a} value={a}>{l}</option>)}
+        {!SB_POSITIONS.some(([a]) => a === s.scoreboard.anchor) && <option value={s.scoreboard.anchor}>{t('下')}</option>}
+      </select>
+      <label className="check"><input type="checkbox" checked={s.playerCaption.enabled}
+        onChange={e => onOverlay({ ...s, playerCaption: { ...s.playerCaption, enabled: e.target.checked } })} /> {t('テロップ')}</label>
+    </>
   )
 }
 

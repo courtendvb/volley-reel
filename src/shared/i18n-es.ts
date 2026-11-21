@@ -1772,4 +1772,6 @@ export const ES: Record<string, string> = {
   "マニュアル": "Manual",
   "マニュアルを開く": "Abrir el manual",
   "使い方の説明を、パソコンのブラウザで開きます。アプリに入っているので、インターネットにつながっていなくても読めます（今は日本語だけです）。": "Abre la guía de uso en el navegador de tu computadora. Viene con la app, así que funciona sin conexión a internet (por ahora solo en japonés).",
+  "見た目は「動画の設定」": "Aspecto: configuración del video",
+  "出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます": "Aquí se elige qué se muestra; la posición, el tamaño, el diseño y los colores están en la configuración del video",
 }

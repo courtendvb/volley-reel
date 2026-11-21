@@ -4,10 +4,13 @@ import { TELOP_LOOKS, lookTheme, type Anchor, type CaptionData, type OverlaySett
 import { cardBackground, drawCaption, drawLineup, drawScoreboard, drawServeSpeed, drawTitleCard } from '../../../shared/overlayDraw'
 import { t } from '../../../shared/i18n'
 import { packPhotoImage } from '../assets'
+import { ThemePicker } from './ThemePicker'
+import type { OverlayTheme } from '../../../shared/overlay'
 
 interface Props {
   settings: OverlaySettings
   onChange: (s: OverlaySettings) => void
+  onTheme: (t: OverlayTheme) => void // the colors are the project's, for every video
   onClose: () => void
   sample: { scoreboard: ScoreboardData; caption: CaptionData; card: { marker: number; name: string; match: string | null } }
 }
@@ -17,7 +20,7 @@ const PREVIEW_W = 560, PREVIEW_H = 315
 
 // Reel-wide settings for the automatic overlays (design §3.7): every element separately, plus colors.
 // Changes apply at once; the preview draws on the current video frame.
-export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props) {
+export function OverlayDialog({ settings: s, onChange, onTheme, onClose, sample }: Props) {
   const frame = useRef<HTMLCanvasElement>(null)
   const card = useRef<HTMLCanvasElement>(null)
   const set = <K extends Exclude<keyof OverlaySettings, 'look'>>(k: K, patch: Partial<OverlaySettings[K]>) => onChange({ ...s, [k]: { ...s[k], ...patch } })
@@ -62,7 +65,8 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
           <div className="ov-settings">
             <section>
               <span className="field-label">{t('配色')}</span>
-              <p className="hint">{t('配色はプロジェクト全体の設定です。上部の「設定」で変えます。')}</p>
+              <ThemePicker value={s.theme} onChange={onTheme} />
+              <p className="hint">{t('スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。')}</p>
             </section>
 
             <section>

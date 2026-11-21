@@ -575,6 +575,9 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .field-label.wide { width: auto; }
 .manual-chapters { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .manual-chapters button.link { text-align: left; }
+/* The View tab: whether things show is set here; their look is in the video settings (OverlayDialog). */
+.look-link { margin-left: auto; font-size: var(--fs-label); }
+.look-link-clip { display: block; margin: var(--space-1) 0 0 auto; }
 .video-panel .count { padding: var(--space-2) var(--space-4) var(--space-4); }
 
 /* ---- object format panel (v3 step 3) ---- */

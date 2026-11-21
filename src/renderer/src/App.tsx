@@ -959,7 +959,7 @@ export function App() {
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
-                <div className="ann-row clip-overlay"><span className="field-label" title={video ? t('この動画の設定です') : t('動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）')}>{t('自動表示')}</span><ListOverlayChecks overlay={overlay} onOverlay={setOverlay} /><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} /></div>
+                <div className="ann-row clip-overlay"><span className="field-label" title={video ? t('この動画の設定です') : t('動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）')}>{t('自動表示')}</span><ListOverlayChecks overlay={overlay} onOverlay={setOverlay} /><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} />{video && <button className="link look-link" onClick={() => setOverlayOpen(true)} title={t('出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます')}>{t('見た目は「動画の設定」')}</button>}</div>
               )}
               <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
                 onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
@@ -1010,6 +1010,7 @@ export function App() {
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
               <div className="stage-panel" hidden={stagePanel !== 'view'}>
+              {video && <button className="link look-link look-link-clip" onClick={() => setOverlayOpen(true)} title={t('出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます')}>{t('見た目は「動画の設定」')}</button>}
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
@@ -1077,7 +1078,7 @@ export function App() {
       )}
 
       {overlayOpen && video && (
-        <OverlayDialog settings={overlay} onChange={setOverlay} onClose={() => setOverlayOpen(false)}
+        <OverlayDialog settings={overlay} onChange={setOverlay} onTheme={th => { if (settings) void saveSettings({ ...settings, theme: th }) }} onClose={() => setOverlayOpen(false)}
           sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
@@ -1106,7 +1107,7 @@ export function App() {
           onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} teamColors={teamColors} onTeamColors={setTeamColors} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
+        <SettingsDialog settings={settings} teams={projectTeams} teamColors={teamColors} onTeamColors={setTeamColors} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
           onLanguage={l => void (async () => { await flushAll(); await api.setLanguage(l); location.reload() })()} />
       )}
     </div>

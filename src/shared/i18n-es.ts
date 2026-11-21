@@ -1091,7 +1091,7 @@ export const ES: Record<string, string> = {
   "{0} 点": "{0} pts",
   "セッターのチームのラリー前の得点": "Los puntos del equipo del armador antes del rally",
   "どの段も、何も選ばなければすべて。レセプションで絞るとレセプションからの攻撃だけ、セッターコールで絞るとコールのないツー（SD）は入りません": "En cada fila, no elegir nada significa todos. Elegir recepciones limita a ataques desde recepción; elegir llamadas del armador deja fuera las fintas (SD), que no tienen",
-  "。チャプター {0} 個を動画に入れました（VLC の「再生 → チャプター」で飛べます）": ". Hay {0} capítulos en el video (VLC: Reproducción → Capítulo)",
+  "。チャプター {0} 個を動画に入れました（再生ソフトのチャプターから飛べます）": ". Hay {0} capítulos en el video (puedes saltar a ellos desde los capítulos de tu reproductor)",
   "ドラッグで動かす（右下の角で大きさを変える。ダブルクリックでたたむ）": "Arrastra para mover (la esquina inferior derecha cambia el tamaño; doble clic lo pliega)",
   "たたむ": "Plegar",
   "マッチレポート": "Reporte del partido",

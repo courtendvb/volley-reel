@@ -108,7 +108,7 @@ const remembered = (kind: ExportKind, dir: string) => {
 app.whenReady().then(async () => {
   // The interface language (設定 → Language); the first start follows Windows' display language.
   // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
-  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
+  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : app.getLocale().startsWith('es') ? 'es' : 'en'))
   account = new Account({
     dir: app.getPath('userData'),
     appVersion: app.getVersion(),

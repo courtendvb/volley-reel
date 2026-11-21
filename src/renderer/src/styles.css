@@ -650,7 +650,7 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .serve-mark { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--line); }
 .serve-mark-time { min-width: 52px; font-variant-numeric: tabular-nums; color: var(--sub); }
 .serve-mark-speed { font-variant-numeric: tabular-nums; }
-.serve-mark .field-label { white-space: nowrap; }
+.serve-mark .field-label { white-space: nowrap; width: auto; }
 .grip { flex: none; width: 14px; color: var(--faint); cursor: grab; text-align: center; font-size: var(--fs-body); line-height: 1; user-select: none; }
 .grip:hover { color: var(--text); }
 .gear { padding: 0 var(--space-2); border: 0; background: transparent; color: var(--sub); font-size: var(--fs-title); line-height: 1; }

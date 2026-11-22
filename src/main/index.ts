@@ -464,6 +464,7 @@ function registerIpc(): void {
   ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
+  ipcMain.handle('account:prices', () => account.prices())
   ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
   ipcMain.handle('account:team', (_e, a: TeamAction) => withAccount(() => account.teamAction(a)))
   // The preload reads the language synchronously, so the interface's text is right from its first paint.

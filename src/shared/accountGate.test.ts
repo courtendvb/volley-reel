@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { gate, type AccountState } from './account'
+import { gate, priceText, type AccountState, type PlanPrice } from './account'
+import { setLang, t, type Lang } from './i18n'
 
 const team = { id: 1, name: 'T' }
 const ok: AccountState = { kind: 'ok', email: 'a', team, teams: [team], suggested: [], status: 'trialing', until: null, daysLeft: 3 }
@@ -30,5 +31,25 @@ describe('gate', () => {
       expect(gate(true, s, 'newProject')).toBe('plan')
       expect(gate(true, s, 'export')).toBe('plan')
     }
+  })
+})
+
+describe('priceText', () => {
+  const p = (x: Partial<PlanPrice> = {}): PlanPrice => ({ amount: 39600, currency: 'jpy', interval: 'year', interval_count: 1, tax: 'inclusive', ...x })
+  const run = (l: Lang, x: PlanPrice | null) => { setLang(l); try { return priceText(x, l, t) } finally { setLang('ja') } }
+
+  it('says the yen price per year, tax included, in each language', () => {
+    expect(run('ja', p())).toBe('￥39,600／年（税込）')
+    expect(run('en', p())).toBe('¥39,600 / year (tax incl.)')
+    expect(run('es', p({ interval: 'month', amount: 3980, tax: 'exclusive' }))).toBe('3980 JPY / mes (más impuestos)') // Spanish groups from 5 digits
+  })
+
+  it('turns cents into dollars and says a longer period', () => {
+    expect(run('en', p({ currency: 'usd', amount: 2999, interval: 'month', interval_count: 3, tax: 'unspecified' }))).toBe('$29.99 / 3 months')
+  })
+
+  it('says nothing it cannot say', () => {
+    expect(run('ja', null)).toBeNull()
+    expect(run('ja', p({ currency: 'not-a-currency' }))).toBeNull()
   })
 })

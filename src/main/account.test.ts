@@ -147,6 +147,20 @@ describe('Account', () => {
     expect(s.calls.at(-1)!.body).toMatchObject({ device_token: 'dev-1', team_id: 7, plan: 'monthly' })
   })
 
+  it('asks for the plan prices for its team, and goes without them offline or signed out', async () => {
+    const prices = { monthly: { amount: 3980, currency: 'jpy', interval: 'month', interval_count: 1, tax: 'inclusive' }, annual: null, annual_trial_days: 14 }
+    expect(await account().a.prices()).toBeNull() // signed out: nothing to ask with
+    const s = signedIn({ '/functions/v1/account-prices': () => [200, prices] }, { denied: 'licence_expired', exp: T0 })
+    const { a } = account({ fetch: s.f })
+    await a.signIn('a@example.com', '123456')
+    expect(await a.prices()).toEqual(prices)
+    expect(s.calls.at(-1)!.body).toMatchObject({ device_token: 'dev-1', team_id: 7 })
+    const off = signedIn({}, { denied: 'licence_expired', exp: T0 }) // no account-prices route: offline
+    const b = account({ fetch: off.f }).a
+    await b.signIn('a@example.com', '123456')
+    expect(await b.prices()).toBeNull()
+  })
+
   it('lets an account in no team pick one: a suggested team, a team ID and passcode, or the trial', async () => {
     const member = new Set<number>()
     const lease = (b: Record<string, unknown>, id: number) => [200, { lease: makeLease({ device: String(b.device_id), team: { id, name: `T${id}` } }), device_token: 'dev-1', teams: [...member].map(i => ({ id: i, name: `T${i}` })), suggested: member.has(30) ? [] : [{ id: 30, name: 'Old' }] }] as [number, unknown]

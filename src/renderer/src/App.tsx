@@ -16,7 +16,7 @@ import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
 import { setStopSec } from './keys'
 import { TrimBar } from './components/TrimBar'
-import { RIGHT_TABS, RightTabs, type RightTab } from './components/RightTabs'
+import { RIGHT_TABS, RightStrip, RightTabs, type RightTab } from './components/RightTabs'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
@@ -54,7 +54,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -177,6 +177,9 @@ export function App() {
   // The right column's tab, kept on this computer.
   const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })
   useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
+  // The right column folded to a thin strip, for a bigger video; kept on this computer.
+  const [rightFolded, setRightFolded] = useState(() => { try { return localStorage.getItem('vr.rightFolded') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('vr.rightFolded', rightFolded ? '1' : '0') } catch { /* not kept */ } }, [rightFolded])
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
   const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
   useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
@@ -328,7 +331,8 @@ export function App() {
   }
   const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
   setChartColors(chartColors) // before anything below draws a chart
-  const lineKey = JSON.stringify(chartColors) // charts already drawn are drawn again
+  setStrikeHeights(project?.settings.strikeHeights) // and the court's flights
+  const lineKey = JSON.stringify([chartColors, project?.settings.strikeHeights]) // charts and flights already drawn are drawn again
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
   // rally, the serve, reception or attack on screen (the list staying on the play picked).
@@ -509,7 +513,7 @@ export function App() {
     setFilter({ ...EMPTY_FILTER, skills: [p.skill], persons: [p.playerKey], endZones: [shotPick!.zone!] })
     setShotPick(null)
   }
-  // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
+  // The 1–6 buttons on a list row: add the play to the scene with that marker (again: clear it).
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
     withReel(r => {
       const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }], 'none', extractRef.current)
@@ -856,7 +860,7 @@ export function App() {
   useShortcuts({
     latest, paused: settingsOpen || !!quickCode || !!codeEditing || !!scoutEditsOf, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
     scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
-    undoRedo: kind => { const a = actionRef.current; if (kind === 'undo' && a?.undo) { a.undo(); setActionNotice(null) } else undoRedo(kind) }, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o),
+    undoRedo: kind => { const a = actionRef.current; if (kind === 'undo' && a?.undo) { a.undo(); setActionNotice(null) } else undoRedo(kind) }, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o), toggleRight: () => setRightFolded(f => !f),
     activateClip, whenIn, jump, setAnnTool, trim, markerKey, editCode: r => setQuickCode(r),
     setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
   })
@@ -937,7 +941,7 @@ export function App() {
           <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
           <button className="primary" onClick={() => setPicker('edit')}>{t('試合を選ぶ')}</button></div>
       ) : (
-        <main className={`workspace${focusEdit ? ' focus-edit' : ''}`}>
+        <main className={`workspace${focusEdit ? ' focus-edit' : ''}${rightFolded ? ' right-folded' : ''}`}>
           <aside className="sidebar" onPointerDownCapture={() => { focusPane.current = 'list' }}>
             <CheckPicker className="match-select" label={t('検索する試合')} all={t('すべての試合（{0}）', project.matches.length)}
               options={project.matches.map(m => ({ key: m.id, label: m.name }))} selected={matchIds}
@@ -1170,6 +1174,7 @@ export function App() {
             </div>
           </section>
           <div className="right-col" onPointerDownCapture={() => { focusPane.current = 'scene' }}>
+            {rightFolded && <RightStrip tab={rightTab} badge={exportBadge} onOpen={tab => { setRightTab(tab); setRightFolded(false) }} />}
             {(['head', 'list'] as const).map(part => {
               const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
@@ -1184,7 +1189,7 @@ export function App() {
                         />
               return part === 'head' ? panel : (
                 <Fragment key={part}>
-                  <RightTabs tab={rightTab} onTab={setRightTab} badge={exportBadge} />
+                  <RightTabs tab={rightTab} onTab={setRightTab} badge={exportBadge} onFold={() => setRightFolded(true)} />
                   <div className="right-pane" hidden={rightTab !== 'video'}>{panel}</div>
                 </Fragment>
               )

@@ -14,7 +14,7 @@ import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
 import { courtQuad, type CourtFit, type CourtPart } from '../../../shared/court'
 import { textStyle, type AnnStyle, type Tool } from './AnnotationLayer'
-import { t } from '../../../shared/i18n'
+import { getLang, t } from '../../../shared/i18n'
 
 interface Props {
   tool: Tool
@@ -352,7 +352,7 @@ export function AnnotationTools(p: Props) {
         ) : (
           <span className="hint">
             {p.annotations.length ? t('注釈 {0} 個。選択ツールでクリックすると選べます。つまみで大きさを変え、「頂点の編集」で頂点を動かせます。', p.annotations.length) : t('動画の上をドラッグして描きます。折れ線・多角形はクリックで頂点を置きます。')}
-            {t('表示時刻の「秒」はクリップの IN からの値です。')}
+            {getLang() === 'ja' ? '' : ' '}{t('表示時刻の「秒」はクリップの IN からの値です。')}
           </span>
         )}
       </div>

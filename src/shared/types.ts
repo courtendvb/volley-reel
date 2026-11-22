@@ -1,8 +1,8 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState, TeamAction } from './account'
+import type { AccountState, PlanPrices, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
-import type { CourtFit } from './court'
+import type { CourtFit, StrikeHeights } from './court'
 import type { CodeEdit, ScoutInsert } from './codeEdit'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
@@ -144,6 +144,7 @@ export interface ProjectSettings {
   lineColors?: ChartLineColors // the direction charts' lines by skill and evaluation; missing: the usual
   pointColors?: ChartLineColors // their points the same way
   pointScale?: number // their points' size, 1 = the usual
+  strikeHeights?: StrikeHeights // how high serves, attacks and sets are struck on the court's flights, in metres (court.ts); missing: the usual
   roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
   overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
 }
@@ -268,6 +269,7 @@ export interface Api {
   accountSignIn(email: string, code: string): Promise<AccountState>
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
   accountSignOut(): Promise<AccountState>
   accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads

@@ -1,39 +1,72 @@
 import { useMemo, useState } from 'react'
-import { listPeople, type PlayRef } from '../../../shared/filter'
-import type { OverlayTheme } from '../../../shared/overlay'
+import { ChartPreview } from './ChartPreview'
+import { PaletteColor } from './PaletteColor'
+import { POINT_SCALE, cleanLineColors, cleanPointScale, type ChartLineColors } from '../../../shared/chart'
+import { LineColors } from './LineColors'
+import { HEADLINE_SIZE, type HeadlineStyle } from '../../../shared/annotation'
 import type { ProjectSettings } from '../../../shared/types'
+import { STRIKE_HEIGHTS, STRIKE_HEIGHT_RANGE, cleanStrikeHeights, type StrikeHeights } from '../../../shared/court'
+import { ACCENTS, applyAppearance, loadAppearance, type Appearance, type ThemeMode } from '../appearance'
+import { AddonPacks } from './AddonPacks'
 import { TeamLogos } from './TeamLogos'
-import { ThemePicker } from './ThemePicker'
+import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
+import { IS_MAC, keyName } from '../../../shared/keys'
+import { FONTS } from '../fonts'
+import { SET_STOP_MAX_SEC, arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec, setSetStopSec, setStopSec } from '../keys'
+
+const api = window.api
+
+// Fonts every computer of its kind has; the list a project's headline can pick from.
 
 interface Props {
   settings: ProjectSettings
-  theme: OverlayTheme // the colors in use now
   teams: { code: string; name: string }[] // the teams in the project's matches, opponents first
-  rawRefs: PlayRef[] // all matches, built without the alias table so every original key shows
+  teamColors: Record<string, string> // the library's, by team code
+  onTeamColors: (c: Record<string, string>) => void
   onSave: (s: ProjectSettings) => Promise<void>
   onClose: () => void
+  onLanguage: (l: Lang) => void // saves the edits, then shows the app in that language
 }
 
-// 自チームのチームコードと名寄せ表 (design §3.2).
-// Player IDs already merge home/away and the scrimmage "-a" suffix; this table is for what's left.
-export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSave, onClose }: Props) {
-  const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
-  const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
-  const [aliases, setAliases] = useState<Record<string, string>>(settings.playerAliases)
-  const [showOpp, setShowOpp] = useState(false)
-  const [saving, setSaving] = useState(false)
+// 自チームのチームコード、オーバーレイの配色、チームのロゴ (design §3.2), add-on packs, and the app's own look.
+// The manual's chapters (site/manual/ja/), opened from the Help page of the settings.
+const MANUAL_CHAPTERS: [string, string][] = [
+  ['01-start.html', '1. はじめに'], ['02-import.html', '2. 試合を取り込む'], ['03-project.html', '3. プロジェクトを作る'],
+  ['04-find.html', '4. プレーを探す'], ['05-scene.html', '5. シーンと動画を作る'], ['06-draw.html', '6. 動画に描く'],
+  ['07-court.html', '7. コートの表示'], ['08-data.html', '8. データスライドとレポート'], ['09-compare.html', '9. 比較動画'],
+  ['10-export.html', '10. 書き出しの詳細'], ['11-help.html', '11. 困ったとき'],
+]
 
-  const people = useMemo(() => listPeople(rawRefs), [rawRefs])
-  const shown = people.filter(p => showOpp || p.teamRole !== 'opp')
-  const label = (key: string) => {
-    const p = people.find(x => x.key === key)
-    return p ? `#${p.jerseys.join('/')} ${p.name}${p.teamCodes.length ? ` (${p.teamCodes.join('/')})` : ''}` : key
-  }
+export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSave, onClose, onLanguage }: Props) {
+  const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
+  // The app's look shows at once and is kept at once, like the logos (it isn't part of the project).
+  const [look, setLook] = useState<Appearance>(loadAppearance)
+  const changeLook = (a: Appearance) => { setLook(a); applyAppearance(a) }
+  const [headline, setHeadline] = useState<HeadlineStyle>(settings.headline ?? {})
+  const head = (patch: HeadlineStyle) => setHeadline({ ...headline, ...patch })
+  const [saving, setSaving] = useState(false)
+  // 通し's stop on a set: kept at once, like the keys. The length is remembered while the stop is off.
+  const [stopOn, setStopOn] = useState(() => setStopSec() > 0)
+  const [stopLen, setStopLen] = useState(() => setStopSec() || 2)
+  const [lines, setLines] = useState<ChartLineColors>(settings.lineColors ?? {})
+  const [points, setPoints] = useState<ChartLineColors>(settings.pointColors ?? {})
+  const [pointScale, setPointScale] = useState(settings.pointScale ?? 1)
+  const preview = useMemo(() => ({ lines, points, pointScale }), [lines, points, pointScale])
+  const [heights, setHeights] = useState<StrikeHeights>(settings.strikeHeights ?? {})
+  // The list on the left picks the one setting shown on the right.
+  const [here, setHere] = useState('team')
+  const page = (id: string) => ({ 'data-section': id, hidden: here !== id })
+  const NAV: [string, [string, string][]][] = [
+    [t('このプロジェクト'), [['team', t('対象チーム')], ['headline', t('見出し')], ['lines', t('チャートの色と点')], ['heights', t('打点の高さ')]]],
+    [t('倉庫'), [['logos', t('チームのロゴ')], ['addons', t('アドオン')]]],
+    [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['through', t('通しで見る')], ['look', t('アプリの見た目')]]],
+    [t('ヘルプ'), [['manual', t('マニュアル')]]],
+  ]
 
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ourTeamCodes: code ? [code] : [], playerAliases: aliases, theme })
+      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], headline, lineColors: cleanLineColors(lines), pointColors: cleanLineColors(points), pointScale: cleanPointScale(pointScale), strikeHeights: cleanStrikeHeights(heights) })
       onClose()
     } finally {
       setSaving(false)
@@ -42,78 +75,173 @@ export function SettingsDialog({ settings, theme: themeNow, teams, rawRefs, onSa
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label="設定" onClick={e => e.stopPropagation()}>
-        <h2>設定</h2>
+      <div className="modal settings" role="dialog" aria-label={t('設定')} onClick={e => e.stopPropagation()}>
+        <h2>{t('設定')}</h2>
 
-        <section>
-          <label className="field-label wide" htmlFor="our-code">対象チーム（自チーム）</label>
+        <div className="settings-body">
+        <nav className="settings-nav" aria-label={t('設定の項目')}>
+          {NAV.map(([group, items]) => (
+            <div key={group} className="settings-nav-group">
+              <span className="settings-nav-title">{group}</span>
+              {items.map(([id, label]) => <button key={id} className={here === id ? 'on' : ''} aria-current={here === id ? 'true' : undefined} onClick={() => setHere(id)}>{label}</button>)}
+            </div>
+          ))}
+        </nav>
+        <div className="settings-pane">
+        <section {...page('team')}>
+          <label className="field-label wide" htmlFor="our-code">{t('対象チーム（自チーム）')}</label>
           <select id="our-code" value={code} onChange={e => setCode(e.target.value)}>
-            {!teams.some(t => t.code === code) && <option value={code}>{code || '（なし）'}</option>}
+            {!teams.some(t => t.code === code) && <option value={code}>{code || t('（なし）')}</option>}
             {teams.map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}`}</option>)}
           </select>
-          <p className="hint">プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。</p>
+          <p className="hint">{t('プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。')}</p>
         </section>
 
-        <section>
-          <span className="field-label wide">配色（プロジェクト全体）</span>
-          <ThemePicker value={theme} onChange={setTheme} />
-          <p className="hint">スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。</p>
-        </section>
-
-        <section>
-          <span className="field-label wide">チームのロゴ（タイトルカード）</span>
-          <TeamLogos teams={teams} />
-          <p className="hint">1 試合のクリップだけのタイトルカードに、相手チームのロゴを出します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。</p>
-        </section>
-
-        <section className="alias-section">
+        <section {...page('headline')}>
+          <span className="field-label wide">{t('見出し')}</span>
           <div className="filter-row">
-            <span className="field-label">名寄せ表</span>
-            <span className="spacer" />
-            <label className="check"><input type="checkbox" checked={showOpp} onChange={e => setShowOpp(e.target.checked)} /> 相手チームの選手も表示</label>
+            <label className="field-label" htmlFor="headline-font">{t('フォント')}</label>
+            <select id="headline-font" value={headline.font ?? ''} onChange={e => { const { font: _f, ...rest } = headline; setHeadline(e.target.value ? { ...rest, font: e.target.value } : rest) }}>
+              <option value="">{t('標準')}</option>
+              {[...new Set([...FONTS, ...(headline.font ? [headline.font] : [])])].map(f => <option key={f} value={f} style={{ fontFamily: `"${f}"` }}>{f}</option>)}
+            </select>
+            <label className="field-label" htmlFor="headline-size">{t('サイズ')}</label>
+            <input id="headline-size" type="number" min={12} max={200} step={2} value={headline.size ?? HEADLINE_SIZE} style={{ width: 64 }}
+              onChange={e => { const n = +e.target.value; if (n >= 12 && n <= 200) head({ size: n }) }} />
           </div>
-          <p className="hint">選手は DataVolley の選手IDで同じ人とみなします（ホーム/アウェイ、紅白戦の「-a」も自動で統合）。IDが違うのに同じ人の場合だけ指定してください。</p>
-          <div className="alias-table">
-            {shown.map(p => {
-              const target = aliases[p.key] ?? ''
-              const loops = !!target && leadsTo(target, p.key, aliases)
-              return (
-                <div key={p.key} className="alias-row">
-                  <span className="who">{label(p.key)}</span>
-                  <code className="key">{p.key}</code>
-                  <span className="muted">{p.plays}</span>
-                  <select value={target} aria-label={`${p.name} と同じ人`}
-                    onChange={e => setAliases(a => { const n = { ...a }; if (e.target.value) n[p.key] = e.target.value; else delete n[p.key]; return n })}>
-                    <option value="">（別の人）</option>
-                    {people.filter(o => o.key !== p.key && (showOpp || o.teamRole !== 'opp')).map(o => (
-                      <option key={o.key} value={o.key}>= {label(o.key)}</option>
-                    ))}
-                  </select>
-                  {loops && <span className="warning-inline">循環しています</span>}
-                </div>
-              )
-            })}
+          <div className="filter-row">
+            <label className="field-label" htmlFor="headline-color">{t('色')}</label>
+            <PaletteColor value={headline.color ?? '#FFFFFF'} label={t('色')} onChange={c => head({ color: c })} />
+            <label className="check"><input type="checkbox" checked={headline.bold !== false} onChange={e => head({ bold: e.target.checked })} /> {t('太字')}</label>
+            <label className="check"><input type="checkbox" checked={headline.outline !== false} onChange={e => head({ outline: e.target.checked })} /> {t('黒縁')}</label>
+            <label className="check"><input type="checkbox" checked={!!headline.box} onChange={e => { const { box: _b, ...rest } = headline; setHeadline(e.target.checked ? { ...rest, box: '#0F172A' } : rest) }} /> {t('背景')}</label>
+            {headline.box && <PaletteColor value={headline.box} label={t('背景の色')} onChange={c => head({ box: c })} />}
+            <button className="link" onClick={() => setHeadline({})}>{t('標準に戻す')}</button>
           </div>
+          <p className="hint">{t('これから入れる見出しの見た目。プロジェクトのすべての動画に使います。入れた見出しは変わりません（書式から個別に変えられます）。')}</p>
         </section>
 
-        {Object.keys(aliases).some(k => leadsTo(aliases[k], k, aliases)) && (
-          <p className="hint">循環している指定は、たどり始めた選手で止まります。どちらか一方を「別の人」に戻してください。</p>
-        )}
+        <section {...page('lines')}>
+          <span className="field-label wide">{t('チャートの色と点')}</span>
+          {(['S', 'A'] as const).map(skill => (
+            <div key={skill} className="chart-colors">
+              <b>{skill === 'S' ? t('サーブ') : t('アタック')}</b>
+              <div className="filter-row"><span className="field-label">{t('線')}</span>
+                <LineColors value={lines[skill]} skill={skill} onChange={v => setLines({ ...lines, [skill]: v })} /></div>
+              <div className="filter-row"><span className="field-label">{t('点')}</span>
+                <LineColors value={points[skill]} skill={skill} of="point" onChange={v => setPoints({ ...points, [skill]: v })} /></div>
+            </div>
+          ))}
+          <div className="filter-row">
+            <label className="field-label" htmlFor="point-scale">{t('点の大きさ')}</label>
+            <input id="point-scale" type="range" min={POINT_SCALE.min} max={POINT_SCALE.max} step={POINT_SCALE.step} value={pointScale} onChange={e => setPointScale(+e.target.value)} />
+            <span className="muted">{`${Math.round(pointScale * 100)}%`}</span>
+          </div>
+          <div><button className="link" onClick={() => { setLines({}); setPoints({}); setPointScale(1) }}>{t('既定に戻す')}</button></div>
+          <ChartPreview colors={preview} />
+          <p className="hint">{t('ディレクションチャートの線と点の色を評価（# + ! - / =）ごとに、点の大きさとあわせて決めます。動画のチャートとデータスライドのすべてに使います（プロジェクトごと）。')}</p>
+        </section>
+
+        <section {...page('heights')}>
+          <span className="field-label wide">{t('打点の高さ')}</span>
+          {([['jumpServe', t('ジャンプサーブ')], ['floatServe', t('フローターサーブ')], ['attack', t('アタック')], ['set', t('セット')]] as [keyof StrikeHeights, string][]).map(([k, label]) => (
+            <div key={k} className="filter-row">
+              <label className="field-label" htmlFor={`strike-${k}`}>{label}</label>
+              <input id={`strike-${k}`} type="number" min={STRIKE_HEIGHT_RANGE.min} max={STRIKE_HEIGHT_RANGE.max} step={STRIKE_HEIGHT_RANGE.step} style={{ width: 72 }}
+                value={heights[k] ?? STRIKE_HEIGHTS[k]} onChange={e => setHeights({ ...heights, [k]: +e.target.value })} />
+              <span>m</span>
+              <span className="muted">{t('既定 {0} m', STRIKE_HEIGHTS[k])}</span>
+            </div>
+          ))}
+          <div><button className="link" onClick={() => setHeights({})}>{t('既定に戻す')}</button></div>
+          <p className="hint">{t('コートに描くボールの軌道が、どの高さから打たれたとするか（メートル）。女子やユースのチームでは低めにします。セットの軌道はアタックの高さで終わります。このプロジェクトのすべての動画とデータスライドに使います。')}</p>
+        </section>
+
+        <section {...page('logos')}>
+          <span className="field-label wide">{t('チームのロゴ・色')}</span>
+          <TeamLogos teams={teams} colors={teamColors} onColors={onTeamColors} />
+          <p className="hint">{t('ロゴは、1 試合のクリップだけのタイトルカードに相手チームのものを出します。色は、動画のローテーション表示（6人の並び）のチームの色です。どちらも倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。')}</p>
+        </section>
+
+        <section {...page('addons')}>
+          <span className="field-label wide">{t('アドオン')}</span>
+          <AddonPacks />
+          <p className="hint">{t('リーグの選手写真などを別ファイル（.vrpack）で足します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。写真は右の「選手写真」から入れます。')}</p>
+        </section>
+
+        <section {...page('manual')}>
+          <span className="field-label wide">{t('マニュアル')}</span>
+          <div className="filter-row"><button className="primary" onClick={() => void api.openManual()}>{t('マニュアルを開く')}</button></div>
+          <ul className="manual-chapters">
+            {MANUAL_CHAPTERS.map(([file, title]) => <li key={file}><button className="link" onClick={() => void api.openManual(file)}>{title}</button></li>)}
+          </ul>
+          <p className="hint">{t('使い方の説明を、パソコンのブラウザで開きます。アプリに入っているので、インターネットにつながっていなくても読めます（今は日本語だけです）。')}</p>
+        </section>
+
+        <section {...page('lang')}>
+          {/* Both names, so it can be found whichever language is showing. */}
+          <label className="field-label wide" htmlFor="app-lang">Language / 言語</label>
+          <select id="app-lang" value={getLang()} onChange={e => onLanguage(e.target.value as Lang)}>
+            {LANGS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          <p className="hint">{t('アプリの表示の言語。このパソコンのすべてのプロジェクトに使います（変えると画面を読み直します。編集中の内容は保存されます）。')}</p>
+        </section>
+
+        <section {...page('keys')}>
+          <span className="field-label wide">{t('キー操作')}</span>
+          <div className="filter-row">
+            <label className="field-label" htmlFor="arrow-sec">{t('← →')}</label>
+            <input id="arrow-sec" type="number" min={0.1} max={60} step={0.1} defaultValue={arrowSec()}
+              onChange={e => { const n = +e.target.value; if (n > 0 && n <= 60) setArrowSec(n) }} />
+            <label className="field-label" htmlFor="ctrl-arrow-sec">{keyName(t('Ctrl + ← →'))}</label>
+            <input id="ctrl-arrow-sec" type="number" min={0.1} max={60} step={0.5} defaultValue={ctrlArrowSec()}
+              onChange={e => { const n = +e.target.value; if (n > 0 && n <= 60) setCtrlArrowSec(n) }} />
+          </div>
+          <p className="hint">{t('動画が動く秒数。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。Shift + ← → は 1 フレームのままです。')}</p>
+        </section>
+
+        <section {...page('through')}>
+          <span className="field-label wide">{t('通しで見る')}</span>
+          <div className="filter-row">
+            <label className="check"><input type="checkbox" checked={stopOn} onChange={e => { setStopOn(e.target.checked); setSetStopSec(e.target.checked ? stopLen : 0) }} /> {t('セット配分を出す')}</label>
+            <label className="field-label" htmlFor="set-stop-sec">{t('静止時間')}</label>
+            <input id="set-stop-sec" type="number" min={0.5} max={SET_STOP_MAX_SEC} step={0.5} value={stopLen} disabled={!stopOn} style={{ width: 64 }}
+              onChange={e => { const n = +e.target.value; setStopLen(n); if (n >= 0.5 && n <= SET_STOP_MAX_SEC) setSetStopSec(n) }} />
+            <span>{t('秒')}</span>
+          </div>
+          <p className="hint">{t('ラリーを通しで見るとき、Aパス（# + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。')}</p>
+        </section>
+
+        <section {...page('look')}>
+          <span className="field-label wide">{t('アプリの見た目')}</span>
+          <div className="filter-row">
+            <span className="field-label">{t('画面')}</span>
+            <div className="segmented" role="radiogroup" aria-label={t('ライト・ダーク')}>
+              {([['light', t('ライト')], ['dark', t('ダーク')], ['system', IS_MAC ? t('Mac に合わせる') : t('Windows に合わせる')]] as [ThemeMode, string][]).map(([m, l]) => (
+                <button key={m} role="radio" aria-checked={look.mode === m} className={look.mode === m ? 'on' : ''} onClick={() => changeLook({ ...look, mode: m })}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="filter-row">
+            <span className="field-label">{t('アクセント')}</span>
+            <div className="accent-swatches" role="radiogroup" aria-label={t('アクセントの色')}>
+              {ACCENTS.map(a => (
+                <button key={a.color} role="radio" aria-checked={look.accent === a.color} aria-label={a.name} title={a.name}
+                  className={`accent-swatch${look.accent === a.color ? ' on' : ''}`} style={{ background: a.color }}
+                  onClick={() => changeLook({ ...look, accent: a.color })} />
+              ))}
+            </div>
+          </div>
+          <p className="hint">{t('ボタンや選択中の行の色と、画面の明るさ。このパソコンのすべてのプロジェクトに使います（すぐ反映・保存されます）。書き出す動画には影響しません。')}</p>
+        </section>
+        </div>
+        </div>
+
         <div className="modal-actions">
-          <button onClick={onClose}>キャンセル</button>
-          <button className="primary" onClick={save} disabled={saving}>保存</button>
+          <button onClick={onClose}>{t('キャンセル')}</button>
+          <button className="primary" onClick={save} disabled={saving}>{t('保存')}</button>
         </div>
       </div>
     </div>
   )
-}
-
-// Does following aliases from `from` come back to `to`?
-function leadsTo(from: string, to: string, aliases: Record<string, string>): boolean {
-  const seen = new Set<string>()
-  for (let k: string | undefined = from; k && !seen.has(k); k = aliases[k]) {
-    if (k === to) return true
-    seen.add(k)
-  }
-  return false
 }

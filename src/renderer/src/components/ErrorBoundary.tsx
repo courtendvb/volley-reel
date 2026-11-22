@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import { t } from '../../../shared/i18n'
 
 // Last resort: an error while drawing the screen would otherwise leave the window blank.
 // Scenes and videos are saved shortly after each edit, so reloading brings back the saved state.
@@ -18,12 +19,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     if (!error) return this.props.children
     return (
       <div className="empty" role="alert" style={{ marginTop: '20vh' }}>
-        <h2>表示中にエラーが起きました</h2>
-        <p className="muted">シーンと動画は編集のたびに自動で保存されています。再読み込みすると、保存された状態から続けられます。</p>
+        <h2>{t('表示中にエラーが起きました')}</h2>
+        <p className="muted">{t('シーンと動画は編集のたびに自動で保存されています。再読み込みすると、保存された状態から続けられます。')}</p>
         <pre className="muted" style={{ whiteSpace: 'pre-wrap', textAlign: 'left', fontSize: 12 }}>{error.message}</pre>
         <div className="home-actions" style={{ justifyContent: 'center' }}>
-          <button className="primary" onClick={() => location.reload()}>再読み込み</button>
-          <button onClick={() => this.setState({ error: null })}>このまま続ける</button>
+          <button className="primary" onClick={() => location.reload()}>{t('再読み込み')}</button>
+          <button onClick={() => this.setState({ error: null })}>{t('このまま続ける')}</button>
         </div>
       </div>
     )

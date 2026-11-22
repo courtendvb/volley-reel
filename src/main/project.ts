@@ -1,40 +1,53 @@
-// Project folder (v3): project.json (name, our team codes, alias table, which library matches it
+// Project folder (v3): project.json (name, our team codes, which library matches it
 // uses) and reels/. Matches live in the library and are referenced by id. A pre-v3 project (with
 // its own matches/) is migrated on open: its matches move into the library under the same ids.
+import { cleanLineColors, cleanPointScale, type ChartLineColors } from '../shared/chart'
+import { cleanStrikeHeights, type StrikeHeights } from '../shared/court'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { OverlayTheme } from '../shared/overlay'
-import type { Reel } from '../shared/reel'
+import { cleanSavedFilters, type SavedFilter } from '../shared/filter'
+import { cleanHeadline, type HeadlineStyle } from '../shared/annotation'
+import { overlaySettings, type OverlayPatch, type OverlayTheme } from '../shared/overlay'
+import { withAllMarkers, type Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
-import type { Match, ParsedDVW, ProjectInfo, ProjectSettings } from '../shared/types'
+import type { Match, ParsedDVW, PlayerRole, ProjectInfo, ProjectSettings } from '../shared/types'
+import { cleanRoles } from '../shared/roles'
 import type { Library } from './library'
 import { readJSON, safeId, writeJSON } from './store'
+import { t } from '../shared/i18n'
 
-const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH'], playerAliases: {} }
+const DEFAULT_SETTINGS: ProjectSettings = { ourTeamCodes: ['HTH'] }
 
 interface ProjectFile {
   version: 2
   name: string
   ourTeamCodes: string[]
-  playerAliases: Record<string, string>
+  playerAliases: Record<string, string> // the old 名寄せ table: no longer used, kept as saved
   theme?: OverlayTheme
+  filters?: SavedFilter[]
+  headline?: HeadlineStyle
+  lineColors?: ChartLineColors
+  pointColors?: ChartLineColors
+  pointScale?: number
+  strikeHeights?: StrikeHeights
+  roles?: Record<string, PlayerRole>
+  overlay?: OverlayPatch
   matchIds: string[]
   scenesVersion?: number // 1 = videos exist (v3 step 2); older projects get one video per reel
 }
 
 export class Project {
-  private file: ProjectFile = { version: 2, name: '', ...DEFAULT_SETTINGS, matchIds: [] }
+  private file: ProjectFile = { version: 2, name: '', ...DEFAULT_SETTINGS, playerAliases: {}, matchIds: [] }
   // Problems found while loading (recovered or unreadable files), shown once by the renderer.
   notices: string[] = []
 
   private constructor(readonly dir: string, private library: Library) {}
 
   static async create(dir: string, library: Library, init: { name: string; ourTeamCodes: string[]; matchIds: string[] }): Promise<Project> {
-    if (existsSync(join(dir, 'project.json'))) throw new Error('このフォルダにはすでにプロジェクトがあります。「開く」で開いてください')
+    if (existsSync(join(dir, 'project.json'))) throw new Error(t('このフォルダにはすでにプロジェクトがあります。「開く」で開いてください'))
     const p = new Project(dir, library)
-    await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
-    await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
+    await makeFolders(dir)
     p.file = { version: 2, name: init.name.trim() || basename(dir), ourTeamCodes: cleanCodes(init.ourTeamCodes).slice(0, 1), playerAliases: {}, matchIds: [...new Set(init.matchIds)], scenesVersion: 1 }
     await p.save()
     return p
@@ -43,11 +56,10 @@ export class Project {
   static async open(dir: string, library: Library): Promise<Project> {
     const p = new Project(dir, library)
     const file = join(dir, 'project.json')
-    if (!existsSync(file) && !existsSync(`${file}.bak`)) throw new Error('プロジェクトが見つかりません（project.json がありません）')
-    await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
-    await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
+    if (!existsSync(file) && !existsSync(`${file}.bak`)) throw new Error(t('プロジェクトが見つかりません（project.json がありません）'))
+    await makeFolders(dir)
     const { data: saved, fromBackup } = await readJSON<Partial<ProjectFile> & { version?: number }>(file)
-    if (fromBackup) p.notices.push('プロジェクトの設定ファイルが読めなかったため、1つ前の保存から復元しました')
+    if (fromBackup) p.notices.push(t('プロジェクトの設定ファイルが読めなかったため、1つ前の保存から復元しました'))
     p.file = {
       version: 2,
       name: saved.name || basename(dir),
@@ -55,13 +67,20 @@ export class Project {
       ourTeamCodes: Array.isArray(saved.ourTeamCodes) && saved.ourTeamCodes.length ? saved.ourTeamCodes.slice(0, 1) : DEFAULT_SETTINGS.ourTeamCodes,
       playerAliases: saved.playerAliases && typeof saved.playerAliases === 'object' ? saved.playerAliases : {},
       ...(validTheme(saved.theme) ? { theme: saved.theme } : {}),
+      filters: cleanSavedFilters(saved.filters),
+      headline: cleanHeadline(saved.headline),
+      lineColors: cleanLineColors(saved.lineColors),
+      pointColors: cleanLineColors(saved.pointColors),
+      pointScale: cleanPointScale(saved.pointScale),
+      strikeHeights: cleanStrikeHeights(saved.strikeHeights),
+      roles: cleanRoles(saved.roles),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
       scenesVersion: saved.scenesVersion,
     }
     if ((saved.version ?? 1) < 2) await p.migrateV1()
     if (!p.file.scenesVersion) await p.migrateToVideos()
     const missing = p.file.matchIds.filter(id => !library.getMatch(id))
-    if (missing.length) p.notices.push(`倉庫に見つからない試合が ${missing.length} 件あります（倉庫を変えた可能性があります）`)
+    if (missing.length) p.notices.push(t('倉庫に見つからない試合が {0} 件あります（倉庫を変えた可能性があります）', missing.length))
     return p
   }
 
@@ -80,7 +99,7 @@ export class Project {
           if (id !== data.id) remap.set(data.id, id)
           if (!this.file.matchIds.includes(id)) this.file.matchIds.push(id)
         } catch {
-          this.notices.push(`古い形式の試合ファイル ${f} を移せませんでした`)
+          this.notices.push(t('古い形式の試合ファイル {0} を移せませんでした', f))
         }
       }
       if (remap.size) {
@@ -91,7 +110,7 @@ export class Project {
         }
       }
       await rename(old, join(this.dir, `matches.v1-${Date.now()}`))
-      this.notices.push(`古い形式のプロジェクトでした。試合 ${this.file.matchIds.length} 件を倉庫に移しました`)
+      this.notices.push(t('古い形式のプロジェクトでした。試合 {0} 件を倉庫に移しました', this.file.matchIds.length))
     }
     await this.save()
   }
@@ -104,7 +123,7 @@ export class Project {
       const legacy = (r as Reel & { overlay?: Video['overlay'] }).overlay
       await this.saveVideo(newVideo(r.name, [r.id], { ...(legacy ?? {}), titleCard: { sceneCards: false, ...(legacy?.titleCard ?? {}) } }))
     }
-    if (reels.length) this.notices.push(`リールはシーンになりました。これまでどおり書き出せるよう、リール1本ごとに同じ名前の動画を作りました（${reels.length} 本）`)
+    if (reels.length) this.notices.push(t('リールはシーンになりました。これまでどおり書き出せるよう、リール1本ごとに同じ名前の動画を作りました（{0} 本）', reels.length))
     this.file.scenesVersion = 1
     await this.save()
   }
@@ -115,10 +134,10 @@ export class Project {
       if (!f.endsWith('.json')) continue
       try {
         const { data, fromBackup } = await readJSON<Video>(join(this.dir, 'videos', f))
-        if (fromBackup) this.notices.push(`動画「${data.name}」のファイルが読めなかったため、1つ前の保存から復元しました`)
+        if (fromBackup) this.notices.push(t('動画「{0}」のファイルが読めなかったため、1つ前の保存から復元しました', data.name))
         out.push(data)
       } catch {
-        this.notices.push(`動画のファイル ${f} が読めませんでした（ファイルはそのまま残しています）`)
+        this.notices.push(t('動画のファイル {0} が読めませんでした（ファイルはそのまま残しています）', f))
       }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
@@ -140,17 +159,19 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, playerAliases: this.file.playerAliases, ...(this.file.theme ? { theme: this.file.theme } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.strikeHeights ? { strikeHeights: this.file.strikeHeights } : {}), ...(this.file.roles ? { roles: this.file.roles } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}), ...(this.file.overlay ? { overlay: this.file.overlay } : {}) },
       missing: this.library.missing(matches),
     }
   }
 
+  // Any match in the library, not only the target ones: a scene's clips keep their match (and play,
+  // export, caption) when it is taken off the project's list, which is only what the list searches.
   getMatch(id: string): Match | undefined {
-    return this.file.matchIds.includes(id) ? this.library.getMatch(id) : undefined
+    return this.library.getMatch(id)
   }
 
   parse(id: string): Promise<ParsedDVW> {
-    if (!this.file.matchIds.includes(id)) throw new Error(`この試合はプロジェクトに入っていません: ${id}`)
+    if (!this.library.getMatch(id)) throw new Error(t('この試合は倉庫にありません: {0}', id))
     return this.library.parse(id)
   }
 
@@ -159,15 +180,17 @@ export class Project {
     await this.save()
   }
 
-  async rename(name: string): Promise<void> {
-    this.file.name = name.trim() || this.file.name
-    await this.save()
-  }
-
   async saveSettings(s: ProjectSettings): Promise<void> {
     this.file.ourTeamCodes = cleanCodes(s.ourTeamCodes).slice(0, 1)
-    this.file.playerAliases = Object.fromEntries(Object.entries(s.playerAliases).filter(([k, v]) => k && v && k !== v))
     if (validTheme(s.theme)) this.file.theme = { base: s.theme.base, accent: s.theme.accent }
+    if (s.filters) this.file.filters = cleanSavedFilters(s.filters)
+    this.file.headline = cleanHeadline(s.headline)
+    this.file.lineColors = cleanLineColors(s.lineColors)
+    this.file.pointColors = cleanLineColors(s.pointColors)
+    this.file.pointScale = cleanPointScale(s.pointScale)
+    this.file.strikeHeights = cleanStrikeHeights(s.strikeHeights)
+    this.file.roles = cleanRoles(s.roles)
+    this.file.overlay = s.overlay && typeof s.overlay === 'object' ? overlaySettings(s.overlay) : undefined
     await this.save()
   }
 
@@ -178,10 +201,10 @@ export class Project {
       if (!f.endsWith('.json')) continue
       try {
         const { data, fromBackup } = await readJSON<Reel>(join(this.dir, 'reels', f))
-        if (fromBackup) this.notices.push(`リール「${data.name}」のファイルが読めなかったため、1つ前の保存から復元しました`)
-        out.push(data)
+        if (fromBackup) this.notices.push(t('リール「{0}」のファイルが読めなかったため、1つ前の保存から復元しました', data.name))
+        out.push(withAllMarkers(data))
       } catch {
-        this.notices.push(`リールのファイル ${f} が読めませんでした（ファイルはそのまま残しています）`)
+        this.notices.push(t('リールのファイル {0} が読めませんでした（ファイルはそのまま残しています）', f))
       }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
@@ -204,6 +227,11 @@ export class Project {
   private save(): Promise<void> {
     return writeJSON(join(this.dir, 'project.json'), this.file)
   }
+}
+
+async function makeFolders(dir: string): Promise<void> {
+  await mkdir(join(dir, 'reels', 'deleted'), { recursive: true })
+  await mkdir(join(dir, 'videos', 'deleted'), { recursive: true })
 }
 
 function validTheme(t: unknown): t is OverlayTheme {

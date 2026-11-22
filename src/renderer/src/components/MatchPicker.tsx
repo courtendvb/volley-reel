@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Match } from '../../../shared/types'
 import { formatTime } from '../format'
+import { t } from '../../../shared/i18n'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -8,12 +9,13 @@ interface Props {
   initial: { name: string; codes: string[]; selected: string[] }
   onDone: (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => void
   onClose: () => void
+  sceneClips?: Record<string, number> // the project's scenes' clips of each match (edit)
 }
 
 // Choose a project's matches from the library (v3): pick the target team (one) from the teams in
 // the library and it narrows to that team's matches; tick any number of them. In the project the
 // target team is always "our" team, whichever side it played.
-export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) {
+export function MatchPicker({ mode, matches, initial, onDone, onClose, sceneClips }: Props) {
   const [name, setName] = useState(initial.name)
   const [code, setCode] = useState(() => initial.codes[0]?.toUpperCase() ?? '')
   const codes = code ? [code] : []
@@ -41,51 +43,64 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal picker-modal" role="dialog" aria-label="試合を選ぶ" onClick={e => e.stopPropagation()}>
-        <h2>{mode === 'create' ? '新しいプロジェクト' : 'プロジェクトの試合'}</h2>
+      <div className="modal picker-modal" role="dialog" aria-label={t('試合を選ぶ')} onClick={e => e.stopPropagation()}>
+        <h2>{mode === 'create' ? t('新しいプロジェクト') : t('プロジェクトの試合')}</h2>
         <div className="picker-fields">
           {mode === 'create' && (
-            <label className="field"><span className="field-label">名前</span>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="例: 2026-27 前半ハイライト" /></label>
+            <label className="field"><span className="field-label">{t('名前')}</span>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder={t('例: 2026-27 前半ハイライト')} /></label>
           )}
-          <label className="field"><span className="field-label">対象チーム</span>
-            <select aria-label="対象チーム" value={code} onChange={e => setCode(e.target.value)}>
-              <option value="">チームを選ぶ…</option>
-              {teams.map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}（${t.n}試合）`}</option>)}
+          <label className="field"><span className="field-label">{t('対象チーム')}</span>
+            <select aria-label={t('対象チーム')} value={code} onChange={e => setCode(e.target.value)}>
+              <option value="">{t('チームを選ぶ…')}</option>
+              {teams.map(tm => <option key={tm.code} value={tm.code}>{t('{0} — {1}（{2}試合）', tm.code, tm.name, tm.n)}</option>)}
             </select></label>
-          <p className="hint">倉庫にある試合のチーム（DVW の [3TEAMS]）から 1 つ選びます。このチームが出ている試合を抽出し、プロジェクトの中では、ホームでもアウェイでもこのチームを「自チーム」として扱います（相手チームの分析なら相手を選びます）。</p>
+          <p className="hint">{t('倉庫にある試合のチーム（DVW の [3TEAMS]）から 1 つ選びます。このチームが出ている試合を抽出し、プロジェクトの中では、ホームでもアウェイでもこのチームを「自チーム」として扱います（相手チームの分析なら相手を選びます）。')}</p>
         </div>
         <div className="filter-row">
-          <span className="count"><b>{selected.size}</b> 試合を選択中（候補 {candidates.length}）</span>
+          <span className="count"><b>{selected.size}</b> {t('試合を選択中（候補 {0}）', candidates.length)}</span>
           <span className="spacer" />
           <button className="link" onClick={() => setSelected(s => { const n = new Set(s); for (const m of candidates) { if (all) n.delete(m.id); else n.add(m.id) } return n })}>
-            {all ? '候補をすべて外す' : '候補をすべて選ぶ'}
+            {all ? t('候補をすべて外す') : t('候補をすべて選ぶ')}
           </button>
         </div>
         <div className="match-table picker" role="list">
           {candidates.map(m => (
             <label key={m.id} className={`match-row pick${selected.has(m.id) ? ' on' : ''}`} role="listitem">
               <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
-              <span className="date">{m.date ?? '—'}</span>
-              <span className="teams"><b>{m.teams[0].code}</b> – <b>{m.teams[1].code}</b></span>
-              <span className="muted names">{m.teams[0].name} / {m.teams[1].name}</span>
-              <span className="muted dur">{formatTime(m.durationSec)}</span>
+              <MatchCells m={m} />
+              {!!sceneClips?.[m.id] && (
+                <span className="scene-use" title={t('このプロジェクトのシーンに、この試合のクリップがあります。外しても、クリップはそのまま再生・書き出しできます（左のリストに出なくなるだけ）')}>
+                  {t('シーンで {0} クリップ', sceneClips[m.id])}</span>
+              )}
             </label>
           ))}
-          {!candidates.length && <p className="muted pad">このチームの試合は倉庫にありません</p>}
+          {!candidates.length && <p className="muted pad">{t('このチームの試合は倉庫にありません')}</p>}
         </div>
         <div className="modal-actions">
-          <button onClick={onClose}>キャンセル</button>
+          <button onClick={onClose}>{t('キャンセル')}</button>
           {mode === 'create' && (
             <button disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected], chooseFolder: true })}
-              title="倉庫の外など、置く場所を自分で選んで作ります">場所を選んで作成…</button>
+              title={t('倉庫の外など、置く場所を自分で選んで作ります')}>{t('場所を選んで作成…')}</button>
           )}
           <button className="primary" disabled={!selected.size || !code} onClick={() => onDone({ name, codes, matchIds: [...selected] })}
-            title={mode === 'create' ? '倉庫の projects フォルダに、プロジェクト名のフォルダを作ります' : undefined}>
-            {mode === 'create' ? '作成' : '保存'}
+            title={mode === 'create' ? t('倉庫の projects フォルダに、プロジェクト名のフォルダを作ります') : undefined}>
+            {mode === 'create' ? t('作成') : t('保存')}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+// A match's date, teams and length: the columns of the match lists.
+export function MatchCells({ m }: { m: Match }) {
+  return (
+    <>
+      <span className="date">{m.date ?? '—'}</span>
+      <span className="teams"><b>{m.teams[0].code}</b> – <b>{m.teams[1].code}</b></span>
+      <span className="muted names">{m.teams[0].name} / {m.teams[1].name}</span>
+      <span className="muted dur">{formatTime(m.durationSec)}</span>
+    </>
   )
 }

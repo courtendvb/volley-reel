@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Bulk import into the library (v3): pair each DVW with its video by date and team codes.
 // Names are written differently on each side ("2026-10-11 HTH-SMT.dvw" vs "261011HTH-SMT_FM.MP4"),
 // so both are reduced to a date and a set of three-letter codes. Pure, so it is unit-tested.
@@ -9,7 +10,7 @@ export interface DvwInfo {
   away: string
 }
 
-export interface Pair {
+interface Pair {
   dvw: DvwInfo
   video: string | null
   score: number // 0 = no video found; higher = surer
@@ -18,14 +19,28 @@ export interface Pair {
 
 export const VIDEO_EXTENSIONS = ['mp4', 'mov', 'mts', 'm2ts', 'm4v', 'mkv']
 
-// First date found in a file name: 2026-10-11, 20261011, 2026_10_11 or 261011 (yymmdd).
+// Every date found in a file name, in reading order: 2026-10-11, 20261011, 2026_10_11, 11-10-2026
+// (dd-mm-yyyy) or 261011 (yymmdd). A number that is not a date (a camera counter, a time) is
+// skipped, so a date written after it is still found.
+export function datesFromName(name: string): string[] {
+  const base = basename(name).replace(/\.[^.]+$/, '')
+  const found: { at: number; date: string }[] = []
+  const add = (re: RegExp, make: (m: RegExpExecArray) => string | null) => {
+    for (const m of base.matchAll(re)) {
+      const date = make(m as RegExpExecArray)
+      if (date) found.push({ at: m.index ?? 0, date })
+    }
+  }
+  add(/(?<!\d)(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})(?!\d)/g, m => valid(+m[2], +m[3]) ? `${m[1]}-${m[2]}-${m[3]}` : null)
+  add(/(?<!\d)(\d{2})[-_.](\d{2})[-_.](20\d{2})(?!\d)/g, m => valid(+m[2], +m[1]) ? `${m[3]}-${m[2]}-${m[1]}` : null)
+  add(/(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)/g, m => valid(+m[2], +m[3]) ? `20${m[1]}-${m[2]}-${m[3]}` : null)
+  found.sort((x, y) => x.at - y.at)
+  return [...new Set(found.map(f => f.date))]
+}
+
+// The first date in a file name, or null.
 export function dateFromName(name: string): string | null {
-  const base = basename(name)
-  const long = /(?<!\d)(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})(?!\d)/.exec(base)
-  if (long && valid(+long[2], +long[3])) return `${long[1]}-${long[2]}-${long[3]}`
-  const short = /(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)/.exec(base)
-  if (short && valid(+short[2], +short[3])) return `20${short[1]}-${short[2]}-${short[3]}`
-  return null
+  return datesFromName(name)[0] ?? null
 }
 
 // Upper-case three-letter tokens in a name ("261011HTH-SMT_FM.MP4" → HTH, SMT). The extension and
@@ -43,7 +58,7 @@ export function matchDate(headerDate: string | null, dvwPath: string): string | 
   return fromName && fromName === swapDayMonth(headerDate) ? fromName : headerDate
 }
 
-export function swapDayMonth(d: string): string | null {
+function swapDayMonth(d: string): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
   return m && +m[3] <= 12 ? `${m[1]}-${m[3]}-${m[2]}` : null
 }
@@ -52,21 +67,23 @@ export function swapDayMonth(d: string): string | null {
 // name adds confidence. Best scores are taken first, so a doubleheader on one day still pairs by
 // codes, and a date-only match is used only when it is the sole video on that date.
 export function pairFiles(dvws: DvwInfo[], videos: string[]): Pair[] {
+  const folderPair = pairByFolder(dvws, videos)
   const cands: { d: number; v: number; score: number; note: string }[] = []
   dvws.forEach((dvw, d) => {
+    if (folderPair.has(d)) return
     const date = matchDate(dvw.date, dvw.path)
     if (!date) return
-    const sameDay = videos.map((v, i) => ({ v, i })).filter(x => dateFromName(x.v) === date)
+    const sameDay = videos.map((v, i) => ({ v, i })).filter(x => datesFromName(x.v).includes(date))
     for (const { v, i } of sameDay) {
       const codes = codesFromName(v)
       const hits = [dvw.home, dvw.away].filter(c => c && codes.includes(c.toUpperCase())).length
       if (hits === 0 && sameDay.length > 1) continue
-      cands.push({ d, v: i, score: 1 + hits * 2, note: hits === 2 ? '日付とチーム' : hits === 1 ? '日付と片方のチーム' : '日付のみ（要確認）' })
+      cands.push({ d, v: i, score: 1 + hits * 2, note: hits === 2 ? t('日付とチーム') : hits === 1 ? t('日付と片方のチーム') : t('日付のみ（要確認）') })
     }
   })
   cands.sort((a, b) => b.score - a.score)
-  const usedD = new Set<number>(), usedV = new Set<number>()
-  const chosen = new Map<number, { v: number; score: number; note: string }>()
+  const usedD = new Set<number>(folderPair.keys()), usedV = new Set<number>([...folderPair.values()].map(c => c.v))
+  const chosen = new Map<number, { v: number; score: number; note: string }>(folderPair)
   for (const c of cands) {
     if (usedD.has(c.d) || usedV.has(c.v)) continue
     usedD.add(c.d); usedV.add(c.v)
@@ -74,8 +91,26 @@ export function pairFiles(dvws: DvwInfo[], videos: string[]): Pair[] {
   }
   return dvws.map((dvw, d) => {
     const c = chosen.get(d)
-    return c ? { dvw, video: videos[c.v], score: c.score, note: c.note } : { dvw, video: null, score: 0, note: '動画なし' }
+    return c ? { dvw, video: videos[c.v], score: c.score, note: c.note } : { dvw, video: null, score: 0, note: t('動画なし') }
   })
+}
+
+// A folder that holds exactly one scout file and one video is one match, whatever the names say.
+function pairByFolder(dvws: DvwInfo[], videos: string[]): Map<number, { v: number; score: number; note: string }> {
+  const scouts = new Map<string, number[]>(), vids = new Map<string, number[]>()
+  const push = (m: Map<string, number[]>, p: string, i: number) => m.set(dirname(p), [...(m.get(dirname(p)) ?? []), i])
+  dvws.forEach((x, i) => push(scouts, x.path, i))
+  videos.forEach((v, i) => push(vids, v, i))
+  const out = new Map<number, { v: number; score: number; note: string }>()
+  for (const [dir, ds] of scouts) {
+    const vs = vids.get(dir)
+    if (dir && ds.length === 1 && vs?.length === 1) out.set(ds[0], { v: vs[0], score: 4, note: t('同じフォルダ') })
+  }
+  return out
+}
+
+function dirname(p: string): string {
+  return p.split(/[\/]/).slice(0, -1).join('/').toLowerCase()
 }
 
 function valid(m: number, d: number): boolean {

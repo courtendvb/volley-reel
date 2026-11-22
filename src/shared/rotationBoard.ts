@@ -1,0 +1,616 @@
+// A rotation's slide: one of a team's six rotations (P1–P6, the setter's position) with its setter's
+// side-out. Big "P2" at the top left; the court in perspective with the side-out distribution after a #,
+// + or ! reception, each spiker's usual course, and the six players in the serve-receive formation of
+// the rotation, in the team's colour; on the right, the distribution after each
+// reception (# / + / !) and after a # or + reception for the two setter calls used most, as small
+// tables. Made of objects the slide editor moves and restyles. Pure: no files, no DOM.
+import type { Annotation } from './annotation'
+import { setChartWidth, setterCall } from './setChart'
+import { splitSets, type SetPlace, type SetSplit, type SetterSet, type SetView } from './setterBoard'
+import type { ParsedDVW, Play, Player, PlayerRole } from './types'
+import { homography, project, type CourtFit } from './courtGeometry'
+import { discOutline } from './disc'
+import { mix } from './overlayDraw'
+
+export const ROTATIONS = [1, 6, 5, 4, 3, 2] // the order a team rotates
+
+const uid = () => globalThis.crypto.randomUUID()
+type Text = Extract<Annotation, { kind: 'text' }>
+type TextBox = NonNullable<Text['box']>
+const words = (x: number, y: number, text: string, size: number, color: string, extra: Partial<Text> = {}): Annotation =>
+  ({ id: uid(), kind: 'text', color, x, y, text, size, bold: true, outline: false, ...extra })
+const pct = (n: number, of: number): string => `${of ? Math.round((n / of) * 100) : 0}%`
+const rotationOf = (p: Play) => (p.side === '*' ? p.homeRot : p.awayRot)
+const afterRec = (s: SetterSet, recs: string) => s.set.phase === 'r' && !!s.set.recEffect && recs.includes(s.set.recEffect)
+
+// The sets of a rotation, and those after a #, + or ! reception (the side-out).
+export const inRotation = (sets: SetterSet[], r: number) => sets.filter(s => rotationOf(s.set) === r)
+export const sideOut = (sets: SetterSet[]) => sets.filter(s => afterRec(s, '#+!'))
+
+// The team's lineup in a rotation: the one it had most often at the start of a rally in it, P1 to P6
+// (jerseys; liberos are not in the lineups). With the players, where the DVW names them.
+export interface Lineup { jerseys: number[]; players: (Player | null)[] }
+export function rotationLineup(dvws: ParsedDVW[], team: string, r: number): Lineup | null {
+  const n = new Map<string, { jerseys: number[]; players: (Player | null)[]; count: number }>()
+  for (const d of dvws) {
+    const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
+    if (i < 0) continue
+    const side = i === 0 ? '*' : 'a'
+    const seen = new Set<number>()
+    for (const p of d.plays) {
+      if (p.rallyId === null || seen.has(p.rallyId)) continue
+      seen.add(p.rallyId) // the rally's first play: its rotation as the rally starts
+      const rot = side === '*' ? p.homeRot : p.awayRot, court = d.rallies[p.rallyId]?.court
+      const jerseys = court ? (side === '*' ? court.home : court.away) : []
+      if (rot !== r || jerseys.length !== 6) continue
+      const k = jerseys.join(','), had = n.get(k) ?? { jerseys, players: jerseys.map(j => d.players[`${side}${j}`] ?? null), count: 0 }
+      had.count++
+      n.set(k, had)
+    }
+  }
+  const top = [...n.values()].sort((a, b) => b.count - a.count)[0]
+  return top ? { jerseys: top.jerseys, players: top.players } : null
+}
+
+// The team's serve receive in each rotation: its receptions, the rallies it won after them (side-out)
+// and those it won with the first attack after the reception, a kill (first-ball side-out). keep: only
+// these receptions (the search).
+export interface SideOutRate { n: number; won: number; firstBall: number }
+export function rotationSideOut(dvws: ParsedDVW[], team: string, keep?: (p: Play) => boolean): Record<number, SideOutRate> {
+  const out: Record<number, SideOutRate> = Object.fromEntries(ROTATIONS.map(r => [r, { n: 0, won: 0, firstBall: 0 }]))
+  for (const d of dvws) {
+    const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
+    if (i < 0) continue
+    const side = i === 0 ? '*' : 'a'
+    d.plays.forEach((p, k) => {
+      if (p.side !== side || p.skill !== 'R' || p.rallyId === null || (keep && !keep(p))) return
+      const r = out[(side === '*' ? p.homeRot : p.awayRot) ?? 0]
+      if (!r) return
+      r.n++
+      if (d.rallies[p.rallyId]?.wonBy === side) r.won++
+      // The first attack of the team after it, before the ball goes over.
+      for (const q of d.plays.slice(k + 1)) {
+        if (q.rallyId !== p.rallyId || q.side !== side) break
+        if (q.skill === 'A') { if (q.effect === '#') r.firstBall++; break }
+      }
+    })
+  }
+  return out
+}
+
+// The setter calls used most after a # or + reception, with their sets.
+export function topCalls(sets: SetterSet[], most = 2): { call: string; sets: SetterSet[] }[] {
+  const good = sets.filter(s => afterRec(s, '#+') && s.set.skill === 'E' && setterCall(s.set))
+  const by = new Map<string, SetterSet[]>()
+  for (const s of good) { const c = setterCall(s.set); by.set(c, [...(by.get(c) ?? []), s]) }
+  return [...by.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).slice(0, most).map(([call, list]) => ({ call, sets: list }))
+}
+
+// ---- drawing --------------------------------------------------------------------------------
+const PLACE_LABEL: Record<SetPlace, string> = { left: 'Z4', middle: 'Quick', right: 'Z2/1', pipe: 'Pipe', dump: 'SD' }
+const PLACE_FILL: Partial<Record<SetPlace, string>> = { right: '#DC2626', middle: '#16A34A', left: '#2563EB', pipe: '#0F172A' }
+
+// A table of where the sets went: its title, then N · Pipe · SD and Z2/1 · Quick · Z4, each a label
+// over its share; the largest of the three places in bold red. One group.
+// k: its size (1 = as on a slide with all six tables); the type grows with it.
+function table(title: string, head: { fill: string; text: string }, sp: SetSplit, x: number, y: number, w: number, k = 1): { out: Annotation[]; h: number } {
+  const groupId = uid(), cw = w / 3, rh = TABLE_ROW * k, out: Annotation[] = []
+  const cell = (c: number, r: number, text: string, o: { fill?: string; color?: string; bold?: boolean; span?: number; size?: number } = {}) => {
+    const cwid = cw * (o.span ?? 1)
+    out.push(words(x + c * cw + cwid / 2, y + r * rh, text, Math.round((o.size ?? 13) * k), o.color ?? '#0F172A', {
+      align: 'center', bold: o.bold ?? false, groupId,
+      box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#94A3B8', strokeWidth: 1, padding: Math.round(3 * k), width: cwid, height: rh },
+    }))
+  }
+  cell(0, 0, title, { fill: head.fill, color: head.text, bold: true, span: 3, size: 14 })
+  cell(0, 1, 'N'); cell(1, 1, 'Pipe', { fill: '#0F172A', color: '#FFFFFF', bold: true }); cell(2, 1, 'SD')
+  cell(0, 2, String(sp.total)); cell(1, 2, pct(sp.by.pipe.n, sp.total)); cell(2, 2, pct(sp.by.dump.n, sp.total))
+  const three: SetPlace[] = ['right', 'middle', 'left'], top = Math.max(...three.map(k => sp.by[k].n))
+  three.forEach((k, c) => {
+    cell(c, 3, PLACE_LABEL[k], { fill: PLACE_FILL[k], color: '#FFFFFF', bold: true })
+    const big = sp.total > 0 && sp.by[k].n === top
+    cell(c, 4, pct(sp.by[k].n, sp.total), { bold: big, color: big ? '#DC2626' : '#0F172A' })
+  })
+  return { out, h: rh * 5 }
+}
+
+// The rotation's serve receive: receptions, side-out % and first-ball side-out %, a head in the team's
+// colour over each number. One group.
+function rateTable(r: SideOutRate, x: number, y: number, fill: string): Annotation[] {
+  const g = uid(), cw = 0.085, hh = 0.04, vh = 0.07, out: Annotation[] = []
+  const cells: [string, string][] = [['Receptions', String(r.n)], ['Side-out %', pct(r.won, r.n)], ['FBSO %', pct(r.firstBall, r.n)]]
+  cells.forEach(([head, value], i) => {
+    const cx = x + i * cw + cw / 2
+    out.push(words(cx, y, head, 13, light(fill) ? '#0F172A' : '#FFFFFF', { align: 'center', groupId: g, box: { fill, fillOpacity: 1, stroke: '#FFFFFF', strokeWidth: 1, padding: 3, width: cw, height: hh } }))
+    out.push(words(cx, y + hh, value, 32, '#0F172A', { align: 'center', groupId: g, font: NUMBER_FONT, box: { fill: '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: 3, width: cw, height: vh } }))
+  })
+  return out
+}
+
+// ---- where the players stand ----------------------------------------------------------------
+// Points in the team's own frame, as the DVW clicks are: u across from the team's left, v from its
+// own end line (0) to the net (0.5) and on to the other end line (1).
+export interface TeamPt { u: number; v: number }
+
+// A zone's middle in that frame: the team's own zones on its half, the other team's beyond the net.
+const OWN = [[5, 6, 1], [7, 8, 9], [4, 3, 2]] // rows from the own end line toward the net, left to right
+const OPP = [[2, 3, 4], [9, 8, 7], [1, 6, 5]] // rows from the net toward the far end line
+// sub: the coded sub-zone (own half: A back right, B front right, C front left, D back left) puts it
+// in that quarter of the zone.
+function zoneMiddle(z: number | null, own: boolean, sub?: string | null): TeamPt | null {
+  if (z === null) return null
+  const rows = own ? OWN : OPP
+  for (const [r, row] of rows.entries()) {
+    const c = row.indexOf(z)
+    if (c < 0) continue
+    const q = own ? sub?.toUpperCase() : undefined
+    const du = q === 'A' || q === 'B' ? 1 / 12 : q === 'C' || q === 'D' ? -1 / 12 : 0, dv = q === 'B' || q === 'C' ? 1 / 24 : q === 'A' || q === 'D' ? -1 / 24 : 0
+    return { u: (c + 0.5) / 3 + du, v: (own ? r : r + 3) / 6 + 1 / 12 + dv }
+  }
+  return null
+}
+const mean = (ps: TeamPt[]): TeamPt => ({ u: ps.reduce((a, p) => a + p.u, 0) / ps.length, v: ps.reduce((a, p) => a + p.v, 0) / ps.length })
+
+// One of the side-out team's players as it lines up to receive in a rotation. libero: not in the
+// lineup (a libero); setter: the setter, who doesn't pass.
+const FRONT_RING = '#DC2626' // the ring on the floor round a front-row player
+export interface FormationSpot { jersey: number; role?: PlayerRole; libero?: boolean; setter?: boolean; front?: boolean; at: TeamPt; receives: boolean } // front: in the front row (zones 2–4)
+
+// The serve receive almost every team plays in a 5-1: three passers (the two outside hitters and the
+// libero) across the court about 6–7 m from the net, the setter by the net or behind a front
+// player ready to run in, the opposite and the front middle by the net out of the way, all within the
+// overlap rule. By the setter's zone (the rotation), then by the player's place in the rotation order
+// after the setter: setter, outside 1, middle 1, opposite, outside 2, middle 2 (the back row's middle
+// is the libero). In the team's frame (u from its left, v from its end line to the net at 0.5).
+// Tuned by hand on real slides: the front players a step off the net, and in rotation 4 the outside
+// hitter in zone 2 swinging over to pass on the left.
+const RECEIVE: Record<number, [number, number][]> = {
+  1: [[0.9, 0.1], [0.79, 0.19], [0.36, 0.36], [0.08, 0.35], [0.2, 0.17], [0.5, 0.15]],
+  6: [[0.7, 0.3], [0.82, 0.15], [0.88, 0.3], [0.63, 0.37], [0.18, 0.2], [0.45, 0.14]],
+  5: [[0.3, 0.3], [0.5, 0.14], [0.82, 0.15], [0.88, 0.32], [0.17, 0.18], [0.11, 0.35]],
+  4: [[0.08, 0.44], [0.53, 0.16], [0.79, 0.18], [0.92, 0.07], [0.26, 0.18], [0.16, 0.35]],
+  3: [[0.63, 0.45], [0.18, 0.2], [0.45, 0.14], [0.66, 0.05], [0.84, 0.14], [0.82, 0.33]],
+  2: [[0.67, 0.45], [0.25, 0.2], [0.1, 0.35], [0.37, 0.05], [0.5, 0.14], [0.82, 0.15]],
+}
+
+// The team's libero in a rotation: of the players not in the lineup, the one with the most receptions
+// there (else in any rotation); one the DVW calls a libero first.
+function liberoOf(dvws: ParsedDVW[], team: string, r: number, lineup: Lineup): number | null {
+  const n = new Map<number, { here: number; all: number; libero: boolean }>()
+  for (const d of dvws) {
+    const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
+    if (i < 0) continue
+    const side = i === 0 ? '*' : 'a'
+    for (const p of d.plays) {
+      if (p.side !== side || p.skill !== 'R' || lineup.jerseys.includes(p.jersey)) continue
+      const had = n.get(p.jersey) ?? { here: 0, all: 0, libero: d.players[`${side}${p.jersey}`]?.role === 'L' }
+      had.all++
+      if ((side === '*' ? p.homeRot : p.awayRot) === r) had.here++
+      n.set(p.jersey, had)
+    }
+  }
+  const top = [...n.entries()].sort((a, b) => +b[1].libero - +a[1].libero || b[1].here - a[1].here || b[1].all - a[1].all)[0]
+  return top ? top[0] : null
+}
+
+// Where the lineup stands to receive in rotation r (the setter's zone; where the lineup has the
+// setter elsewhere, that zone), in the standard formation above.
+export function rotationFormation(dvws: ParsedDVW[], team: string, r: number, lineup: Lineup | null, setter: string): FormationSpot[] {
+  if (!lineup || lineup.jerseys.length !== 6) return []
+  const at = lineup.players.findIndex(p => p?.key === setter), sz = at >= 0 ? at + 1 : r
+  const libero = liberoOf(dvws, team, r, lineup)
+  return RECEIVE[sz].map(([u, v], d) => {
+    const zone = ((sz - 1 + d) % 6) + 1, k = zone - 1, jersey = lineup.jerseys[k], role = lineup.players[k]?.role
+    const spot = { u, v }
+    if ((d === 2 || d === 5) && (zone === 1 || zone >= 5)) // the back row's middle: the libero comes on
+      return libero !== null ? { jersey: libero, libero: true, at: spot, receives: true } : { jersey, ...(role ? { role } : {}), at: spot, receives: false }
+    return { jersey, ...(role ? { role } : {}), ...(d === 0 ? { setter: true } : {}), ...(zone >= 2 && zone <= 4 ? { front: true } : {}), at: spot, receives: d === 1 || d === 4 }
+  })
+}
+
+// An attack's line in the team's frame: from where it was hit to where it went, by the clicks, else
+// by the zones' middles.
+export function attackLine(a: Play): { from: TeamPt; to: TeamPt } | null {
+  const from = a.startClick ?? zoneMiddle(a.startZone, true), to = a.endClick ?? zoneMiddle(a.endZone, false)
+  return from && to && to.v > 0.5 ? { from, to } : null
+}
+
+// ---- the court in perspective ---------------------------------------------------------------
+// The whole court seen from behind the near end line, as a camera would: the side-out team on the far
+// half (its left on the picture's right), attacking toward us. Picture points (0..1) of the court's
+// corners: far end line left / right, near end line left / right.
+export const COURT: CourtFit['corners'] = [{ x: 0.135, y: 0.19 }, { x: 0.545, y: 0.19 }, { x: 0.025, y: 0.975 }, { x: 0.655, y: 0.975 }]
+// The team's frame on the picture: across turned round, along as is (its own end line is the far one).
+// The same court flat, seen from above as from the same place: the side-out team on the far half (its
+// own end line at the top, its left on the picture's right), the net across the middle, attacking
+// down toward us. Corners as COURT's; the court 1:2 on the picture so a metre is as long either way
+// (18 m down 0.76 of the height, 9 m across 0.21375 of the width), in the middle of the left-hand area.
+export const FLAT_COURT: CourtFit['corners'] = [{ x: 0.238, y: 0.205 }, { x: 0.45175, y: 0.205 }, { x: 0.238, y: 0.965 }, { x: 0.45175, y: 0.965 }]
+// The rotation slide's court: in perspective (3D, as before) or flat from above (2D).
+export type CourtLook = '3d' | '2d'
+export const COURT_LOOKS: CourtLook[] = ['3d', '2d']
+const onPicture = (H: ReturnType<typeof homography>) => (p: TeamPt): [number, number] => { const q = project(H, 1 - p.u, p.v); return [q.x, q.y] }
+
+const PLACE_COLOR: Partial<Record<SetPlace, string>> = { left: '#2563EB', middle: '#16A34A', right: '#DC2626', pipe: '#7C3AED' }
+const COURT_W = 9, COURT_L = 18
+
+// A cone for one place's attacks: from where they were hit (their mean) over the directions they went
+// (the middle 80% of them) to as far as most of them went. Null without lines to draw it from.
+export function attackCone(lines: { from: TeamPt; to: TeamPt }[]): { apex: TeamPt; from: number; to: number; reach: number } | null {
+  if (!lines.length) return null
+  const apex = mean(lines.map(l => l.from))
+  const ang = lines.map(l => Math.atan2((l.to.u - l.from.u) * COURT_W, (l.to.v - l.from.v) * COURT_L)).sort((a, b) => a - b)
+  const dist = lines.map(l => Math.hypot((l.to.u - apex.u) * COURT_W, (l.to.v - apex.v) * COURT_L)).sort((a, b) => a - b)
+  const q = (xs: number[], f: number) => xs[Math.min(xs.length - 1, Math.max(0, Math.round(f * (xs.length - 1))))]
+  let lo = q(ang, 0.1), hi = q(ang, 0.9)
+  const min = 0.09 // at least ~10 degrees wide
+  if (hi - lo < min) { const m = (lo + hi) / 2; lo = m - min / 2; hi = m + min / 2 }
+  return { apex, from: lo, to: hi, reach: q(dist, 0.85) }
+}
+
+// A spiker's usual course: of their attacks, the most that went within ~20 degrees of each other, as
+// a cone over those. Null without lines.
+const COURSE = 0.35 // radians
+export function mainCourse(lines: { from: TeamPt; to: TeamPt }[]): ReturnType<typeof attackCone> {
+  const angle = (l: { from: TeamPt; to: TeamPt }) => Math.atan2((l.to.u - l.from.u) * COURT_W, (l.to.v - l.from.v) * COURT_L)
+  const sorted = [...lines].sort((a, b) => angle(a) - angle(b))
+  let best: typeof lines = []
+  for (let i = 0; i < sorted.length; i++) {
+    const run = sorted.slice(i).filter(l => angle(l) - angle(sorted[i]) <= COURSE)
+    if (run.length > best.length) best = run
+  }
+  return attackCone(best)
+}
+
+// Light or dark: which text reads on a fill.
+const light = (hex: string) => { const n = parseInt(hex.slice(1, 7), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 160 }
+const FLOOR = '#2B4A6F', COURT_FILL = '#E7C89C', FRONT_FILL = '#DDB784', PLANK = '#8A5A2B', LINE = '#FFFFFF'
+const BLOCKER = '#CBD5E1'
+export const TEAM_COLOR = '#1D4ED8' // a team without a colour of its own
+// The slide's numbers (jerseys, shares, the P and the table) in a sporty face Windows has; elsewhere
+// the usual one. Changeable on each text in the format panel.
+export const NUMBER_FONT = 'Bahnschrift'
+// The five players' discs (not the libero's): their fill and outline.
+export interface DiscLook { fill: string; line: string }
+export const discLine = (fill: string) => mix(fill, '#000000', 0.5)
+
+// The main colour of a picture (a team's logo), from its RGBA pixels: the most common strong colour,
+// leaving out see-through, white, black and grey pixels. Null when it has none.
+export function mainColor(px: ArrayLike<number>): string | null {
+  const bins = new Map<number, { n: number; r: number; g: number; b: number }>()
+  for (let i = 0; i + 3 < px.length; i += 4) {
+    const r = px[i], g = px[i + 1], b = px[i + 2], hi = Math.max(r, g, b), lo = Math.min(r, g, b)
+    if (px[i + 3] < 128 || hi < 40 || (hi - lo) / hi < 0.35) continue
+    const k = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5), had = bins.get(k) ?? { n: 0, r: 0, g: 0, b: 0 }
+    had.n++; had.r += r; had.g += g; had.b += b
+    bins.set(k, had)
+  }
+  const top = [...bins.values()].sort((a, b) => b.n - a.n)[0]
+  if (!top) return null
+  const hex = (v: number) => Math.round(v / top.n).toString(16).padStart(2, '0')
+  return `#${hex(top.r)}${hex(top.g)}${hex(top.b)}`
+}
+
+// The court, the net, the side-out team's players in their serve-receive formation (in the team's
+// colour, the libero in white), the other team's three blockers at the net, a cone for each spiker's
+// usual course in this rotation, each place's share beyond the net over where it is hit from, and
+// the dumps by the setter.
+// flat: the court from above (FLAT_COURT): the players as plain discs on the floor, the net a line.
+function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, cones = true, flat = false): Annotation[] {
+  const corners = flat ? FLAT_COURT : COURT
+  const H = homography(corners), at = (u: number, v: number): [number, number] => { const q = project(H, u, v); return [q.x, q.y] }
+  const team = onPicture(H), out: Annotation[] = [], g = uid()
+  const poly = (pts: [number, number][], fill: string | null, o: Partial<Extract<Annotation, { kind: 'polygon' }>> = {}): Annotation =>
+    ({ id: uid(), kind: 'polygon', color: '#FFFFFF', width: 0, points: pts, fill, fillOpacity: 1, groupId: g, locked: true, ...o })
+  const line = (a: [number, number], b: [number, number], width: number, color = LINE, o: { opacity?: number; dash?: 'dash' } = {}): Annotation =>
+    ({ id: uid(), kind: 'polyline', color, width, points: [a, b], groupId: g, locked: true, ...o })
+  // The court and the net are fixed (locked: a click goes through them).
+  // Floor and court: the free zone, the court in wood with its planks, the front zones a shade
+  // darker, and the lines (the centre line, the attack lines and their dashes out of court).
+  out.push(poly([at(-0.07, -0.035), at(1.07, -0.035), at(1.07, 1.03), at(-0.07, 1.03)], FLOOR))
+  out.push(poly([at(0, 0), at(1, 0), at(1, 1), at(0, 1)], COURT_FILL))
+  out.push(poly([at(0, 1 / 3), at(1, 1 / 3), at(1, 2 / 3), at(0, 2 / 3)], FRONT_FILL))
+  for (let i = 1; i < 24; i++) out.push(line(at(i / 24, 0), at(i / 24, 1), 1, PLANK, { opacity: 0.14 }))
+  out.push(poly([at(0, 0), at(1, 0), at(1, 1), at(0, 1)], null, { color: LINE, width: 3 }))
+  for (const v of [1 / 3, 2 / 3]) out.push(line(at(0, v), at(1, v), 2.5), line(at(-0.07, v), at(0, v), 1.5, LINE, { dash: 'dash' }), line(at(1, v), at(1.07, v), 1.5, LINE, { dash: 'dash' }))
+  out.push(line(at(0, 0.5), at(1, 0.5), 3))
+  // Cones: a spiker's usual course (of two attacks or more), in the colour of where they mostly hit
+  // from; the stronger the more of the side-out they took. Their number at the cone's far end.
+  const total = so.length || 1, sp = splitSets(so)
+  const bySpiker = new Map<string, SetterSet[]>()
+  for (const s of so) if (s.place !== 'dump') bySpiker.set(s.attack.playerKey, [...(bySpiker.get(s.attack.playerKey) ?? []), s])
+  const tips: Annotation[] = []
+  // One cone a place: of the spikers who mostly hit from it, the one with the most attacks.
+  const byPlace = new Map<SetPlace, SetterSet[]>()
+  for (const list of bySpiker.values()) {
+    if (list.length < 2) continue
+    const places = new Map<SetPlace, number>()
+    for (const s of list) places.set(s.place, (places.get(s.place) ?? 0) + 1)
+    const place = [...places.entries()].sort((a, b) => b[1] - a[1])[0][0]
+    if (list.length > (byPlace.get(place)?.length ?? 0)) byPlace.set(place, list)
+  }
+  for (const [place, list] of cones ? [...byPlace.entries()].sort((a, b) => a[1].length - b[1].length) : []) {
+    const c = mainCourse(list.flatMap(s => { const l = attackLine(s.attack); return l ? [l] : [] }))
+    if (!c) continue
+    const color = PLACE_COLOR[place] ?? '#0F172A'
+    const steps = 14, rim: [number, number][] = []
+    for (let i = 0; i <= steps; i++) {
+      const a = c.from + ((c.to - c.from) * i) / steps
+      const u = c.apex.u + (Math.sin(a) * c.reach) / COURT_W, v = c.apex.v + (Math.cos(a) * c.reach) / COURT_L
+      // Flat, the whole floor shows: a cone stops at its edge rather than run off it.
+      rim.push(team(flat ? { u: Math.min(1.06, Math.max(-0.06, u)), v: Math.min(1.025, v) } : { u, v }))
+    }
+    const share = list.length / total, cg = uid()
+    out.push(poly([team(c.apex), ...rim], color, { fillOpacity: 0.28 + 0.4 * share, color: mix(color, '#000000', 0.25), width: 1.5, groupId: cg, locked: false }))
+    const mid = rim[steps >> 1]
+    tips.push(words(mid[0], mid[1] + 0.006, `#${list[0].attack.jersey}`, 13, '#FFFFFF', { align: 'center', groupId: cg, font: NUMBER_FONT, box: { fill: mix(color, '#000000', 0.2), fillOpacity: 0.95, stroke: null, strokeWidth: 0, padding: 2, radius: 3 } }))
+  }
+  out.push(...tips)
+  // The players: a ball resting on the floor (lit from the top left), its soft shadow on the floor;
+  // the far ones first so nearer ones cover them. A ball is about 0.9 m wide where it stands. A
+  // front-row player stands in a red ring on the floor, round their shadow.
+  const { fill: teamColor, line: rimColor } = look
+  const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string, rimWidth = 1, front = false) => {
+    const gg = uid(), f = invert(H, p)
+    if (flat) { // a plain disc 1.3 m wide centred on its place, the front-row ring round it
+      if (front) out.push({ id: uid(), kind: 'polygon', color: FRONT_RING, width: 3, points: discOutline(corners, { u: f.u, v: f.v, r: 0.92, z: 0 }).top, fill: FRONT_RING, fillOpacity: 0.14, groupId: gg })
+      const ring = discOutline(corners, { u: f.u, v: f.v, r: 0.65, z: 0 }).top, xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * 1280
+      out.push({ id: uid(), kind: 'circle', color: rim, width: rimWidth + 1, x: p[0] - d / 2 / 1280, y: p[1] - d / 2 / 720, w: d / 1280, h: d / 720, fill, fillOpacity: 1, groupId: gg })
+      if (label) out.push(words(p[0], (p[1] * 720 - d * 0.29) / 720, label, Math.round(d * 0.48), ink, { align: 'center', groupId: gg, font: NUMBER_FONT }))
+      return
+    }
+    const ring = discOutline(corners, { u: f.u, v: f.v, r: 0.45, z: 0 }).top
+    if (front) out.push({ id: uid(), kind: 'polygon', color: FRONT_RING, width: 3, points: discOutline(corners, { u: f.u, v: f.v + 0.005, r: 0.72, z: 0 }).top, fill: FRONT_RING, fillOpacity: 0.14, groupId: gg })
+    const xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * 1280 // its width in px at 720p
+    const cx = p[0], cy = p[1] * 720 - d * 0.42 // its centre over the floor point, in px
+    out.push({ id: uid(), kind: 'polygon', color: '#000000', width: 0, points: discOutline(corners, { u: f.u, v: f.v + 0.005, r: 0.47, z: 0 }).top, fill: '#2A1708', fillOpacity: 0.32, groupId: gg })
+    out.push({ id: uid(), kind: 'circle', color: rim, width: rimWidth, x: cx - d / 2 / 1280, y: (cy - d / 2) / 720, w: d / 1280, h: d / 720, fill, fillOpacity: 1, shade: 'ball', groupId: gg })
+    if (label) out.push(words(cx, (cy - d * 0.27) / 720, label, Math.round(d * 0.45), ink, { align: 'center', groupId: gg, font: NUMBER_FONT }))
+  }
+  for (const s of [...formation].sort((a, b) => a.at.v - b.at.v)) {
+    const p = team({ u: Math.min(1, Math.max(0, s.at.u)), v: Math.min(0.49, Math.max(0.02, s.at.v)) })
+    const deep = light(teamColor) ? mix(teamColor, '#000000', 0.45) : teamColor // the libero: white, in the team's colour
+    if (s.libero) disc(p, '#FFFFFF', deep, String(s.jersey), deep, 2)
+    else disc(p, teamColor, rimColor, String(s.jersey), light(teamColor) ? '#0F172A' : '#FFFFFF', 1, !!s.front)
+  }
+  if (flat) { flatNet(out, at, team, sp, total, g); for (const u of [0.2, 0.5, 0.8]) disc(at(u, 0.53), BLOCKER, '#94A3B8', '', ''); return out }
+  // The net: posts, a see-through mesh, the white tape along its top and the cable at its foot, and
+  // the antennas over the sidelines.
+  const [nl, nr] = [at(-0.05, 0.5), at(1.05, 0.5)], up = 0.12, low = 0.03, netTop = nl[1] - up
+  out.push(poly([[nl[0], netTop], [nr[0], netTop], [nr[0], nr[1] - low], [nl[0], nl[1] - low]], '#0F172A', { fillOpacity: 0.16 }))
+  for (let i = 1; i < 30; i++) { const x = nl[0] + ((nr[0] - nl[0]) * i) / 30; out.push(line([x, netTop], [x, nl[1] - low], 1, '#0F172A', { opacity: 0.22 })) }
+  for (let i = 1; i < 4; i++) { const y = netTop + ((up - low) * i) / 4; out.push(line([nl[0], y], [nr[0], y], 1, '#0F172A', { opacity: 0.18 })) }
+  out.push(line([nl[0], netTop], [nr[0], netTop], 5, '#FFFFFF'), line([nl[0], nl[1] - low], [nr[0], nr[1] - low], 1.5, '#F8FAFC'))
+  // Each place's share where it is hit from: Z2/1, the quick and Z4 in a row on the net, evenly
+  // spaced with the quick in the middle; Pipe straight under the quick, over the far attack line. A
+  // tab in the place's colour with its name, the share beside it. Picture points (tuned by hand).
+  const LABEL: [SetPlace, [number, number]][] = [['right', [0.163, 0.429]], ['middle', [0.34, 0.429]], ['left', [0.517, 0.429]], ['pipe', [0.34, 0.326]]]
+  const tw = 0.04, nw = 0.056, bh = 0.042
+  for (const [k, [cx, cy]] of LABEL) {
+    const by = cy - bh / 2
+    const x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
+    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
+    out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
+    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 24, '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
+    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], 12, '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
+  }
+  for (const u of [0, 1]) {
+    const [x, y] = at(u, 0.5)
+    for (let i = 0; i < 5; i++) out.push(line([x, y - up - i * 0.014], [x, y - up - (i + 1) * 0.014], 3, i % 2 ? '#FFFFFF' : '#DC2626'))
+  }
+  for (const p of [nl, nr]) out.push({ id: uid(), kind: 'rect', color: '#1E293B', x: p[0] - 0.006, y: p[1] - up - 0.02, w: 0.012, h: up + 0.05, width: 1, fill: '#475569', fillOpacity: 1, groupId: g, locked: true })
+  // The other team's front row at the net: three blockers, plain.
+  for (const u of [0.2, 0.5, 0.8]) disc(at(u, 0.535), BLOCKER, '#94A3B8', '', '')
+  return out
+}
+
+// The flat court's net and the places' shares: the net a dark line across with its posts. Each place's
+// tab (its name, the share beside it) is wider than a third of the court, so Z4 and Z2/1 stand outside
+// the sidelines level with the net, on the side they are hit from; the quick just over the net past
+// the blockers and Pipe under it (on the team's half they would cover the front-row players).
+function flatNet(out: Annotation[], at: (u: number, v: number) => [number, number], team: (p: TeamPt) => [number, number], sp: SetSplit, total: number, g: string) {
+  const [a, b] = [at(-0.05, 0.5), at(1.05, 0.5)]
+  out.push({ id: uid(), kind: 'polyline', color: '#0F172A', width: 6, points: [a, b], groupId: g, locked: true })
+  out.push({ id: uid(), kind: 'polyline', color: '#FFFFFF', width: 2, points: [a, b], groupId: g, locked: true })
+  for (const u of [0, 1]) { const p = at(u, 0.5); out.push({ id: uid(), kind: 'polyline', color: '#DC2626', width: 4, points: [[p[0], p[1] - 0.008], [p[0], p[1] + 0.008]], groupId: g, locked: true }) }
+  for (const p of [a, b]) out.push({ id: uid(), kind: 'circle', color: '#1E293B', width: 1, x: p[0] - 0.006, y: p[1] - 0.0107, w: 0.012, h: 0.0213, fill: '#475569', fillOpacity: 1, groupId: g, locked: true })
+  const LABEL: [SetPlace, TeamPt][] = [['left', { u: -0.34, v: 0.5 }], ['middle', { u: 0.5, v: 0.6 }], ['right', { u: 1.34, v: 0.5 }], ['pipe', { u: 0.5, v: 0.68 }]]
+  const tw = 0.04, nw = 0.056, bh = 0.042
+  for (const [k, pt] of LABEL) {
+    const [cx, cy] = team(pt), by = cy - bh / 2, x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
+    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
+    out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
+    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 24, '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
+    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], 12, '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
+  }
+}
+
+// A picture point back to court units (the homography's inverse, by solving its 2×2 system).
+function invert(H: ReturnType<typeof homography>, p: [number, number]): { u: number; v: number } {
+  // x = (a u + b v + c) / (g u + h v + 1), y = (d u + e v + f) / (g u + h v + 1)
+  const { a, b, c, d, e, f, g, h } = H, [x, y] = p
+  const m11 = a - g * x, m12 = b - h * x, m21 = d - g * y, m22 = e - h * y, r1 = x - c, r2 = y - f
+  const det = m11 * m22 - m12 * m21
+  return { u: (r1 * m22 - m12 * r2) / det, v: (m11 * r2 - r1 * m21) / det }
+}
+
+export interface RotationSlideData {
+  rotation: number
+  team: string
+  setter: Player
+  sets: SetterSet[] // the setter's, every rotation
+  formation: FormationSpot[]
+  callNames?: Record<string, string>
+  photo?: { assetId: string; width: number; height: number } // the setter's, by the set chart
+  logo?: { assetId: string; width: number; height: number } // the team's, at the top left
+  rates?: SideOutRate // the team's serve receive in the rotation
+  teamColor?: string // the side-out team's colour, its players' discs
+  discLine?: string // and their outline (missing: a darker shade of it)
+  cones?: boolean // the spikers' cones on the court (missing: shown)
+  tables?: RotationTables // which of the tables at the bottom right (missing: all six)
+  court?: CourtLook // the court in perspective or flat from above (missing: 3D)
+}
+
+// The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
+// pass, the # and + passes, the three passes, only the setter calls, or none. The fewer, the larger
+// they are drawn (tableGrid). attackers: in their place, cards of the rotation's attackers with the
+// most side-out attacks (attackerCards), 1 to 3 of them (RotationSlideData.attackers).
+export type RotationTables = 'all' | 'hash' | 'hashPlus' | 'passes' | 'calls' | 'attackers' | 'none'
+export const ROTATION_TABLES: RotationTables[] = ['all', 'hash', 'hashPlus', 'passes', 'calls', 'attackers', 'none']
+const TABLE_ROW = 0.03, TABLE_W = 0.145, TABLE_H = TABLE_ROW * 5, TABLE_GAP = 0.01, TABLE_COL_GAP = 0.012
+const TABLE_AREA = { y: 0.5, h: 0.49 } // under the set chart, across the right-hand area
+
+// How n tables go in the area: the columns and rows that let them be largest, and that size (k = 1:
+// the size on a slide with all six). Filled column by column.
+export function tableGrid(n: number): { cols: number; rows: number; k: number } {
+  let best = { cols: 1, rows: Math.max(1, n), k: 0 }
+  for (let cols = 1; cols <= Math.max(1, n); cols++) {
+    const rows = Math.ceil(n / cols)
+    const k = Math.min((RIGHT.w - (cols - 1) * TABLE_COL_GAP) / cols / TABLE_W, (TABLE_AREA.h - (rows - 1) * TABLE_GAP) / rows / TABLE_H)
+    if (k > best.k + 1e-9) best = { cols, rows, k }
+  }
+  return best
+}
+
+// Where the set chart goes on the slide (top right), as a share of the picture's height.
+// The right-hand area (over the tables) and the set chart in its middle, under the setter's heading.
+const RIGHT = { x: 0.69, w: 0.302 }
+const CHART_H = 0.36
+export const ROTATION_CHART = { x: RIGHT.x + RIGHT.w / 2 - (setChartWidth(CHART_H) * 9) / 16 / 2, y: 0.128, h: CHART_H, rich: true }
+
+// The setter's heading over the chart: their photo (when there is one), the jersey on the team's
+// colour, the name large, what the chart shows under it; on a light panel with a bar in the colour.
+function setterHeading(v: RotationSlideData, fill: string): Annotation[] {
+  const g = uid(), out: Annotation[] = [], y = 0.015, h = 0.1, ink = '#0F172A'
+  out.push({ id: uid(), kind: 'rect', color: '#E2E8F0', x: RIGHT.x, y, w: RIGHT.w, h, width: 1, fill: '#F8FAFC', fillOpacity: 1, groupId: g })
+  out.push({ id: uid(), kind: 'rect', color: fill, x: RIGHT.x, y, w: 0.006, h, width: 0, fill, fillOpacity: 1, groupId: g })
+  let x = RIGHT.x + 0.016
+  if (v.photo) {
+    const pw = 0.05, ph = h - 0.016
+    out.push({ id: uid(), kind: 'image', color: fill, x, y: y + 0.008, w: pw, h: ph, assetId: v.photo.assetId, fit: 'cover', groupId: g })
+    out.push({ id: uid(), kind: 'rect', color: fill, x, y: y + 0.008, w: pw, h: ph, width: 2, fill: null, groupId: g })
+    x += pw + 0.012
+  }
+  out.push(words(x, y + 0.014, `#${v.setter.jersey}`, 22, light(fill) ? ink : '#FFFFFF', { groupId: g, font: NUMBER_FONT, box: { fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 4, radius: 5 } }))
+  out.push(words(x + 0.045, y + 0.008, v.setter.lastName.toUpperCase(), 28, ink, { groupId: g }))
+  out.push(words(x, y + 0.062, `S${v.rotation} · ${v.team} · Set distribution after # + ! reception`, 13, '#475569', { bold: false, groupId: g }))
+  return out
+}
+
+export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string): Annotation[] {
+  const out: Annotation[] = [], rot = inRotation(v.sets, v.rotation), so = sideOut(rot)
+  const fill = v.teamColor ?? TEAM_COLOR
+  // The heading: the team's logo at the top left, the rotation large and underlined, then its serve
+  // receive in a table (the setter's name is over the set chart).
+  const headGroup = uid()
+  let x = 0.02
+  if (v.logo) {
+    const h = 0.13, w = Math.min(0.08, (h * 9 * v.logo.width) / (16 * v.logo.height))
+    out.push({ id: uid(), kind: 'image', color: ink, x, y: 0.02 + (h - Math.min(h, (w * 16 * v.logo.height) / (9 * v.logo.width))) / 2, w, h: Math.min(h, (w * 16 * v.logo.height) / (9 * v.logo.width)), assetId: v.logo.assetId })
+    x += w + 0.014
+  }
+  // The underline as long as the P and its digit (the ink of Bahnschrift's is about half the size each).
+  const pw = (80 * 0.5 * 2) / 1280
+  out.push(words(x, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup, font: NUMBER_FONT }))
+  out.push({ id: uid(), kind: 'polyline', color: fill, width: 6, points: [[x + 0.003, 0.15], [x + 0.003 + pw, 0.15]], groupId: headGroup })
+  out.push(...rateTable(v.rates ?? { n: 0, won: 0, firstBall: 0 }, x + pw + 0.035, 0.03, fill))
+  out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }, v.cones !== false, v.court === '2d'))
+  out.push(...setterHeading(v, fill))
+  // Bottom right: by reception, and by setter call (the chart is above them), as many as were chosen.
+  const recs: [string, string, { fill: string; text: string }][] = [['#', '# pass', { fill: '#DBEAFE', text: '#0F172A' }], ['+', '+ pass', { fill: '#DCFCE7', text: '#0F172A' }], ['!', '! pass', { fill: '#FDE8D0', text: '#0F172A' }]]
+  const which = v.tables ?? 'all'
+  const passes = recs.slice(0, which === 'hash' ? 1 : which === 'hashPlus' ? 2 : which === 'calls' || which === 'none' || which === 'attackers' ? 0 : 3)
+    .map(([e, title, head]) => ({ title, head, sp: splitSets(rot.filter(s => afterRec(s, e))) }))
+  // The setter calls of this rotation, the most used first.
+  const callHead = { fill: '#334155', text: '#FFFFFF' }
+  const calls = which === 'all' || which === 'calls'
+    ? topCalls(rot, 3).map(({ call, sets }, i) => { const name = v.callNames?.[call]; return { title: `${i + 1}. CALL ${call}${name ? ` ${name}` : ''}`, head: callHead, sp: splitSets(sets) } })
+    : []
+  // All six: the passes in the left column, the calls in the right, as they always were. Else the
+  // chosen ones as large as the area lets them be, in the middle of it.
+  const list = [...passes, ...calls]
+  const grid = which === 'all' ? { cols: 2, rows: 3, k: 1 } : tableGrid(list.length)
+  const w = TABLE_W * grid.k, h = TABLE_H * grid.k, across = grid.cols * w + (grid.cols - 1) * TABLE_COL_GAP
+  const x0 = which === 'all' ? RIGHT.x : RIGHT.x + (RIGHT.w - across) / 2
+  list.forEach((tb, i) => {
+    const col = which === 'all' ? (i < passes.length ? 0 : 1) : Math.floor(i / grid.rows)
+    const row = which === 'all' ? (i < passes.length ? i : i - passes.length) : i % grid.rows
+    out.push(...table(tb.title, tb.head, tb.sp, x0 + col * (w + TABLE_COL_GAP), TABLE_AREA.y + row * (h + TABLE_GAP), w, grid.k).out)
+  })
+  return out
+}
+
+// ---- the rotation's attackers (a choice for the bottom right) --------------------------------------
+// The team's side-out attacks in a rotation (in the reception phase), by attacker, the most first: at
+// most `most` of them.
+export interface RotationAttacker { key: string; jersey: number; team: string; player: Player | null; plays: Play[] }
+export function rotationAttackers(dvws: ParsedDVW[], team: string, r: number, keep?: (p: Play) => boolean, most = ATTACKER_CARDS): RotationAttacker[] {
+  const by = new Map<string, RotationAttacker>()
+  for (const d of dvws) {
+    const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
+    if (i < 0) continue
+    const side = i === 0 ? '*' : 'a'
+    for (const p of d.plays) {
+      if (p.side !== side || p.skill !== 'A' || p.phase !== 'r' || rotationOf(p) !== r || (keep && !keep(p))) continue
+      const had = by.get(p.playerKey) ?? { key: p.playerKey, jersey: p.jersey, team: d.teams[i].code.toUpperCase(), player: d.players[`${side}${p.jersey}`] ?? null, plays: [] }
+      had.plays.push(p)
+      by.set(p.playerKey, had)
+    }
+  }
+  return [...by.values()].sort((a, b) => b.plays.length - a.plays.length || a.jersey - b.jersey).slice(0, most)
+}
+export const ATTACKER_CARDS = 3 // at most; the slide shows 1 to 3 (attackerCards)
+
+// An attacker's numbers: the shares of hard spikes, soft ones and tips (the hit type coded after the
+// zones: H / P / T), kills, errors, blocked and attempts, and the shares of kills, errors, + and -.
+export interface AttackerStats { hard: number; soft: number; tip: number; k: number; e: number; b: number; att: number; pos: number; neg: number }
+export const hitType = (p: Play) => p.code.charAt(12).toUpperCase()
+export function attackerStats(plays: Play[]): AttackerStats {
+  const n = (f: (p: Play) => boolean) => plays.filter(f).length
+  const typed = n(p => 'HPT'.includes(hitType(p)) && hitType(p) !== '')
+  const share = (t: string) => (typed ? n(p => hitType(p) === t) / typed : 0)
+  return { hard: share('H'), soft: share('P'), tip: share('T'), k: n(p => p.effect === '#'), e: n(p => p.effect === '='), b: n(p => p.effect === '/'), att: plays.length, pos: n(p => p.effect === '+'), neg: n(p => p.effect === '-') }
+}
+const two = (n: number, of = 1) => (of ? (n / of).toFixed(2) : '–')
+
+// The cards across the bottom right, side by side (count of them, 1 to 3): the name in a grey head, H | P | T, a table of K E B
+// Att, K% and ERR%, Pos and Neg; under it, where to place the chart of the attacker's attacks (the
+// caller draws it: a direction chart). Each card is one group. chartWidth: a chart's width for a height
+// (shares of the picture).
+export function attackerCards(list: RotationAttacker[], chartWidth: (h: number) => number, count = ATTACKER_CARDS): { annotations: Annotation[]; charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] } {
+  const annotations: Annotation[] = [], charts: { attacker: RotationAttacker; x: number; y: number; h: number }[] = []
+  const n = Math.min(ATTACKER_CARDS, Math.max(1, Math.round(count)))
+  // Fewer cards are wider and their type larger; a single card puts its chart beside the numbers.
+  const gap = 0.008, w = (RIGHT.w - gap * (n - 1)) / n, k = n === 1 ? 1.35 : n === 2 ? 1.2 : 1, beside = n === 1
+  const top = TABLE_AREA.y, bottom = TABLE_AREA.y + TABLE_AREA.h, ink = '#0F172A', grid = '#94A3B8'
+  list.slice(0, n).forEach((a, i) => {
+    const x = RIGHT.x + i * (w + gap), g = uid(), s = attackerStats(a.plays), out: Annotation[] = []
+    const nw = beside ? w * 0.56 : w // the numbers' width
+    const cell = (cx: number, y: number, cw: number, h0: number, text: string, size0: number, o: { fill?: string; bold?: boolean; stroke?: string | null } = {}) => {
+      const h = h0 * k, size = Math.round(size0 * k), pad = Math.max(1, (h * 720 - size * 1.2) / 2)
+      out.push(words(cx, y + pad / 720, text, size, ink, { align: 'center', bold: o.bold ?? false, groupId: g,
+        box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: o.stroke === undefined ? grid : o.stroke, strokeWidth: o.stroke === null ? 0 : 1, padding: pad, width: cw, height: h } }))
+      return h
+    }
+    const name = a.player ? `#${a.jersey} ${[a.player.firstName, a.player.lastName.toUpperCase()].filter(Boolean).join(' ')}` : `#${a.jersey}`
+    let y = top
+    y += cell(x + nw / 2, y, nw, 0.036, name, 13, { fill: '#E5E7EB', bold: true })
+    y += cell(x + nw / 2, y, nw, 0.03, a.team, 12, { fill: '#E5E7EB', bold: true })
+    const box = y
+    y += 0.006 * k
+    y += cell(x + nw / 2, y, nw, 0.03, `H: ${s.hard.toFixed(2)} | P: ${s.soft.toFixed(2)} | T: ${s.tip.toFixed(2)}`, 11, { stroke: null }) + 0.004 * k
+    const cw = nw / 4
+    ;(['K', 'E', 'B', 'Att'] as const).forEach((h, c) => cell(x + cw * (c + 0.5), y, cw, 0.03, h, 12, { stroke: null }))
+    y += 0.03 * k
+    ;[s.k, s.e, s.b, s.att].forEach((v, c) => cell(x + cw * (c + 0.5), y, cw, 0.03, String(v), 12, { stroke: null }))
+    y += 0.03 * k
+    y += cell(x + nw / 2, y, nw, 0.028, `K%: ${two(s.k, s.att)} | ERR%: ${two(s.e, s.att)}`, 11, { stroke: null })
+    y += cell(x + nw / 2, y, nw, 0.028, `Pos: ${two(s.pos, s.att)} | Neg: ${two(s.neg, s.att)}`, 11, { stroke: null }) + 0.002
+    // The frame round the numbers, then the chart: under them, or beside them on a single card.
+    annotations.push({ id: uid(), kind: 'rect', color: grid, x, y: box, w: nw, h: y - box, width: 1, fill: null, groupId: g }, ...out)
+    const room = beside ? { x: x + nw + gap, y: top, w: w - nw - gap } : { x, y: y + 0.004, w }
+    const ch = bottom - room.y - 0.004, fit = Math.min(1, room.w / chartWidth(ch)), chh = ch * fit
+    charts.push({ attacker: a, x: room.x + (room.w - chartWidth(chh)) / 2, y: room.y, h: chh })
+  })
+  return { annotations, charts }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, drawAnnotation, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
+import { asOneObject, sameChange, cleanHeadline, applyStyle, styleMany, drawAnnotation, freshIds, hitTest, normalizeBox, pasteCopies, shiftTimes, translate, visibleAt, type Annotation } from './annotation'
 
 // Enough of a 2D context for hit testing: text width = 0.5 * font px per character.
 const fake = { font: '', measureText: (t: string) => ({ width: t.length * 0.5 * parseFloat(/(\d+(\.\d+)?)px/.exec(fake.font)![1]) }) }
@@ -46,6 +46,7 @@ describe('hit testing', () => {
     expect(hitTest(ctx, list, 0.3, 0.3, 1280, 720)?.id).toBe('a') // on the arrow line
     expect(hitTest(ctx, list, 0.3, 0.2, 1280, 720)).toBeNull() // off the line
     expect(hitTest(ctx, list, 0.7, 0.7, 1280, 720)?.id).toBe('r')
+    expect(hitTest(ctx, list.map(a => (a.id === 'r' ? { ...a, locked: true } : a)), 0.7, 0.7, 1280, 720)?.id).not.toBe('r') // a locked one is clicked through
     expect(hitTest(ctx, list, 0.15, 0.82, 1280, 720)?.id).toBe('t')
   })
 })
@@ -108,5 +109,65 @@ describe('drawAnnotation', () => {
     const { ctx, calls } = canvas()
     expect(() => drawAnnotation(ctx, rect, 100, 100)).not.toThrow()
     expect(calls.filter(c => c === 'save').length).toBe(calls.filter(c => c === 'restore').length)
+  })
+})
+
+describe('cleanHeadline', () => {
+  it('keeps what is usable and drops the rest', () => {
+    expect(cleanHeadline({ font: 'Yu Gothic UI', size: 60, color: '#ff0000', bold: false, outline: true, box: 'red' })).toEqual({ font: 'Yu Gothic UI', size: 60, color: '#ff0000', bold: false, outline: true })
+    expect(cleanHeadline({ font: 'x"; color: red', size: 500 })).toBeUndefined()
+    expect(cleanHeadline(undefined)).toBeUndefined()
+  })
+})
+
+describe('style on several objects', () => {
+  const list: Annotation[] = [
+    { id: 'r', kind: 'rect', color: '#FF0000', width: 4, x: 0, y: 0, w: 0.1, h: 0.1 },
+    { id: 'a', kind: 'arrow', color: '#FF0000', width: 4, x1: 0, y1: 0, x2: 0.1, y2: 0.1 },
+    { id: 't', kind: 'text', color: '#FFFFFF', x: 0, y: 0, text: 'x', size: 30 },
+    { id: 'o', kind: 'circle', color: '#FF0000', width: 4, x: 0, y: 0, w: 0.1, h: 0.1 },
+  ]
+  it('fills the fillable ones picked, and leaves the rest', () => {
+    const out = styleMany(list, ['r', 'a', 't'], { fill: '#00FF00', fillOpacity: 0.5 })
+    expect(out[0]).toMatchObject({ fill: '#00FF00', fillOpacity: 0.5 })
+    expect(out[1]).not.toHaveProperty('fill')
+    expect(out[2]).not.toHaveProperty('fill')
+    expect(out[3]).not.toHaveProperty('fill') // not picked
+  })
+  it('sets the line opacity on lines, and a line colour leaves text alone', () => {
+    const out = styleMany(list, ['r', 'a', 't'], { color: '#0000FF', lineOpacity: 0.4 }, a => a.kind !== 'text')
+    expect(out[0]).toMatchObject({ color: '#0000FF', lineOpacity: 0.4 })
+    expect(out[1]).toMatchObject({ color: '#0000FF', lineOpacity: 0.4 })
+    expect(out[2]).toMatchObject({ color: '#FFFFFF' })
+    expect(applyStyle(list[2], { lineOpacity: 0.4 })).not.toHaveProperty('lineOpacity')
+  })
+})
+
+describe('a text font from the format panel', () => {
+  it('sets a font on texts, and takes it off again', () => {
+    const tx: Annotation = { id: 't', kind: 'text', color: '#000000', x: 0, y: 0, text: '7', size: 16 }
+    const set = applyStyle(tx, { font: 'Bahnschrift' })
+    expect(set.kind === 'text' && set.font).toBe('Bahnschrift')
+    expect('font' in applyStyle(set, { font: null })).toBe(false)
+    expect(applyStyle(set, { size: 20 })).toMatchObject({ font: 'Bahnschrift', size: 20 })
+  })
+})
+
+describe('zone paint as one object', () => {
+  const cell = (i: number, g?: string): Annotation => ({ id: `z${i}`, kind: 'polygon', color: '#EF4444', width: 0, points: [[0, 0], [1, 0], [1, 1]], fill: '#EF4444', fillOpacity: 0.5, cell: { row: i, col: 0, div: 9 }, ...(g ? { groupId: g } : {}) })
+  const arrow: Annotation = { id: 'a', kind: 'arrow', color: '#FFFFFF', x1: 0, y1: 0, x2: 1, y2: 1, width: 4, groupId: 'g' }
+  const list = [cell(0, 'g'), cell(1, 'g'), cell(2, 'g'), arrow, cell(3, 'other')]
+  it('takes in every painted cell of its group, and nothing else', () => {
+    expect(asOneObject(list, 'z1')).toEqual(['z0', 'z1', 'z2'])
+    expect(asOneObject(list, 'a')).toEqual(['a']) // a grouped object that isn't zone paint stays itself
+    expect(asOneObject([cell(5)], 'z5')).toEqual(['z5'])
+  })
+  it('makes the same change on the others, keeping their own shape', () => {
+    const before = list[0], after = { ...before, fadeIn: 0.5, showFrom: 3, fill: '#3B82F6', points: [[9, 9], [8, 8], [7, 7]] } as Annotation
+    const other = sameChange(before, after, list[1]) as Extract<Annotation, { kind: 'polygon' }>
+    expect(other).toMatchObject({ fadeIn: 0.5, showFrom: 3, fill: '#3B82F6', cell: { row: 1 } })
+    expect(other.points).toEqual(list[1].kind === 'polygon' ? list[1].points : null)
+    const { fadeIn: _f, ...cleared } = { ...list[1], fadeIn: 1 } as Annotation & { fadeIn?: number }
+    expect(sameChange({ ...before, fadeIn: 1 } as Annotation, before, { ...list[1], fadeIn: 1 } as Annotation)).toEqual(cleared)
   })
 })

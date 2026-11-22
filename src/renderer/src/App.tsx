@@ -1,76 +1,113 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { composing } from './keys'
-import { EMPTY_FILTER, applyFilter, buildRefs, detailOptions, listPeople, ourSide, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { clipRangeSource } from '../../shared/markRange'
+import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { effectName, playLabel } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, defaultRange, findClip, chronological, findOverlaps, markerCardOn, markersOf, newReel, playOrder, rangeDefaults, relink, setAnnotations, setOverlayOverride, toggleMarker, trimClip,
-  type Clip, type ClipMode, type Group, type Marker, type Reel,
+  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
-import type { ImportProgress, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings } from '../../shared/types'
-import { FilterPanel, type Scope } from './components/FilterPanel'
+import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
+import { SlidePickDialog } from './components/SlidePickDialog'
+import { CheckPicker } from './components/CheckPicker'
+import { ShotPick, type ShotRow } from './components/ShotPick'
+import { FilterPanel } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
+import { setStopSec } from './keys'
 import { TrimBar } from './components/TrimBar'
+import { RIGHT_TABS, RightStrip, RightTabs, type RightTab } from './components/RightTabs'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
-import { freshIds, pasteCopies, shiftTimes, withGroups, type Annotation } from '../../shared/annotation'
-import { changed, mergeScoped, moveToScope, scopeOf, splitScoped, type AnnScope, type ScopedAnnotations } from '../../shared/annotationScope'
-import { captionData, overlaySettings, scoreboardData, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../shared/overlay'
+import { ObjectTimeline } from './components/ObjectTimeline'
+import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
+import { captionData, followAt, followWindows, overlaySettings, scoreboardData, withTeamColors, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { FORECAST_AHEAD_SEC, courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
-import { ClipOverlayRow } from './components/ClipOverlayRow'
-import { EXPORT_HEIGHT, buildExportJob } from './exportRender'
-import { addScene, cardMatch, dropScene, newVideo, planScene, planVideo, videoCard, type Card, type PlanItem, type Video } from '../../shared/video'
-import { CardEditBar, CardEditor } from './components/CardEditor'
+import { ClipOverlayRow, LineupCheck, ListOverlayChecks, ServeSpeedCheck } from './components/ClipOverlayRow'
+import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
+import { assetImage, packAssetId } from './assets'
+import { isZonePaint, type ImageLookup } from '../../shared/annotation'
+import { CardEditBar, CardEditor, BoardEditBar, SlideEditBar, type CardInserts, type SlideMark } from './components/CardEditor'
+import { cardPlayers, cardTeams, fillPlanFrames, topPhoto } from '../../shared/cardPeople'
 import { FadeLayer } from './components/FadeLayer'
 import { PalettePanel } from './components/PalettePanel'
-import { ExportPanel, type ExportTarget } from './components/ExportPanel'
+import { PlayerPhotos } from './components/PlayerPhotos'
+import { ExportPanel } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
+import { PresetDialog } from './components/PresetDialog'
+import { usePresetVideos } from './app/usePresetVideos'
 import { Home, MissingNote } from './components/Home'
+import { CompareView } from './components/CompareView'
+import { CompareMenu } from './components/CompareMenu'
+import { useCompare } from './app/useCompare'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
-import type { LibraryInfo, RecentProject, ScanResult } from '../../shared/types'
-import type { ExportEvent } from '../../shared/types'
 import { VideoPane } from './components/VideoPane'
-import { insertAsset, resetAssets } from './assets'
+import { CourtLayer } from './components/CourtLayer'
+import { CourtBar } from './components/CourtBar'
+import { MatchReportDialog } from './components/MatchReportDialog'
+import { AnalysisDialog } from './components/AnalysisDialog'
+import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
+import { setterCall } from '../../shared/setChart'
+import { BoardDialog } from './components/BoardDialog'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
+import { t } from '../../shared/i18n'
+import { captionPhoto, findPhoto } from '../../shared/pack'
+import { usePacks } from './packs'
+import { playMaximized } from './maximize'
+import { clipPlayedSec } from '../../shared/timing'
+import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
+import { SAVE_DELAY_MS } from './app/useAutosave'
+import { useUpdates } from './app/useUpdates'
+import { useSceneStore } from './app/useSceneStore'
+import { useCardEdit } from './app/useCardEdit'
+import { useObjects } from './app/useObjects'
+import { useSlides } from './app/useSlides'
+import { useProjectFlow } from './app/useProjectFlow'
+import { usePlaySearch } from './app/usePlaySearch'
+import { useSlideFiles } from './app/useSlideFiles'
+import { useExport } from './app/useExport'
+import { useShortcuts } from './app/useShortcuts'
+import { Banners } from './app/Banners'
+import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
+import { ServeMarkBar } from './components/ServeMarkBar'
+import { OffsetBar } from './components/OffsetBar'
+import { CodeEditDialog } from './components/CodeEditDialog'
+import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
+const SPEED_LIST_SEC = 4 // how long the serve speed plate stays after the touch on a play picked in the list
 // The main process loads the page with ?smoke when it runs a self-check (VR_SMOKE).
 const SMOKE = new URLSearchParams(location.search).has('smoke')
 const PREROLL_SEC = 2 // jump a little before the contact so the play is seen building up
+const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the scene's 終わりの余白 a rally stays up before the next one
 
-// Clips whose play can't be found in the DVW, per scene object and DVW set (relink walks every clip).
-// The marker group a clip is worked on in: the one it was opened from if it is still in it, else its
-// first marker (null when it has none, so there are no marker-wide objects to show).
-function markerFor(r: Reel, clipId: string, preferred: Group | null): Marker | null {
-  if (preferred && preferred !== 'none' && r.groups[preferred].includes(clipId)) return preferred
-  return markersOf(r, clipId)[0] ?? null
-}
 
-const missingMemo = new WeakMap<Reel, { dvws: Record<string, ParsedDVW>; missing: Set<string> }>()
-function missingOf(r: Reel, dvws: Record<string, ParsedDVW>): Set<string> {
-  const hit = missingMemo.get(r)
-  if (hit && hit.dvws === dvws) return hit.missing
-  const missing = relink(r, dvws).missing
-  missingMemo.set(r, { dvws, missing })
-  return missing
-}
-const NO_ALIASES: ProjectSettings['playerAliases'] = {}
-const SAVE_DELAY_MS = 400
-const UNDO_MERGE_MS = 600
-const UNDO_LIMIT = 100
 
+const NOTICE_SEC = 10
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
+  // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
+  const [sceneMatches, setSceneMatches] = useState<Match[]>([])
   const [matchId, setMatchId] = useState<string | null>(null)
-  const [scope, setScope] = useState<Scope>('all') // the list shows every match in the project unless one is picked
+  const [shotPick, setShotPick] = useState<{ at: Pt; rows: ShotRow[]; zone: number | null } | null>(null) // a click on the heatmap
+  const [matchIds, setMatchIds] = useState<string[]>([]) // the matches the list shows; none picked: all of the project's
   // How plays added from the search are cut: around the key play, or from it to the end of the rally.
   const [extract, setExtract] = useState<ClipMode>(() => { try { return localStorage.getItem('vr.extract') === 'toEnd' ? 'toEnd' : 'keyplay' } catch { return 'keyplay' } })
+  // 通し: the list plays rally by rally: a play picked plays its whole rally (serve to its end) once, the
+  // list staying on it, then the next rally with a play in the list; only serves, receptions and
+  // attacks get a caption on the way (the display follows them).
+  const [listThrough, setListThroughState] = useState(() => { try { return localStorage.getItem('vr.listThrough') === '1' } catch { return false } })
+  const listThroughRef = useRef(listThrough)
+  listThroughRef.current = listThrough
+  const setListThrough = (v: boolean) => { setListThroughState(v); try { localStorage.setItem('vr.listThrough', v ? '1' : '0') } catch { /* kept for this run only */ } }
   useEffect(() => { try { localStorage.setItem('vr.extract', extract) } catch { /* not kept */ } }, [extract])
   const extractRef = useRef(extract)
   extractRef.current = extract
@@ -78,11 +115,10 @@ export function App() {
   const [matchOrder, setMatchOrder] = useState<'old' | 'new'>(() => { try { return localStorage.getItem('vr.matchOrder') === 'new' ? 'new' : 'old' } catch { return 'old' } })
   useEffect(() => { try { localStorage.setItem('vr.matchOrder', matchOrder) } catch { /* not kept */ } }, [matchOrder])
   const [filter, setFilter] = useState<PlayFilter>(EMPTY_FILTER)
+  const packs = usePacks() // player photos, for the caption's photo
+  const packsRef = useRef(packs)
+  packsRef.current = packs
   const [selected, setSelected] = useState<PlayKey | null>(null)
-  const [reels, setReels] = useState<Reel[]>([])
-  const [reelId, setReelId] = useState<string | null>(null)
-  const [videos, setVideos] = useState<Video[]>([])
-  const [videoId, setVideoId] = useState<string | null>(null)
   const [activeClipId, setActiveClipId] = useState<string | null>(null)
   // The marker group the open clip was opened from (a clip can be in several); null = its first.
   const [activeGroup, setActiveGroup] = useState<Group | null>(null)
@@ -102,174 +138,174 @@ export function App() {
   const toggleExtra = useCallback((id: string) => setExtraSel(xs => (xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])), [])
   useEffect(() => { setEditPoints(false); setCropping(false) }, [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
-  const [exportState, setExportState] = useState<{ status: 'preparing' | 'running' | ExportEvent['type']; ratio: number; message: string; outPath?: string } | null>(null)
+  // The teams' colors (library, by team code): the rotation lineup's discs.
+  const [teamColors, setTeamColors] = useState<Record<string, string>>({})
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // A notice says what just happened; it goes by itself after 10 seconds (a click closes it sooner).
+  useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), NOTICE_SEC * 1000); return () => clearTimeout(id) }, [notice])
+  // The latest state for callbacks and steps in the same tick; filled in on every render below.
+  const latest = useRef<AppLatest>({ overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null } as AppLatest)
+  const {
+    reels, setReels, reelId, setReelId, videos, setVideos, videoId, setVideoId, reel, video,
+    saveState, flushAll, markSaved, record, undoRedo, clearHistory,
+    putScene, putVideo, addScenes, addVideo, showScene, removeScenes, sceneSnap, videoSnap,
+    updateReel, updateVideo, updateScene, withReel, makeScene, deleteReel, createVideo, scenesOnlyIn, selectVideo, deleteVideo,
+  } = useSceneStore({ latest, setActiveClipId, setProject, setError })
+  const { staleSlides, checkSlideFiles, laterSlides, reloadSlideFiles } = useSlideFiles(() => latest.current.reels, updateReel, setProgress, setNotice)
+  const {
+    library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
+    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, deleteMatch, deleteProject, pickerDone, projectTeams, saveSettings,
+  } = useProjectFlow({
+    latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
+    setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
+  })
+  const cmp = useCompare(setError)
+  useEffect(() => { if (library) void api.listTeamColors().then(setTeamColors).catch(() => undefined) }, [!!library])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [library, setLibrary] = useState<LibraryInfo | null>(null)
-  const [recent, setRecent] = useState<RecentProject[]>([])
-  const [scan, setScan] = useState<ScanResult | null>(null)
-  const [picker, setPicker] = useState<'create' | 'edit' | null>(null)
+  // The court grid's look is this computer's, for every match; the corners belong to each match.
+  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
+  useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
+  const [courtFitting, setCourtFitting] = useState(false)
+  // The right column's tab, kept on this computer.
+  const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })
+  useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
+  // The right column folded to a thin strip, for a bigger video; kept on this computer.
+  const [rightFolded, setRightFolded] = useState(() => { try { return localStorage.getItem('vr.rightFolded') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('vr.rightFolded', rightFolded ? '1' : '0') } catch { /* not kept */ } }, [rightFolded])
+  // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
+  const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
+  useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
+  // An object picked on the video (or a headline's 書式) opens the objects panel, unless the trim panel is up (its lanes show the object's times).
+  const showObjects = () => setStagePanel('objects')
+  const gridStyleRef = useRef(gridStyle)
+  gridStyleRef.current = gridStyle
 
-  const matches = useMemo(() => Object.fromEntries((project?.matches ?? []).map(m => [m.id, m])), [project])
+  const matches = useMemo(() => Object.fromEntries([...(project?.matches ?? []), ...sceneMatches].map(m => [m.id, m])), [project, sceneMatches])
+  // The target matches only: what figures over "all matches" count (charts, codes, data slides), as the
+  // list searches them; a match only a scene still uses is played but not counted.
+  const targetDvws = useMemo(() => Object.fromEntries((project?.matchIds ?? []).filter(id => dvws[id]).map(id => [id, dvws[id]])), [dvws, project])
+  const projectMatchIds = useMemo(() => (project?.matches ?? []).map(m => m.id), [project]) // oldest first
   const match = matchId ? matches[matchId] ?? null : null
-  const reel = reels.find(r => r.id === reelId) ?? null
-  const video = videos.find(v => v.id === videoId) ?? null
-
-  useEffect(() => {
-    void api.getLibrary().then(setLibrary)
-    void api.recentProjects().then(setRecent)
-    void api.getProject().then(p => p && loadProject(p))
-    return api.onImportProgress(setProgress)
-  }, [])
-
-  // Every match's DVW is parsed up front (a few ms each) so "all matches" search is instant.
-  // Reels are re-linked to the fresh parse, in case a DVW was edited since they were saved.
-  // Only the latest call applies its results, so overlapping loads can't overwrite newer state.
-  const loadGen = useRef(0)
-  const loadProject = useCallback(async (p: ProjectInfo | null) => {
-    const gen = ++loadGen.current
-    if (p?.path !== latest.current.projectPath) resetAssets() // another project's pictures go
-    latest.current.projectPath = p?.path ?? null
-    setProject(p)
-    setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
-    if (!p) { setDvws({}); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
-    const parsed: Record<string, ParsedDVW> = {}
-    for (const m of p.matches) {
-      try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
-    }
-    if (gen !== loadGen.current) return
-    setDvws(parsed)
-    const listed = await api.listReels()
-    if (gen !== loadGen.current) return
-    const vids = await api.listVideos()
-    if (gen !== loadGen.current) return
-    // Scenes whose clips were re-pointed to their plays (the DVW changed) count as unsaved, so the
-    // new pointers are written; the rest are clean as loaded.
-    const relinked = listed.map(r => relink(r, parsed))
-    const loaded = relinked.map(x => x.reel)
-    saved.current = new Map<string, object>([
-      ...relinked.filter(x => !x.changed).map(x => [`scene:${x.reel.id}`, x.reel] as const),
-      ...vids.map(v => [`video:${v.id}`, v] as const),
-    ])
-    savedJson.current = new Map([...saved.current].map(([k, o]) => [k, JSON.stringify(o)] as const))
-    undoStack.current = []; redoStack.current = []
-    setReels(loaded)
-    setVideos(vids)
-    setVideoId(id => (id && vids.some(v => v.id === id) ? id : vids[0]?.id ?? null))
-    const notes = await api.takeNotices()
-    if (notes.length) setNotice(notes.join(' / '))
-    setReelId(id => (id && loaded.some(r => r.id === id) ? id : loaded[0]?.id ?? null))
-  }, [])
-
-  // Autosave: any reel whose JSON differs from what was last written is saved shortly after.
-  // Closing the window flushes whatever is still pending (see the main process's close handler).
-  // The last saved object per "scene:id" / "video:id" (unchanged = the same object) and its JSON.
-  const saved = useRef(new Map<string, object>())
-  const savedJson = useRef(new Map<string, string>())
-  const [saveState, setSaveState] = useState<'saved' | 'pending' | 'error'>('saved')
-  const allClean = () => latest.current.reels.every(x => saved.current.get(`scene:${x.id}`) === x)
-    && latest.current.videos.every(x => saved.current.get(`video:${x.id}`) === x)
-  const saveNow = useCallback(async (kind: 'scene' | 'video', obj: Reel | Video) => {
-    const key = `${kind}:${obj.id}`
-    if (saved.current.get(key) === obj) return
-    // Serialized only here, for an object that may have changed: an edit that ended where it
-    // started is not written again.
-    const json = JSON.stringify(obj)
-    if (savedJson.current.get(key) === json) { saved.current.set(key, obj); if (allClean()) setSaveState('saved'); return }
+  useEffect(() => setCourtFitting(false), [matchId])
+  // Shown at once, then saved to the match in the library.
+  // The court found in the video, left open for the corners to be finished by hand.
+  const autoFit = async (id: string) => {
     try {
-      if (kind === 'scene') await api.saveReel(obj as Reel); else await api.saveVideo(obj as Video)
-      saved.current.set(key, obj); savedJson.current.set(key, json)
-      if (allClean()) setSaveState('saved')
+      const corners = await api.detectCourt(id)
+      if (!corners) { setNotice(t('コートを見つけられませんでした。四隅を手で合わせてください')); return }
+      setCourt(id, { corners, nearSet1: matches[id]?.court?.nearSet1 ?? '*' })
+      setCourtFitting(true)
+      setNotice(t('コートの候補を置きました。線に合っているか確かめて、ずれていれば四隅を直してください'))
     } catch (e) {
-      setSaveState('error')
-      setError(`${kind === 'scene' ? 'シーン' : '動画'}を保存できませんでした: ${(e as Error).message}`)
+      setError(String(e))
     }
-  }, [])
-  const flushAll = useCallback(() => Promise.all([
-    ...latest.current.reels.map(r => saveNow('scene', r)), ...latest.current.videos.map(v => saveNow('video', v)),
-  ]), [saveNow])
+  }
+  // A match on screen without a court grid, the first time this computer shows it: the court is looked for
+  // in the video and, when found, left in fitting mode with a bar asking to check it; when not, the bar
+  // offers to fit it by hand. Only once per match (vr.courtAsked), so "later" stays later.
+  const [courtGuide, setCourtGuide] = useState<{ matchId: string; status: 'finding' | 'found' | 'missing' } | null>(null)
+  const shownMatch = useRef<string | null>(null)
+  shownMatch.current = matchId
   useEffect(() => {
-    const dirty = [
-      ...reels.filter(r => saved.current.get(`scene:${r.id}`) !== r).map(r => ['scene', r] as const),
-      ...videos.filter(v => saved.current.get(`video:${v.id}`) !== v).map(v => ['video', v] as const),
-    ]
-    if (!dirty.length) return
-    setSaveState(s => (s === 'error' ? s : 'pending'))
-    const timers = dirty.map(([k, o]) => window.setTimeout(() => void saveNow(k, o), SAVE_DELAY_MS))
-    return () => timers.forEach(t => clearTimeout(t))
-  }, [reels, videos, saveNow])
-  useEffect(() => api.onFlushRequest(async () => { await flushAll() }), [flushAll])
+    if (SMOKE || !match || match.court || project?.missing[match.id]?.includes('video')) return
+    const id = match.id
+    let asked: string[] = []
+    try { asked = JSON.parse(localStorage.getItem('vr.courtAsked') ?? '[]') } catch { /* none kept */ }
+    if (asked.includes(id)) return
+    try { localStorage.setItem('vr.courtAsked', JSON.stringify([...asked, id].slice(-500))) } catch { /* not kept */ }
+    setCourtGuide({ matchId: id, status: 'finding' })
+    api.detectCourt(id).then(corners => {
+      if (!corners) { setCourtGuide({ matchId: id, status: 'missing' }); return }
+      setCourt(id, { corners, nearSet1: '*' })
+      if (shownMatch.current === id) setCourtFitting(true)
+      setCourtGuide({ matchId: id, status: 'found' })
+    }).catch(() => setCourtGuide({ matchId: id, status: 'missing' }))
+  }, [match?.id, !!match?.court])
+  const fitByHand = (id: string) => { setCourt(id, { corners: DEFAULT_CORNERS, nearSet1: '*' }); setCourtFitting(true); setCourtGuide(null) }
+
+  // A serve's hit or touch (serveMark.ts): shown at once, saved with the match a moment after the last
+  // change, so dragging a line doesn't write the match on every move.
+  const markSaves = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; patch: { hit?: number | null; touch?: number | null } }>())
+  const setServeMark = (matchId: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== matchId ? m : withServeMark(m, fingerprint, patch))) })
+    const key = `${matchId}|${fingerprint}`, was = markSaves.current.get(key)
+    if (was) clearTimeout(was.timer)
+    const merged = { ...(was?.patch ?? {}), ...patch }
+    markSaves.current.set(key, { patch: merged, timer: setTimeout(() => {
+      markSaves.current.delete(key)
+      void api.setServeMark(matchId, fingerprint, merged).catch(err => setError(String(err)))
+    }, 200) })
+  }
+  const setCourt = (id: string, court: CourtFit | null) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
+    void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  // A play's code corrected (codeEdit.ts): saved beside the match, then the match read again so every list,
+  // report and court shows the new code.
+  const [codeEditing, setCodeEditing] = useState<PlayRef | null>(null)
+  const saveCode = async (r: PlayRef, to: string) => {
+    const p = r.play
+    if (p.line === undefined) return
+    try {
+      const info = await api.setCodeEdit(r.matchId, p.line, p.original ?? p.code, to)
+      if (info) setProject(info)
+      const d = await api.parseMatch(r.matchId)
+      setDvws(prev => ({ ...prev, [r.matchId]: d }))
+      setCodeEditing(null)
+    } catch (err) { setError(String(err)) }
+  }
+  const setOffset = (id: string, offsetSec: number) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
+    void api.setMatchOffset(id, offsetSec).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
+  setChartColors(chartColors) // before anything below draws a chart
+  setStrikeHeights(project?.settings.strikeHeights) // and the court's flights
+  const lineKey = JSON.stringify([chartColors, project?.settings.strikeHeights]) // charts and flights already drawn are drawn again
+  const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
+  // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
+  // rally, the serve, reception or attack on screen (the list staying on the play picked).
+  const [followPlay, setFollowPlay] = useState<(PlayKey & { shares?: boolean }) | null>(null) // shares: the set distribution, over the stop before a set
+  const courtPlay = (match && followPlay?.matchId === match.id ? dvws[match.id]?.plays[followPlay.playId] : null) ?? selectedPlay
+  const nextPlay = courtPlay && match ? dvws[match.id]?.plays[courtPlay.id + 1] ?? null : null
 
   const settings = project?.settings
-  const refsByMatch = useMemo(() => {
-    const out: Record<string, PlayRef[]> = {}
-    if (settings) for (const m of project!.matches) if (dvws[m.id]) out[m.id] = buildRefs(m.id, dvws[m.id], settings)
-    return out
-  }, [dvws, settings, project])
+  // The setter calls coded in the matches (K1, KA...), with their names, for the set filter on the 表示 tab.
+  const setterCalls = useMemo(() => {
+    const names: Record<string, string> = Object.assign({}, ...Object.values(targetDvws).map(d => d.codeNames))
+    const codes = new Set(Object.values(targetDvws).flatMap(d => d.plays.filter(p => p.skill === 'E').map(setterCall)).filter(Boolean))
+    return [...codes].sort().map(code => ({ code, ...(names[code] ? { name: names[code] } : {}) }))
+  }, [targetDvws])
+  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter, sceneMatches)
+  // The scene and marker group of the clip on screen (while 通し plays, the one playing), for the 範囲 of the marks.
+  const rangeScene = (playingClipId ? reels.find(r => r.clips[playingClipId]) : null) ?? reel ?? null
+  const rangeGroup = rangeScene && playingClipId && rangeScene.clips[playingClipId] ? groupOf(rangeScene, playingClipId) : activeGroup
+  // A clip can leave the player's marks off (自動表示's 分析表示): the clip on screen, or while 通し plays, the one playing.
+  const courtClip = (playingClipId ? rangeScene?.clips[playingClipId] : null) ?? (reel && activeClipId ? reel.clips[activeClipId] : null) ?? null
+  const hideMarks = !!courtClip?.overlayOverride?.courtMarks?.hidden
+  const sharesNow = !!followPlay?.shares
+  const courtStyle = useMemo(() => {
+    const base = hideMarks ? withoutPlayerMarks(gridStyle) : gridStyle
+    // The stop before a set after a good reception (通し): that setter's set distribution in the rotation, whatever the 表示 tab has on.
+    if (!sharesNow) return base
+    const { setFilter: _f, ...e } = base.bySkill?.E ?? {}
+    return { ...base, bySkill: { ...base.bySkill, E: { ...e, setCourt: { layer: 'shares' as const } } } }
+  }, [hideMarks, gridStyle, sharesNow])
+  const courtZones = useMemo(() => (match?.court && courtPlay
+    ? playMarks(courtPlay, match.court, nextPlay, courtStyle, () => Object.values(targetDvws).flatMap(d => d.plays), { filtered: () => results.map(r => r.play), name: chartName(dvws[match.id], courtPlay), setterName: set => chartName(dvws[match.id], set), ranges: clipRangeSource(rangeScene, rangeGroup, match.id, dvws) })
+    : null), [match?.court, courtPlay, nextPlay, rangeScene, rangeGroup, courtStyle, gridStyle.bySkill, gridStyle.coneColor, lineKey, Object.values(gridStyle.bySkill ?? {}).some(m => m?.chart?.scope === 'filter') ? results : null, dvws, targetDvws])
 
-  const scopeRefs = useMemo(() => {
-    if (scope === 'match') return matchId ? refsByMatch[matchId] ?? [] : []
-    const ms = project?.matches ?? [] // oldest first
-    return (matchOrder === 'new' ? [...ms].reverse() : ms).flatMap(m => refsByMatch[m.id] ?? [])
-  }, [scope, matchId, refsByMatch, project, matchOrder])
-  const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
-  const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
-  // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
-  const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
-  const teamFilterLimited = useMemo(() => scopeRefs.some(r => r.teamRole === null), [scopeRefs])
-  const matchLabels = useMemo(() => labelMatches(project?.matches ?? [], settings?.ourTeamCodes ?? []), [project, settings])
-
-  // ---- reels --------------------------------------------------------------------------------
-  // One undo history for scenes, videos and the project settings, in the order edits happened. Edits to the same thing
-  // within UNDO_MERGE_MS (a handle drag, typing a name) become one step.
-  type Snapshot = { kind: 'scene'; value: Reel } | { kind: 'video'; value: Video } | { kind: 'settings'; value: ProjectSettings }
-  const undoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
-  const redoStack = useRef<{ key: string; prev: Snapshot; at: number }[]>([])
-  const record = useCallback((prev: Snapshot) => {
-    const key = prev.kind === 'settings' ? 'settings' : `${prev.kind}:${prev.value.id}`, now = Date.now(), top = undoStack.current[undoStack.current.length - 1]
-    if (top && top.key === key && now - top.at < UNDO_MERGE_MS) top.at = now
-    else { undoStack.current.push({ key, prev, at: now }); if (undoStack.current.length > UNDO_LIMIT) undoStack.current.shift() }
-    redoStack.current = []
-  }, [])
-  const putScene = (r: Reel) => {
-    latest.current = { ...latest.current, reels: latest.current.reels.map(x => (x.id === r.id ? r : x)), reel: latest.current.reel?.id === r.id ? r : latest.current.reel }
-    setReels(rs => rs.map(x => (x.id === r.id ? r : x)))
-  }
-  const putVideo = (v: Video) => {
-    latest.current = { ...latest.current, videos: latest.current.videos.map(x => (x.id === v.id ? v : x)), video: latest.current.video?.id === v.id ? v : latest.current.video }
-    setVideos(vs => vs.map(x => (x.id === v.id ? v : x)))
-  }
-  const updateReel = useCallback((r: Reel) => {
-    const prev = latest.current.reels.find(x => x.id === r.id)
-    if (prev && prev !== r) record({ kind: 'scene', value: prev })
-    putScene(r)
-  }, [record])
-  const updateVideo = useCallback((v: Video) => {
-    const prev = latest.current.videos.find(x => x.id === v.id)
-    if (prev && prev !== v) record({ kind: 'video', value: prev })
-    putVideo(v)
-  }, [record])
-  const undoRedo = useCallback((dir: 'undo' | 'redo') => {
-    const [from, to] = dir === 'undo' ? [undoStack.current, redoStack.current] : [redoStack.current, undoStack.current]
-    for (let e = from.pop(); e; e = from.pop()) {
-      if (e.prev.kind === 'settings') {
-        const now = latest.current.settings
-        if (!now) continue
-        to.push({ key: e.key, prev: { kind: 'settings', value: now }, at: 0 })
-        void api.saveSettings(e.prev.value).then(setProject).catch(err => setError(String(err)))
-        return
-      }
-      const id = e.prev.value.id
-      const cur = e.prev.kind === 'scene' ? latest.current.reels.find(x => x.id === id) : latest.current.videos.find(x => x.id === id)
-      if (!cur) continue // deleted since: skip to the next step
-      to.push({ key: e.key, prev: { kind: e.prev.kind, value: cur } as Snapshot, at: 0 })
-      if (e.prev.kind === 'scene') { putScene(e.prev.value); setReelId(e.prev.value.id) } else { putVideo(e.prev.value); setVideoId(e.prev.value.id) }
-      return
-    }
-  }, [])
   const missing = useMemo(() => (reel ? missingOf(reel, dvws) : new Set<string>()), [reel, dvws])
+  // How many of the scenes' clips come from each match (the match picker says so), and whether a
+  // match is one the project searches (a clip of another is marked 対象外).
+  const sceneClips = useMemo(() => {
+    const n: Record<string, number> = {}
+    for (const r of reels) for (const c of Object.values(r.clips)) n[c.matchId] = (n[c.matchId] ?? 0) + 1
+    return n
+  }, [reels])
+  const offTarget = useCallback((matchId: string) => !!project && !project.matchIds.includes(matchId), [project])
   // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
   const infoFor = useCallback((c: Clip, scene: Reel | null): ClipInfo => {
     const m = matches[c.matchId], d = dvws[c.matchId], play = d?.plays[c.playId]
@@ -279,22 +315,35 @@ export function App() {
       range: d && m ? clipRange(c, d, m.offsetSec, defaults) : null,
       def: d && m && play ? defaultRange(d, play, m.offsetSec, defaults, c.mode) : null,
       matchLabel: matchLabels[c.matchId] ?? '?',
-      date: m?.date ?? '',
+      matchKey: matchRank[c.matchId] ?? '9999',
     }
-  }, [matches, dvws, refsByMatch, matchLabels])
+  }, [matches, dvws, refsByMatch, matchLabels, matchRank])
   const clipInfo = useCallback((c: Clip): ClipInfo => infoFor(c, reel), [infoFor, reel])
   // A scene's clips in play order (its scope), leaving out clips that can't be played.
   // A scene's play order and stats are asked for many times per render (the scene editor, the
   // video's scene list, the plan, the export choices); scenes are immutable, so each result is kept
   // per scene object (and dropped with it) until the DVWs or the matches change.
-  // A clip's [match date, IN time] in a scene: where a newly marked clip goes in its group.
-  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.date, i.range?.in ?? 0] }
+  // A clip's [match in list order, IN time] in a scene: where a newly marked clip goes in its group.
+  const whenIn = (s: Reel) => (c: Clip): [string, number] => { const i = latest.current.infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }
+  // A clip's right-click: the clip into another scene with its markers and edits, moved (out of this
+  // one) or copied. One undo step covers both scenes.
+  const clipToScene = (clipId: string, toId: string, move: boolean) => {
+    const { reel: from, reels: rs } = latest.current
+    const to = rs.find(r => r.id === toId), c = from?.clips[clipId]
+    if (!from || !to || !c) return
+    const { reel: next, existed } = copyClipTo(c, to, markersOf(from, clipId), whenIn(to))
+    record([sceneSnap(from.id), sceneSnap(to.id)], false)
+    putScene(next)
+    if (move) { putScene(removeClip(from, clipId)); if (latest.current.activeClipId === clipId) setActiveClipId(null) }
+    setNotice(existed ? (move ? t('「{0}」には同じプレーがあるため、そのクリップにマーカーを付け、ここからは外しました', to.name) : t('「{0}」には同じプレーがあるため、そのクリップにマーカーだけ付けました', to.name))
+      : move ? t('「{0}」へ移動しました', to.name) : t('「{0}」へコピーしました', to.name))
+  }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
     const hit = orderMemo.get(s)
     if (hit) return hit
     const miss = missingOf(s, dvws)
-    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.date, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
+    const o = playOrder(s, c => { const i = infoFor(c, s); return [i.matchKey, i.range?.in ?? 0] }).filter(c => !miss.has(c.id) && infoFor(c, s).range)
     orderMemo.set(s, o)
     return o
   }, [dvws, infoFor, orderMemo])
@@ -303,16 +352,16 @@ export function App() {
     const hit = statsMemo.get(s)
     if (hit) return hit
     const o = orderOf(s)
-    const st = { clips: o.length, sec: o.reduce((t, c) => { const r = infoFor(c, s).range!; return t + r.out - r.in }, 0) }
+    const st = { clips: o.length, sec: o.reduce((t, c) => { return t + clipPlayedSec(infoFor(c, s).range!, c.timing) }, 0) }
     statsMemo.set(s, st)
     return st
   }, [orderOf, infoFor, statsMemo])
   const order = useMemo(() => {
     if (!reel) return []
-    return playOrder(reel, c => { const i = clipInfo(c); return [i.date, i.range?.in ?? 0] })
+    return playOrder(reel, c => { const i = clipInfo(c); return [i.matchKey, i.range?.in ?? 0] })
       .filter(c => !missing.has(c.id) && clipInfo(c).range)
   }, [reel, clipInfo, missing])
-  const orderSec = useMemo(() => order.reduce((s, c) => { const r = clipInfo(c).range!; return s + r.out - r.in }, 0), [order, clipInfo])
+  const orderSec = useMemo(() => order.reduce((s, c) => s + clipPlayedSec(clipInfo(c).range!, c.timing), 0), [order, clipInfo])
   // Clips of one match whose ranges overlap (e.g. two plays of the same rally): warned, both kept.
   const overlaps = useMemo(() => {
     if (!reel) return new Map<string, string[]>()
@@ -332,33 +381,65 @@ export function App() {
     return out
   }, [reel])
 
-  // The reel to add to: the current one, or a new one on first use. Computed outside a state
-  // updater because new clips get random ids, and StrictMode runs updaters twice.
-  const withReel = useCallback((fn: (r: Reel) => Reel): Reel => {
-    const rs = latest.current.reels
-    const cur = rs.find(r => r.id === latest.current.reelId)
-    const next = fn(cur ?? newReel(`シーン ${rs.length + 1}`))
-    if (cur) record({ kind: 'scene', value: cur })
-    const all = cur ? rs.map(r => (r.id === cur.id ? next : r)) : [...rs, next]
-    latest.current = { ...latest.current, reels: all, reelId: next.id, reel: next }
-    setReels(all)
-    setReelId(next.id)
-    if (!cur) placeInVideo(next.id)
-    return next
-  }, [record])
-  // A new scene goes into the current video; with no video yet, the first one is made for it.
-  const placeInVideo = (sceneId: string) => {
-    const v = latest.current.video
-    if (v) { updateVideo(addScene(v, sceneId)); return }
-    const nv = newVideo(`動画 ${latest.current.videos.length + 1}`, [sceneId])
-    latest.current = { ...latest.current, videos: [...latest.current.videos, nv], video: nv }
-    setVideos(vs => [...vs, nv]); setVideoId(nv.id)
-  }
-
   const addPlays = useCallback((refs: PlayRef[], group: Group = 'none') => {
     withReel(r => addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), group, extractRef.current).reel)
   }, [withReel])
-  // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
+  // The court's marks on a slide: taken from the play selected in the list, and fixed there.
+  const slideTarget = selectedPlay && match?.court ? `#${selectedPlay.jersey} ${playLabel(selectedPlay.skill, selectedPlay.effect)}` : null
+  const markSlide = (s: Slide, mark: SlideMark, on: boolean) => {
+    const r = latest.current.reel
+    if (!r) return
+    if (!on) { const { [mark]: _gone, ...rest } = s; updateReel(setSlide(r, rest as Slide)); return }
+    const fit = match?.court
+    if (!selectedPlay || !fit) return
+    const all = () => Object.values(targetDvws).flatMap(d => d.plays)
+    const shots = playerMarks(selectedPlay, fit, { ...DEFAULT_GRID_STYLE, heat: true, landings: true, serveFlights: true, cones: true, coneColor: gridStyle.coneColor, chart: markStyle(gridStyle, selectedPlay.skill).chart ?? DEFAULT_CHART }, all, { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[match!.id], selectedPlay) })
+    const add: Partial<Slide> | null = mark === 'zones' ? { zones: { fit, zones: playMarks(selectedPlay, fit, nextPlay), detail: gridStyle.detail } }
+      : mark === 'heat' && shots?.heat ? { heat: { fit, points: shots.heat.points, ...(shots.heat.rough ? { rough: shots.heat.rough } : {}) } }
+      : mark === 'landings' && shots?.landings ? { landings: { fit, points: shots.landings.points, ...(shots.landings.rough ? { rough: shots.landings.rough } : {}) } }
+      : mark === 'flights' && shots?.flights ? { flights: shots.flights }
+      : mark === 'cones' && shots?.cones ? { cones: shots.cones }
+      : mark === 'chart' && shots?.chart ? { chart: shots.chart }
+      : null
+    if (add) updateReel(setSlide(r, { ...s, ...add }))
+    else setNotice(mark === 'flights' ? t('サーブ軌道はサーブを選ぶと載せられます') : mark === 'cones' ? t('コーンはアタックを選ぶと載せられます') : t('サーブかアタックを選ぶと載せられます'))
+  }
+  // A shot on the court: the row it has in the list of its match.
+  const goToShot = (p: Play) => {
+    setShotPick(null)
+    for (const id of Object.keys(dvws)) if (dvws[id].plays[p.id] === p) { const r = refsByMatch[id]?.[p.id]; if (r) jump(r); return }
+  }
+  // A click on the court tab's marks: a landing point goes to that shot; the heatmap offers the
+  // shots nearest to the click. Anything else is left to the layers above.
+  const courtClick = (at: Pt) => {
+    const marks = courtZones?.player, fit = match?.court
+    setShotPick(null)
+    if (!marks || !fit) return false
+    if (marks.landings) {
+      const H = homography(fit.corners), w = match!.width, h = match!.height
+      const away = marks.landings.points.map(p => { const q = onPicture(H, p.x, p.y); return Math.hypot((q.x - at.x) * w, (q.y - at.y) * h) })
+      const i = away.indexOf(Math.min(...away))
+      if (away[i] < w / 80) { goToShot(marks.landings.plays[i]); return true }
+    }
+    const floor = marks.heat && marks.heat.points.length ? floorAt(fit, at) : null
+    if (!floor || floor.x < -0.15 || floor.x > 1.15 || floor.y < -0.15 || floor.y > 1.15) return false
+    const heat = marks.heat!
+    const rows = nearestShots(heat.points, floor, 5).map(i => {
+      const p = heat.plays[i], id = Object.keys(dvws).find(m => dvws[m].plays[p.id] === p)
+      return { play: p, label: `${id ? matchLabels[id] ?? '' : ''} S${p.setNum} ${p.score.home}-${p.score.away} ${effectName(p.skill, p.effect)}` }
+    })
+    setShotPick({ at, rows, zone: zoneAt(floor) })
+    return true
+  }
+  // Everything of this player's that landed in the zone clicked, in the list.
+  const zoneList = () => {
+    const p = shotPick?.rows[0]?.play
+    if (!p || shotPick?.zone === null) return
+    setMatchIds([])
+    setFilter({ ...EMPTY_FILTER, skills: [p.skill], persons: [p.playerKey], endZones: [shotPick!.zone!] })
+    setShotPick(null)
+  }
+  // The 1–6 buttons on a list row: add the play to the scene with that marker (again: clear it).
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
     withReel(r => {
       const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }], 'none', extractRef.current)
@@ -366,65 +447,56 @@ export function App() {
     })
   }, [withReel])
 
-  const createReel = () => {
-    const r = newReel(`シーン ${reels.length + 1}`)
-    latest.current = { ...latest.current, reels: [...latest.current.reels, r] }
-    setReels(rs => [...rs, r]); setReelId(r.id); setActiveClipId(null)
-    placeInVideo(r.id)
-  }
-  // Deleting a scene takes it out of every video that used it.
-  const deleteReel = async (id: string) => {
-    await api.deleteReel(id)
-    saved.current.delete(`scene:${id}`); savedJson.current.delete(`scene:${id}`)
-    const rest = reels.filter(r => r.id !== id)
-    setReels(rest); setReelId(rest[0]?.id ?? null); setActiveClipId(null)
-    for (const v of latest.current.videos) if (v.sceneIds.includes(id)) updateVideo(dropScene(v, id))
-  }
-  // A new video starts empty; its scenes are added (or made) for it. Switching videos shows one of its scenes.
-  const createVideo = () => {
-    const v = newVideo(`動画 ${videos.length + 1}`, [])
-    latest.current = { ...latest.current, videos: [...latest.current.videos, v], video: v }
-    setVideos(vs => [...vs, v]); setVideoId(v.id); setReelId(null); setActiveClipId(null)
-  }
-  const selectVideo = (id: string) => {
-    setVideoId(id)
-    const v = videos.find(x => x.id === id)
-    if (v && !(reelId && v.sceneIds.includes(reelId))) { setReelId(v.sceneIds.find(s => reels.some(r => r.id === s)) ?? null); setActiveClipId(null) }
-  }
-  const deleteVideo = async (id: string) => {
-    await api.deleteVideo(id)
-    saved.current.delete(`video:${id}`); savedJson.current.delete(`video:${id}`)
-    const rest = videos.filter(v => v.id !== id)
-    setVideos(rest); setVideoId(rest[0]?.id ?? null)
-  }
-
   // The project's colors win over the video's (videos made before project colors keep their own).
+  // No video open (the left list's plays only): the project's own display settings.
   const overlay = useMemo(() => {
-    const o = overlaySettings(video?.overlay)
+    const o = overlaySettings(video ? video.overlay : project?.settings.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
-  }, [video?.overlay, project?.settings.theme])
-  const latest = useRef({ results, filter, matches, reels, reelId, reel, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, videos, videoId, video, orderOf, infoFor, overlayData: null as null | ((c: Clip | null) => { scoreboard: ScoreboardData; caption: CaptionData } | null), exportState: null as null | { status: string; ratio: number; message: string; outPath?: string }, notice: null as string | null, dvwsRef: null as null | Record<string, ParsedDVW>, library: null as LibraryInfo | null, projectPath: null as string | null, activeGroup: null as Group | null })
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, exportState, notice, dvwsRef: dvws, library, activeGroup }
+  }, [video, project?.settings.overlay, project?.settings.theme])
+  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, targetDvws, library, activeGroup }
+  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
+    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
+    addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
+  })
+  const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
+    () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
   // ---- navigation ---------------------------------------------------------------------------
   // Stable identity so memoized rows don't re-render. A play in another match switches the video
   // first; playback.seekIn holds the seek until that match's video is ready.
   // With 切り出し = プレー前後, a play picked in the list plays its key-play window and then the
   // next play in the list follows on its own (listRun), until the list ends or something else is played.
-  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number } | null>(null)
+  const listRunRef = useRef<{ matchId: string; playId: number; start: number; end: number; rallyId?: number } | null>(null)
+  // 通し: the display's windows (followData), for the court's marks to follow them; the play they last took.
+  const followDataRef = useRef<{ key: string; windows: FollowWindow[]; court: CourtWindow[] } | null>(null)
+  const followSel = useRef<number | null>(null)
+  const sharesOn = useRef(false) // the set distribution shows only while the picture is stopped, not on the frames before or after it
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
   const [loopOn, setLoopOn] = useState(true) // the trim bar's ループ再生 box: off lets the clip play on past OUT
-  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false) }, [])
+  const stopListRun = useCallback(() => { listRunRef.current = null; setListRun(false); setFollowPlay(null) }, [])
   const jump = useCallback((r: PlayRef) => {
     const m = latest.current.matches[r.matchId]
     if (!m) return
     setSelected({ matchId: r.matchId, playId: r.play.id })
+    setFollowPlay(null)
     const c = latest.current.reel && findClip(latest.current.reel, r.matchId, r.play.id)
     setActiveClipId(c ? c.id : null)
     setMatchId(r.matchId)
     const t = r.play.time + m.offsetSec
+    const rally = listThroughRef.current && r.play.rallyId !== null ? latest.current.dvwsRef?.[r.matchId]?.rallies[r.play.rallyId] : undefined
+    if (rally) {
+      // Played as the list's, not as a clip: the display follows the rally (followData).
+      setActiveClipId(null)
+      followSel.current = r.play.id
+      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      const start = Math.max(0, rally.serveTime - d.rallyLead + m.offsetSec)
+      listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + LIST_RALLY_LINGER_SEC + m.offsetSec, rallyId: r.play.rallyId! }
+      setListRun(true)
+      playback.seekIn(r.matchId, start, { play: true })
+      return
+    }
     if (extractRef.current === 'keyplay') {
       const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
       listRunRef.current = { matchId: r.matchId, playId: r.play.id, start: t - d.keyBefore, end: t + d.keyAfter }
@@ -439,14 +511,25 @@ export function App() {
   jumpRef.current = jump
   useEffect(() => playback.subscribe(s => {
     const run = listRunRef.current
+    // 通し: the court's marks follow the serve, reception or attack on screen; the list stays on the play picked.
+    if (run?.rallyId !== undefined && playback.attachedKey === run.matchId && s.time >= run.start && s.time <= run.end) {
+      const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.court, s.time) : -1
+      let w = at >= 0 ? f!.court[at] : null
+      if (w?.shares && s.holdAt === null) w = null
+      if (!w?.shares && sharesOn.current) { sharesOn.current = false; if (!w) setFollowPlay(null) } // gone as the picture runs again
+      if (w?.shares) sharesOn.current = true
+      if (w && w.playId !== followSel.current) { followSel.current = w.playId; setFollowPlay({ matchId: run.matchId, playId: w.playId, ...(w.shares ? { shares: true } : {}) }) }
+    }
     // Only inside this play's window: right after a jump the time can still be the old one.
     if (!run || s.paused || playback.attachedKey !== run.matchId || s.time < run.end || s.time > run.end + 3 || s.time < run.start) return
     const res = latest.current.results
     const i = res.findIndex(x => x.matchId === run.matchId && x.play.id === run.playId)
-    const next = i >= 0 ? res[i + 1] : undefined
+    // A rally played whole (通し): on to the next listed play in another rally.
+    const next = i < 0 ? undefined : run.rallyId === undefined ? res[i + 1]
+      : res.slice(i + 1).find(x => x.matchId !== run.matchId || x.play.rallyId !== run.rallyId)
     listRunRef.current = null
     if (next) jumpRef.current(next)
-    else { setListRun(false); playback.pause() }
+    else { setListRun(false); setFollowPlay(null); playback.pause() }
   }), [])
 
   const activateClip = useCallback((c: Clip, g?: Group) => {
@@ -462,12 +545,20 @@ export function App() {
 
   // The plan both the through-play and the export follow: a whole video (scenes with their cards),
   // or one scene on its own for previewing it.
+  // A title card's photo frame: the photo of the player with the most clips of its marker (a marker
+  // card), its scene (a scene card) or the video (the video's card), from the packs; null without one.
+  const cardFramePhoto = useCallback((card: Card): string | null => {
+    const { reels: rs, video: v, dvwsRef: ds } = latest.current
+    const scenes = card.scene ? rs.filter(r => r.id === card.scene) : (v?.sceneIds ?? []).flatMap(id => rs.filter(r => r.id === id))
+    const clips = scenes.flatMap(r => (card.marker !== null && card.scene ? r.groups[card.marker as Marker] ?? [] : Object.keys(r.clips)).map(id => r.clips[id]).filter(Boolean))
+    return topPhoto(clips, ds ?? {}, cp => { const ph = findPhoto(packsRef.current, cp.player, cp.team); return ph ? packAssetId(ph.pack, ph.player.photo) : null })
+  }, [])
   const currentPlan = useCallback((target: 'video' | 'scene'): PlanItem[] => {
     const { video: v, reel: r, reels: rs, overlay: ov, matches: ms, settings: st, orderOf: of } = latest.current
     const codes = st?.ourTeamCodes ?? []
-    if (target === 'scene') return r ? planScene(of(r), r, ov, ms, codes) : []
-    return v ? planVideo(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, codes) : []
-  }, [])
+    const plan = target === 'scene' ? (r ? planScene(of(r), r, ov, ms, codes) : []) : v ? planVideo(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, codes) : []
+    return fillPlanFrames(plan, cardFramePhoto)
+  }, [cardFramePhoto])
 
   // startAt and the reported index count clips, not cards. The scene editor follows the scene of
   // the clip on screen, so number keys tag the clip that is playing.
@@ -482,7 +573,7 @@ export function App() {
       // the start points at the first of them.
       if (p.kind === 'card') { if (clipNo === startAt && startItem < 0) startItem = items.length; items.push({ card: p.card, durationSec: p.durationSec }); clipAt.push(null); continue }
       if (clipNo === startAt && startItem < 0) startItem = items.length
-      items.push({ key: p.clip.matchId, ...inf(p.clip, byId[p.sceneId] ?? null).range! })
+      items.push({ key: p.clip.matchId, ...inf(p.clip, byId[p.sceneId] ?? null).range!, timing: p.clip.timing })
       clipAt.push({ clip: p.clip, sceneId: p.sceneId, group: p.group })
       clipNo++
     }
@@ -520,22 +611,86 @@ export function App() {
   // ---- trimming (design §3.5) -----------------------------------------------------------------
   const active = reel && activeClipId ? reel.clips[activeClipId] ?? null : null
   const activeInfo = active ? clipInfo(active) : null
+  // A serve's hit and touch (on the match, by play) and the speed they give: for the open clip, and for
+  // the play picked in the list when no clip of it is open.
+  const serveInfo = (m: Match | undefined, play: Play | null | undefined, clip: Clip | null) => {
+    if (!m || !play || play.skill !== 'S') return null
+    const mark = serveMarkOf(m, play), times = playTimes(mark, clip)
+    return { mark, times, measured: measuredSpeed(play, times.skillSec ?? play.time + m.offsetSec, times.touchSec) }
+  }
+  const activeServe = active && activeInfo?.ref ? serveInfo(matches[active.matchId], activeInfo.ref.play, active) : null
+  const listServe = match && selectedPlay && !(active && activeInfo?.range && active.matchId === match.id && active.playId === selectedPlay.id) ? serveInfo(match, selectedPlay, null) : null
+  // The clip's own objects on the timelines under 編集 and 図形.
+  // A zone paint is one lane, however many cells it has.
+  const timelineObjects = active && activeInfo?.range ? active.annotations.filter((a, i, all) => !(isZonePaint(a) && a.groupId && all.findIndex(x => isZonePaint(x) && x.groupId === a.groupId) < i)).map(a => ({
+    id: a.id, label: a.kind === 'text' ? `T ${a.text}` : isZonePaint(a) && a.groupId ? t('ゾーン塗り（{0}）', active.annotations.filter(x => isZonePaint(x) && x.groupId === a.groupId).length) : a.kind === 'polygon' && a.cell ? t('ゾーン {0}', zoneOfCell(a.cell)) : a.kind === 'polygon' && a.disc ? (a.disc.part === 'top' ? t('円柱') : t('円柱（側面）')) : KIND_LABEL[a.kind],
+    from: a.showFrom ?? activeInfo.range!.in, to: a.showTo ?? activeInfo.range!.out, set: a.showFrom !== undefined || a.showTo !== undefined,
+  })) : []
   const loopIn = activeInfo?.range?.in, loopOut = activeInfo?.range?.out
   // The active clip loops while it's being trimmed; a through-play overrides the loop.
   useEffect(() => {
-    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun && loopOn ? { key: active.matchId, in: loopIn, out: loopOut } : null)
+    playback.setLoop(active && loopIn !== undefined && loopOut !== undefined && !seqPlaying && !listRun && loopOn ? { key: active.matchId, in: loopIn, out: loopOut, timing: active.timing } : null)
   }, [active, loopIn, loopOut, seqPlaying, listRun, loopOn])
 
   useEffect(() => setSelectedAnn(null), [activeClipId])
 
   // ---- annotations (design §3.6) --------------------------------------------------------------
   // Scoreboard and caption for a clip, from its play in the DVW.
-  const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData } | null => {
+  const overlayData = useCallback((c: Clip | null): { scoreboard: ScoreboardData; caption: CaptionData; speed: SpeedData | null } | null => {
     const d = c ? dvws[c.matchId] : null, play = c && d ? d.plays[c.playId] : null
     if (!c || !d || !play) return null
-    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption) }
-  }, [dvws, settings, overlay])
+    const tm = playTimes(serveMarkOf(matches[c.matchId], play), c)
+    const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
+    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
+    const speed = kmh && tm.touchSec !== undefined ? { kmh, touchSec: tm.touchSec } : null
+    return { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], matches[c.matchId]?.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
+  }, [dvws, settings, overlay, packs, video?.captionNames, matches, teamColors])
   const activeOverlay = overlayData(active)
+  // No clip on screen: the scoreboard and caption follow the playhead over the left list's plays in
+  // this match (as the video's settings have them), each from its contact until the next listed play's,
+  // or for the scene's after-the-play length at most. So a play, or plays in a row, can be shown as the
+  // video would show them without making one.
+  const followData = useMemo(() => {
+    const d = match ? dvws[match.id] : null
+    if (!match || !d) return null
+    // 通し: the rally's serves, receptions and attacks as each happens, whatever the list shows. Else the
+    // play picked, for the whole of its window (what the list plays of it), from its start.
+    const defaults = reel ? rangeDefaults(reel) : DEFAULT_RANGE
+    const pick = !listThrough && selectedPlay ? defaultRange(d, selectedPlay, match.offsetSec, defaults, extract) : null
+    const windows = listThrough
+      ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
+      : pick && selectedPlay ? [{ from: pick.in, to: pick.out, playId: selectedPlay.id }] : []
+    // The court's marks have windows of their own (a serve stays longer, a good reception's set gets a stop).
+    const stop = setStopSec()
+    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter, stop, gridStyle.forecast === false ? 0 : FORECAST_AHEAD_SEC) : windows
+    const holds = listThrough ? setFreezes(d.plays, match.offsetSec, stop).map(f => ({ at: f.at, sec: f.sec })) : []
+    const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
+    return {
+      key: match.id, windows, court, holds,
+      data: (playId: number) => {
+        const play = d.plays[playId]
+        if (!play) return null
+        let v = cache.get(playId)
+        if (!v) {
+          const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
+          v = { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], match.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+          cache.set(playId, v)
+        }
+        return v
+      },
+    }
+  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract, settingsOpen, gridStyle.forecast]) // settingsOpen: the set stop's length is read again once the settings close
+  followDataRef.current = followData
+  // 通し stops the picture before a set after a good reception, for the set distribution to be read.
+  useEffect(() => {
+    playback.setListHolds(listThrough && listRun && followData ? { key: followData.key, holds: followData.holds } : null)
+    return () => playback.setListHolds(null)
+  }, [listThrough, listRun, followData])
+  // The serve speed plate on the video, from the touch on: to the end of the open clip, or for a few
+  // seconds after it on a serve picked in the list.
+  const speedPlate = listServe?.measured && listServe.mark?.touch !== undefined && match
+    ? { key: match.id, from: listServe.mark.touch, to: listServe.mark.touch + SPEED_LIST_SEC, kmh: listServe.measured }
+    : active && activeInfo?.range && activeOverlay?.speed ? { key: active.matchId, from: activeOverlay.speed.touchSec, to: activeInfo.range.out, kmh: activeOverlay.speed.kmh } : null
   const activeMarker = reel && active ? markerFor(reel, active.id, activeGroup) : null
   const activeScoped = useMemo<ScopedAnnotations | null>(() => active ? {
     video: video?.annotations ?? [], scene: reel?.annotations ?? [],
@@ -545,211 +700,69 @@ export function App() {
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
-  // The export panel's choices: the whole video, the open scene, each marker group of it.
-  const planSec = (plan: PlanItem[]) => {
-    const byId = Object.fromEntries(reels.map(s => [s.id, s]))
-    let sec = 0, clips = 0
-    for (const it of plan) {
-      if (it.kind === 'card') { sec += it.durationSec; continue }
-      const r = infoFor(it.clip, byId[it.sceneId] ?? null).range
-      if (r) { sec += r.out - r.in; clips++ }
+  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget, quality } = useExport(
+    { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef, cardFramePhoto)
+  latest.current.exportState = exportState
+  const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
+  const {
+    cardEdit, setCardEdit, focusEdit, setFocusEdit, cardTool, setCardTool, cardToolsOpen, setCardToolsOpen,
+    cardEditCard, cardEditRef, cardAnnsRef, setCardAnns, cardScopeOf, setCardScope, hideOnCard, cardHiddenIds, cardTitleNow, setCardTitle, setCardLayout, cardShown, setCardShown, alignCards,
+    editCard, editingSlide, editingSource,
+  } = useCardEdit({ latest, settings, video, reels, matches, overlay, setOverlay: o => setOverlay(o), selectedAnn, setSelectedAnn, updateReel, updateVideo })
+  const {
+    scopedNow, setAnns, setAnnScope, setObjectSpan, insertImage, pasteImage, placeImage, paletteSelection, putPaletteItem, copyObjects, pasteObjects,
+  } = useObjects({
+    latest, updateReel, updateVideo, cardEditRef, cardAnnsRef, cardEditCard, setCardAnns,
+    activeAnns, selectedAnn, extraSel, setExtraSel, selectAnn, setSelectedAnn, setAnnTool, setNotice, setError,
+  })
+
+  // ---- slides ---------------------------------------------------------------------------------
+  const { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards, pptxPick, setPptxPick, savePptx, slideThumbs } = useSlides({
+    latest, dvws: targetDvws, settings, packs, gridStyle, overlay, activeGroup, whenIn, cardEdit, editCard, updateScene, makeScene, setProgress, setNotice, setError,
+  })
+  const [reportOpen, setReportOpen] = useState(false) // the match report
+  const [analysisOpen, setAnalysisOpen] = useState(false) // 分析
+
+  // A title card's pictures to put on it: the photos of its clips' players (then the rest of those
+  // matches'), and the logos the library has for the teams (those matches' first). Its clips: a
+  // marker card's group, a scene card's scene, the video card's scenes.
+  const [logoCodes, setLogoCodes] = useState<string[]>([])
+  const editingTitleCard = !!cardEditCard && !cardEdit?.slideId
+  // While a card is edited its photo frame shows the photo it will have.
+  const cardImages = useMemo((): ImageLookup => {
+    const photo = editingTitleCard && cardEditCard ? cardFramePhoto(cardEditCard) : null
+    return id => (id.startsWith('frame:') ? (photo ? assetImage(photo) : null) : assetImage(id))
+  }, [editingTitleCard, cardEditCard, cardFramePhoto, reels, dvws, packs]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (editingTitleCard) void api.listLogos().then(l => setLogoCodes(Object.keys(l))) }, [editingTitleCard])
+  const cardInserts = useMemo((): CardInserts | undefined => {
+    if (!editingTitleCard || !cardEdit) return undefined
+    const scenes = cardEdit.sceneId ? [reels.find(r => r.id === cardEdit.sceneId)].filter(Boolean) : (video?.sceneIds ?? []).map(id => reels.find(r => r.id === id)).filter(Boolean)
+    const clips = (scenes as Reel[]).flatMap(r => (cardEdit.marker !== null ? r.groups[cardEdit.marker] : Object.keys(r.clips)).map(id => r.clips[id]).filter(Boolean))
+    const photos = cardPlayers(clips, dvws).flatMap(cp => {
+      const ph = findPhoto(packs, cp.player, cp.team)
+      return ph ? [{ key: `${cp.team}|${cp.player.key}|${cp.player.jersey}`, label: `${cp.team} #${cp.player.jersey} ${ph.player.label ?? cp.player.lastName}`, own: cp.clips > 0, pack: ph.pack, photo: ph.player.photo }] : []
+    })
+    const teams = cardTeams(clips, dvws), have = new Set(logoCodes)
+    const logos = [...teams.filter(tm => have.has(tm.code)).map(tm => ({ code: tm.code, label: `${tm.code} ${tm.name}` })),
+      ...logoCodes.filter(c => !teams.some(tm => tm.code === c)).sort().map(c => ({ code: c, label: c }))]
+    return {
+      photos, logos,
+      onPhoto: (pack, photo) => void placeImage(() => api.usePackPhoto(pack, photo), true, { w: 0.15, cx: 0.12, cy: 0.72 }), // lower left, clear of the title
+      onLogo: code => void placeImage(() => api.useLogo(code), true, { w: 0.1, cx: 0.9, cy: 0.14, shared: true }), // top right, on every card of the kind
+      // A portrait frame (3:4) lower left, clear of the title.
+      onFrame: () => {
+        const w = 0.14, h = (w * 4 / 3) * (16 / 9), id = crypto.randomUUID()
+        setCardAnns([...(cardEditCard?.annotations ?? []), { id, kind: 'image', color: '#FFFFFF', x: 0.12 - w / 2, y: Math.min(1 - h, 0.78 - h / 2), w, h, assetId: 'frame:top', frame: 'top', fit: 'cover' }], { all: [id] }) // on every card of the kind
+        setAnnTool('select'); setSelectedAnn(id)
+      },
     }
-    return { sec, clips }
-  }
-  const fmtLen = (s: number) => `${Math.floor(Math.round(s) / 60)}分${String(Math.round(s) % 60).padStart(2, '0')}秒`
-  const markerPlan = (sc: Reel, m: Marker) => {
-    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
-    return planScene(orderOf(only), only, overlay, matches, settings?.ourTeamCodes ?? [])
-  }
-  // Rebuilt when the video, its scenes or the overlay change (planSec and markerPlan read the same state).
-  const exportTargets: ExportTarget[] = useMemo(() => {
-    if (!video) return []
-    const out: ExportTarget[] = []
-    const vp = planSec(currentPlan('video'))
-    out.push({ key: 'video', label: `動画「${video.name}」全体`, detail: `${video.sceneIds.length} シーン・${vp.clips} クリップ・${fmtLen(vp.sec)}`, empty: !vp.clips })
-    if (reel) {
-      const sp = planSec(currentPlan('scene'))
-      out.push({ key: 'scene', label: `シーン「${reel.name}」だけ`, detail: `${sp.clips} クリップ・${fmtLen(sp.sec)}`, empty: !sp.clips })
-      for (const m of reel.groupOrder) {
-        if (!reel.groups[m].length) continue
-        const mp = planSec(markerPlan(reel, m))
-        out.push({ key: `marker:${m}`, label: `マーカー ${m}「${reel.markerNames[m] || `マーカー ${m}`}」だけ`, detail: `${mp.clips} クリップ・${fmtLen(mp.sec)}`, empty: !mp.clips })
-      }
-    }
-    return out
-  }, [video, reel, reels, overlay, matches, settings, dvws])
-  const exportInfo = `${EXPORT_HEIGHT}p・${overlay.transition.fade ? 'フェードあり' : 'フェードなし'}・${overlay.titleCard.videoCard || overlay.titleCard.sceneCards || overlay.titleCard.enabled ? 'タイトルカードあり' : 'タイトルカードなし'}`
-  const exportTarget = (key: string) => {
-    if (key === 'video') { void startExport(); return }
-    const sc = latest.current.reel
-    if (!sc) return
-    if (key === 'scene') { void startExport(undefined, { plan: currentPlan('scene'), name: `${video?.name ?? sc.name} - ${sc.name}` }); return }
-    void exportMarker(sc.id, Number(key.split(':')[1]) as Marker)
-  }
-  // One marker group of a scene as its own MP4: its card (when on) and its clips, with the video's
-  // overlays and objects. A group switched off can still be exported this way.
-  const exportMarker = (sceneId: string, m: Marker, outPath?: string) => {
-    const { reels: rs, orderOf: of, overlay: ov, matches: ms, settings: st, video: v } = latest.current
-    const sc = rs.find(x => x.id === sceneId)
-    if (!sc) return Promise.resolve(null)
-    const only = { ...sc, markerOff: {}, scope: 'marked' as const, groupOrder: [m] }
-    const plan = planScene(of(only), only, ov, ms, st?.ourTeamCodes ?? [])
-    const name = `${v?.name ?? sc.name} - ${sc.markerNames[m] || `マーカー${m}`}`
-    return startExport(outPath, { plan, name })
-  }
-  // The gears: edit a title card over the video window — its title's place and size, and objects on
-  // it (text, pictures, shapes). sceneId null = the video's opening card; marker null = the scene's card.
-  const [cardEdit, setCardEdit] = useState<{ sceneId: string | null; marker: Marker | null } | null>(null)
-  const [cardTool, setCardTool] = useState<'objects' | 'title'>('objects') // what the pointer edits on the card
-  const cardEditCard = useMemo((): Card | null => {
-    if (!cardEdit) return null
-    const codes = settings?.ourTeamCodes ?? []
-    if (cardEdit.sceneId === null) return video ? videoCard(video, Object.fromEntries(reels.map(r => [r.id, r])), matches, codes) : null
-    const sc = reels.find(x => x.id === cardEdit.sceneId)
-    if (!sc) return null
-    const m = cardEdit.marker
-    const ids = m === null ? Object.keys(sc.clips) : sc.groups[m]
-    return { marker: m, name: m === null ? sc.name : sc.markerNames[m], ...cardMatch(sc, ids, matches, codes),
-      annotations: (m === null ? sc.cardAnnotations : sc.markerCardAnnotations?.[m]) ?? [] }
-  }, [cardEdit, reels, video, matches, settings])
-  const setCardAnns = useCallback((list: Annotation[]) => {
-    const ce = cardEditRef.current
-    if (!ce) return
-    const now = new Date().toISOString()
-    if (ce.sceneId === null) { const v = latest.current.video; if (v) updateVideo({ ...v, cardAnnotations: list, updatedAt: now }); return }
-    const sc = latest.current.reels.find(x => x.id === ce.sceneId)
-    if (!sc) return
-    updateReel(ce.marker === null ? { ...sc, cardAnnotations: list, updatedAt: now }
-      : { ...sc, markerCardAnnotations: { ...sc.markerCardAnnotations, [ce.marker]: list }, updatedAt: now })
-  }, [updateReel, updateVideo])
-  const cardEditRef = useRef(cardEdit)
-  cardEditRef.current = cardEdit
-  const cardAnnsRef = useRef<Annotation[]>([])
-  cardAnnsRef.current = cardEditCard?.annotations ?? []
-  // Whether this card is shown at all (the same switches as the overlay dialog and the scene editor).
-  const cardShown = !cardEdit ? false : cardEdit.sceneId === null ? !!overlay.titleCard.videoCard
-    : cardEdit.marker === null ? (reels.find(x => x.id === cardEdit.sceneId)?.sceneCard ?? overlay.titleCard.sceneCards)
-    : (() => { const sc = reels.find(x => x.id === cardEdit.sceneId); return sc ? markerCardOn(sc, cardEdit.marker!, overlay.titleCard.enabled) : false })()
-  const setCardShown = (on: boolean) => {
-    if (!cardEdit) return
-    if (cardEdit.sceneId === null) { setOverlay({ ...overlay, titleCard: { ...overlay.titleCard, videoCard: on } }); return }
-    if (cardEdit.marker === null) {
-      const s = reels.find(x => x.id === cardEdit.sceneId)
-      if (s) updateReel({ ...s, sceneCard: on, updatedAt: new Date().toISOString() })
-      return
-    }
-    const sc = reels.find(x => x.id === cardEdit.sceneId)
-    if (sc) updateReel({ ...sc, markerCards: { ...sc.markerCards, [cardEdit.marker]: on }, updatedAt: new Date().toISOString() })
-  }
-  // The palette works on the card being edited, else on the active clip: what "save" stores is the
-  // selection with its groups; a used item goes on top and is selected.
-  const paletteSelection = useMemo(() => {
-    const list = cardEditCard ? cardEditCard.annotations ?? [] : activeAnns
-    if (!selectedAnn) return []
-    const ids = withGroups(list, [selectedAnn, ...extraSel])
-    return list.filter(a => ids.includes(a.id))
-  }, [cardEditCard, activeAnns, selectedAnn, extraSel])
-  const putPaletteItem = (anns: Annotation[]) => {
-    if (!anns.length) return
-    if (cardEditRef.current) setCardAnns([...cardAnnsRef.current, ...anns])
-    else { const now = scopedNow(); if (!now) return; setAnns([...mergeScoped(now), ...anns]) }
-    setAnnTool('select'); selectAnn(anns[0].id)
-  }
-  // Ctrl+C / Ctrl+V: the selected objects (with their groups) are kept here with times relative to
-  // the clip's IN, like a palette item, and pasted as new objects on the clip or card being edited.
-  // Only within the project: pictures are the project's own files.
-  const paletteSelRef = useRef<Annotation[]>([])
-  paletteSelRef.current = paletteSelection
-  const copied = useRef<{ projectPath: string | null; anns: Annotation[] } | null>(null)
-  // The edited clip's IN, or null on a title card; undefined when nothing can take objects.
-  const editInNow = (): number | null | undefined => {
-    if (cardEditRef.current) return null
-    const { reel: r, activeClipId: id, clipInfo: info } = latest.current
-    const c = r && id ? r.clips[id] : null
-    return c ? info(c).range?.in : undefined
-  }
-  const copyObjects = (): boolean => {
-    const sel = paletteSelRef.current, at = editInNow()
-    if (!sel.length || at === undefined) return false
-    copied.current = { projectPath: latest.current.projectPath, anns: sel.map(a => shiftTimes(a, at === null ? null : -at)) }
-    const msg = `図形を ${sel.length} 個コピーしました（Ctrl+V で貼り付け）`
-    setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? null : n)), 2500) // a short note, not one to dismiss
-    return true
-  }
-  const pasteObjects = (): boolean => {
-    const c = copied.current, at = editInNow()
-    if (!c || c.projectPath !== latest.current.projectPath || at === undefined || playback.current.seq) return false
-    const list = cardEditRef.current ? cardAnnsRef.current : mergeScoped(scopedNow()!)
-    const copies = pasteCopies(freshIds(c.anns.map(a => shiftTimes(a, at))), list)
-    putPaletteItem(copies)
-    setExtraSel(copies.slice(1).map(a => a.id))
-    return true
-  }
-  const editCard = (sceneId: string | null, marker: Marker | null) => {
-    playback.stopSequence(); playback.pause(); setSelectedAnn(null); setCardTool('objects'); setCardEdit({ sceneId, marker })
-  }
+  }, [editingTitleCard, cardEdit, cardEditCard, reels, video, dvws, packs, logoCodes, placeImage, setCardAnns, setAnnTool])
+
   const setOverlay = useCallback((s: OverlaySettings) => {
-    const v = latest.current.video
+    const v = latest.current.video, st = latest.current.settings
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
-  }, [updateVideo])
-
-  // The active clip's objects with its scene's and its video's (表示範囲). The editor gets them
-  // merged; edits are split back to where each object lives.
-  const scopedNow = (): ScopedAnnotations | null => {
-    const { reel: r, activeClipId: id, video: v } = latest.current
-    const c = r && id ? r.clips[id] : null
-    const m = c ? markerFor(r!, c.id, latest.current.activeGroup) : null
-    return c ? { video: v?.annotations ?? [], scene: r!.annotations ?? [], marker: m ? r!.markerAnnotations?.[m] ?? [] : [], clip: c.annotations } : null
-  }
-  const applyScoped = useCallback((next: ScopedAnnotations) => {
-    const { reel: r, activeClipId: id, video: v } = latest.current
-    const prev = scopedNow()
-    if (!r || !id || !prev) return
-    const now = new Date().toISOString()
-    const m = markerFor(r, id, latest.current.activeGroup)
-    if (changed(prev.clip, next.clip) || changed(prev.scene, next.scene) || (m && changed(prev.marker, next.marker))) {
-      let nr = changed(prev.clip, next.clip) ? setAnnotations(r, id, next.clip) : r
-      if (changed(prev.scene, next.scene)) nr = { ...nr, annotations: next.scene, updatedAt: now }
-      if (m && changed(prev.marker, next.marker)) nr = { ...nr, markerAnnotations: { ...nr.markerAnnotations, [m]: next.marker }, updatedAt: now }
-      updateReel(nr)
-    }
-    if (v && changed(prev.video, next.video)) updateVideo({ ...v, annotations: next.video, updatedAt: now })
-  }, [updateReel, updateVideo])
-  const setAnns = useCallback((list: Annotation[]) => {
-    const prev = scopedNow()
-    if (prev) applyScoped(splitScoped(prev, list))
-  }, [applyScoped])
-  const setAnnScope = useCallback((annId: string, to: AnnScope) => {
-    const prev = scopedNow()
-    if (prev) applyScoped(moveToScope(prev, annId, to))
-  }, [applyScoped])
-
-  // Puts a picture (or page 1 of a PDF) in the middle of the frame, 30% of its width.
-  const insertImage = useCallback(async (path?: string): Promise<string | null> => {
-    const { reel: r, activeClipId: id, matches: ms } = latest.current
-    const c = r && id ? r.clips[id] : null
-    const onCard = !!cardEditRef.current
-    if (!c && !onCard) return null
-    try {
-      const img = await insertAsset(path)
-      if (!img) return null
-      const m = c ? ms[c.matchId] : undefined
-      const frame = m?.width && m.height ? m.width / m.height : 16 / 9
-      const ratio = (img.height / img.width) * frame // normalized height per normalized width
-      let w = 0.3, h = w * ratio
-      if (h > 0.8) { h = 0.8; w = h / ratio }
-      const a: Annotation = { id: crypto.randomUUID(), kind: 'image', color: '#FFFFFF', x: (1 - w) / 2, y: (1 - h) / 2, w, h, assetId: img.assetId }
-      if (cardEditRef.current) { setCardAnns([...cardAnnsRef.current, a]) } else {
-        const now = scopedNow()
-        if (now) setAnns([...mergeScoped(now), a])
-      }
-      setSelectedAnn(a.id); setAnnTool('select')
-      return a.id
-    } catch (e) {
-      setError((e as Error).message)
-      return null
-    }
-  }, [setAnns, setCardAnns])
+    else if (st) void saveSettings({ ...st, overlay: s })
+  }, [updateVideo, saveSettings])
 
   const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
     const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
@@ -759,209 +772,45 @@ export function App() {
     updateReel(trimClip(r, c.id, edge, t, i.range, i.def, ms[c.matchId]?.durationSec))
   }, [updateReel])
 
-  const copyObjectsRef = useRef(copyObjects)
-  copyObjectsRef.current = copyObjects
-  const pasteObjectsRef = useRef(pasteObjects)
-  pasteObjectsRef.current = pasteObjects
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target
-      if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || settingsOpen || composing(e)) return
-      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        const k = e.key.toLowerCase()
-        if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo') }
-        else if (k === 'c' && !e.shiftKey && !window.getSelection()?.toString()) { if (copyObjectsRef.current()) e.preventDefault() }
-        else if (k === 'v' && !e.shiftKey) { if (pasteObjectsRef.current()) e.preventDefault() }
-        else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); undoRedo('redo') }
-        return
-      }
-      if (e.altKey) return
-      if (e.key === '?') { setShortcutsOpen(o => !o); return }
-      if (e.code === 'Space') { e.preventDefault(); playback.toggle() }
-      else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && focusPane.current === 'scene') {
-        // Up / Down in the scene editor (last clicked): the clip above / below, opened like a click on it.
-        e.preventDefault()
-        const r = latest.current.reel
-        if (!r) return
-        const rows = [...r.groupOrder.flatMap(g => r.groups[g].map(id => ({ id, g: g as Group }))),
-          ...chronological(r, r.groups.none, whenIn(r)).map(c => ({ id: c.id, g: 'none' as Group }))]
-        const a = latest.current.activeClipId, ag = latest.current.activeGroup
-        let i = rows.findIndex(x => x.id === a && (ag === null || x.g === ag))
-        if (i < 0) i = rows.findIndex(x => x.id === a)
-        const next = rows[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
-        if (next) activateClip(r.clips[next.id], next.g)
-      }
-      else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        // Up / Down: the previous / next play in the left list (played like a click on it).
-        e.preventDefault()
-        const res = latest.current.results, s = latest.current.selected
-        const i = s ? res.findIndex(x => x.matchId === s.matchId && x.play.id === s.playId) : -1
-        const next = res[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
-        if (next) jumpRef.current(next)
-      }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-0.5) }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(0.5) }
-      else if (e.key === 'Escape') playback.stopSequence()
-      else if ((latest.current.activeClipId || cardEditRef.current) && /^[vtacrfglp]$/i.test(e.key)) {
-        const tools: Record<string, Tool> = { v: 'select', t: 'text', a: 'arrow', c: 'circle', r: 'rect', f: 'freehand', g: 'triangle', l: 'polyline', p: 'polygon' }
-        setAnnTool(tools[e.key.toLowerCase()])
-      }
-      else if ((e.key === 'Delete' || e.key === 'Backspace') && latest.current.selectedAnn) {
-        const sel = latest.current.selectedAnn, now = scopedNow()
-        // The selected object, the other selected ones and their groups.
-        const drop = (list: Annotation[]) => { const ids = withGroups(list, [sel!, ...extraSelRef.current]); return list.filter(a => !ids.includes(a.id)) }
-        if (cardEditRef.current) { e.preventDefault(); setCardAnns(drop(cardAnnsRef.current)); setSelectedAnn(null); setExtraSel([]) }
-        else if (now) { e.preventDefault(); setAnns(drop(mergeScoped(now))); setSelectedAnn(null); setExtraSel([]) }
-      }
-      else if (e.key === '[' || e.key === ']') {
-        const { reel: r, activeClipId: id } = latest.current
-        if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
-      }
-      else if (/^[0-5]$/.test(e.key)) { e.preventDefault(); markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, markerKey, trim])
+  useShortcuts({
+    latest, paused: settingsOpen, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
+    scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
+    undoRedo, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o), toggleRight: () => setRightFolded(f => !f),
+    activateClip, whenIn, jump, setAnnTool, trim, markerKey,
+    setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
+  })
 
-  // ---- export (design §3.8) ------------------------------------------------------------------
-  // The job is built here (PNG layers drawn with the preview's functions) and handed to the main
-  // process, which encodes in the background; the app stays usable meanwhile.
-  useEffect(() => api.onExportEvent(ev => {
-    if (ev.type === 'progress') setExportState(s => ({ ...(s ?? { message: '' }), status: 'running', ratio: ev.ratio, message: `${ev.item + 1} / ${ev.items} 本目を書き出し中${eta(ev.ratio, ev.elapsedSec)}` }))
-    else if (ev.type === 'done') setExportState({ status: 'done', ratio: 1, outPath: ev.outPath, message: `書き出しました（${Math.round(ev.footageSec)} 秒分を ${Math.round(ev.elapsedSec)} 秒、${(ev.sizeBytes / 1e6).toFixed(1)} MB）` })
-    else if (ev.type === 'error') setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${ev.message}` })
-    else setExportState({ status: 'cancelled', ratio: 0, message: '書き出しをキャンセルしました' })
-  }), [])
-
-  // The whole video by default; part of it (one marker group) when a plan and a file name are given.
-  const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
-    const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf } = latest.current
-    const plan = part?.plan ?? currentPlan('video')
-    if (!v || !plan.some(p => p.kind === 'clip')) return null
-    const outPath = outPathArg ?? await api.chooseExportPath(part?.name ?? v.name)
-    if (!outPath) return null
-    setExportState({ status: 'preparing', ratio: 0, message: 'オーバーレイを準備しています' })
-    try {
-      const byId = Object.fromEntries(rs.map(s => [s.id, s]))
-      const job = await buildExportJob(plan, ov,
-        { range: (c, sceneId) => inf(c, byId[sceneId] ?? null).range, overlayData: c => latest.current.overlayData!(c), matches: ms,
-          sceneAnnotations: id => byId[id]?.annotations ?? [], videoAnnotations: v.annotations ?? [],
-          markerAnnotations: (id, g) => (g === 'none' ? [] : byId[id]?.markerAnnotations?.[g] ?? []) }, outPath)
-      await api.startExport(job)
-      return job
-    } catch (e) {
-      setExportState({ status: 'error', ratio: 0, message: `書き出しに失敗しました: ${(e as Error).message}` })
-      return null
-    }
-  }, [currentPlan])
 
   // ---- dev self-check (VR_SMOKE): only loaded when the main process runs one (see smoke.ts)
   useEffect(() => {
     if (!SMOKE) return
-    const host: SmokeHost = { activateClip, currentPlan, editCard, exportMarker, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setScope, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
+    const host: SmokeHost = { activateClip, currentPlan, editCard, exportClip, exportMarker, exportScenes, extraSelRef, insertImage, jump, latest, loadProject, overlapsRef, playThrough, putSlide, scopedNow, setAnnScope, setAnnTool, setAnns, setExtract, setFilter, setLibrary, setOverlay, setOverlayOpen, setPicker, setReelId, setReels, setScan, setMatchIds, setSelectedAnn, setSettingsOpen, setVideoId, setVideos, startExport, updateReel, updateVideo, SAVE_DELAY_MS }
     void import('./smoke').then(m => m.installSmoke(host))
   }, [jump, loadProject, playThrough, activateClip, updateReel, updateVideo, overlayData, setOverlay, startExport, currentPlan])
-
-  // ---- project ------------------------------------------------------------------------------
-  // ---- library and projects (v3) -------------------------------------------------------------
-  const guard = async (fn: () => Promise<void>) => {
-    setError(null)
-    try { await fn() } catch (e) { setError((e as Error).message) } finally { setProgress(null) }
-  }
-  const resetView = () => { setFilter(EMPTY_FILTER); setSelected(null); setActiveClipId(null); setMatchId(null) }
-  const openProject = (path?: string) => guard(async () => {
-    const p = await api.openProject(path)
-    if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
-  })
-  const goHome = async () => {
-    await flushAll() // nothing pending is lost on the way out
-    playback.stopSequence()
-    await api.closeProject()
-    resetView()
-    setProject(null); setReels([]); setReelId(null); setVideos([]); setVideoId(null); setDvws({})
-    setLibrary(await api.getLibrary()); setRecent(await api.recentProjects())
-  }
-  const chooseLibrary = () => guard(async () => { const l = await api.chooseLibrary(); if (l) { setLibrary(l); setProject(null) } })
-  const scanFolders = () => guard(async () => { const r = await api.scanFolders(); if (r) setScan(r) })
-  const importPairs = (pairs: { dvwPath: string; video: string }[]) => guard(async () => {
-    setScan(null)
-    const r = await api.importPairs(pairs)
-    setLibrary(await api.getLibrary())
-    if (r.failed.length) setError(`取り込めなかった試合があります: ${r.failed.map(f => `${f.dvwPath.split(/[\\/]/).pop()}（${f.message}）`).join(' / ')}`)
-    else setNotice(`${r.imported.length} 試合を倉庫に取り込みました`)
-  })
-  const relocate = (id: string, part: MissingPart) => guard(async () => {
-    const r = await api.relocateMatch(id, part)
-    if (!r) return
-    setLibrary(r.library)
-    if (r.project) await loadProject(r.project)
-    setNotice(r.note)
-  })
-  const importOne = () => guard(async () => { const m = await api.importMatch(); if (m) setLibrary(await api.getLibrary()) })
-  const pickerDone = (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => guard(async () => {
-    setPicker(null)
-    if (picker === 'create') {
-      const p = await api.createProject({ name: r.name, ourTeamCodes: r.codes, matchIds: r.matchIds, chooseFolder: r.chooseFolder })
-      if (p) { resetView(); await loadProject(p); setRecent(await api.recentProjects()) }
-      return
-    }
-    await api.saveSettings({ ...latest.current.settings!, ourTeamCodes: r.codes })
-    await loadProject(await api.setProjectMatches(r.matchIds))
-  })
-
-  // The teams in the project's matches for the logo list: opponents first, then ours.
-  const projectTeams = useMemo(() => {
-    const map = new Map<string, { code: string; name: string }>()
-    for (const m of project?.matches ?? []) for (const t of m.teams) if (!map.has(t.code)) map.set(t.code, { code: t.code, name: t.name })
-    const ours = settings?.ourTeamCodes ?? []
-    return [...map.values()].sort((a, b) => Number(ours.includes(a.code)) - Number(ours.includes(b.code)) || a.code.localeCompare(b.code))
-  }, [project, settings])
-  const saveSettings = async (s: ProjectSettings) => {
-    const prev = latest.current.settings
-    if (prev) record({ kind: 'settings', value: prev })
-    setProject(await api.saveSettings(s))
-  }
-
-
-  const rawRefs = useMemo(() => settingsOpen && settings
-    ? (project?.matches ?? []).flatMap(m => dvws[m.id] ? buildRefs(m.id, dvws[m.id], { ...settings, playerAliases: NO_ALIASES }) : [])
-    : [], [settingsOpen, settings, project, dvws])
 
   return (
     <div className="app">
       <header className="topbar">
-        <strong className="brand">volley-reel</strong>
-        {project && <button onClick={() => void goHome()} title="倉庫とプロジェクトの一覧に戻る">ホーム</button>}
+        <strong className="brand">SyncScout Video Editor</strong>
+        {appVersion && <span className="app-version" title={t('このアプリのバージョン')}>v{appVersion}</span>}
+        {project && <button onClick={() => void goHome()} title={t('倉庫とプロジェクトの一覧に戻る')}>{t('ホーム')}</button>}
         {project && <strong className="project-name" title={project.path}>{project.name}</strong>}
-        {project && <button onClick={() => setPicker('edit')} title="倉庫から試合を足す・外す">試合 {project.matches.length}</button>}
+        {project && <button onClick={() => setPicker('edit')} title={t('倉庫から試合を足す・外す')}>{t('試合')} {project.matches.length}</button>}
         <span className="spacer" />
-        {project && <span className={`save-state ${saveState}`} title="シーンと動画は自動で保存されます">{saveState === 'saved' ? '保存済み' : saveState === 'pending' ? '保存中…' : '保存に失敗'}</span>}
-        <button onClick={() => setShortcutsOpen(true)} title="ショートカット一覧 (?)">ショートカット</button>
-        {project && <button onClick={() => setSettingsOpen(true)}>設定</button>}
+        {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
+        {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
+        {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
+        {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
+        {project && <button onClick={() => setAnalysisOpen(true)} title={t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る')}>{t('分析')}</button>}
+        {!project && !cmp.open && <CompareMenu compares={cmp.compares} onOpenMenu={() => void cmp.refresh()} onNew={cmp.newCompare} onOpen={cmp.openCompare} onDelete={s => void cmp.deleteCompare(s)} />}
+        <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
+        {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
 
-      {progress && (
-        <div className="banner">
-          {progress.message}
-          {progress.ratio != null && <progress value={progress.ratio} max={1} />}
-        </div>
-      )}
-      {error && <div className="banner error" onClick={() => setError(null)}>{error}</div>}
-      {notice && <div className="banner notice" onClick={() => setNotice(null)}>{notice}</div>}
-      {exportState && (
-        <div className={`banner export ${exportState.status}`} role="status">
-          <span>{exportState.message}</span>
-          {(exportState.status === 'running' || exportState.status === 'preparing') && (
-            <>
-              <progress value={exportState.ratio} max={1} />
-              <span className="muted">{Math.round(exportState.ratio * 100)}%</span>
-              <button onClick={() => void api.cancelExport()}>キャンセル</button>
-            </>
-          )}
-          {exportState.status === 'done' && exportState.outPath && <button onClick={() => void api.showInFolder(exportState.outPath!)}>フォルダを開く</button>}
-          {exportState.status !== 'running' && exportState.status !== 'preparing' && <button className="link" onClick={() => setExportState(null)}>閉じる</button>}
-        </div>
-      )}
+      <Banners progress={progress} update={update} updateLater={updateLater} updateBusy={updateBusy} onRestart={() => void restartToUpdate()} onUpdateLater={() => setUpdateLater(true)}
+        error={error} onError={setError} notice={notice} onNotice={setNotice}
+        staleSlides={staleSlides} onReloadSlides={paths => void reloadSlideFiles(paths)} onLaterSlides={() => void laterSlides()}
+        exportState={exportState} onCloseExport={() => setExportState(null)} />
 
       {project && Object.keys(project.missing).length > 0 && (
         <div className="missing-bar" role="alert">
@@ -970,89 +819,173 @@ export function App() {
           ))}
         </div>
       )}
-      {!project ? (
+      {project && match && courtGuide?.matchId === match.id && (courtGuide.status !== 'found' || courtFitting) && (
+        <div className={`banner court-guide ${courtGuide.status}`} role="status">
+          {courtGuide.status === 'finding' && <span>{t('この試合のコートの線を、動画から探しています…（初めての試合だけ）')}</span>}
+          {courtGuide.status === 'found' && (
+            <>
+              <span>{t('コートのグリッドを自動で合わせました。動画のコートの線に合っているか確かめてください。ずれていれば四隅の丸をドラッグして直し、手前のチームも確かめて「完了」')}</span>
+              <button className="primary" onClick={() => { setCourtFitting(false); setCourtGuide(null) }}>{t('完了')}</button>
+            </>
+          )}
+          {courtGuide.status === 'missing' && (
+            <>
+              <span>{t('この試合のコートを自動では見つけられませんでした。グリッドを合わせると、ゾーン・軌道・ヒートマップなどを動画に重ねられます')}</span>
+              <button className="primary" onClick={() => fitByHand(match.id)}>{t('手で合わせる')}</button>
+              <button className="link" onClick={() => setCourtGuide(null)} title={t('あとで合わせるときは、動画の下の「表示」タブの「グリッドを合わせる」から')}>{t('あとで')}</button>
+            </>
+          )}
+        </div>
+      )}
+      {!project && cmp.open ? (
+        <CompareView key={cmp.open.id} initial={cmp.open} library={library} onExit={cmp.closeCompare} onError={setError} />
+      ) : !project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
-          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)}
-          onRelocate={(id, part) => void relocate(id, part)} />
+          onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
+          onRelocate={(id, part) => void relocate(id, part)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
       ) : !project.matches.length ? (
-        <div className="empty"><h2>試合を選びましょう</h2>
-          <p className="muted">倉庫から、このプロジェクトで使う試合を選びます。</p>
-          <button className="primary" onClick={() => setPicker('edit')}>試合を選ぶ</button></div>
+        <div className="empty"><h2>{t('試合を選びましょう')}</h2>
+          <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
+          <button className="primary" onClick={() => setPicker('edit')}>{t('試合を選ぶ')}</button></div>
       ) : (
-        <main className="workspace">
+        <main className={`workspace${focusEdit ? ' focus-edit' : ''}${rightFolded ? ' right-folded' : ''}`}>
           <aside className="sidebar" onPointerDownCapture={() => { focusPane.current = 'list' }}>
-            <select className="match-select" value={scope === 'all' ? '' : matchId ?? ''} aria-label="検索する試合"
-              onChange={e => { if (e.target.value) { setScope('match'); setMatchId(e.target.value) } else setScope('all') }}>
-              <option value="">すべての試合（{project.matches.length}）</option>
-              {project.matches.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            {scope === 'all' && project.matches.length > 1 && (
-              <div className="segmented match-order" role="radiogroup" aria-label="試合の並び">
-                {([['old', '古い試合から'], ['new', '新しい試合から']] as const).map(([v, l]) => (
+            <CheckPicker className="match-select" label={t('検索する試合')} all={t('すべての試合（{0}）', project.matches.length)}
+              options={project.matches.map(m => ({ key: m.id, label: m.name }))} selected={matchIds}
+              onChange={ids => { setMatchIds(ids); if (ids.length && !ids.includes(matchId ?? '')) setMatchId(ids[0]) }} />
+            {matchIds.length !== 1 && project.matches.length > 1 && (
+              <div className="segmented match-order" role="radiogroup" aria-label={t('試合の並び')}>
+                {([['old', t('古い試合から')], ['new', t('新しい試合から')]] as const).map(([v, l]) => (
                   <button key={v} role="radio" aria-checked={matchOrder === v} className={matchOrder === v ? 'on' : ''} onClick={() => setMatchOrder(v)}>{l}</button>
                 ))}
               </div>
             )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
-              filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract}
-              shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited}
+              filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract} through={listThrough} onThrough={setListThrough}
+              range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
+              shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
+              saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
-              ? <PlayList refs={results} matches={matches} showMatch={scope === 'all' && (project?.matches.length ?? 0) > 1}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
-              : <p className="muted pad">読み込み中…</p>}
+              ? <PlayList refs={results} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={setCodeEditing} />
+              : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
           <section className="stage">
+            {focusEdit && (
+              // The edit mode puts the right column away, palette and all: the palette floats instead.
+              <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem}
+                clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} float={{ onDock: () => setFocusEdit(false) }} />
+            )}
             {match && (
-              <VideoPane key={match.id} match={match} overlay={size => {
+              <VideoPane key={match.id} match={match} editMode={{ on: focusEdit, onToggle: () => setFocusEdit(f => !f) }} overlay={size => {
                 const here = active && activeInfo?.range && active.matchId === match.id ? { key: active.matchId, ...activeInfo.range } : null
                 if (cardEditCard) {
                   return (
                     <>
-                      <CardEditor size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} active={cardTool === 'title'} />
-                      <AnnotationLayer
-                        size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always
+                      <CardEditor key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title' || cardTool === 'logo'} target={cardTool === 'logo' ? 'logo' : 'title'} />
+                      <AnnotationLayer onMade={() => setAnnTool('select')}
+                        size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always images={cardImages}
                         editable={cardTool === 'objects'} tool={annTool} style={annStyle}
                         selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={selectAnn} onChange={setCardAnns}
                       />
                     </>
                   )
                 }
+                const court = match.court && (
+                  <CourtLayer key={lineKey} size={size} fit={match.court} style={courtStyle} zones={courtZones} flight={courtPlay ? flightTiming(courtPlay, match.offsetSec, playTimes(serveMarkOf(match, courtPlay), active?.matchId === match.id && active.playId === courtPlay.id ? active : null)) : null} fitting={courtFitting}
+                    onCorners={corners => match.court && setCourt(match.id, { ...match.court, corners })}
+                    onPoint={!courtFitting && !seqPlaying && annTool === 'select' && stagePanel !== 'objects' ? courtClick : undefined} />
+                )
                 return (
                   <>
-                    <OverlayLayer size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
-                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} />
+                    {!courtFitting && court}
+                    <OverlayLayer key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} settings={overlay} clip={here} scoreboard={activeOverlay?.scoreboard ?? null}
+                      caption={activeOverlay?.caption ?? null} override={active?.overlayOverride} speed={speedPlate} follow={followData} />
                     {here && active && (
-                      <AnnotationLayer
-                        size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here}
+                      <AnnotationLayer onMade={() => setAnnTool('select')}
+                        size={size} annotations={activeAnns} scopeOf={activeScopeOf} clip={here} floor={match.court?.corners ?? null}
                         editable={!seqPlaying} tool={annTool} style={annStyle}
-                        selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={selectAnn} onChange={setAnns}
+                        selectedId={selectedAnn} extraIds={extraSel} onToggleExtra={toggleExtra} editPoints={editPoints} cropping={cropping} onSelect={id => { selectAnn(id); if (id) showObjects() }} onChange={setAnns}
                       />
                     )}
                     {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
+                    {courtFitting && court}
+                    {shotPick && (
+                      <ShotPick x={shotPick.at.x * size.w} y={shotPick.at.y * size.h} size={size} rows={shotPick.rows} zone={shotPick.zone}
+                        onPick={goToShot} onZone={zoneList} onClose={() => setShotPick(null)} />
+                    )}
                   </>
                 )
               }} />
             )}
-            {cardEditCard && (
-              <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
-                tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown} />
+            {cardEditCard && editingSlide?.board && (
+              <BoardEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
+                onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
+                onBoard={() => setBoardEdit(editingSlide)} onSave={as => void saveCards(as, editingSlide)} />
+            )}
+            {cardEditCard && editingSlide && !editingSlide.board && (
+              <SlideEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
+                target={slideTarget} onMark={(mark, on) => markSlide(editingSlide, mark, on)}
+                onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
+                onReload={editingSource ? () => void reloadSlideFiles([editingSource.path]) : null}
+                onSave={as => void saveCards(as, editingSlide)} />
+            )}
+            {cardEditCard && !editingSlide && (
+              <CardEditBar card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
+                tool={cardTool} onTool={setCardTool} shown={cardShown} onShown={setCardShown}
+                title={cardTitleNow.title} nameTitle={cardTitleNow.name} onTitle={setCardTitle} inserts={cardInserts}
+                hiddenCount={cardHiddenIds.length} onShowHidden={() => hideOnCard(cardHiddenIds, false)} onAlign={alignCards} />
             )}
             {cardEditCard && cardTool === 'objects' && (
+              <div className="filter-row">
+                <button className="link" aria-expanded={cardToolsOpen} onClick={() => setCardToolsOpen(o => !o)}>{cardToolsOpen ? '▾' : '▸'} {t('図形')}</button>
+              </div>
+            )}
+            {/* The work area takes only the room the video leaves, and scrolls: a tall panel never shrinks the video. */}
+            <div className="stage-work">
+            {cardEditCard && cardTool === 'objects' && (
+              <div className="stage-panel" hidden={!cardToolsOpen}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle} cardMode
                 annotations={cardEditCard.annotations ?? []} scopeOf={() => 'clip'} onScope={() => {}} canVideo={false} selectedId={selectedAnn}
+                {...(editingTitleCard ? { cardScope: { of: cardScopeOf, set: setCardScope, hide: (id: string) => { hideOnCard([id], true); setSelectedAnn(null) },
+                  kindName: cardEditCard.video ? t('動画の') : cardEditCard.marker === null ? t('シーンの') : t('マーカーの') } } : {})}
                 editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setCardAnns} onInsertImage={() => void insertImage()} clip={{ in: 0, out: 0 }} disabled={false}
               />
+              </div>
             )}
-            {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
-              <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} disabled={seqPlaying} clipIn={activeInfo.range.in}
-                onFormat={id => { setAnnTool('select'); setSelectedAnn(id) }} />
+            </div>
+            {!cardEdit && match && (
+              <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting}>
+                {active && activeInfo?.range && active.matchId === matchId && (stagePanel === 'edit' || stagePanel === 'objects') && (
+                  <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} headline={settings?.headline} disabled={seqPlaying} clipIn={activeInfo.range.in} compact
+                    onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
+                )}
+              </StageTabs>
+            )}
+            <div className="stage-work">
+            {!cardEdit && match && selectedPlay && stagePanel === 'edit' && (
+              <OffsetBar play={selectedPlay} offsetSec={match.offsetSec} onOffset={sec => setOffset(match.id, sec)} />
+            )}
+            {!cardEdit && match && listServe && selectedPlay && (
+              <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
+                onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />
+            )}
+            {!cardEdit && match && (
+              <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
+              {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
+                <div className="ann-row clip-overlay"><span className="field-label" title={video ? t('この動画の設定です') : t('動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）')}>{t('自動表示')}</span><ListOverlayChecks overlay={overlay} onOverlay={setOverlay} /><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} />{video && <button className="link look-link" onClick={() => setOverlayOpen(true)} title={t('出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます')}>{t('見た目は「動画の設定」')}</button>}</div>
+              )}
+              <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} style={gridStyle} onStyle={setGridStyle} fitting={courtFitting} onFitting={setCourtFitting}
+                onFit={fit => setCourt(match.id, fit)} onAuto={() => autoFit(match.id)} />
+              </div>
             )}
             {!cardEdit && active && activeInfo?.range && activeInfo.def && activeInfo.ref && active.matchId === matchId && (
+              <div className="stage-panel" hidden={stagePanel !== 'edit'}>
               <TrimBar
                 label={`${activeInfo.matchLabel}  #${activeInfo.ref.play.jersey} ${activeInfo.ref.name}`}
                 keyTime={activeInfo.ref.play.time + (matches[active.matchId]?.offsetSec ?? 0)}
@@ -1062,111 +995,146 @@ export function App() {
                   const oi = reel!.clips[id] ? clipInfo(reel!.clips[id]) : null
                   return oi?.ref ? `#${oi.ref.play.jersey} ${oi.ref.name} ${oi.ref.play.skill}` : id
                 })}
-                onTrim={trim} loop={loopOn} onLoop={setLoopOn}
-                objects={active.annotations.map(a => ({
-                  id: a.id, label: a.kind === 'text' ? `T ${a.text}` : KIND_LABEL[a.kind],
-                  from: a.showFrom ?? activeInfo.range!.in, to: a.showTo ?? activeInfo.range!.out, set: a.showFrom !== undefined || a.showTo !== undefined,
-                }))}
-                selectedObjectId={selectedAnn} onSelectObject={id => { setAnnTool('select'); setSelectedAnn(id) }}
-                onObjectSpan={(id, edge, t) => {
-                  const now = scopedNow()
-                  if (!now) return
-                  setAnns(mergeScoped(now).map(a => {
-                    if (a.id !== id) return a
-                    const key = edge === 'from' ? 'showFrom' : 'showTo'
-                    const { [key]: _old, ...rest } = a
-                    return (t === null ? rest : { ...rest, [key]: t }) as Annotation
-                  }))
+                onTrim={trim} loop={loopOn} onLoop={setLoopOn} onFrameSlide={() => void frameAfterClip()}
+                speed={activeServe ? { value: active.speedKmh ?? null, usual: serveSpeed(activeInfo.ref.play), measured: activeServe.measured } : null}
+                onSpeed={kmh => { const r = latest.current.reel; if (r) updateReel(setServeSpeed(r, active.id, kmh)) }}
+                touchTime={activeServe?.mark?.touch ?? null}
+                onTouchTime={sec => setServeMark(active.matchId, activeInfo.ref!.play.fingerprint, { touch: sec })}
+                skillTime={activeServe ? activeServe.times.skillSec ?? null : active.skillSec ?? null}
+                onSkillTime={sec => {
+                  const r = latest.current.reel
+                  if (!activeServe) { if (r) updateReel(setSkillTime(r, active.id, sec)); return }
+                  // A serve's hit belongs to the play: every clip of it, and the list, use it.
+                  setServeMark(active.matchId, activeInfo.ref!.play.fingerprint, { hit: sec })
+                  if (r && active.skillSec !== undefined) updateReel(setSkillTime(r, active.id, null))
                 }}
+                timing={active.timing} onTiming={tm => { const r = latest.current.reel; if (r) updateReel(setTiming(r, active.id, tm)) }}
+                objects={timelineObjects}
+                selectedObjectId={selectedAnn} onSelectObject={id => { setAnnTool('select'); setSelectedAnn(id) }}
+                onObjectSpan={(id, edge, t) => setObjectSpan(id, { [edge]: t })}
               />
+              </div>
             )}
             {!cardEdit && active && activeInfo?.range && active.matchId === matchId && (
+              <div className="stage-panel" hidden={stagePanel !== 'objects'}>
               <AnnotationTools
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
+                court={matches[active.matchId]?.court?.corners ?? null}
               />
+              <ObjectTimeline range={activeInfo.range} objects={timelineObjects} selectedId={selectedAnn} disabled={seqPlaying}
+                onSelect={id => { setAnnTool('select'); setSelectedAnn(id) }} onSpan={setObjectSpan} />
+              </div>
             )}
-            {!cardEdit && active && activeInfo?.ref && active.matchId === matchId && (
+            {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
+              <div className="stage-panel" hidden={stagePanel !== 'view'}>
+              {video && <button className="link look-link look-link-clip" onClick={() => setOverlayOpen(true)} title={t('出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます')}>{t('見た目は「動画の設定」')}</button>}
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
+                videoName={video?.captionNames?.[activeInfo.ref.play.playerKey]} canVideo={!!video}
+                onVideoName={name => {
+                  const v = latest.current.video, key = activeInfo.ref!.play.playerKey
+                  if (!v) return
+                  const { [key]: _old, ...rest } = v.captionNames ?? {}
+                  const names = name ? { ...rest, [key]: name } : rest
+                  updateVideo({ ...v, captionNames: Object.keys(names).length ? names : undefined, updatedAt: new Date().toISOString() })
+                }}
                 autoLine={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showSkill: true, showEvaluation: true }).line ?? '' : ''}
                 onChange={o => { const r = latest.current.reel; if (r) updateReel(setOverlayOverride(r, active.id, o)) }}
               />
+              </div>
             )}
+            </div>
           </section>
           <div className="right-col" onPointerDownCapture={() => { focusPane.current = 'scene' }}>
-            <VideoPanel
+            {rightFolded && <RightStrip tab={rightTab} badge={exportBadge} onOpen={tab => { setRightTab(tab); setRightFolded(false) }} />}
+            {(['head', 'list'] as const).map(part => {
+              const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
-              onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={id => void deleteVideo(id)} onChange={updateVideo}
-              onSelectScene={id => { setReelId(id); setActiveClipId(null) }} onNewScene={createReel}
+              onSelectVideo={selectVideo} onNewVideo={createVideo} onDeleteVideo={deleteVideo} onRemake={id => void remakePresetVideo(id)} onChange={updateVideo}
+              onSelectScene={id => { setReelId(id); setActiveClipId(null); setRightTab('scene') }} onNewScene={() => { makeScene(); setRightTab('scene') }}
               onEditCard={id => editCard(id, null)} onEditVideoCard={() => editCard(null, null)}
               videoCardOn={!!overlay.titleCard.videoCard} onVideoCard={on => setOverlay({ ...overlay, titleCard: { ...overlay.titleCard, videoCard: on } })}
               sceneCardOn={s => s.sceneCard ?? overlay.titleCard.sceneCards}
               onSceneCard={(s, on) => updateReel({ ...s, sceneCard: on, updatedAt: new Date().toISOString() })}
               onRenameScene={(id, name) => { const r = latest.current.reels.find(x => x.id === id); if (r && r.name !== name) updateReel({ ...r, name, updatedAt: new Date().toISOString() }) }}
-              onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onStop={() => playback.stopSequence()}
-            />
+              onOpenOverlay={() => setOverlayOpen(true)} playing={seqPlaying} onPlay={() => playThrough('video', 0)} onPlayMax={() => void playMaximized(() => playThrough('video', 0))} onStop={() => playback.stopSequence()}
+                        />
+              return part === 'head' ? panel : (
+                <Fragment key={part}>
+                  <RightTabs tab={rightTab} onTab={setRightTab} badge={exportBadge} onFold={() => setRightFolded(true)} />
+                  <div className="right-pane" hidden={rightTab !== 'video'}>{panel}</div>
+                </Fragment>
+              )
+            })}
+            <div className="right-pane" hidden={rightTab !== 'scene'}>
             <ReelPanel
               reels={reels} reel={reel} onSelectReel={id => { setReelId(id); setActiveClipId(null) }}
-              onNewReel={createReel} onDeleteReel={id => void deleteReel(id)} onChange={updateReel}
-              info={clipInfo} missing={missing} activeClipId={activeClipId} playingClipId={playingClipId}
-              onActivate={activateClip} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onStop={() => playback.stopSequence()}
+              onNewReel={makeScene} onDeleteReel={deleteReel} onChange={updateReel}
+              info={clipInfo} missing={missing} offTarget={offTarget} activeClipId={activeClipId} playingClipId={playingClipId}
+              onActivate={(c, g) => { if (cardEditRef.current?.slideId) { setCardEdit(null); setSelectedAnn(null) } activateClip(c, g) }} playing={seqPlaying} onPlayThrough={() => playThrough('scene', 0)} onPlayMax={() => void playMaximized(() => playThrough('scene', 0))} onStop={() => playback.stopSequence()}
               orderCount={order.length} orderSec={orderSec} overlaps={overlaps} usedIn={reel ? videos.filter(v => v.sceneIds.includes(reel.id)).length : 0}
-              videoSceneIds={video?.sceneIds ?? null} onAddToVideo={id => { if (video) updateVideo(addScene(video, id)) }}
+              videoSceneIds={video?.sceneIds ?? null} videos={videos} onAddToVideo={id => { if (video) updateVideo(addScene(video, id)) }}
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
+              onSlide={(spot, how) => void putSlide(spot, how)} onEditSlide={id => reel && editCard(reel.id, null, id)}
+              editingSlideId={cardEdit?.slideId ?? null} canFrame={!!match}
+              onClipToScene={clipToScene} onExportClip={(id, g) => { if (reel) void exportClip(reel.id, id, g) }}
             />
             <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem}
               clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} />
-            <ExportPanel targets={exportTargets} info={exportInfo} state={exportState} onExport={exportTarget}
+            <PlayerPhotos dvw={!cardEditCard && active ? dvws[active.matchId] ?? null : null}
+              focus={!cardEditCard && activeInfo?.ref ? { side: activeInfo.ref.play.side, jersey: activeInfo.ref.play.jersey } : null}
+              disabled={!cardEditCard && !(active && activeInfo?.range)}
+              onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
+            </div>
+            <div className="right-pane" hidden={rightTab !== 'export'}>
+            <ExportPanel targets={exportTargets} info={exportInfo} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} quality={quality} onHeight={h => setOverlay({ ...overlay, output: { height: h } })} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
+            </div>
           </div>
         </main>
       )}
 
       {overlayOpen && video && (
-        <OverlayDialog settings={overlay} onChange={setOverlay} onClose={() => setOverlayOpen(false)}
+        <OverlayDialog settings={overlay} onChange={setOverlay} onTheme={th => { if (settings) void saveSettings({ ...settings, theme: th }) }} onClose={() => setOverlayOpen(false)}
           sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
       )}
+      {codeEditing && dvws[codeEditing.matchId] && (
+        <CodeEditDialog play={codeEditing.play} matchName={matches[codeEditing.matchId]?.name ?? ''}
+          players={Object.values(dvws[codeEditing.matchId].players).filter(p => p.side === codeEditing.play.side).sort((a, b) => a.jersey - b.jersey)}
+          onSave={to => void saveCode(codeEditing, to)} onClose={() => setCodeEditing(null)} />
+      )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+      {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
       {picker && library && (
-        <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)}
+        <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}
           initial={picker === 'create'
             ? { name: '', codes: ['HTH'].filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
+      {reportOpen && project && (
+        <MatchReportDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} initial={match?.id ?? null} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setReportOpen(false)}
+          onPick={p => { setMatchIds(p.m); if (!p.m.includes(matchId ?? '')) setMatchId(p.m[0] ?? null); setFilter({ ...EMPTY_FILTER, ...p.f }); setFocusEdit(false); setReportOpen(false) }} />
+      )}
+      {analysisOpen && project && (
+        <AnalysisDialog matches={project.matches.filter(m => dvws[m.id])} dvws={dvws} ourCodes={settings?.ourTeamCodes ?? []} onClose={() => setAnalysisOpen(false)} />
+      )}
+      {pptxPick && (
+        <SlidePickDialog slides={pptxPick.slides} current={pptxPick.current} thumbs={slideThumbs} onSave={savePptx} onClose={() => setPptxPick(null)} />
+      )}
+      {(boardOpen || boardEdit) && (
+        <BoardDialog chartStyle={k => markStyle(gridStyle, k).chart} dvws={boardDvws} results={results.map(r => r.play)} ourTeam={settings?.ourTeamCodes[0] ?? ''} scene={reel}
+          {...(boardEdit?.board ? { initial: boardEdit.board.config } : {})}
+          onCreate={c => void makeBoard(c)} onClose={() => { setBoardOpen(false); setBoardEdit(null) }}
+          onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />
+      )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} rawRefs={rawRefs} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} teams={projectTeams} teamColors={teamColors} onTeamColors={setTeamColors} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
+          onLanguage={l => void (async () => { await flushAll(); await api.setLanguage(l); location.reload() })()} />
       )}
     </div>
   )
 }
-
-// Dialog preview data: the active (or first) clip's real data, or a placeholder for an empty reel.
-function overlaySample(d: { scoreboard: ScoreboardData; caption: CaptionData } | null, r: Reel | null) {
-  const m = r?.groupOrder.find(g => r.groups[g].length) ?? 1
-  return {
-    scoreboard: d?.scoreboard ?? { left: 'HTH', right: 'OPP', ptsL: 17, ptsR: 9, setsL: 1, setsR: 0, winner: 'L' as const },
-    caption: d?.caption ?? { number: 1, name: 'PLAYER', line: 'SERVE · ACE' },
-    card: { marker: m, name: r?.markerNames[m] ?? '', match: null },
-  }
-}
-
-// Short label for the match column: "10/11 SMT" (the opponent when one side is ours).
-function labelMatches(ms: Match[], codes: string[]): Record<string, string> {
-  return Object.fromEntries(ms.map(m => {
-    const side = ourSide(m.teams, codes)
-    const opp = side === '*' ? m.teams[1].code : side === 'a' ? m.teams[0].code : `${m.teams[0].code}-${m.teams[1].code}`
-    const d = m.date ? `${+m.date.slice(5, 7)}/${+m.date.slice(8, 10)}` : ''
-    return [m.id, `${d} ${opp}`.trim()]
-  }))
-}
-
-function eta(ratio: number, elapsedSec: number): string {
-  if (ratio < 0.03 || elapsedSec < 2) return ''
-  const left = Math.max(0, Math.round(elapsedSec / ratio - elapsedSec))
-  return `・残り約 ${left >= 60 ? `${Math.floor(left / 60)}分${left % 60}秒` : `${left}秒`}`
-}
-

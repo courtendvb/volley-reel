@@ -1,67 +1,95 @@
-// Every keyboard shortcut in one place (design M8). Keep in sync with the keydown handler in App.tsx.
-const GROUPS: { title: string; keys: [string, string][] }[] = [
+import { Fragment } from 'react'
+import { t } from '../../../shared/i18n'
+import { keyName } from '../../../shared/keys'
+import { arrowSec, ctrlArrowSec } from '../keys'
+
+// Every keyboard shortcut in one place, by what they are for. Keep in sync with useShortcuts.
+const groups = (): { title: string; keys: [string, string][] }[] => [
   {
-    title: '再生',
+    title: t('再生'),
     keys: [
-      ['Space', '再生 / 一時停止（クリップ選択中はループ再生）'],
-      ['← / →', '0.5 秒戻る / 進む'],
-      ['Shift + ← / →', '1 フレーム戻る / 進む'],
-      ['↑ / ↓', '左の一覧の前 / 次のプレーへ'],
-      ['Esc', '通し再生を止める'],
+      ['Space', t('再生 / 一時停止')],
+      ['← / →', t('{0} 秒戻る / 進む', arrowSec())],
+      ['Ctrl + ← / →', t('{0} 秒戻る / 進む', ctrlArrowSec())],
+      ['Shift + ← / →', t('1 フレーム戻る / 進む')],
+      ['M', t('動画を最大化 / 元に戻す')],
+      ['Ctrl + B', t('右の欄をたたむ / 開く')],
+      ['Esc', t('通し再生を止める')],
     ],
   },
   {
-    title: 'シーン・動画',
+    title: t('プレー・クリップの移動'),
     keys: [
-      ['1 〜 5', '選択中のクリップにマーカー（複数付けられる。同じ数字で解除）。シーンにないプレーなら、そのマーカーで追加'],
-      ['0', 'マーカーをすべて外す'],
-      ['[ / ]', '再生位置を IN / OUT にする'],
-      ['Ctrl + Z', '元に戻す'],
-      ['Ctrl + Y / Ctrl + Shift + Z', 'やり直す'],
+      ['↑ / ↓', t('前 / 次のプレーへ')],
+      ['D / F', t('シーンの前 / 次のクリップへ')],
     ],
   },
   {
-    title: '注釈',
+    title: t('クリップの整理'),
     keys: [
-      ['V', '選択・移動'],
-      ['T', 'テキスト'],
-      ['A', '矢印'],
-      ['C', '円'],
-      ['R', '四角'],
-      ['G', '三角形（ドラッグで描く）'],
-      ['F', 'フリーハンド'],
-      ['L / P', '折れ線 / 多角形（クリックで頂点、ダブルクリックか Enter で確定、Backspace で1つ戻す、Esc で中止）'],
-      ['つまみをドラッグ', '矢印の端・図形の大きさ（Shift で縦横比を保つ。画像は逆に Shift で比率を外す。頂点・矢印の端は Shift で隣と縦横をそろえる）'],
-      ['Alt+Enter', 'テキストの改行（Enter で確定）'],
-      ['「頂点の編集」', '頂点を動かす（四角・円は多角形になる）'],
-      ['辺の中点を引く / 頂点をダブルクリック', '頂点の編集中に、頂点を追加 / 削除'],
-      ['Delete', '選択中の注釈を削除'],
-      ['Ctrl + C / Ctrl + V', '選択中の図形（グループごと）をコピー / 今のクリップ・カードに貼り付け'],
-      ['ダブルクリック', 'テキストを編集'],
+      [t('1 〜 6'), t('マーカーを付ける / 外す')],
+      ['0', t('マーカーをすべて外す')],
+      [t('Shift + 1 〜 6'), t('メモを付ける / 外す')],
+      ['Shift + 0', t('メモを外す')],
+      ['[ / ]', t('再生位置を IN / OUT にする')],
     ],
   },
-  { title: 'その他', keys: [['?', 'この一覧を開く / 閉じる']] },
+  {
+    title: t('編集'),
+    keys: [
+      ['Ctrl + Z', t('元に戻す')],
+      ['Ctrl + Y', t('やり直す')],
+      ['Ctrl + C / Ctrl + V', t('図形をコピー / 貼り付け')],
+      ['Delete', t('選択中の図形を削除')],
+      ['← / ↑ / → / ↓', t('選択中の図形を少し動かす（Shift で大きく）')],
+      ['?', t('この一覧を開く / 閉じる')],
+    ],
+  },
+  {
+    title: t('図形の道具'),
+    keys: [
+      ['V', t('選択・移動')],
+      ['T', t('テキスト')],
+      ['A', t('矢印')],
+      ['C', t('円')],
+      ['R', t('四角')],
+      ['G', t('三角形')],
+      ['L / P', t('折れ線 / 多角形')],
+    ],
+  },
+  {
+    title: t('図形の細かい操作'),
+    keys: [
+      ['Alt + Enter', t('テキストの改行')],
+      ['Enter', t('折れ線・多角形を確定')],
+      ['Backspace', t('折れ線・多角形の頂点を 1 つ戻す')],
+      ['Shift', t('つまみのドラッグで縦横比を保つ（画像は比率を外す）')],
+    ],
+  },
 ]
+
+// A key name as key caps: "Ctrl + Z" → [Ctrl] + [Z], "← / →" → [←] / [→].
+function Keys({ text }: { text: string }) {
+  return <>{keyName(text).split(/( \+ | \/ )/).map((part, i) => (i % 2 ? <Fragment key={i}>{part}</Fragment> : <kbd key={i}>{part}</kbd>))}</>
+}
 
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal shortcuts" role="dialog" aria-label="ショートカット一覧" onClick={e => e.stopPropagation()}>
-        <h2>ショートカット一覧</h2>
+      <div className="modal shortcuts" role="dialog" aria-label={t('ショートカット一覧')} onClick={e => e.stopPropagation()}>
+        <h2>{t('ショートカット一覧')}</h2>
         <div className="shortcut-groups">
-          {GROUPS.map(g => (
+          {groups().map(g => (
             <section key={g.title}>
               <h3>{g.title}</h3>
-              <table>
-                <tbody>
-                  {g.keys.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}
-                </tbody>
-              </table>
+              <dl>
+                {g.keys.map(([k, what]) => <Fragment key={k}><dt><Keys text={k} /></dt><dd>{what}</dd></Fragment>)}
+              </dl>
             </section>
           ))}
         </div>
-        <p className="hint">文字を入力している間は、キー操作は入力欄に送られます。</p>
-        <div className="modal-actions"><button className="primary" onClick={onClose}>閉じる</button></div>
+        <p className="hint">{t('文字を入力している間は、キー操作は入力欄に送られます。← → の秒数は「設定」で変えられます。')}</p>
+        <div className="modal-actions"><button className="primary" onClick={onClose}>{t('閉じる')}</button></div>
       </div>
     </div>
   )

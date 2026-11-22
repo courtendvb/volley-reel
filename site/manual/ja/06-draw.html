@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>動画に描く — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="図形とテキスト、出す時間、スロー・停止、タイトルカード、スライド">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><a href="06-draw.html" aria-current="page">6. 動画に描く</a></li>
+        <li><a href="07-court.html">7. コートの表示</a></li>
+        <li><a href="08-data.html">8. データスライドとレポート</a></li>
+        <li><a href="09-compare.html">9. 比較動画</a></li>
+        <li><a href="10-export.html">10. 書き出しの詳細</a></li>
+        <li><a href="11-help.html">11. 困ったとき</a></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>6. 動画に描く</h1>
+<p class="m-lead">クリップの上に、見出し、矢印、円、テキスト、画像を描きます。出す時間を決めたり、スローや停止を入れたりして、伝えたいことを足します。</p>
+<figure class="m-shot"><img src="../../img/ja/finish-annotate.jpg" alt="見出し、2 枚ブロックを囲む円、空いたコートへの矢印、メモを足したアタック。" loading="lazy"><figcaption>見出し、2 枚ブロックを囲む円、空いたコートへの矢印、メモを足したアタック。</figcaption></figure>
+<h2 id="tools">図形・コメントの道具</h2>
+<p>シーンのクリップを選び、動画の下の<span class="ui">図形・コメント</span>タブを開きます。道具を選んで、動画の上をドラッグして描きます。</p>
+<figure class="m-shot narrow"><img src="../img/ja/objects.jpg" alt="「図形・コメント」タブ。上に道具、下に次に描く図形の書式が並びます。" loading="lazy"><figcaption>「図形・コメント」タブ。上に道具、下に次に描く図形の書式が並びます。</figcaption></figure>
+<div class="m-scroll"><table class="m-table">
+  <thead><tr><th>道具</th><th>キー</th><th>使い方</th></tr></thead>
+  <tbody>
+    <tr><td>選択</td><td><kbd>V</kbd></td><td>描いた図形を選んで動かします。つまみで大きさを変えます。<kbd>Shift</kbd> + クリックで複数選べます。</td></tr>
+    <tr><td>テキスト</td><td><kbd>T</kbd></td><td>押した場所に文字を書きます。<kbd>Alt</kbd> + <kbd>Enter</kbd> で改行します。</td></tr>
+    <tr><td>矢印・曲線の矢印</td><td><kbd>A</kbd></td><td>始点から終点へドラッグします。曲線の矢印は、青い点を動かして曲げます。</td></tr>
+    <tr><td>円・四角・三角形</td><td><kbd>C</kbd> <kbd>R</kbd> <kbd>G</kbd></td><td>ドラッグで描きます。三角形は、打った点から広がるコースを示すのに使えます。</td></tr>
+    <tr><td>折れ線・多角形</td><td><kbd>L</kbd> <kbd>P</kbd></td><td>クリックで頂点を置き、ダブルクリックか <kbd>Enter</kbd> で確定します。<kbd>Backspace</kbd> で 1 つ戻ります。</td></tr>
+    <tr><td>フリーハンド</td><td></td><td>ドラッグしたとおりに線を描きます。</td></tr>
+    <tr><td>丸付き数字</td><td></td><td>クリックごとに 1、2、3… と番号の付いた円を置きます。</td></tr>
+    <tr><td>コート上の四角形・円柱</td><td></td><td>コートの遠近に合わせて、床の上に四角形や円柱を置きます。コートのグリッドを合わせた試合で使います。</td></tr>
+    <tr><td>画像・PDF…</td><td></td><td>ロゴや図などの画像、PDF の 1 ページ目を動画の上に置きます。</td></tr>
+    <tr><td>ゾーンを塗る</td><td></td><td>小さなコートでゾーン（9 か 81 区画）を選び、動画のコートの上に塗ります。</td></tr>
+  </tbody>
+</table></div>
+<p>書式（線の色と太さ、線の種類、矢印の向き、塗り、文字の色と大きさ、太字、縁取り、枠）は、描く前に決めても、描いたあとに図形を選んで変えてもかまいません。<kbd>Ctrl</kbd> + <kbd>C</kbd> / <kbd>V</kbd> で図形をコピーでき、<kbd>Ctrl</kbd> + <kbd>Z</kbd> で元に戻せます。</p>
+
+<h2 id="headline">見出し</h2>
+<p>タブの横の<b>見出し</b>の欄に文字を入れると、動画の上の中央に大きく出ます（例：「ラインを抑える」）。そのクリップで伝えたい一言に使います。</p>
+
+<h2 id="time">出す時間と動き</h2>
+<ul class="dots">
+  <li>動画の下の<b>表示時間</b>のバーに、選んだ図形の出る時刻と消える時刻がオレンジの線で出ます。両端をドラッグして決めます。</li>
+  <li><b>フェードイン</b>は、出るときと消えるときにじわっと変わる秒数です。<b>描くアニメーション</b>にすると、線が始点から伸び、円が描かれていくように出ます。</li>
+  <li><b>目立たせる</b>のパルス・点滅・波紋は、出ている間、目を引く動きを繰り返します。</li>
+  <li><b>表示範囲</b>で、このクリップだけか、同じマーカー・シーン・動画のすべてのクリップに出すかを選べます。</li>
+</ul>
+
+<h2 id="slow">スローと停止</h2>
+<p>クリップを選んで<span class="ui">編集</span>タブを開き、見せたい場面で<span class="ui">＋ スロー</span>か<span class="ui">＋ 停止</span>を押します。スローは再生位置から 1 秒を 0.5 倍で流し、停止はその場面を 2 秒止めます。範囲・速さ・秒数は、その下の欄で変えられます。止めている間に図形を出すと、説明の時間が取れます。</p>
+
+<h2 id="cards">タイトルカード</h2>
+<figure class="m-shot"><img src="../../img/ja/finish-card.jpg" alt="マーカーの頭のタイトルカード。マーカーの名前と、試合の相手・日付が出ます。" loading="lazy"><figcaption>マーカーの頭のタイトルカード。マーカーの名前と、試合の相手・日付が出ます。</figcaption></figure>
+<p>動画の頭、シーンの頭、マーカーの頭に、名前を書いたタイトルカードが入ります。出すかどうかは、それぞれの<span class="ui">カード</span>で切り替えます。⚙ でカードを開くと、文字、タイトルの位置と大きさ、ロゴ、図形を編集できます。<span class="ui">ほかのカードにも揃える…</span>で、同じ配置をほかの種類のカードにも使えます。</p>
+
+<h2 id="slides">スライドを入れる</h2>
+<p>クリップの間に、説明のためのスライドを入れられます。シーンの行やマーカーの見出しを右クリックして選びます。</p>
+<ul class="dots">
+  <li><b>＋ 今の画面をスライドに</b>（編集タブ）：今の動画のコマを止めた画像を背景に、矢印などを描くスライドを作ります。</li>
+  <li><b>無地のスライド</b>：タイトルカードの色の無地に、文字や図形で説明を書きます。</li>
+  <li><b>PDF・画像を読み込む…</b>：PowerPoint から PDF で書き出したものなどを、1 ページずつスライドにします。直した PDF は読み直せます。</li>
+</ul>
+
+<h2 id="palette">パレット</h2>
+<p>よく使う図形の組み合わせ（矢印と円、チームのロゴなど）を選んで<span class="ui">選択を保存</span>すると、右下のパレットに残ります。ほかのプロジェクトでも、押すだけで置けます。</p>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="05-scene.html"><small>前へ</small>シーンと動画を作る</a><a class="next" href="07-court.html"><small>次へ</small>コートの表示</a></nav>
+  </main>
+</div>
+</body>
+</html>

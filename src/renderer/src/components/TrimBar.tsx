@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { snapTime } from '../../../shared/annotationEdit'
 import { playback } from '../playback'
-import { composing } from '../keys'
+import { arrowSec, composing } from '../keys'
+import { t } from '../../../shared/i18n'
+import { SLOW_RATES, clipPlayedSec, type ClipTiming, type Hold, type Slow } from '../../../shared/timing'
 
 interface Props {
   label: string
@@ -12,6 +14,13 @@ interface Props {
   overrides: { in: boolean; out: boolean }
   overlapLabels: string[]
   onTrim: (edge: 'in' | 'out', t: number | null) => void
+  // A serve's speed for its flight, in km/h (measured: from the red line to the reception's touch); null on other skills.
+  speed: { value: number | null; usual: number | null; measured: number | null } | null
+  onSpeed: (kmh: number | null) => void
+  touchTime: number | null // a serve: when the reception touches the ball (the blue line), marked by hand; null = not marked
+  onTouchTime: (t: number | null) => void
+  skillTime: number | null // the red line, moved by hand from keyTime; null = on it
+  onSkillTime: (t: number | null) => void
   loop: boolean // loop the clip (off: play on past OUT to see around it)
   onLoop: (on: boolean) => void
   // The clip's objects and when each shows (from / to are video times; set = not the whole clip).
@@ -19,6 +28,9 @@ interface Props {
   selectedObjectId: string | null
   onSelectObject: (id: string) => void
   onObjectSpan: (id: string, edge: 'from' | 'to', t: number | null) => void // null = the clip's edge
+  timing: ClipTiming | undefined // slow stretches and holds (video times)
+  onTiming: (timing: ClipTiming) => void
+  onFrameSlide: () => void // the picture on screen as a slide right after this clip
 }
 
 export interface TimelineObject { id: string; label: string; from: number; to: number; set: boolean }
@@ -27,33 +39,38 @@ const CONTEXT_SEC = 4 // track shows this much beyond the clip and its default r
 
 // IN/OUT editor for the active clip (design §3.5): drag the handles, press [ / ] at the playhead,
 // or type seconds relative to the key play. The clip loops while this bar is shown.
-export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan }: Props) {
+export function TrimBar({ label, keyTime, range, def, durationSec, overrides, overlapLabels, onTrim, speed, onSpeed, touchTime, onTouchTime, skillTime, onSkillTime, loop, onLoop, objects, selectedObjectId, onSelectObject, onObjectSpan, timing, onTiming, onFrameSlide }: Props) {
   const [lanesOpen, setLanesOpen] = useState(false)
   // While a show / hide time sticks to another time: that time, drawn as a guide line.
   const [snapGuide, setSnapGuide] = useState<number | null>(null)
   // Dragging an object's start or end, on the main track or on its own lane (same scale).
   const objDrag = useRef<{ id: string; edge: 'from' | 'to'; rect: DOMRect } | null>(null)
   const track = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<'in' | 'out' | null>(null)
+  const [drag, setDrag] = useState<'in' | 'out' | 'skill' | 'touch' | null>(null)
+  const skillAt = skillTime ?? keyTime
 
   const lo = Math.max(0, Math.min(range.in, def.in) - CONTEXT_SEC)
   const hi = Math.min(durationSec || Infinity, Math.max(range.out, def.out) + CONTEXT_SEC)
   const pct = (t: number) => `${((t - lo) / (hi - lo)) * 100}%`
+  // The time under clientX on a bar `width` wide; NaN when the bar has no width (not laid out,
+  // e.g. its panel hidden mid-drag), which the drags below ignore rather than write.
+  const timeOn = (clientX: number, left: number, width: number) => (width > 0 ? lo + Math.max(0, Math.min(1, (clientX - left) / width)) * (hi - lo) : NaN)
   const timeAt = (clientX: number) => {
     const r = track.current!.getBoundingClientRect()
-    return lo + Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * (hi - lo)
+    return timeOn(clientX, r.left, r.width)
   }
 
-  const startDrag = (edge: 'in' | 'out') => (e: PointerEvent) => {
+  const startDrag = (edge: 'in' | 'out' | 'skill' | 'touch') => (e: PointerEvent) => {
     e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
     setDrag(edge)
     playback.pause()
   }
   const onMove = (e: PointerEvent) => {
     const od = objDrag.current
     if (od) {
-      const raw = lo + Math.max(0, Math.min(1, (e.clientX - od.rect.left) / od.rect.width)) * (hi - lo)
+      const raw = timeOn(e.clientX, od.rect.left, od.rect.width)
+      if (!Number.isFinite(raw)) return
       // Sticks to the other objects' times, IN / OUT and the key play within 6 px (Alt: free).
       const targets = [range.in, range.out, keyTime, ...objects.filter(o => o.id !== od.id).flatMap(o => [o.from, o.to])]
       const sn = e.altKey ? { t: raw, snapped: null } : snapTime(raw, targets, (6 / od.rect.width) * (hi - lo))
@@ -66,6 +83,22 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     }
     if (!drag) return
     const t = timeAt(e.clientX)
+    if (!Number.isFinite(t)) return
+    if (drag === 'skill') {
+      // Back on the DVW's time within 6 px (Alt: free), so it can be put back by hand.
+      const sn = e.altKey ? { t, snapped: null } : snapTime(t, [keyTime], (6 / track.current!.getBoundingClientRect().width) * (hi - lo))
+      setSnapGuide(sn.snapped)
+      onSkillTime(sn.snapped !== null ? null : Math.round(sn.t * 100) / 100)
+      playback.seek(sn.t)
+      return
+    }
+    if (drag === 'touch') {
+      // Frames matter here (a serve flies well under a second), so the time is kept to the millisecond.
+      const at = Math.max(skillAt + 0.05, t)
+      onTouchTime(Math.round(at * 1000) / 1000)
+      playback.seek(at)
+      return
+    }
     onTrim(drag, t)
     playback.seek(t) // show the frame under the handle
   }
@@ -85,9 +118,9 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     return (
       <div className={`trim-object${main ? ' main' : ''}${o.set ? '' : ' whole'}`}
         style={{ left: pct(Math.max(lo, o.from)), width: `calc(${pct(Math.min(hi, o.to))} - ${pct(Math.max(lo, o.from))})` }}
-        title={`${o.label}: ${rel(o.from)} 〜 ${rel(o.to)} 秒`}>
-        <span className="obj-grip from" onPointerDown={grab('from')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title="出る時刻（ドラッグ）" />
-        <span className="obj-grip to" onPointerDown={grab('to')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title="消える時刻（ドラッグ）" />
+        title={t('{0}: {1} 〜 {2} 秒', o.label, rel(o.from), rel(o.to))}>
+        <span className="obj-grip from" onPointerDown={grab('from')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title={t('出る時刻（ドラッグ）')} />
+        <span className="obj-grip to" onPointerDown={grab('to')} onPointerMove={onMove} onPointerUp={() => { objDrag.current = null; setSnapGuide(null) }} title={t('消える時刻（ドラッグ）')} />
       </div>
     )
   }
@@ -98,10 +131,11 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
     <div className="trim">
       <div className="trim-head">
         <span className="trim-title">{label}</span>
-        <span className="muted">{(range.out - range.in).toFixed(1)}秒</span>
-        <label className="check muted" title="外すと OUT を過ぎても再生を続け、範囲の外も見られます">
-          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> ループ再生{loop && <Playing />}</label>
-        {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} 本と範囲が重なっています</span>}
+        <span className="muted">{(range.out - range.in).toFixed(1)}{t('秒')}{timing?.slows?.length || timing?.holds?.length ? t('（再生 {0} 秒）', clipPlayedSec(range, timing).toFixed(1)) : ''}</span>
+        <label className="check muted" title={t('外すと OUT を過ぎても再生を続け、範囲の外も見られます')}>
+          <input type="checkbox" checked={loop} onChange={e => onLoop(e.target.checked)} /> {t('ループ再生')}{loop && <Playing />}</label>
+        <button onClick={onFrameSlide} title={t('動画の今のコマを、このクリップのすぐ後ろのスライドにします。矢印などを描けます')}>{t('＋ 今の画面をスライドに')}</button>
+        {overlapLabels.length > 0 && <span className="overlap" title={overlapLabels.join('\n')}>⚠ {overlapLabels.length} {t('本と範囲が重なっています')}</span>}
       </div>
 
       <div className="trim-track" ref={track} onPointerMove={onMove} onPointerUp={() => { setDrag(null); objDrag.current = null; setSnapGuide(null) }}
@@ -109,11 +143,23 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         {seconds.map(s => (
           <span key={s} className={`tick${s === 0 ? ' zero' : ''}`} style={{ left: pct(keyTime + s) }}>{s % 2 === 0 ? (s > 0 ? `+${s}` : s) : ''}</span>
         ))}
-        <div className="trim-default" style={{ left: pct(def.in), width: `calc(${pct(def.out)} - ${pct(def.in)})` }} title="初期値の範囲" />
+        <div className="trim-default" style={{ left: pct(def.in), width: `calc(${pct(def.out)} - ${pct(def.in)})` }} title={t('初期値の範囲')} />
         <div className="trim-range" style={{ left: pct(range.in), width: `calc(${pct(range.out)} - ${pct(range.in)})` }} />
-        <div className="trim-key" style={{ left: pct(keyTime) }} title="キープレー" />
-        <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title="IN（ドラッグ）" />
-        <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title="OUT（ドラッグ）" />
+        <div className={`trim-key${drag === 'skill' ? ' dragging' : ''}`} style={{ left: pct(skillAt) }} onPointerDown={startDrag('skill')}
+          title={t('スキルの起点（ドラッグ）。軌道はここから動きます')} />
+        {speed && touchTime !== null && (
+          <div className={`trim-touch${drag === 'touch' ? ' dragging' : ''}`} style={{ left: pct(touchTime) }} onPointerDown={startDrag('touch')}
+            title={t('レシーブのタッチ（ドラッグ）。赤線からここまでで速度を出します')} />
+        )}
+        <div className={`trim-handle in${drag === 'in' ? ' dragging' : ''}`} style={{ left: pct(range.in) }} onPointerDown={startDrag('in')} title={t('IN（ドラッグ）')} />
+        <div className={`trim-handle out${drag === 'out' ? ' dragging' : ''}`} style={{ left: pct(range.out) }} onPointerDown={startDrag('out')} title={t('OUT（ドラッグ）')} />
+        {(timing?.slows ?? []).map((s, k) => (
+          <div key={`s${k}`} className="trim-slow" style={{ left: pct(Math.max(lo, s.from)), width: `calc(${pct(Math.min(hi, s.to))} - ${pct(Math.max(lo, s.from))})` }}
+            title={t('スロー ×{0}: {1} 〜 {2} 秒', s.rate, rel(s.from), rel(s.to))}>×{s.rate}</div>
+        ))}
+        {(timing?.holds ?? []).map((h, k) => (
+          <div key={`h${k}`} className="trim-hold" style={{ left: pct(h.at) }} title={t('停止 {0} 秒（{1} 秒の位置）', h.sec, rel(h.at))} />
+        ))}
         {selected && span(selected, true)}
         <Playhead lo={lo} hi={hi} />
         {snapGuide !== null && <div className="trim-snap" style={{ left: pct(snapGuide) }} />}
@@ -121,8 +167,8 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
 
       <div className="trim-lanes-head">
         <button className="link" aria-expanded={lanesOpen} onClick={() => setLanesOpen(o => !o)} disabled={!objects.length}>
-          {lanesOpen ? '▾' : '▸'} 図形の表示時間（{objects.length}）</button>
-        <span className="muted small">{selected ? '橙の線の両端をドラッグで、出る時刻・消える時刻' : '図形を選ぶと、その表示時間がバーに出ます'}</span>
+          {lanesOpen ? '▾' : '▸'} {t('図形の表示時間（{0}）', objects.length)}</button>
+        <span className="muted small">{selected ? t('橙の線の両端をドラッグで、出る時刻・消える時刻') : t('図形を選ぶと、その表示時間がバーに出ます')}</span>
       </div>
       {lanesOpen && (
         <div className="trim-lanes">
@@ -139,37 +185,139 @@ export function TrimBar({ label, keyTime, range, def, durationSec, overrides, ov
         </div>
       )}
 
+      <SlowHold timing={timing} onTiming={onTiming} range={range} rel={rel} keyTime={keyTime} />
+
       <div className="trim-fields">
         <Edge name="IN" keyName="[" value={rel(range.in)} overridden={overrides.in}
           onSet={() => onTrim('in', playback.current.time)} onType={v => onTrim('in', keyTime + v)} onReset={() => onTrim('in', null)} />
         <Edge name="OUT" keyName="]" value={rel(range.out)} overridden={overrides.out}
           onSet={() => onTrim('out', playback.current.time)} onType={v => onTrim('out', keyTime + v)} onReset={() => onTrim('out', null)} />
-        <span className="hint">秒はキープレーからの相対値。Space でループ再生、← → 0.5 秒、Shift+← → 1 フレーム</span>
+        <Edge name={t('起点')} keyName="◎" value={rel(skillAt)} overridden={skillTime !== null}
+          onSet={() => onSkillTime(Math.round(playback.current.time * 100) / 100)} onType={v => onSkillTime(v ? Math.round((keyTime + v) * 100) / 100 : null)} onReset={() => onSkillTime(null)} />
+        {speed && (
+          <Edge name={t('タッチ')} keyName="◎" value={touchTime === null ? '' : (touchTime - keyTime).toFixed(3)} overridden={touchTime !== null}
+            title={t('レシーブがボールに触れたコマで押します（Shift+← → で 1 コマずつ）')} unsetLabel={t('未設定')}
+            onSet={() => onTouchTime(Math.round(playback.current.time * 1000) / 1000)}
+            onType={v => onTouchTime(Math.round((keyTime + v) * 1000) / 1000)} onReset={() => onTouchTime(null)} resetLabel={t('外す')} />
+        )}
+        {speed?.measured ? <Measured kmh={speed.measured} sec={touchTime! - skillAt} hitByHand={skillTime !== null} />
+          : speed?.usual && <Speed value={speed.value} usual={speed.usual} onChange={onSpeed} />}
+        <span className="hint">{t('秒はキープレーからの相対値。Space でループ再生、← → {0} 秒、Shift+← → 1 フレーム', arrowSec())}</span>
       </div>
     </div>
   )
 }
 
-function Edge({ name, keyName, value, overridden, onSet, onType, onReset }: {
+// Slow stretches and holds of the clip: added at the playhead, then their times (seconds from the key
+// play, or the playhead), the rate and the hold's seconds set here. They play in the loop and the
+// through-play, and go into the export.
+function SlowHold({ timing, onTiming, range, rel, keyTime }: {
+  timing: ClipTiming | undefined; onTiming: (t: ClipTiming) => void; range: { in: number; out: number }; rel: (t: number) => string; keyTime: number
+}) {
+  const slows = timing?.slows ?? [], holds = timing?.holds ?? []
+  const now = () => Math.max(range.in, Math.min(range.out, Math.round(playback.current.time * 100) / 100))
+  const put = (s: Slow[], h: Hold[]) => onTiming({ ...(s.length ? { slows: s } : {}), ...(h.length ? { holds: h } : {}) })
+  const setSlow = (k: number, p: Partial<Slow>) => put(slows.map((s, i) => { if (i !== k) return s; const n = { ...s, ...p }; return n.to > n.from ? n : s }), holds)
+  const setHold = (k: number, p: Partial<Hold>) => put(slows, holds.map((h, i) => (i === k ? { ...h, ...p } : h)))
+  const at = (v: number) => Math.max(range.in, Math.min(range.out, keyTime + v))
+  return (
+    <div className="trim-timing">
+      <span className="field-label">{t('スロー・停止')}</span>
+      <button onClick={() => { const a = now(); put([...slows, { from: a, to: Math.min(range.out, a + 1), rate: 0.5 }], holds) }}
+        title={t('再生位置から 1 秒を 0.5 倍で。範囲と速さは下で変えられます')}>{t('＋ スロー')}</button>
+      <button onClick={() => put(slows, [...holds, { at: now(), sec: 2 }])} title={t('再生位置のコマで 2 秒止める。秒数は下で変えられます')}>{t('＋ 停止')}</button>
+      {slows.map((s, k) => (
+        <span key={`s${k}`} className="trim-timing-item">
+          {t('スロー')}
+          <SecField value={rel(s.from)} label={t('スローの始め（キープレーからの秒）')} onType={v => setSlow(k, { from: at(v) })} onNow={() => setSlow(k, { from: now() })} />〜
+          <SecField value={rel(s.to)} label={t('スローの終わり（キープレーからの秒）')} onType={v => setSlow(k, { to: at(v) })} onNow={() => setSlow(k, { to: now() })} />
+          <select value={s.rate} aria-label={t('スローの速さ')} onChange={e => setSlow(k, { rate: Number(e.target.value) })}>
+            {SLOW_RATES.map(r => <option key={r} value={r}>×{r}</option>)}
+          </select>
+          <button className="link" aria-label={t('このスローを外す')} onClick={() => put(slows.filter((_, i) => i !== k), holds)}>×</button>
+        </span>
+      ))}
+      {holds.map((h, k) => (
+        <span key={`h${k}`} className="trim-timing-item">
+          {t('停止')}
+          <SecField value={rel(h.at)} label={t('止める位置（キープレーからの秒）')} onType={v => setHold(k, { at: at(v) })} onNow={() => setHold(k, { at: now() })} />
+          <input type="number" min={0.5} max={30} step={0.5} value={h.sec} aria-label={t('止める秒数')}
+            onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.5 && n <= 30) setHold(k, { sec: n }) }} />{t('秒')}
+          <button className="link" aria-label={t('この停止を外す')} onClick={() => put(slows, holds.filter((_, i) => i !== k))}>×</button>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// A serve's speed through the air: the flight takes as long as its distance at this speed. Empty
+// goes back to the usual time, whose speed shows in the field.
+function Speed({ value, usual, onChange }: { value: number | null; usual: number; onChange: (kmh: number | null) => void }) {
+  const [text, setText] = useState(value === null ? '' : String(value))
+  useEffect(() => setText(value === null ? '' : String(value)), [value])
+  const commit = () => {
+    const v = parseFloat(text)
+    if (!text.trim()) onChange(null)
+    else if (v >= 20 && v <= 160) onChange(v)
+    else setText(value === null ? '' : String(value))
+  }
+  return (
+    <span className="trim-edge" title={t('動画のボールに軌道が合うように、サーブの平均の速さを入れます。空にすると既定に戻ります')}>
+      {t('速度')}
+      <input type="number" min={20} max={160} step={1} value={text} placeholder={String(usual)} aria-label={t('サーブの速度（km/h）')}
+        onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} /> km/h
+    </span>
+  )
+}
+
+// The speed from the red line to the blue one, which the flight then follows (the field gives way to it).
+function Measured({ kmh, sec, hitByHand }: { kmh: number; sec: number; hitByHand: boolean }) {
+  return (
+    <span className="trim-edge trim-measured" title={t('赤線（ヒット）から青線（タッチ）までの時間と、サーブ位置からレシーブ位置までの距離から出した平均の速さです')}>
+      {t('速度')} <b>{kmh} km/h</b> <span className="muted small">{t('（{0} 秒）', sec.toFixed(3))}</span>
+      {!hitByHand && <span className="overlap" title={t('赤線が DVW の秒のままです。サーブを打ったコマに合わせてください')}>⚠ {t('起点が未調整')}</span>}
+    </span>
+  )
+}
+
+// Seconds from the key play, typed or set to the playhead (◎).
+function SecField({ value, label, onType, onNow }: { value: string; label: string; onType: (v: number) => void; onNow: () => void }) {
+  const [text, setText] = useState(value)
+  // What is being typed stays as it is ("1" is not put back as "1.0"); a value from elsewhere shows.
+  useEffect(() => { if (parseFloat(text) !== parseFloat(value)) setText(value) }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Every change counts at once, so the spin buttons and typing move the bar as they go. Leaving the
+  // field shows what was kept: a time outside the clip, or a slow's end before its start, isn't.
+  const change = (s: string) => { setText(s); const v = parseFloat(s); if (isFinite(v)) onType(v) }
+  return (
+    <span className="sec-field">
+      <input type="number" step={0.1} value={text} aria-label={label} onChange={e => change(e.target.value)} onBlur={() => setText(value)}
+        onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) setText(value) }} />
+      <button className="link" onClick={onNow} title={t('再生位置にする')} aria-label={t('{0}を再生位置にする', label)}>◎</button>
+    </span>
+  )
+}
+
+function Edge({ name, keyName, value, overridden, onSet, onType, onReset, title, unsetLabel, resetLabel }: {
   name: string; keyName: string; value: string; overridden: boolean
   onSet: () => void; onType: (v: number) => void; onReset: () => void
+  title?: string; unsetLabel?: string; resetLabel?: string // the button's tip, and the words for not set and for clearing
 }) {
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
   const commit = () => { const v = parseFloat(text); if (isFinite(v)) onType(v); else setText(value) }
   return (
     <span className="trim-edge">
-      <button onClick={onSet} title={`再生位置を ${name} にする (${keyName})`}>{keyName} {name}</button>
-      <input type="number" step={0.1} value={text} aria-label={`${name}（キープレーからの秒）`}
+      <button onClick={onSet} title={title ?? t('再生位置を {0} にする ({1})', name, keyName)}>{keyName} {name}</button>
+      <input type="number" step={0.1} value={text} aria-label={t('{0}（キープレーからの秒）', name)}
         onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
-      {overridden ? <button className="link" onClick={onReset}>既定に戻す</button> : <span className="muted small">既定</span>}
+      {overridden ? <button className="link" onClick={onReset}>{resetLabel ?? t('既定に戻す')}</button> : <span className="muted small">{unsetLabel ?? t('既定')}</span>}
     </span>
   )
 }
 
 // The parts that follow the video every frame are their own small components, so the bar (with
 // its lanes) doesn't re-render as the video plays.
-function Playhead({ lo, hi }: { lo: number; hi: number }) {
+export function Playhead({ lo, hi }: { lo: number; hi: number }) {
   const [now, setNow] = useState(playback.current.time)
   useEffect(() => playback.subscribe(st => setNow(st.time)), [])
   if (now < lo || now > hi) return null
@@ -179,5 +327,5 @@ function Playhead({ lo, hi }: { lo: number; hi: number }) {
 function Playing() {
   const [paused, setPaused] = useState(playback.current.paused)
   useEffect(() => playback.subscribe(st => setPaused(st.paused)), [])
-  return paused ? null : <>中</>
+  return paused ? null : <>{t('中')}</>
 }

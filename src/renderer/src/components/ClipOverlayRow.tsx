@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
 import { composing } from '../keys'
+import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 interface Props {
   override: ClipOverlayOverride | undefined
@@ -9,64 +11,125 @@ interface Props {
   autoName: string
   autoLine: string
   onChange: (o: ClipOverlayOverride | undefined) => void
+  videoName: string | undefined // the video's name for this clip's player (every clip of theirs in the video)
+  canVideo: boolean // there is a video to keep it in
+  onVideoName: (name: string | undefined) => void
 }
 
 // Per-clip exceptions to the reel's overlay settings: hide an element, or rewrite the caption.
-const SB_POSITIONS: [Anchor, string][] = [['tl', '左上'], ['tc', '中央上'], ['tr', '右上']]
+const SB_POSITIONS: [Anchor, string][] = [['tl', t('左上')], ['tc', t('中央上')], ['tr', t('右上')]]
 
-export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange }: Props) {
+export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange, videoName, canVideo, onVideoName }: Props) {
   const [gear, setGear] = useState(false)
-  const [name, setName] = useState(o?.playerCaption?.name ?? '')
+  const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
+  // Where a name typed here goes: the player's name in the whole video (the default), or this clip only.
+  const ownName = o?.playerCaption?.name
+  const [scope, setScope] = useState<'video' | 'clip'>(ownName || !canVideo ? 'clip' : 'video')
+  const nameAt = (sc: 'video' | 'clip') => (sc === 'clip' ? ownName ?? '' : videoName ?? '')
+  const [name, setName] = useState(nameAt(scope))
   const [line, setLine] = useState(o?.playerCaption?.line ?? '')
-  useEffect(() => { setName(o?.playerCaption?.name ?? ''); setLine(o?.playerCaption?.line ?? '') }, [o])
+  useEffect(() => { const sc = ownName || !canVideo ? 'clip' : 'video'; setScope(sc); setName(nameAt(sc)); setLine(o?.playerCaption?.line ?? '') }, [o, videoName, canVideo])
 
   const write = (next: ClipOverlayOverride) => {
     const sb = next.scoreboard?.hidden ? { hidden: true } : undefined
     const pc = next.playerCaption
     const cap = pc && (pc.hidden || pc.name || pc.line) ? { ...(pc.hidden ? { hidden: true } : {}), ...(pc.name ? { name: pc.name } : {}), ...(pc.line ? { line: pc.line } : {}) } : undefined
-    onChange(sb || cap ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}) } : undefined)
+    const marks = next.courtMarks?.hidden ? { hidden: true } : undefined
+    onChange(sb || cap || marks ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}), ...(marks ? { courtMarks: marks } : {}) } : undefined)
   }
-  const commit = () => write({ ...o, playerCaption: { ...o?.playerCaption, name: name.trim() || undefined, line: line.trim() || undefined } })
+  const commit = () => {
+    const n = name.trim() || undefined
+    if (scope === 'video') {
+      if (n !== videoName) onVideoName(n)
+      write({ ...o, playerCaption: { ...o?.playerCaption, name: undefined, line: line.trim() || undefined } }) // the clip follows the video's name
+    } else write({ ...o, playerCaption: { ...o?.playerCaption, name: n, line: line.trim() || undefined } })
+  }
 
   return (
     <div className="ann-row clip-overlay">
-      <span className="field-label">自動表示</span>
+      <span className="field-label">{t('自動表示')}</span>
       {/* On for the clip and the video: ticking it while the video has the scoreboard off turns it on for the video. */}
       <label className="check"><input type="checkbox" checked={s.scoreboard.enabled && !o?.scoreboard?.hidden}
         onChange={e => {
           if (e.target.checked && !s.scoreboard.enabled) onOverlay({ ...s, scoreboard: { ...s.scoreboard, enabled: true } })
           write({ ...o, scoreboard: { hidden: !e.target.checked } })
-        }} /> スコアボード</label>
-      <select className="ov-pos" aria-label="スコアボードの位置（動画全体）" title="スコアボードの位置（この動画のすべてのクリップ）" value={s.scoreboard.anchor}
+        }} /> {t('スコアボード')}</label>
+      <select className="ov-pos" aria-label={t('スコアボードの位置（動画全体）')} title={t('スコアボードの位置（この動画のすべてのクリップ）')} value={s.scoreboard.anchor}
         onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, anchor: e.target.value as Anchor } })}>
         {SB_POSITIONS.map(([a, l]) => <option key={a} value={a}>{l}</option>)}
-        {!SB_POSITIONS.some(([a]) => a === s.scoreboard.anchor) && <option value={s.scoreboard.anchor}>下</option>}
+        {!SB_POSITIONS.some(([a]) => a === s.scoreboard.anchor) && <option value={s.scoreboard.anchor}>{t('下')}</option>}
       </select>
       <label className="check"><input type="checkbox" checked={!o?.playerCaption?.hidden}
-        onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> テロップ</label>
-      <input className="ov-text" value={name} placeholder={autoName} aria-label="テロップの名前（空欄で自動）"
+        onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> {t('テロップ')}</label>
+      <label className="check" title={t('ヒートマップ・落下点・軌道・コーン・チャート・トスのチャート・着弾の波紋を、このクリップでは出さない。グリッドと選んだプレーのゾーンは出たまま（書き出しも同じ）。ほかのクリップは変わらない')}>
+        <input type="checkbox" checked={!o?.courtMarks?.hidden} onChange={e => write({ ...o, courtMarks: { hidden: !e.target.checked } })} /> {t('分析表示')}</label>
+      <ServeSpeedCheck overlay={s} onOverlay={onOverlay} />
+      <LineupCheck overlay={s} onOverlay={onOverlay} />
+      <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
-      <input className="ov-text wide" value={line} placeholder={autoLine} aria-label="テロップの2行目（空欄で自動）"
+      {canVideo && (
+        <select className="ov-pos" value={scope} aria-label={t('名前を使う範囲')}
+          title={t('動画全体: この動画の、この選手のすべてのクリップのテロップに使う。このクリップだけ: このクリップだけ別の名前にする')}
+          onChange={e => { const sc = e.target.value as 'video' | 'clip'; setScope(sc); setName(nameAt(sc)) }}>
+          <option value="video">{t('動画全体（この選手）')}</option>
+          <option value="clip">{t('このクリップだけ')}</option>
+        </select>
+      )}
+      <input className="ov-text wide" value={line} placeholder={autoLine} aria-label={t('テロップの2行目（空欄で自動）')}
         onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <span className="spacer" />
-      <span className="ov-gear-wrap">
-        <button className="ov-gear" aria-label="タイトルカードとフェード" aria-expanded={gear} title="タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」" onClick={() => setGear(g => !g)}>⚙</button>
+      <span className="ov-gear-wrap" ref={gearPop.anchor}>
+        <button className="ov-gear" aria-label={t('タイトルカードとフェード')} aria-expanded={gear} title={t('タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」')} onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
-          <div className="ov-gear-pop" role="dialog" aria-label="タイトルカード">
-            <label className="check">タイトルカード（シーン・マーカー）
-              <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label="タイトルカードの秒数（一括）"
-                onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> 秒</label>
-            <label className="check"><input type="checkbox" checked={s.transition.fade} aria-label="フェード"
-              onChange={e => onOverlay({ ...s, transition: { ...s.transition, fade: e.target.checked } })} /> クリップとカードの切り替えでフェード（イン・アウト）</label>
+          <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('タイトルカード')}>
+            <label className="check">{t('タイトルカード（シーン・マーカー）')}
+              <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数（一括）')}
+                onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> {t('秒')}</label>
+            <label className="check"><input type="checkbox" checked={s.transition.fade} aria-label={t('フェード')}
+              onChange={e => onOverlay({ ...s, transition: { ...s.transition, fade: e.target.checked } })} /> {t('クリップとカードの切り替えでフェード（イン・アウト）')}</label>
             {s.transition.fade && (
-              <label className="check">フェードの秒数
-                <input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label="フェードの秒数"
-                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) onOverlay({ ...s, transition: { ...s.transition, durationSec: n } }) }} /> 秒</label>
+              <label className="check">{t('フェードの秒数')}
+                <input type="number" min={0.1} max={2} step={0.1} value={s.transition.durationSec} aria-label={t('フェードの秒数')}
+                  onChange={e => { const n = parseFloat(e.target.value); if (n >= 0.1 && n <= 2) onOverlay({ ...s, transition: { ...s.transition, durationSec: n } }) }} /> {t('秒')}</label>
             )}
-            <span className="hint">配色はプロジェクト全体の設定です（上部の「設定」）</span>
+            <span className="hint">{t('配色はプロジェクト全体の設定です（上部の「設定」）')}</span>
           </div>
         )}
       </span>
     </div>
+  )
+}
+
+// The serve speed plate on the video (the video's setting): a serve with its hit and touch marked shows it from the touch.
+export function ServeSpeedCheck({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <label className="check" title={t('ヒットとタッチを打ったサーブの速度を、タッチのコマから動画に出します（この動画のすべて）')}>
+      <input type="checkbox" checked={s.serveSpeed.enabled} onChange={e => onOverlay({ ...s, serveSpeed: { ...s.serveSpeed, enabled: e.target.checked } })} /> {t('サーブ速度')}</label>
+  )
+}
+
+// With no clip open: the scoreboard and its place, and the caption, for every play followed in the
+// list (the video's settings, or the project's while no video is open).
+export function ListOverlayChecks({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <>
+      <label className="check"><input type="checkbox" checked={s.scoreboard.enabled}
+        onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, enabled: e.target.checked } })} /> {t('スコアボード')}</label>
+      <select className="ov-pos" aria-label={t('スコアボードの位置')} value={s.scoreboard.anchor}
+        onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, anchor: e.target.value as Anchor } })}>
+        {SB_POSITIONS.map(([a, l]) => <option key={a} value={a}>{l}</option>)}
+        {!SB_POSITIONS.some(([a]) => a === s.scoreboard.anchor) && <option value={s.scoreboard.anchor}>{t('下')}</option>}
+      </select>
+      <label className="check"><input type="checkbox" checked={s.playerCaption.enabled}
+        onChange={e => onOverlay({ ...s, playerCaption: { ...s.playerCaption, enabled: e.target.checked } })} /> {t('テロップ')}</label>
+    </>
+  )
+}
+
+// Both teams' six on a small court (the video's setting).
+export function LineupCheck({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <label className="check" title={t('両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）')}>
+      <input type="checkbox" checked={s.lineup.enabled} onChange={e => onOverlay({ ...s, lineup: { ...s.lineup, enabled: e.target.checked } })} /> {t('ローテーション')}</label>
   )
 }

@@ -1,8 +1,19 @@
-import type { Annotation } from './annotation'
+import type { ChartLineColors } from './chart'
+import type { Lang } from './i18n'
+import type { AccountState, PlanPrices, TeamAction } from './account'
+import type { Annotation, HeadlineStyle } from './annotation'
+import type { CourtFit, StrikeHeights } from './court'
+import type { CodeEdit } from './codeEdit'
+import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
-import type { OverlayTheme } from './overlay'
+import type { OverlayPatch, OverlayTheme } from './overlay'
+import type { PackInfo, PackManifest, PhotoTarget } from './pack'
+import type { RosterPlayer } from './packMaker'
 import type { Reel } from './reel'
 import type { Video } from './video'
+import type { CompareFile, CompareSession } from './videoCompare'
+import type { CompareExportJob } from './compareExport'
+import type { ClipTiming } from './timing'
 
 export type Side = '*' | 'a'
 
@@ -17,12 +28,23 @@ export interface Player {
   jersey: number
   lastName: string
   firstName: string
+  role?: PlayerRole // from the DVW's roster, when it says
+  libero?: boolean // marked L in the roster
+  sets?: (number | '*' | null)[] // sets 1–5: the zone they started in, '*' came on, null did not play
 }
+
+export type PlayerRole = 'L' | 'OH' | 'OP' | 'MB' | 'S'
+
+// A place on the court seen by the play's team from behind its own end line: u across (0–1), v from
+// that end line (0) past the net (0.5) to the far one (1). Outside 0–1 is off the court.
+export interface ClickPoint { u: number; v: number }
 
 export interface Play {
   id: number // order of appearance; the skip rule in dvw.ts is fixed so this is stable per file
-  fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift
+  fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift (the original code, before any correction)
   code: string
+  line?: number // its line among the file's [3SCOUT] lines, which a correction names (codeEdit.ts)
+  original?: string // the file's code, when a correction changed it
   time: number // DVW time (offset not applied)
   side: Side
   jersey: number
@@ -36,7 +58,19 @@ export interface Play {
   awayRot: number | null
   startZone: number | null
   endZone: number | null
+  startSub: string | null // A–D within the start zone, from where the scout clicked (not coded)
+  endSub: string | null // A–D within the end zone: as coded, else from where the scout clicked
+  startClick?: ClickPoint | null // where the scout clicked, or for a reception or dig where the ball came from (dvw.ts)
+  endClick?: ClickPoint | null
+  setTo?: string // a set: the tempo of the same team's attack right after it (dvw.ts)
+  shotCode?: string // a reception or dig: the code of the serve or attack it answers, for the height the ball came from
   rallyId: number | null
+  possibility?: boolean // the serve, blocks and first attack of a rally where the serving team got an attack (dvw.ts)
+  before: string[] // codes of the last two contacts before this one in the rally, latest first, freeballs included
+  after: string[] // the next two after it, in order
+  phase: 'r' | 't' | null // reception phase or transition (dvw.ts phaseOf); null for serves
+  recEffect?: string // in the reception phase: the evaluation of the reception it came from
+  front?: string[] // player keys of both teams' front rows at this play (dvw.ts); missing: the file has no lineups
 }
 
 export interface Rally {
@@ -46,6 +80,7 @@ export interface Rally {
   lastActionTime: number // the point line is logged ~10s after this, so clips end here
   pointTime: number | null
   wonBy: Side | null
+  court?: { home: number[]; away: number[] } // the jerseys on court (the lineups at the serve; no liberos)
 }
 
 export interface ParsedDVW {
@@ -56,6 +91,18 @@ export interface ParsedDVW {
   rallies: Rally[]
   allHome: boolean // every play coded as '*': side can't tell the teams apart
   codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
+  info?: MatchInfo // for the match report; missing on matches read before it was kept
+  staleEdits?: CodeEdit[] // corrections whose line no longer holds the code they were made on (left out)
+}
+
+// The match as the DVW's header tells it: start time, each set's partial scores (at 8, 16, 21), final
+// score and minutes, the teams' sets won and staff, and what [3MORE] holds (often empty).
+export interface MatchInfo {
+  time: string | null
+  sets: { partials: string[]; score: string; minutes: number }[]
+  staff: [{ coach: string; assistant: string }, { coach: string; assistant: string }]
+  setsWon: [number, number]
+  more: { referees: string; spectators: string; receipts: string; city: string; hall: string }
 }
 
 export interface Match {
@@ -75,12 +122,25 @@ export interface Match {
   allHome: boolean
   warnings: string[]
   importedAt: string
+  court?: CourtFit // the court grid fitted to this video (missing: not fitted yet)
+  serveMarks?: Record<string, ServeMark> // by play fingerprint: serves' hits and touches marked by hand (serveMark.ts)
+  codeEdits?: CodeEdit[] // corrections to the scout file's codes, laid over it when read (codeEdit.ts); the file is not written
 }
+
+// A serve's hit and its reception's touch, video times marked by hand frame by frame.
+export interface ServeMark { hit?: number; touch?: number }
 
 export interface ProjectSettings {
   ourTeamCodes: string[] // e.g. ['HTH', 'HTA']: decides 自チーム/相手 per match
-  playerAliases: Record<string, string> // player key -> the key it is the same person as (manual exceptions)
   theme?: OverlayTheme // overlay colors for the whole project (scoreboard, captions, title cards); missing = each video's own
+  filters?: SavedFilter[] // search conditions saved under a name, in the order they were saved
+  headline?: HeadlineStyle // how new headlines look; missing = as they always were
+  lineColors?: ChartLineColors // the direction charts' lines by skill and evaluation; missing: the usual
+  pointColors?: ChartLineColors // their points the same way
+  pointScale?: number // their points' size, 1 = the usual
+  strikeHeights?: StrikeHeights // how high serves, attacks and sets are struck on the court's flights, in metres (court.ts); missing: the usual
+  roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
+  overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
 }
 
 export interface ProjectInfo {
@@ -103,7 +163,7 @@ export interface LibraryInfo {
   missing: MissingFiles
 }
 
-export interface ScanPair {
+interface ScanPair {
   dvwPath: string
   date: string | null
   home: string
@@ -126,6 +186,9 @@ export interface RecentProject {
   openedAt: string
 }
 
+// Another project, for comparing its target team with this one's (分析 → 相手との比較).
+export interface ProjectSummary { path: string; name: string; code: string; matches: number }
+
 export interface ProjectInit {
   name: string
   ourTeamCodes: string[]
@@ -146,15 +209,33 @@ export interface Api {
   getLibrary(): Promise<LibraryInfo | null>
   chooseLibrary(): Promise<LibraryInfo | null>
   importMatch(): Promise<Match | null> // into the library, choosing a video and a DVW
+  matchUsers(id: string): Promise<string[]> // names of the projects that list this match
+  deleteMatch(id: string): Promise<{ library: LibraryInfo; project: ProjectInfo | null }> // off the library (its file moves to matches/deleted/; the video and DVW stay)
+  deleteProject(path: string): Promise<RecentProject[]> // the folder to the trash; the recent list as it is now
   relocateMatch(id: string, part: MissingPart): Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string } | null> // choose where the moved file is now
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
+  pickCompareVideo(): Promise<CompareFile | null> // a video file for one side of a comparison (no DVW needed)
+  openCompareVideo(path: string): Promise<CompareFile> // the same file again, from a saved comparison
+  parseCompareMatch(id: string): Promise<ParsedDVW> // a library match's DVW, with no project open
+  listCompares(): Promise<CompareSession[]>
+  saveCompare(s: CompareSession): Promise<void>
+  removeCompare(id: string): Promise<void>
+  chooseCompareExportPath(defaultName: string): Promise<string | null> // the MP4's place; needs no project
+  exportCompare(job: CompareExportJob): Promise<void> // in the background; progress and the result arrive as export events
   createProject(init: ProjectInit): Promise<ProjectInfo | null> // in <library>/projects/<name>, or a folder the user picks
   openProject(path?: string): Promise<ProjectInfo | null> // asks for a folder when no path
+  openMatchProject(matchId: string, code: string): Promise<ProjectInfo> // one match with that team as ours: its project made before, else a new one
   closeProject(): Promise<void>
   setProjectMatches(ids: string[]): Promise<ProjectInfo>
   parseMatch(id: string): Promise<ParsedDVW>
+  otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
+  projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
+  setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
+  setCodeEdit(id: string, line: number, from: string, to: string): Promise<ProjectInfo | null> // a play's code corrected (to = from takes it off)
+  setMatchOffset(id: string, offsetSec: number): Promise<ProjectInfo | null> // DVW time + offset = video time, for every play of the match
+  setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
   saveReel(r: Reel): Promise<void>
@@ -163,31 +244,89 @@ export interface Api {
   saveVideo(v: Video): Promise<void>
   deleteVideo(id: string): Promise<void>
   chooseExportPath(defaultName: string): Promise<string | null>
+  chooseExportFolder(fileNames: string[]): Promise<{ paths: string[]; existing: string[] } | null> // one .mp4 per name
   startExport(job: ExportJob): Promise<void>
   cancelExport(): Promise<void>
   onExportEvent(cb: (e: ExportEvent) => void): () => void
+  onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
+  installUpdate(): Promise<void> // after saving: restart into the downloaded version
+  updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
+  openManual(page?: string): Promise<void> // the manual shipped with the app, in the browser (a chapter's file name, or the index)
+  appVersion(): Promise<string>
+  // The SyncScout account (shared/account.ts). enabled: false until the release that asks for one.
+  account(): Promise<{ enabled: boolean; state: AccountState }>
+  accountSendCode(email: string): Promise<void> // mails a one-time code
+  accountSignIn(email: string, code: string): Promise<AccountState>
+  accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
+  accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
+  accountSignOut(): Promise<AccountState>
+  accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
+  lang: Lang // the interface language, read once when the window loads
+  setLanguage(l: Lang): Promise<void> // kept for the next start; the window reloads to show it
   showInFolder(path: string): Promise<void>
   takeNotices(): Promise<string[]>
   // Images for annotations, kept in the project's assets/ folder. Picking an image copies it there;
   // picking a PDF returns its bytes, and the renderer saves page 1 as a PNG.
   pickAsset(): Promise<PickedAsset | null>
   saveAsset(png: Uint8Array): Promise<string>
+  // Ctrl+V: what was copied last (objects in the app, a picture elsewhere), and the picture saved as an asset.
+  clipboardKind(): Promise<'objects' | 'image' | 'other'>
+  markObjectsCopied(): Promise<void>
+  saveClipboardImage(): Promise<{ assetId: string; width: number; height: number } | null>
   readAsset(id: string): Promise<Uint8Array>
   smokePickAsset?: (path: string) => Promise<PickedAsset | null>
+  // Slides: files picked as slides (several at once), read again by path when one changes, their
+  // modified times (null: gone), and a frame of a match's video saved as a picture.
+  pickSlides(): Promise<SlideFile[]>
+  readSlideFile(path: string): Promise<SlideFile>
+  slideFileTimes(paths: string[]): Promise<Record<string, number | null>>
+  grabFrame(matchId: string, sec: number): Promise<string>
+  detectCourt(matchId: string): Promise<CourtCorners | null> // the court found in the video
+  smokePickSlides?: (paths: string[]) => Promise<SlideFile[]> // copies them into the project first
+  smokeTouch?: (path: string) => Promise<void> // a file in the project: marked as just changed
   // Team logos (library, by team code) for title cards. Each returns the codes that have one -> file.
   // The palette (library, every project): my colors and saved objects. Pictures in saved objects
   // are copied into the library, and into the project again when the object is used.
   getPalette(): Promise<Palette>
   setPaletteColors(colors: string[]): Promise<Palette>
-  savePaletteItem(name: string, annotations: Annotation[]): Promise<Palette>
-  removePaletteItem(id: string): Promise<Palette>
+  savePaletteItem(name: string, annotations: Annotation[], category?: string | null): Promise<Palette>
+  addPaletteCategory(name: string): Promise<Palette>
+  renamePaletteCategory(id: string, name: string): Promise<Palette>
+  movePaletteCategory(id: string, to: number): Promise<Palette> // `to` counted among the other tabs
+  removePaletteCategory(id: string): Promise<Palette> // only an empty one
+  setPaletteItemCategory(id: string, category: string | null): Promise<Palette>
+  removePaletteItem(id: string): Promise<Palette> // a locked item is kept
+  movePaletteItem(id: string, to: number): Promise<Palette>
+  lockPaletteItem(id: string, locked: boolean): Promise<Palette>
   usePaletteItem(id: string): Promise<Annotation[]> // its objects, with their pictures now in the project
+  listTeamColors(): Promise<Record<string, string>> // library: #RRGGBB by team code, for the rotation lineup
+  setTeamColor(code: string, color: string | null): Promise<Record<string, string>>
   listLogos(): Promise<Record<string, string>>
   pickLogo(code: string): Promise<Record<string, string>>
   removeLogo(code: string): Promise<Record<string, string>>
   readLogo(code: string): Promise<Uint8Array | null>
+  useLogo(code: string): Promise<{ assetId: string; width: number; height: number } | null> // copied into the project
+  listPacks(): Promise<PackInfo[]>
+  importPack(): Promise<PackInfo[]> // asks for a .vrpack; the packs after
+  removePack(id: string): Promise<PackInfo[]>
+  packRoster(): Promise<RosterPlayer[]> // everyone in the library's matches
+  saveCard(name: string, ext: 'png' | 'pdf' | 'pptx', data: Uint8Array): Promise<string | null> // asks where; the path
+  saveReportPdf(html: string, name: string): Promise<string | null> // the match report as an A4 PDF; asks where; the path
+  savePack(manifest: PackManifest, photos: Record<string, Uint8Array>, install: boolean): Promise<{ saved: string | null; packs: PackInfo[] }>
+  readPackPhoto(id: string, photo: string): Promise<Uint8Array>
+  setPlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // asks for a picture; kept in the local pack
+  removePlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // only a photo set in the app
+  usePackPhoto(id: string, photo: string): Promise<{ assetId: string; width: number; height: number }> // copied into the project
+  smokeImportPack?: (path: string) => Promise<PackInfo[]>
+  smokeSetPhoto?: (target: PhotoTarget, path: string) => Promise<PackInfo[]>
   smokeRelocate?: (id: string, part: MissingPart, path: string) => Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string }>
   smokeSetLogo?: (code: string, path: string) => Promise<Record<string, string>>
+  smokeClipboardImage?: (path: string) => Promise<void>
+  smokeShot?: (path: string) => Promise<void>
+  smokeDrag?: (points: [number, number][]) => Promise<void> // real mouse: press, move through, release
+  smokeRightClick?: (x: number, y: number) => Promise<void> // real mouse: a right click
+  smokeKey?: (key: string) => Promise<void> // a real key press
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
@@ -198,8 +337,12 @@ export interface Api {
   onImportProgress(cb: (p: ImportProgress) => void): () => void
 }
 
-export interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[] }
-export interface Palette { colors: string[]; items: PaletteItem[] }
+interface PaletteItem { id: string; name: string; createdAt: string; annotations: Annotation[]; locked?: boolean; category?: string } // locked: can't be removed
+interface PaletteCategory { id: string; name: string }
+export interface Palette { colors: string[]; items: PaletteItem[]; categories?: PaletteCategory[] } // categories: the tabs, in order
+
+// A picture is copied into assets/ right away; a PDF's pages are rendered by the renderer.
+export type SlideFile = { path: string; name: string; mtimeMs: number } & ({ kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array })
 
 export type PickedAsset = { kind: 'image'; assetId: string } | { kind: 'pdf'; data: Uint8Array; name: string }
 
@@ -212,11 +355,14 @@ export interface ExportLayer {
   to?: number
   fadeIn?: number // seconds the layer fades in from `from` (0 / missing: none)
   fadeOut?: number // seconds the layer fades out before `to`
+  // Shown only part of each period inside its window (a pulsing object: one layer per moment of a
+  // swell): from `at` for `len` seconds of every `period`, counted from `from`.
+  every?: { period: number; at: number; len: number }
 }
 
 export type ExportItem =
-  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[] }
-  | { kind: 'card'; png: Uint8Array; durationSec: number }
+  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[]; timing?: ClipTiming } // layers' from / to: seconds into the clip as played (with its slows and holds)
+  | { kind: 'card'; png: Uint8Array; durationSec: number; layers?: ExportLayer[] } // layers' from / to: seconds into the card
 
 export interface ExportJob {
   outPath: string
@@ -225,10 +371,20 @@ export interface ExportJob {
   fpsStr: string // e.g. '30000/1001'
   items: ExportItem[]
   fadeSec?: number // fade in and out of black on every item (clips and cards)
+  chapters?: { item: number; title: string }[] // chapters starting at these items, written into the MP4 (VLC lists them)
+  chaptersText?: boolean // and as YouTube's list, a .txt next to the MP4
 }
+
+type CourtCorners = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
+
+// A newer version for an installed copy: found, downloading, then ready to restart into.
+export type UpdateEvent = { type: 'available'; version: string } | { type: 'progress'; ratio: number } | { type: 'ready'; version: string }
+  | { type: 'manual'; version: string } // a newer version to get from the download page (Mac)
+  | { type: 'error'; message: string } // the update couldn't be installed (the download page still works)
 
 export type ExportEvent =
   | { type: 'progress'; ratio: number; item: number; items: number; elapsedSec: number }
-  | { type: 'done'; outPath: string; elapsedSec: number; footageSec: number; sizeBytes: number }
+  | { type: 'done'; outPath: string; elapsedSec: number; footageSec: number; sizeBytes: number
+      chaptersPath?: string; chapterCount?: number; shortChapters?: string[] } // the chapter list written, how many, those under 10 s
   | { type: 'error'; message: string }
   | { type: 'cancelled' }

@@ -91,4 +91,104 @@ describe.skipIf(!dir || !existsSync(dir))('real DVW files', () => {
     expect(a.rallies.length).toBeGreaterThan(0)
     expect(b.plays.map(p => p.fingerprint)).toEqual(a.plays.map(p => p.fingerprint))
   })
+  // Column 3 on attack lines is DataVolley's own phase: r reception, s / p transition.
+  it.each(files)('%s: reception and transition attacks agree with the scout column', f => {
+    const text = readFileSync(join(dir!, f), 'latin1')
+    const cols = text.split(/\r?\n/).map(l => l.trim().split(';'))
+      .filter(c => /^[*a]\d\dA/.test(c[0]) && !isNaN(parseFloat(c[12]))).map(c => c[2])
+    const ours = parseDVW(text).plays.filter(p => p.skill === 'A').map(p => p.phase)
+    expect(ours.length).toBe(cols.length)
+    expect(ours.map((ph, i) => (ph && cols[i] ? `${ph}${cols[i] === 'r' ? 'r' : 't'}` : 'ok')).filter(x => x !== 'ok' && x[0] !== x[1])).toEqual([])
+  })
+})
+
+describe('a set and its attack', () => {
+  it('keeps the tempo of the same team\u0027s attack right after it', () => {
+    const d = parseDVW(['[3TEAMS]', 'HTH;HOME;0;;', 'TGB;AWAY;0;;', '[3SCOUT]', 'a04SM+~~~58A;;;;;;;14.00.01;1;1;1;1;201;;', '*21EQ+K8F~8C;;;;;;;14.00.03;1;1;1;1;203;;', '*07AU+P1~41BH3;;;;;;;14.00.04;1;1;1;1;204;;', '*21EH+K8F~8C;;;;;;;14.00.06;1;1;1;1;206;;', ''].join(String.fromCharCode(10)))
+    expect(d.plays.filter(p => p.skill === 'E').map(p => p.setTo ?? null)).toEqual(['U', null])
+  })
+})
+
+describe('possibility', () => {
+  const marked = (scout: string) => parseDVW(`[3TEAMS]
+HTH;HOME;0;;
+TGB;AWAY;0;;
+[3SCOUT]
+${scout}
+`).plays.map(p => `${p.side}${p.skill}${p.possibility ? ':P' : ''}`)
+  const line = (code: string, sec: number) => `${code};;;;;;;14.00.${String(sec).padStart(2, '0')};1;1;1;1;${200 + sec};;`
+  const serve = line('*04SM+~~~58A', 1), rec = line('a01RM+~~~58A', 2), set = line('a02EH+K8F~8C', 3), oppAttack = line('a07AH+P1~41BH', 4)
+
+  it('marks the serve, the blocks before the first attack, and that attack only', () => {
+    const block = line('*03BH+~~~~~', 5), dig = line('*02DH+~~~~~', 6), mySet = line('*05EH+K8F~8C', 7), first = line('*07AH+P1~41BH', 8), second = line('*07AH-P1~41BH', 9), lateBlock = line('*03BH-~~~~~', 10)
+    expect(marked([serve, rec, set, oppAttack, block, dig, mySet, first, lateBlock, second].join('\n')))
+      .toEqual(['*S:P', 'aR', 'aE', 'aA', '*B:P', '*D', '*E', '*A:P', '*B', '*A'])
+  })
+  it('marks nothing without an attack by the serving team', () => {
+    expect(marked([serve, rec, set, oppAttack, line('*03BH#~~~~~', 5)].join('\n'))).toEqual(['*S', 'aR', 'aE', 'aA', '*B'])
+  })
+})
+
+describe('clicks', () => {
+  const D = parseDVW(`[3TEAMS]
+HTH;HOME;0;;
+TGB;AWAY;0;;
+[3SCOUT]
+a04SM+~~~58A;;;;0619;-1-1;7348;14.00.07;1;4;2;1;214;;
+*05RM-~~~58AR;;;;;;;14.00.09;1;4;2;1;217;;
+*07AH#P1~41BH3;s;r;;4717;-1-1;8017;14.00.11;1;4;2;1;218;;
+a06BH=~~~~;s;;;;;;14.00.13;1;4;2;1;220;;
+*08DH+~~~41B;s;;;;;;14.00.14;1;4;2;1;221;;
+`)
+  const [serve, reception, attack, block, cover] = D.plays
+
+  it("sends a set without an end click to the same team's next attack", () => {
+    const d = parseDVW(`[3TEAMS]
+HTH;HOME;0;;
+TGB;AWAY;0;;
+[3SCOUT]
+a04SM+~~~58A;;;;0619;-1-1;7348;14.00.07;1;4;2;1;214;;
+*21EH+K8F~8C;;;;3548;;;14.00.11;1;4;2;1;218;;
+*07AH#P1~41BH3;s;r;;4717;-1-1;8017;14.00.11;1;4;2;1;218;;
+`)
+    const [, set, attack] = d.plays
+    expect(set.endClick).toEqual(attack.startClick)
+  })
+
+  it('keeps where the scout clicked', () => {
+    expect(serve.startClick?.v).toBeCloseTo(-0.0075)
+    expect(attack.endClick?.v).toBeGreaterThan(0.5)
+    expect(block.startClick ?? null).toBeNull()
+  })
+
+  it('gives a reception the serve seen from the other side', () => {
+    expect(reception.startClick!.u).toBeCloseTo(1 - serve.startClick!.u)
+    expect(reception.startClick!.v).toBeCloseTo(1 - serve.startClick!.v)
+    expect(reception.endClick!.v).toBeCloseTo(1 - serve.endClick!.v)
+  })
+
+  it("doesn't give a dig of the team's own blocked attack its own shot", () => {
+    expect(cover.side).toBe(attack.side)
+    expect(cover.startClick ?? null).toBeNull()
+  })
+})
+
+describe('front row', () => {
+  const lines = (lineups: string) => parseDVW(`[3TEAMS]
+HTH;HOME;;;;
+OPP;AWAY;;;;
+[3PLAYERS-H]
+0;2;2;;;;;;TAN-TAR-02;TANAKA;Taro;
+[3PLAYERS-V]
+1;9;16;;;;;;;BROWN;Bob;
+[3SCOUT]
+*02SQ-~~~16A;;;;;;;;1;1;1;1;100;;${lineups}
+`).plays[0]
+
+  it('takes P2 to P4 of both lineups, by player key', () => {
+    expect(lines('1;2;3;4;5;6;7;16;9;10;11;12;').front).toMatchObject({ 0: 'TAN-TAR-02', 1: '*3', 2: '*4', 3: 'a16', 5: 'a10', length: 6 })
+  })
+  it('leaves it out for a file without lineups', () => {
+    expect(lines('').front).toBeUndefined()
+  })
 })

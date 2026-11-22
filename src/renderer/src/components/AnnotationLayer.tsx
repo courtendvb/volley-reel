@@ -1,26 +1,39 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { composing } from '../keys'
 import {
-  applyStyle, bounds, drawAnnotation, fadeAlpha, hitTest, normalizeBox, translate, visibleAt, withGroups,
-  type Annotation, type AnnotationKind, type StylePatch,
-} from '../../../shared/annotation'
-import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, pointsBox, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
+  animAt, applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, isAnimated, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
+  type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
+import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
+import { t } from '../../../shared/i18n'
+import { keyName } from '../../../shared/keys'
+import { floorAt, floorRect, type CourtFit } from '../../../shared/court'
+import { discOutline, discShapes, type FloorDisc } from '../../../shared/disc'
 
 const SCOPE_COLOR: Record<AnnScope, string> = { clip: '#4B61D1', marker: '#7C3AED', scene: '#D97706', video: '#059669' }
-const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: 'マーカー全体', scene: 'シーン全体', video: '動画全体' }
+const SCOPE_TAG: Record<AnnScope, string> = { clip: '', marker: t('マーカー全体'), scene: t('シーン全体'), video: t('動画全体') }
 
-// A triangle is drawn like a box and stored as a polygon.
-export type Tool = 'select' | AnnotationKind | 'triangle'
+// A triangle is drawn like a box and stored as a polygon; so is a rectangle laid on the court's floor,
+// which follows its perspective (a plain box when there is no court or the drag leaves the floor).
+// The field text is typed in shows it in its own colour on a ground it can be read on, with a caret that
+// stands out from both: dark text on light, light text on dark.
+function editColors(color: string): { color: string; background: string; caretColor: string } {
+  const m = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  const light = m ? 0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16) > 150 : true
+  return light ? { color, background: 'rgba(15, 23, 42, 0.85)', caretColor: '#FACC15' } : { color, background: 'rgba(255, 255, 255, 0.95)', caretColor: '#DC2626' }
+}
+
+export type Tool = 'select' | AnnotationKind | 'curve' | 'triangle' | 'number' | 'floorRect' | 'floorDisc'
 // The style for the next shape; also what the format panel shows when nothing is selected.
 // textColor: new text is white by default while shapes are red, so text has its own color.
-export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string }
+export type AnnStyle = StylePatch & { color: string; width: number; size: number; textColor?: string; discHeight?: number } // discHeight: metres, for new discs on the court
 export const textStyle = (s: AnnStyle): AnnStyle => ({ ...s, color: s.textColor ?? '#FFFFFF' })
 
 interface Props {
+  images?: ImageLookup // how pictures are found (a title card's photo frame shows its player); else the project's assets
   size: { w: number; h: number }
   annotations: Annotation[]
   clip: { key: string; in: number; out: number }
@@ -32,8 +45,10 @@ interface Props {
   onToggleExtra?: (id: string) => void
   scopeOf?: (id: string) => AnnScope | null // where each object lives (frame color and tag)
   editPoints: boolean // Office's "Edit Points": vertex handles instead of the box
+  onMade?: () => void // an object was just made: the tools go back to 選択
   cropping: boolean // the selected picture is being cropped: handles move the frame, dragging moves the picture
   always?: boolean // a title card's objects: shown whatever the video is doing
+  floor?: CourtFit['corners'] | null // the court fitted to the video: shapes can be laid on its floor
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
 }
@@ -44,13 +59,13 @@ type Drag =
   | { mode: 'move'; id: string; from: [number, number]; orig: Annotation; others: Annotation[] }
   | { mode: 'handle'; id: string; handle: string }
   | { mode: 'draw'; draft: Annotation; from: [number, number] }
-  | { mode: 'crop'; id: string; handle: BoxHandle; full: Box }
-  | { mode: 'pan'; id: string; from: [number, number]; orig: ImageAnn; full: Box }
+  | { mode: 'crop'; id: string; handle: BoxHandle; full: Rect }
+  | { mode: 'pan'; id: string; from: [number, number]; orig: ImageAnnotation; full: Rect }
 
-type ImageAnn = Extract<Annotation, { kind: 'image' }>
-type Box = { x: number; y: number; w: number; h: number }
 
 const uid = () => crypto.randomUUID()
+const DISC_HEIGHT = 0.2 // metres, a new disc's thickness unless set
+const plainBox = (a: [number, number], b: [number, number]): [number, number][] => [a, [b[0], a[1]], b, [a[0], b[1]]]
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const HANDLE_PX = 7 // grab radius around a handle
 
@@ -79,13 +94,18 @@ export function AnnotationLayer(p: Props) {
   // every frame of the video.
   // A title card covers the frame during a through-play: the clip's objects are not on it.
   const [onCard, setOnCard] = useState(!!playback.current.card)
-  // Fading objects add their opacity in twentieths, so the layer redraws as they fade.
+  // Fading objects add their opacity in twentieths, and moving ones how far they are drawn, where they
+  // are in a swell or a ring's spread and whether they are blinked off, so the layer redraws as they change.
+  const motionKey = (a: Annotation, t: number) => {
+    const m = animAt(a, t, clipRef.current)
+    return m ? `:${m.reveal !== undefined ? `r${Math.round(m.reveal * 60)}` : ''}${m.pulse !== undefined ? `p${Math.round(m.pulse * 30)}` : ''}${m.ripple !== undefined ? `w${Math.round(m.ripple * 30)}` : ''}${m.hidden ? 'h' : ''}` : ''
+  }
   const visibleKey = (t: number) => `${playback.attachedKey}|${annsRef.current.filter(a => visibleAt(a, t, clipRef.current))
-    .map(a => (a.fadeIn || a.fadeOut ? `${a.id}:${Math.round(fadeAlpha(a, t, clipRef.current) * 20)}` : a.id)).join(',')}`
+    .map(a => (a.fadeIn || a.fadeOut ? `${a.id}:${Math.round(fadeAlpha(a, t, clipRef.current) * 20)}` : a.id) + (isAnimated(a) ? motionKey(a, t) : '')).join(',')}`
   const [visKey, setVisKey] = useState('')
   const clipRef = useRef(p.clip)
   clipRef.current = p.clip
-  useEffect(() => playback.subscribe(s => { setVisKey(visibleKey(s.time)); setOnCard(!!s.card) }), [])
+  useEffect(() => playback.subscribe(s => { setVisKey(visibleKey(s.time) + (s.paused ? '|paused' : '')); setOnCard(!!s.card) }), [])
 
   const onScreen = p.always || playback.attachedKey === p.clip.key
   const pathDraft: Annotation | null = path && path.points.length
@@ -112,7 +132,9 @@ export function AnnotationLayer(p: Props) {
         const img = assetImage(cropImg.assetId), f = fullRect(cropImg)
         if (img) { ctx.save(); ctx.globalAlpha = 0.35; ctx.drawImage(img, f.x * p.size.w, f.y * p.size.h, f.w * p.size.w, f.h * p.size.h); ctx.restore() }
       }
-      drawAnnotation(ctx, a, p.size.w, p.size.h, assetImage)
+      // Moving objects move as the video goes; paused, the one selected for editing shows whole, as its handles do.
+      const still = p.always || !vis || (p.editable && a.id === p.selectedId && playback.current.paused)
+      drawAnnotation(ctx, a, p.size.w, p.size.h, p.images ?? assetImage, still ? undefined : animAt(a, time, p.clip))
     }
     ctx.globalAlpha = 1
     // The other selected objects and the selected one's group: a thin frame each.
@@ -134,14 +156,22 @@ export function AnnotationLayer(p: Props) {
       ctx.strokeRect(b.x * p.size.w - 6, b.y * p.size.h - 6, b.w * p.size.w + 12, b.h * p.size.h + 12)
       ctx.setLineDash([])
       if (SCOPE_TAG[scope]) {
-        ctx.font = 'bold 11px "Segoe UI", "Yu Gothic UI", sans-serif'
+        ctx.font = 'bold 11px "Segoe UI", "Yu Gothic UI", "Helvetica Neue", "Hiragino Sans", sans-serif'
         const tw = ctx.measureText(SCOPE_TAG[scope]).width + 10, tx = b.x * p.size.w - 6, ty = Math.max(0, b.y * p.size.h - 24)
         ctx.fillStyle = SCOPE_COLOR[scope]; ctx.fillRect(tx, ty, tw, 17)
         ctx.fillStyle = '#FFFFFF'; ctx.textBaseline = 'middle'; ctx.fillText(SCOPE_TAG[scope], tx + 5, ty + 9)
       }
+      // A curve's control points hang on thin lines from their ends, as in drawing programs.
+      if (selected.kind === 'arrow' && selected.c1 && selected.c2) {
+        ctx.save(); ctx.lineWidth = 1; ctx.strokeStyle = '#4B61D1'; ctx.setLineDash([4, 3])
+        for (const [e, c] of [[[selected.x1, selected.y1], selected.c1], [[selected.x2, selected.y2], selected.c2]]) {
+          ctx.beginPath(); ctx.moveTo(e[0] * p.size.w, e[1] * p.size.h); ctx.lineTo(c[0] * p.size.w, c[1] * p.size.h); ctx.stroke()
+        }
+        ctx.restore()
+      }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds])
+  }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds, p.images])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {
@@ -162,7 +192,7 @@ export function AnnotationLayer(p: Props) {
   }
   const ctx2d = () => canvas.current!.getContext('2d')!
   // The wheel zooms the picture being cropped (a native listener: React's wheel handler can't prevent scrolling).
-  const cropRef = useRef<ImageAnn | null>(null)
+  const cropRef = useRef<ImageAnnotation | null>(null)
   cropRef.current = cropImg
   useEffect(() => {
     const c = canvas.current
@@ -198,11 +228,29 @@ export function AnnotationLayer(p: Props) {
     const a = applyStyle({ id: uid(), kind: q.kind, color: p.style.color, width: p.style.width, points: q.points } as Annotation, p.style)
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
+    p.onMade?.()
   }
 
+  const onFloor = (a: [number, number], b: [number, number]): [number, number][] =>
+    (p.floor && floorRect(p.floor, { x: a[0], y: a[1] }, { x: b[0], y: b[1] })) || plainBox(a, b)
+  // A disc on the court: dragged from its centre out to its edge; its thickness from the style.
+  const discAt = (from: [number, number], to: [number, number]): FloorDisc | null => {
+    const c = p.floor && floorAt({ corners: p.floor }, { x: from[0], y: from[1] }), e = p.floor && floorAt({ corners: p.floor }, { x: to[0], y: to[1] })
+    if (!c || !e) return null
+    return { u: c.x, v: c.y, r: Math.max(0.1, Math.round(Math.hypot((e.x - c.x) * 9, (e.y - c.y) * 18) * 10) / 10), z: p.style.discHeight ?? DISC_HEIGHT }
+  }
+  const discFill = () => p.style.fill ?? p.style.color
   const onDown = (e: PointerEvent) => {
     if (!p.editable || textEdit) return
     const pt = at(e)
+    if (p.tool === 'number') {
+      e.preventDefault()
+      const n = numberCircle(uid(), pt[0], pt[1], nextNumber(p.annotations), p.style.color, Math.max(14, Math.round(p.style.size * 0.6)))
+      p.onChange([...p.annotations, n])
+      p.onSelect(n.id)
+      p.onMade?.()
+      return
+    }
     if (p.tool === 'text') {
       e.preventDefault()
       setTimeout(() => setTextEdit({ id: null, x: pt[0], y: pt[1], value: '' }), 0)
@@ -243,8 +291,11 @@ export function AnnotationLayer(p: Props) {
     playback.pause()
     const base = { id: uid(), color: p.style.color }
     const draft: Annotation = p.tool === 'arrow' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width }
+      : p.tool === 'curve' ? { ...base, kind: 'arrow', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], width: p.style.width, ...curveControls(pt[0], pt[1], pt[0], pt[1]) }
       : p.tool === 'freehand' ? { ...base, kind: 'freehand', points: [pt], width: p.style.width }
       : p.tool === 'triangle' ? { ...base, kind: 'polygon', points: trianglePoints(pt, pt), width: p.style.width }
+      : p.tool === 'floorRect' ? { ...base, kind: 'polygon', points: onFloor(pt, pt), width: p.style.width }
+      : p.tool === 'floorDisc' ? { ...base, kind: 'polygon', points: [pt, pt, pt], width: p.style.width, fill: discFill(), fillOpacity: p.style.fillOpacity ?? 1 }
       : { ...base, kind: p.tool as 'rect' | 'circle', x: pt[0], y: pt[1], w: 0, h: 0, width: p.style.width }
     setDrag({ mode: 'draw', draft: applyStyle(draft, p.style), from: pt })
   }
@@ -275,7 +326,7 @@ export function AnnotationLayer(p: Props) {
       const cur = annsRef.current.find(a => a.id === drag.id)
       if (!cur) return
       // Shift: box corners keep their proportions; vertices and arrow ends line up with a neighbor.
-      const snap = e.shiftKey && /^(p[12]|[vm]\d+)$/.test(drag.handle)
+      const snap = e.shiftKey && /^([pc][12]|[vm]\d+)$/.test(drag.handle)
       const [sx, sy] = snap ? snapToNeighbors(cur, drag.handle, x, y, p.size.w, p.size.h) : [x, y]
       const r = dragHandle(cur, drag.handle, sx, sy, { keepAspect: e.shiftKey && !snap })
       replace(r.a)
@@ -283,10 +334,11 @@ export function AnnotationLayer(p: Props) {
       return
     }
     const d = drag.draft
-    const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y }
+    const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y, ...(d.c1 ? curveControls(d.x1, d.y1, x, y) : {}) }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }
-      : d.kind === 'polygon' ? { ...d, points: trianglePoints(drag.from, [x, y]) }
+      : d.kind === 'polygon' && p.tool === 'floorDisc' ? (() => { const dc = discAt(drag.from, [x, y]); return dc && p.floor ? { ...d, points: discOutline(p.floor, dc).side, disc: { ...dc, part: 'top' as const } } : d })()
+      : d.kind === 'polygon' ? { ...d, points: p.tool === 'floorRect' ? onFloor(drag.from, [x, y]) : trianglePoints(drag.from, [x, y]) }
       : d
     setDrag({ ...drag, draft: next })
   }
@@ -300,10 +352,18 @@ export function AnnotationLayer(p: Props) {
         : d.kind === 'rect' || d.kind === 'circle' ? Math.abs(d.w) > 0.005 && Math.abs(d.h) > 0.005
         : d.kind === 'polygon' ? pointsBox(d.points).w > 0.005 && pointsBox(d.points).h > 0.005
         : true
-      if (big) {
+      if (big && d.kind === 'polygon' && d.disc && p.floor) {
+        // The disc: its side and top in one group, the top selected.
+        const { part: _p, ...dc } = d.disc
+        const shapes = discShapes(p.floor, dc, { color: d.color, fill: d.fill ?? discFill(), fillOpacity: d.fillOpacity ?? 1, width: d.width, ...(d.dash ? { dash: d.dash } : {}) }, { side: uid(), top: d.id, group: uid() })
+        p.onChange([...annsRef.current, ...shapes])
+        p.onSelect(d.id)
+        p.onMade?.()
+      } else if (big) {
         const done = d.kind === 'circle' || d.kind === 'rect' ? normalizeBox(d) : d
         p.onChange([...annsRef.current, done])
         p.onSelect(done.id)
+        p.onMade?.()
       }
     }
     setDrag(null)
@@ -330,7 +390,9 @@ export function AnnotationLayer(p: Props) {
     if (!t) return
     const value = t.value.trim()
     if (t.id) {
-      p.onChange(value ? p.annotations.map(a => (a.id === t.id && a.kind === 'text' ? { ...a, text: value } : a)) : p.annotations.filter(a => a.id !== t.id))
+      // A box of a fixed width (a note line) stays when emptied: it is still there to write in.
+      const stays = p.annotations.some(a => a.id === t.id && a.kind === 'text' && a.box?.width)
+      p.onChange(value || stays ? p.annotations.map(a => (a.id === t.id && a.kind === 'text' ? { ...a, text: value } : a)) : p.annotations.filter(a => a.id !== t.id))
       return
     }
     if (!value) return
@@ -338,6 +400,7 @@ export function AnnotationLayer(p: Props) {
     const a = applyStyle({ id: uid(), kind: 'text', color: ts.color, x: t.x, y: t.y, text: value, size: ts.size }, ts)
     p.onChange([...p.annotations, a])
     p.onSelect(a.id)
+    p.onMade?.()
   }
   // Enter finishes; Alt+Enter or Shift+Enter starts a new line; Escape cancels.
   const onTextKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -363,12 +426,12 @@ export function AnnotationLayer(p: Props) {
     <div className="ann-layer" style={{ pointerEvents: p.editable ? 'auto' : 'none', cursor }}>
       <canvas ref={canvas} style={{ width: p.size.w, height: p.size.h }} data-testid="ann-canvas"
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onDoubleClick={onDouble} />
-      {path && <div className="ann-hint">クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止</div>}
+      {path && <div className="ann-hint">{t('クリックで頂点を追加・ダブルクリックか Enter で確定・Backspace で1つ戻す・Esc で中止')}</div>}
       {textEdit && (
         <textarea
-          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder="テキスト（Alt+Enter で改行）"
+          ref={inputRef} className="ann-text-input" autoFocus value={textEdit.value} placeholder={keyName(t('テキスト（Alt+Enter で改行）'))}
           rows={Math.max(1, textEdit.value.split('\n').length)}
-          style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, color: editingText?.color ?? textStyle(p.style).color }}
+          style={{ left: textEdit.x * p.size.w, top: textEdit.y * p.size.h, fontSize: textSize, ...editColors(editingText?.color ?? textStyle(p.style).color) }}
           onChange={e => setTextEdit({ ...textEdit, value: e.target.value })} onKeyDown={onTextKey} onBlur={commitText}
         />
       )}
@@ -376,15 +439,17 @@ export function AnnotationLayer(p: Props) {
   )
 }
 
-// Office-like handles: squares for corners / ends / vertices, small circles for midpoints.
+// Office-like handles: squares for corners / ends / vertices, small circles for midpoints, filled
+// dots for a curve's control points.
 function drawHandle(ctx: CanvasRenderingContext2D, h: Handle, W: number, H: number): void {
   const x = h.x * W, y = h.y * H
   ctx.save()
   ctx.lineWidth = 1.5
   ctx.strokeStyle = '#4B61D1'
-  ctx.fillStyle = h.kind === 'mid' ? 'rgba(255,255,255,0.75)' : '#FFFFFF'
+  ctx.fillStyle = h.kind === 'mid' ? 'rgba(255,255,255,0.75)' : h.kind === 'ctrl' ? '#4B61D1' : '#FFFFFF'
   ctx.beginPath()
   if (h.kind === 'mid') ctx.arc(x, y, 4, 0, Math.PI * 2)
+  else if (h.kind === 'ctrl') { ctx.strokeStyle = '#FFFFFF'; ctx.arc(x, y, 5, 0, Math.PI * 2) }
   else ctx.rect(x - 5, y - 5, 10, 10)
   ctx.fill(); ctx.stroke()
   ctx.restore()

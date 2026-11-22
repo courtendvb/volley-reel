@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>試合を取り込む — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="倉庫に動画と DVW を入れる">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html" aria-current="page">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><a href="06-draw.html">6. 動画に描く</a></li>
+        <li><a href="07-court.html">7. コートの表示</a></li>
+        <li><a href="08-data.html">8. データスライドとレポート</a></li>
+        <li><a href="09-compare.html">9. 比較動画</a></li>
+        <li><a href="10-export.html">10. 書き出しの詳細</a></li>
+        <li><a href="11-help.html">11. 困ったとき</a></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>2. 試合を取り込む</h1>
+<p class="m-lead">試合の動画と、その試合の DVW（DataVolley・VolleyStation のスカウトファイル）を組にして、倉庫に入れます。</p>
+<figure class="m-shot"><img src="../img/ja/home-empty.jpg" alt="はじめて開いたホーム画面。左が倉庫、右がプロジェクトです。" loading="lazy"><figcaption>はじめて開いたホーム画面。左が倉庫、右がプロジェクトです。</figcaption></figure>
+<h2 id="library">倉庫を決める</h2>
+<p>はじめて開くと、倉庫にするフォルダを聞かれます。空のフォルダを選ぶと、そこが新しい倉庫になります。前に使っていた倉庫のフォルダを選べば、そのまま続きから使えます。あとから<span class="ui">倉庫を変更</span>で切り替えられます。</p>
+<div class="m-note warn">
+  <strong>動画と DVW は動かさないでください</strong>
+  <p>倉庫は動画と DVW をコピーせず、もとの場所を覚えています。ファイルを移したり名前を変えたりすると見つからなくなります。そのときは、見つからないファイルの横に出る<span class="ui">場所を指定…</span>で、新しい場所を選び直します。</p>
+</div>
+
+<h2 id="folders">フォルダからまとめて取り込む</h2>
+<ol class="m-steps">
+  <li>ホームの<span class="ui">フォルダから一括取り込み</span>を押し、動画と DVW のあるフォルダを選びます。いくつ選んでもかまいません。</li>
+  <li>見つかった DVW と動画が、日付とチームコードで組になって並びます。「判定」に、どう組にしたかが出ます。</li>
+  <li>組が違っていたら、その行の動画を選び直します。入れたくない行はチェックを外します。</li>
+  <li><span class="ui">◯ 試合を取り込む</span>を押します。</li>
+</ol>
+<figure class="m-shot"><img src="../img/ja/import-scan.jpg" alt="一括取り込みの画面。4 つの DVW がそれぞれの動画と組になっています。" loading="lazy"><figcaption>一括取り込みの画面。4 つの DVW がそれぞれの動画と組になっています。</figcaption></figure>
+<div class="m-scroll"><table class="m-table">
+  <thead><tr><th>判定</th><th>意味</th></tr></thead>
+  <tbody>
+    <tr><td>日付とチーム</td><td>日付と両チームのコードがファイル名で合いました。</td></tr>
+    <tr><td>日付と片方のチーム</td><td>日付と、チームコードの片方が合いました。</td></tr>
+    <tr><td>日付のみ（要確認）</td><td>日付しか合っていません。動画が正しいか確かめてください。</td></tr>
+    <tr><td>同じフォルダ</td><td>DVW と同じフォルダにある動画です。</td></tr>
+    <tr><td>動画なし</td><td>合う動画がありません。動画を自分で選びます。</td></tr>
+  </tbody>
+</table></div>
+<p>動画のファイル名に、<code>2026-10-10 RSH vs HCF.mp4</code> のように日付とチームコードを入れておくと、正しく組になります。</p>
+
+<h2 id="one">1 試合だけ取り込む</h2>
+<p><span class="ui">1試合を取り込む</span>を押し、試合の動画、次にスカウトファイル（.dvw か .vsm）の順に選びます。</p>
+
+<h2 id="notes">取り込むときに知っておくこと</h2>
+<ul class="dots">
+  <li><b>DVW は、その動画と同期したものを使います。</b>クリップは DVW に記録された時刻で切り出します。DataVolley や VolleyStation で、動画との時刻合わせを済ませた DVW を使ってください。試合全体が同じだけずれているときは、アプリの<b>時刻合わせ</b>で直せます（<a href="11-help.html#timing">11 章</a>）。DVW の時刻が動画の長さを超えているときは、取り込みのときに知らせます。</li>
+  <li><b>そのままでは再生できない形式の動画</b>は、取り込みのときに再生できる形式に変換します。長い動画は時間がかかります。</li>
+  <li>ログインしていない間は、倉庫に入れられるのは 1 試合までです。</li>
+</ul>
+
+<h2 id="list">倉庫の一覧</h2>
+<figure class="m-shot"><img src="../img/ja/library.jpg" alt="4 試合を取り込んだ倉庫。右に作ったプロジェクトが出ます。" loading="lazy"><figcaption>4 試合を取り込んだ倉庫。右に作ったプロジェクトが出ます。</figcaption></figure>
+<ul class="dots">
+  <li>上の欄にチームコードや日付を入れると絞り込めます（例：<code>RSH 2026-10</code>）。</li>
+  <li><span class="ui">◯◯ で開く</span>は、その 1 試合だけのプロジェクトを、そのチームを分析対象にして開きます。1 試合をすぐ見たいときに使います。</li>
+  <li><span class="ui">削除</span>は倉庫から外すだけで、動画と DVW のファイルは消えません。</li>
+</ul>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="01-start.html"><small>前へ</small>はじめに</a><a class="next" href="03-project.html"><small>次へ</small>プロジェクトを作る</a></nav>
+  </main>
+</div>
+</body>
+</html>

@@ -1,24 +1,26 @@
 // Editing annotation geometry with handles (v3 step 3): arrow ends, 8-way box resize, and
 // Office-style "edit points" for polylines, polygons and freehand — drag a vertex, drag a midpoint
 // to insert one, delete one. Pure functions on normalized coordinates, so they are unit-tested.
-import { isPoints, normalizeBox, type Annotation, type PointsAnnotation } from './annotation'
+import { curveControls, isPoints, normalizeBox, pointsBox, withQuad, type Annotation, type ImageAnnotation, type PointsAnnotation, type Rect, type Quad } from './annotation'
 
-export type HandleKind = 'end' | 'resize' | 'vertex' | 'mid'
+type HandleKind = 'end' | 'resize' | 'vertex' | 'mid' | 'ctrl' // ctrl: a curve's control point
 export interface Handle { id: string; kind: HandleKind; x: number; y: number }
 
-export const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
+const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
 export type BoxHandle = (typeof BOX_HANDLES)[number]
 
 // Freehand strokes can have hundreds of points; past this many, simplify before editing points.
 export const MAX_EDIT_POINTS = 80
-export const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
+const MIN_POINTS = { polyline: 2, freehand: 2, polygon: 3 } as const
 
 // Point shapes show the 8 box handles (resize the whole shape) unless points are being edited,
 // as in Office's "Edit Points" mode.
 export function handlesOf(a: Annotation, editPoints = false): Handle[] {
   switch (a.kind) {
-    case 'arrow': return [{ id: 'p1', kind: 'end', x: a.x1, y: a.y1 }, { id: 'p2', kind: 'end', x: a.x2, y: a.y2 }]
-    case 'rect': case 'circle': case 'image': return boxHandles(a)
+    case 'arrow': return [{ id: 'p1', kind: 'end', x: a.x1, y: a.y1 }, { id: 'p2', kind: 'end', x: a.x2, y: a.y2 },
+      ...(a.c1 && a.c2 ? [{ id: 'c1', kind: 'ctrl' as const, x: a.c1[0], y: a.c1[1] }, { id: 'c2', kind: 'ctrl' as const, x: a.c2[0], y: a.c2[1] }] : [])]
+    case 'image': return a.quad ? a.quad.map(([x, y], i) => ({ id: `q${i}`, kind: 'vertex' as const, x, y })) : boxHandles(a)
+    case 'rect': case 'circle': return boxHandles(a)
     case 'text': return []
     default: {
       if (!editPoints) return boxHandles(pointsBox(a.points))
@@ -43,10 +45,11 @@ function boxHandles({ x, y, w, h }: { x: number; y: number; w: number; h: number
   return BOX_HANDLES.map(id => ({ id, kind: 'resize' as const, x: at[id][0], y: at[id][1] }))
 }
 
-export function pointsBox(pts: [number, number][]): { x: number; y: number; w: number; h: number } {
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
-  const x = Math.min(...xs), y = Math.min(...ys)
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+// A straight arrow bent into a curve, or a curve made straight again.
+export function setCurved(a: Annotation, curved: boolean): Annotation {
+  if (a.kind !== 'arrow') return a
+  if (!curved) { const { c1: _a, c2: _b, ...rest } = a; return rest }
+  return a.c1 && a.c2 ? a : { ...a, ...curveControls(a.x1, a.y1, a.x2, a.y2) }
 }
 
 // An isosceles triangle in the box dragged from `from` to `to` (apex at the top middle).
@@ -71,8 +74,19 @@ export function toPolygon(a: Annotation): Annotation {
 // Drags a handle to (x, y). Dragging a midpoint inserts a vertex there; the result says which
 // handle to keep dragging (the new vertex). keepAspect (Shift) holds a box's proportions.
 export function dragHandle(a: Annotation, id: string, x: number, y: number, opts: { keepAspect?: boolean } = {}): { a: Annotation; id: string } {
-  if (a.kind === 'arrow') return { a: id === 'p1' ? { ...a, x1: x, y1: y } : { ...a, x2: x, y2: y }, id }
+  if (a.kind === 'arrow') {
+    // On a curve, an end takes its control point along, so the curve keeps its shape there (as in Office).
+    if (id === 'c1' || id === 'c2') return { a: a.c1 && a.c2 ? { ...a, [id]: [x, y] } : a, id }
+    const curved = !!(a.c1 && a.c2)
+    if (id === 'p1') return { a: { ...a, x1: x, y1: y, ...(curved ? { c1: [a.c1![0] + x - a.x1, a.c1![1] + y - a.y1] as [number, number] } : {}) }, id }
+    return { a: { ...a, x2: x, y2: y, ...(curved ? { c2: [a.c2![0] + x - a.x2, a.c2![1] + y - a.y2] as [number, number] } : {}) }, id }
+  }
   if (a.kind === 'rect' || a.kind === 'circle') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !!opts.keepAspect) }, id }
+  // A picture laid with perspective: each corner moves on its own.
+  if (a.kind === 'image' && a.quad) {
+    const i = Number(id.slice(1))
+    return { a: id[0] === 'q' && a.quad[i] ? withQuad(a, a.quad.map((p, j) => (j === i ? [x, y] : p)) as Quad) : a, id }
+  }
   // Pictures keep their proportions at the corners unless Shift is held (Office does the same).
   if (a.kind === 'image') return { a: { ...a, ...resizeBox(a, id as BoxHandle, x, y, !opts.keepAspect) }, id }
   if (!isPoints(a)) return { a, id }
@@ -92,7 +106,7 @@ export function dragHandle(a: Annotation, id: string, x: number, y: number, opts
 // within tolPx. Neighbors are the vertices on either side (for a midpoint, the edge's two ends).
 export function snapToNeighbors(a: Annotation, id: string, x: number, y: number, W: number, H: number, tolPx = 10): [number, number] {
   let nbrs: [number, number][] = []
-  if (a.kind === 'arrow') nbrs = id === 'p1' ? [[a.x2, a.y2]] : id === 'p2' ? [[a.x1, a.y1]] : []
+  if (a.kind === 'arrow') nbrs = id === 'p1' ? [[a.x2, a.y2]] : id === 'p2' ? [[a.x1, a.y1]] : id === 'c1' ? [[a.x1, a.y1]] : id === 'c2' ? [[a.x2, a.y2]] : []
   else if (isPoints(a)) {
     const pts = a.points, n = pts.length, i = Number(id.slice(1)), closed = a.kind === 'polygon'
     const at = (j: number) => (closed ? pts[(j + n) % n] : pts[j])
@@ -141,16 +155,14 @@ function resizePoints(pts: [number, number][], h: BoxHandle, x: number, y: numbe
 
 // ---- cropping a picture (Office-style: the frame shows part of the picture; the picture can be
 // moved and zoomed under the frame). "full" is where the whole picture would be on the frame.
-type ImageAnnotation = Extract<Annotation, { kind: 'image' }>
-type Box = { x: number; y: number; w: number; h: number }
 
-export function fullRect(a: ImageAnnotation): Box {
+export function fullRect(a: ImageAnnotation): Rect {
   const c = a.crop ?? { x: 0, y: 0, w: 1, h: 1 }
   const w = a.w / c.w, h = a.h / c.h
   return { x: a.x - c.x * w, y: a.y - c.y * h, w, h }
 }
 
-function withFrame(a: ImageAnnotation, box: Box, full: Box): ImageAnnotation {
+function withFrame(a: ImageAnnotation, box: Rect, full: Rect): ImageAnnotation {
   const crop = { x: (box.x - full.x) / full.w, y: (box.y - full.y) / full.h, w: box.w / full.w, h: box.h / full.h }
   const whole = Math.abs(crop.x) < 1e-6 && Math.abs(crop.y) < 1e-6 && Math.abs(crop.w - 1) < 1e-6 && Math.abs(crop.h - 1) < 1e-6
   const { crop: _c, ...rest } = a
@@ -158,14 +170,14 @@ function withFrame(a: ImageAnnotation, box: Box, full: Box): ImageAnnotation {
 }
 
 // Drags a frame handle: the frame changes, the picture stays; the frame can't leave the picture.
-export function cropHandle(a: ImageAnnotation, full: Box, h: BoxHandle, x: number, y: number): ImageAnnotation {
+export function cropHandle(a: ImageAnnotation, full: Rect, h: BoxHandle, x: number, y: number): ImageAnnotation {
   const b = resizeBox(a, h, Math.max(full.x, Math.min(full.x + full.w, x)), Math.max(full.y, Math.min(full.y + full.h, y)), false)
   if (b.w < 0.01 || b.h < 0.01) return a
   return withFrame(a, b, full)
 }
 
 // Moves the picture under the frame, so the frame stays on the picture.
-export function panCrop(a: ImageAnnotation, full: Box, dx: number, dy: number): ImageAnnotation {
+export function panCrop(a: ImageAnnotation, full: Rect, dx: number, dy: number): ImageAnnotation {
   const x = Math.min(a.x, Math.max(a.x + a.w - full.w, full.x + dx))
   const y = Math.min(a.y, Math.max(a.y + a.h - full.h, full.y + dy))
   return withFrame(a, a, { ...full, x, y })

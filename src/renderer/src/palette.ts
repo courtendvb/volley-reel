@@ -30,12 +30,26 @@ export async function forgetColor(c: string): Promise<void> {
   set(await api.setPaletteColors(current.colors.filter(x => x !== c.toUpperCase())))
 }
 
-export async function savePaletteItem(name: string, anns: Annotation[]): Promise<void> {
-  set(await api.savePaletteItem(name, anns))
+export async function savePaletteItem(name: string, anns: Annotation[], category: string | null = null): Promise<void> {
+  set(await api.savePaletteItem(name, anns, category))
 }
+
+export async function addPaletteCategory(name: string): Promise<Palette> { const p = await api.addPaletteCategory(name); set(p); return p }
+export async function renamePaletteCategory(id: string, name: string): Promise<void> { set(await api.renamePaletteCategory(id, name)) }
+export async function movePaletteCategory(id: string, to: number): Promise<void> { set(await api.movePaletteCategory(id, to)) }
+export async function removePaletteCategory(id: string): Promise<void> { set(await api.removePaletteCategory(id)) }
+export async function setPaletteItemCategory(id: string, category: string | null): Promise<void> { set(await api.setPaletteItemCategory(id, category)) }
 
 export async function removePaletteItem(id: string): Promise<void> {
   set(await api.removePaletteItem(id))
+}
+
+export async function movePaletteItem(id: string, to: number): Promise<void> {
+  set(await api.movePaletteItem(id, to))
+}
+
+export async function lockPaletteItem(id: string, locked: boolean): Promise<void> {
+  set(await api.lockPaletteItem(id, locked))
 }
 
 // The item's objects with new ids (and new group ids), ready to add to a clip or a card.

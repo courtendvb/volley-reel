@@ -5,6 +5,7 @@ import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
+import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
 import { FREE_MATCHES, type TeamAction } from '../shared/account'
@@ -357,6 +358,14 @@ function registerIpc(): void {
     return project?.info() ?? null
   })
 
+  ipcMain.handle('match:setOffset', async (_e, id: string, offsetSec: number) => {
+    await lib().setOffset(id, offsetSec)
+    return project?.info() ?? null
+  })
+  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, to: string) => {
+    await lib().setCodeEdit(id, line, from, to)
+    return project?.info() ?? null
+  })
   ipcMain.handle('match:setServeMark', (_e, id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => lib().setServeMark(id, fingerprint, patch))
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
@@ -431,6 +440,7 @@ function registerIpc(): void {
   ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
+  ipcMain.handle('account:prices', () => account.prices())
   ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
   ipcMain.handle('account:team', (_e, a: TeamAction) => withAccount(() => account.teamAction(a)))
   // The preload reads the language synchronously, so the interface's text is right from its first paint.
@@ -438,6 +448,13 @@ function registerIpc(): void {
   ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })
   // The renderer has saved: no flush on the way out, straight into the installer.
   ipcMain.handle('update:install', () => { updating = installUpdate() })
+  // The manual ships with the app (electron-builder extraResources: site/), so it opens without the internet, in the
+  // computer's browser. Japanese only for now; page: a chapter's file name (05-scene.html), else the index.
+  ipcMain.handle('app:manual', (_e, page?: string) => {
+    const site = app.isPackaged ? join(process.resourcesPath, 'site') : join(app.getAppPath(), 'site')
+    const name = page && /^[0-9a-z-]+\.html$/.test(page) ? page : 'index.html'
+    return shell.openExternal(pathToFileURL(join(site, 'manual', 'ja', name)).href)
+  })
   ipcMain.handle('update:help', (_e, what: 'page' | 'log') => (what === 'page' ? shell.openExternal(RELEASES_PAGE) : shell.showItemInFolder(updateLogPath())))
 
   ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })

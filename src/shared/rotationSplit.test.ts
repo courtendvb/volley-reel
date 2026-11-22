@@ -41,12 +41,12 @@ describe('rotation split', () => {
     expect(Object.keys(g.names)).toEqual(['1', '2'])
   })
 
-  it('marks by player, the most attacks first, five at most', () => {
-    const people = ['b', 'a', 'a', 'c', 'b', 'a', 'd', 'e', 'f']
+  it('marks by player, the most attacks first, six at most', () => {
+    const people = ['b', 'a', 'a', 'c', 'b', 'a', 'd', 'e', 'f', 'g']
     const g = markers(people.map(person => ref({ person })), 'player')
-    expect(g.names).toEqual({ 1: '#1 A', 2: '#2 B', 3: '#3 C', 4: '#4 D', 5: '#5 E' })
-    expect(g.counts).toEqual({ 1: 3, 2: 2, 3: 1, 4: 1, 5: 1 })
-    expect(g.items.map(i => i.marker)).toEqual([2, 1, 1, 3, 2, 1, 4, 5, null])
+    expect(g.names).toEqual({ 1: '#1 A', 2: '#2 B', 3: '#3 C', 4: '#4 D', 5: '#5 E', 6: '#6 F' })
+    expect(g.counts).toEqual({ 1: 3, 2: 2, 3: 1, 4: 1, 5: 1, 6: 1 })
+    expect(g.items.map(i => i.marker)).toEqual([2, 1, 1, 3, 2, 1, 4, 5, 6, null])
     expect(g.rest).toBe(1)
   })
 

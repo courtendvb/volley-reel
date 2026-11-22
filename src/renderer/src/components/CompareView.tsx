@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LibraryInfo, ParsedDVW } from '../../../shared/types'
 import { jumpTime, playJumpRows } from '../../../shared/comparePlays'
 import { alignCourts } from '../../../shared/compareFit'
-import { applyGesture, emptyPane, offsetFor, other, partnerTime, stepTime, withZoom, type CompareFile, type CompareLayout, type CompareSession, type CompareSource, type ComparePane as PaneState, type PaneGesture, type Side } from '../../../shared/videoCompare'
+import { applyGesture, autoCompareName, emptyPane, nameAfterSource, offsetFor, other, partnerTime, stepTime, withZoom, type CompareFile, type CompareLayout, type CompareSession, type CompareSource, type PaneGesture, type Side } from '../../../shared/videoCompare'
 import { ComparePane, type GestureTarget, type PaneMedia } from './ComparePane'
 import { errorText } from '../format'
 import { t } from '../../../shared/i18n'
@@ -42,7 +42,6 @@ export function CompareView({ initial, library, onExit, onError }: Props) {
   }, [s.left.source, s.right.source])
 
   const update = useCallback((fn: (s: CompareSession) => CompareSession) => setS(p => ({ ...fn(p), updatedAt: new Date().toISOString() })), [])
-  const patchPane = useCallback((side: Side, fn: (p: PaneState) => PaneState) => update(p => ({ ...p, [side]: fn(p[side]) })), [update])
 
   // Files chosen earlier (a saved comparison) are made playable again when they come into view.
   useEffect(() => {
@@ -181,7 +180,17 @@ export function CompareView({ initial, library, onExit, onError }: Props) {
   }
   const lockZoom = (on: boolean) => update(p => on ? { ...p, zoomLocked: true, right: { ...p.right, view: withZoom(p.right.view, p.left.view.zoom) } } : { ...p, zoomLocked: false })
 
-  const setSource = (side: Side, source: CompareSource) => patchPane(side, () => ({ ...emptyPane(), source }))
+  // A side's video as people know it: the match's name in the library, or the file's name without its extension.
+  const labelOf = (src: CompareSource | null) => src?.kind === 'match' ? matches.find(m => m.id === src.matchId)?.name ?? null
+    : src?.kind === 'file' ? src.name.replace(/\.[^.]+$/, '') : null
+  const setSource = (side: Side, source: CompareSource) =>
+    update(p => ({ ...p, name: nameAfterSource(p, side, source, labelOf, t('新しい比較')), [side]: { ...emptyPane(), source } }))
+  // A comparison saved before names were given (still the default name) takes its videos' name when opened.
+  useEffect(() => {
+    if (s.name !== t('新しい比較') || !matches.length) return
+    const auto = autoCompareName(labelOf(s.left.source), labelOf(s.right.source))
+    if (auto) update(p => ({ ...p, name: auto }))
+  }, [matches.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const pickFile = async (side: Side) => {
     try {
       const f = await api.pickCompareVideo()

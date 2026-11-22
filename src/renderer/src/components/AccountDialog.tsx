@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FREE_MATCHES, gate, type AccountState, type Gate, type LeaseTeam } from '../../../shared/account'
-import { t } from '../../../shared/i18n'
+import { FREE_MATCHES, gate, priceText, type AccountState, type Gate, type LeaseTeam, type PlanPrices } from '../../../shared/account'
+import { getLang, t } from '../../../shared/i18n'
 import { errorText } from '../format'
 import { setAccountState, useAccount } from '../account'
 
@@ -222,6 +222,17 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
   // invoice (any card), not a new plan. The server answers that case with the invoice page.
   const unpaid = state.kind === 'expired' && state.reason === 'payment_required'
   const canPay = !unpaid && (state.kind !== 'ok' || state.status === 'trialing')
+  // The prices on the plan buttons, asked once per team; offline the buttons go without.
+  const [prices, setPrices] = useState<PlanPrices | null>(null)
+  useEffect(() => {
+    if (!canPay) return
+    let live = true
+    void window.api.accountPrices().then(p => { if (live) setPrices(p) }, () => {})
+    return () => { live = false }
+  }, [canPay, state.team.id])
+  const annualPrice = priceText(prices?.annual ?? null, getLang(), t)
+  const monthlyPrice = priceText(prices?.monthly ?? null, getLang(), t)
+  const freeDays = annualPrice ? prices?.annual_trial_days ?? 0 : 0
   const leave = () => {
     if (!confirm(t('「{0}」から抜けますか？ もう一度入るには、チームID と合言葉が必要です。', state.team.name))) return
     void run(() => window.api.accountTeam({ action: 'leave', team_id: state.team.id }))
@@ -240,10 +251,15 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
       </dl>
       {state.kind !== 'ok' && <p className="muted">{t('作ったプロジェクトや書き出した動画は、このパソコンに残っています。')}</p>}
       {unpaid && <p className="muted">{t('更新のお支払いが済んでいません。Stripe の請求書ページで支払うと、すぐに使えるようになります。別のカードでも支払えます。')}</p>}
+      {canPay && freeDays > 0 && <p className="muted">{t('年額プランは最初の {0} 日間が無料で、その後に1年分が請求されます。', freeDays)}</p>}
       <div className="row">
         {unpaid && <button className="primary" onClick={() => onPay('annual')} disabled={busy}>{t('未払いの請求を支払う')}</button>}
-        {canPay && <button className="primary" onClick={() => onPay('annual')} disabled={busy}>{t('年額プランに申し込む')}</button>}
-        {canPay && <button onClick={() => onPay('monthly')} disabled={busy}>{t('月額プランに申し込む')}</button>}
+        {canPay && <button className="primary plan-button" onClick={() => onPay('annual')} disabled={busy}>
+          {t('年額プランに申し込む')}{annualPrice && <span className="plan-price">{annualPrice}</span>}
+        </button>}
+        {canPay && <button className="plan-button" onClick={() => onPay('monthly')} disabled={busy}>
+          {t('月額プランに申し込む')}{monthlyPrice && <span className="plan-price">{monthlyPrice}</span>}
+        </button>}
         <button onClick={() => void run(() => window.api.accountRefresh(state.team.id))} disabled={busy}>{t('状態を更新')}</button>
       </div>
       <button type="button" className="link account-teams-toggle" onClick={() => setTeamsOpen(!teamsOpen)} aria-expanded={teamsOpen}>

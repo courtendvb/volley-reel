@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>データスライドとレポート — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="データスライド、プリセット、マッチレポート、分析">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><a href="06-draw.html">6. 動画に描く</a></li>
+        <li><a href="07-court.html">7. コートの表示</a></li>
+        <li><a href="08-data.html" aria-current="page">8. データスライドとレポート</a></li>
+        <li><a href="09-compare.html">9. 比較動画</a></li>
+        <li><a href="10-export.html">10. 書き出しの詳細</a></li>
+        <li><a href="11-help.html">11. 困ったとき</a></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>8. データスライドとレポート</h1>
+<p class="m-lead">動画だけでなく、数字の資料もプロジェクトの試合から作れます。データスライドは動画の中に入れられ、PNG・PDF・PowerPoint にも書き出せます。</p>
+
+<h2 id="slides">データスライド</h2>
+<p>上の<span class="ui">データスライド作成</span>を押し、種類とチーム、選手を選んで<span class="ui">作成</span>を押します。できたスライドは、選んだマーカーの中か、シーンの頭のタイトルカードとして入ります。</p>
+<figure class="m-shot"><img src="../img/ja/board.jpg" alt="「データスライド」の画面。サーブで 3 人を選んだところ。下に仕上がりの見本が出ます。" loading="lazy"><figcaption>「データスライド」の画面。サーブで 3 人を選んだところ。下に仕上がりの見本が出ます。</figcaption></figure>
+<div class="m-scroll"><table class="m-table">
+  <thead><tr><th>種類</th><th>中身</th></tr></thead>
+  <tbody>
+    <tr><td>サーブ・アタック</td><td>選手ごとのコースのチャートと、ブレイク率・ミス率・決定率などです。</td></tr>
+    <tr><td>セット</td><td>レセプションの質とセッターコールごとの、トスの行き先の割合です。ローテーション別のサイドアウトにもできます。</td></tr>
+    <tr><td>ローテーション</td><td>ローテーションごとに 1 枚。フォーメーション、主なアタッカーのコーン、攻撃の割合の表です。</td></tr>
+    <tr><td>サーブの狙い</td><td>受けた選手とサーブの入ったゾーンごとの、良いパスの率とレセプション後の決定率です。</td></tr>
+    <tr><td>チーム比較</td><td>2 つのプロジェクトのチームを、サイドアウト・ブレイク・アタック・サーブ・レセプションなどで並べます。並べる数字は選べます。</td></tr>
+    <tr><td>個人スタッツ</td><td>選手ごとのサーブ・アタック・レセプションの基本の数字の表です。</td></tr>
+  </tbody>
+</table></div>
+<figure class="m-shot"><img src="../../img/slide-rotation.jpg" alt="ローテーションのスライド。" loading="lazy"><figcaption>ローテーションのスライド。</figcaption></figure><figure class="m-shot"><img src="../../img/slide-setter.jpg" alt="セッターのスライド。レセプションの質とセッターコールごとのトス配分。" loading="lazy"><figcaption>セッターのスライド。レセプションの質とセッターコールごとのトス配分。</figcaption></figure>
+<p>写真は、選手写真のパック（右下の<span class="ui">選手写真</span>）から入ります。スライドの文字や写真はあとから動かせ、矢印や図形も足せます。</p>
+
+<h2 id="preset">プリセットから作る</h2>
+<figure class="m-shot narrow"><img src="../../img/ja/preset.jpg" alt="「プリセットから作る」。サイドアウトの動画を、レセプションの質で分けて作るところ。" loading="lazy"><figcaption>「プリセットから作る」。サイドアウトの動画を、レセプションの質で分けて作るところ。</figcaption></figure>
+<p>上の<span class="ui">プリセットから作る</span>で、決まった型の動画をまとめて作れます。サイドアウト、サーブ、ブロック、アタックから選び、ローテーション別・選手別・ゾーン別・結果別などの分け方を選ぶと、シーンとマーカーに分かれた新しい動画ができます。試合が増えたら<span class="ui">作り直す</span>で、同じ型のまま作り直せます。</p>
+
+<h2 id="report">マッチレポート</h2>
+<figure class="m-shot"><img src="../../img/ja/report-team.jpg" alt="4 試合を合わせたチームのレポート。" loading="lazy"><figcaption>4 試合を合わせたチームのレポート。</figcaption></figure>
+<p>上の<span class="ui">マッチレポート</span>で、1 試合か全試合の合計を A4 1 枚のレポートにします。選手ごとの得点・サーブ・レセプション・アタックと、チームの合計が並びます。<b>数字を押すと、そのプレーだけがプレー一覧に出ます</b>。PDF でも保存できます。</p>
+
+<h2 id="analysis">分析</h2>
+<figure class="m-shot"><img src="../../img/ja/analysis-rotation.jpg" alt="分析のローテーションのタブ。" loading="lazy"><figcaption>分析のローテーションのタブ。</figcaption></figure>
+<p>上の<span class="ui">分析</span>で、対象チームの数字を表で見られます。得点率・ミス率、サイドアウト・ブレイク、レセプションと攻撃、ローテーション、連続得点・連続失点のタブがあります。</p>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="07-court.html"><small>前へ</small>コートの表示</a><a class="next" href="09-compare.html"><small>次へ</small>比較動画</a></nav>
+  </main>
+</div>
+</body>
+</html>

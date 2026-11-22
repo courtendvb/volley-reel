@@ -8,6 +8,7 @@ import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilt
 import { effectName } from '../../../shared/labels'
 import type { MarkRange } from '../../../shared/markRange'
 import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 interface Props {
   match: Match
@@ -69,6 +70,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
     onStyle({ ...s, bySkill: { ...s.bySkill, [tab]: value === undefined ? rest : { ...rest, [key]: value } } })
   }
   const [gear, setGear] = useState(false)
+  const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
   const [finding, setFinding] = useState(false)
   const autoButton = (after?: () => void) => (
     <button disabled={finding} title={t('動画の中のコートの線を探して、四隅の候補を置きます。少し時間がかかります。最後は線に合っているか確かめてください')}
@@ -120,10 +122,10 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
             <option value="a">{away.name || away.code}</option>
           </select></label>
           <span className="spacer" />
-          <span className="ov-gear-wrap">
+          <span className="ov-gear-wrap" ref={gearPop.anchor}>
             <button className="ov-gear" aria-label={t('グリッドの見た目')} aria-expanded={gear} onClick={() => setGear(g => !g)}>⚙</button>
             {gear && (
-              <div className="ov-gear-pop" role="dialog" aria-label={t('グリッドの見た目')}>
+              <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('グリッドの見た目')}>
                 <label className="check">{t('色')} <PaletteColor value={s.color} label={t('グリッドの色')} onChange={c => onStyle({ ...s, color: c })} /></label>
                 <label className="check">{t('濃さ')}
                   <input type="range" min={0.1} max={1} step={0.05} value={s.opacity} onChange={e => onStyle({ ...s, opacity: +e.target.value })} /> {Math.round(s.opacity * 100)}%</label>
@@ -141,7 +143,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
       <section className="court-group">
         <h3 className="court-group-head" title={t('一覧やシーンで選んだプレー 1 本の表示')}>{t('選んだ1本')}</h3>
         <Layer label={t('ゾーン')} title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')} on={s.playZones} onToggle={on => onStyle({ ...s, playZones: on })}
-          help={[t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（ジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点（3.15 m）まで（セットの開始座標がない DVW はセットのゾーンの中央、ゾーンもなければネット際のセッター位置から）。座標がないプレーはゾーンを塗り、ゾーンの中央を近似の位置として白抜きの点で出す（軌道は破線）')]}>
+          help={[t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（既定はジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m。設定の「打点の高さ」で変えられる）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点まで（セットの開始座標がない DVW はセットのゾーンの中央、ゾーンもなければネット際のセッター位置から）。座標がないプレーはゾーンを塗り、ゾーンの中央を近似の位置として白抜きの点で出す（軌道は破線）')]}>
           <select value={s.detail} aria-label={t('ゾーンの細かさ')} title={t('ゾーンの細かさ')} onChange={e => onStyle({ ...s, detail: e.target.value as GridStyle['detail'] })}>
             <option value="zone">{t('ゾーン')}</option>
             <option value="sub">{t('サブゾーン')}</option>

@@ -2,7 +2,7 @@
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
 import { BLINK_ON, drawAnnotation, emphasisOf, emphasisSec, isAnimated, type Anim, type Annotation, type Emphasis } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
-import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { exportHeight, lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
 import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
@@ -12,7 +12,6 @@ import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawFor
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
-export const EXPORT_HEIGHT = 720
 const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
 const DRAW_STEPS_PER_SEC = 15 // an object being drawn in: steps a second (at most DRAW_STEPS)
@@ -30,14 +29,16 @@ interface Deps {
   courtStyle?: GridStyle // the grid's look, as in the player
 }
 
-// 720p at the source aspect, at the source frame rate when every match shares one (else 30).
-function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: number; height: number; fpsStr: string } {
+// 720p (1080p when picked and every source is that high, exportHeight) at the source aspect, at the source frame
+// rate when every match shares one (else 30).
+function exportFormat(clips: Clip[], matches: Record<string, Match>, overlay: OverlaySettings): { width: number; height: number; fpsStr: string } {
   const ms = [...new Set(clips.map(c => c.matchId))].map(id => matches[id]).filter(Boolean)
   const first = ms[0]
+  const height = exportHeight(overlay, ms.map(m => m.height))
   const aspect = first?.width && first.height ? first.width / first.height : 16 / 9
-  const width = Math.round((EXPORT_HEIGHT * aspect) / 2) * 2
+  const width = Math.round((height * aspect) / 2) * 2
   const rates = new Set(ms.map(m => m.fpsStr))
-  return { width, height: EXPORT_HEIGHT, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
+  return { width, height, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
 }
 
 // chapters: where YouTube chapters start, as plan indexes (planVideoChapters); kept on the job as item indexes.
@@ -66,7 +67,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
 
 export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[], chaptersText = false): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
-  const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
+  const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches, overlay)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
   const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations),
     ...plan.flatMap(p => (p.kind === 'clip' ? d.markerAnnotations(p.sceneId, p.group) : [])),

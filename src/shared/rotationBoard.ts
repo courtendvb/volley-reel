@@ -221,6 +221,14 @@ export function attackLine(a: Play): { from: TeamPt; to: TeamPt } | null {
 // corners: far end line left / right, near end line left / right.
 export const COURT: CourtFit['corners'] = [{ x: 0.135, y: 0.19 }, { x: 0.545, y: 0.19 }, { x: 0.025, y: 0.975 }, { x: 0.655, y: 0.975 }]
 // The team's frame on the picture: across turned round, along as is (its own end line is the far one).
+// The same court flat, seen from above as from the same place: the side-out team on the far half (its
+// own end line at the top, its left on the picture's right), the net across the middle, attacking
+// down toward us. Corners as COURT's; the court 1:2 on the picture so a metre is as long either way
+// (18 m down 0.76 of the height, 9 m across 0.21375 of the width), in the middle of the left-hand area.
+export const FLAT_COURT: CourtFit['corners'] = [{ x: 0.238, y: 0.205 }, { x: 0.45175, y: 0.205 }, { x: 0.238, y: 0.965 }, { x: 0.45175, y: 0.965 }]
+// The rotation slide's court: in perspective (3D, as before) or flat from above (2D).
+export type CourtLook = '3d' | '2d'
+export const COURT_LOOKS: CourtLook[] = ['3d', '2d']
 const onPicture = (H: ReturnType<typeof homography>) => (p: TeamPt): [number, number] => { const q = project(H, 1 - p.u, p.v); return [q.x, q.y] }
 
 const PLACE_COLOR: Partial<Record<SetPlace, string>> = { left: '#2563EB', middle: '#16A34A', right: '#DC2626', pipe: '#7C3AED' }
@@ -287,8 +295,10 @@ export function mainColor(px: ArrayLike<number>): string | null {
 // colour, the libero in white), the other team's three blockers at the net, a cone for each spiker's
 // usual course in this rotation, each place's share beyond the net over where it is hit from, and
 // the dumps by the setter.
-function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, cones = true): Annotation[] {
-  const H = homography(COURT), at = (u: number, v: number): [number, number] => { const q = project(H, u, v); return [q.x, q.y] }
+// flat: the court from above (FLAT_COURT): the players as plain discs on the floor, the net a line.
+function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, cones = true, flat = false): Annotation[] {
+  const corners = flat ? FLAT_COURT : COURT
+  const H = homography(corners), at = (u: number, v: number): [number, number] => { const q = project(H, u, v); return [q.x, q.y] }
   const team = onPicture(H), out: Annotation[] = [], g = uid()
   const poly = (pts: [number, number][], fill: string | null, o: Partial<Extract<Annotation, { kind: 'polygon' }>> = {}): Annotation =>
     ({ id: uid(), kind: 'polygon', color: '#FFFFFF', width: 0, points: pts, fill, fillOpacity: 1, groupId: g, locked: true, ...o })
@@ -326,7 +336,9 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, 
     const steps = 14, rim: [number, number][] = []
     for (let i = 0; i <= steps; i++) {
       const a = c.from + ((c.to - c.from) * i) / steps
-      rim.push(team({ u: c.apex.u + (Math.sin(a) * c.reach) / COURT_W, v: c.apex.v + (Math.cos(a) * c.reach) / COURT_L }))
+      const u = c.apex.u + (Math.sin(a) * c.reach) / COURT_W, v = c.apex.v + (Math.cos(a) * c.reach) / COURT_L
+      // Flat, the whole floor shows: a cone stops at its edge rather than run off it.
+      rim.push(team(flat ? { u: Math.min(1.06, Math.max(-0.06, u)), v: Math.min(1.025, v) } : { u, v }))
     }
     const share = list.length / total, cg = uid()
     out.push(poly([team(c.apex), ...rim], color, { fillOpacity: 0.28 + 0.4 * share, color: mix(color, '#000000', 0.25), width: 1.5, groupId: cg, locked: false }))
@@ -337,9 +349,17 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, 
   // The players: a ball resting on the floor (lit from the top left), its soft shadow on the floor;
   // the far ones first so nearer ones cover them. A ball is about 0.9 m wide where it stands. A
   // front-row player stands in a red ring on the floor, round their shadow.
-  const corners = COURT, { fill: teamColor, line: rimColor } = look
+  const { fill: teamColor, line: rimColor } = look
   const disc = (p: [number, number], fill: string, rim: string, label: string, ink: string, rimWidth = 1, front = false) => {
-    const gg = uid(), f = invert(H, p), ring = discOutline(corners, { u: f.u, v: f.v, r: 0.45, z: 0 }).top
+    const gg = uid(), f = invert(H, p)
+    if (flat) { // a plain disc 1.3 m wide centred on its place, the front-row ring round it
+      if (front) out.push({ id: uid(), kind: 'polygon', color: FRONT_RING, width: 3, points: discOutline(corners, { u: f.u, v: f.v, r: 0.92, z: 0 }).top, fill: FRONT_RING, fillOpacity: 0.14, groupId: gg })
+      const ring = discOutline(corners, { u: f.u, v: f.v, r: 0.65, z: 0 }).top, xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * 1280
+      out.push({ id: uid(), kind: 'circle', color: rim, width: rimWidth + 1, x: p[0] - d / 2 / 1280, y: p[1] - d / 2 / 720, w: d / 1280, h: d / 720, fill, fillOpacity: 1, groupId: gg })
+      if (label) out.push(words(p[0], (p[1] * 720 - d * 0.29) / 720, label, Math.round(d * 0.48), ink, { align: 'center', groupId: gg, font: NUMBER_FONT }))
+      return
+    }
+    const ring = discOutline(corners, { u: f.u, v: f.v, r: 0.45, z: 0 }).top
     if (front) out.push({ id: uid(), kind: 'polygon', color: FRONT_RING, width: 3, points: discOutline(corners, { u: f.u, v: f.v + 0.005, r: 0.72, z: 0 }).top, fill: FRONT_RING, fillOpacity: 0.14, groupId: gg })
     const xs = ring.map(q => q[0]), d = (Math.max(...xs) - Math.min(...xs)) * 1280 // its width in px at 720p
     const cx = p[0], cy = p[1] * 720 - d * 0.42 // its centre over the floor point, in px
@@ -353,6 +373,7 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, 
     if (s.libero) disc(p, '#FFFFFF', deep, String(s.jersey), deep, 2)
     else disc(p, teamColor, rimColor, String(s.jersey), light(teamColor) ? '#0F172A' : '#FFFFFF', 1, !!s.front)
   }
+  if (flat) { flatNet(out, at, team, sp, total, g); for (const u of [0.2, 0.5, 0.8]) disc(at(u, 0.53), BLOCKER, '#94A3B8', '', ''); return out }
   // The net: posts, a see-through mesh, the white tape along its top and the cable at its foot, and
   // the antennas over the sidelines.
   const [nl, nr] = [at(-0.05, 0.5), at(1.05, 0.5)], up = 0.12, low = 0.03, netTop = nl[1] - up
@@ -383,6 +404,27 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, 
   return out
 }
 
+// The flat court's net and the places' shares: the net a dark line across with its posts. Each place's
+// tab (its name, the share beside it) is wider than a third of the court, so Z4 and Z2/1 stand outside
+// the sidelines level with the net, on the side they are hit from; the quick just over the net past
+// the blockers and Pipe under it (on the team's half they would cover the front-row players).
+function flatNet(out: Annotation[], at: (u: number, v: number) => [number, number], team: (p: TeamPt) => [number, number], sp: SetSplit, total: number, g: string) {
+  const [a, b] = [at(-0.05, 0.5), at(1.05, 0.5)]
+  out.push({ id: uid(), kind: 'polyline', color: '#0F172A', width: 6, points: [a, b], groupId: g, locked: true })
+  out.push({ id: uid(), kind: 'polyline', color: '#FFFFFF', width: 2, points: [a, b], groupId: g, locked: true })
+  for (const u of [0, 1]) { const p = at(u, 0.5); out.push({ id: uid(), kind: 'polyline', color: '#DC2626', width: 4, points: [[p[0], p[1] - 0.008], [p[0], p[1] + 0.008]], groupId: g, locked: true }) }
+  for (const p of [a, b]) out.push({ id: uid(), kind: 'circle', color: '#1E293B', width: 1, x: p[0] - 0.006, y: p[1] - 0.0107, w: 0.012, h: 0.0213, fill: '#475569', fillOpacity: 1, groupId: g, locked: true })
+  const LABEL: [SetPlace, TeamPt][] = [['left', { u: -0.34, v: 0.5 }], ['middle', { u: 0.5, v: 0.6 }], ['right', { u: 1.34, v: 0.5 }], ['pipe', { u: 0.5, v: 0.68 }]]
+  const tw = 0.04, nw = 0.056, bh = 0.042
+  for (const [k, pt] of LABEL) {
+    const [cx, cy] = team(pt), by = cy - bh / 2, x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
+    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
+    out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
+    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 24, '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
+    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], 12, '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
+  }
+}
+
 // A picture point back to court units (the homography's inverse, by solving its 2×2 system).
 function invert(H: ReturnType<typeof homography>, p: [number, number]): { u: number; v: number } {
   // x = (a u + b v + c) / (g u + h v + 1), y = (d u + e v + f) / (g u + h v + 1)
@@ -406,6 +448,7 @@ export interface RotationSlideData {
   discLine?: string // and their outline (missing: a darker shade of it)
   cones?: boolean // the spikers' cones on the court (missing: shown)
   tables?: RotationTables // which of the tables at the bottom right (missing: all six)
+  court?: CourtLook // the court in perspective or flat from above (missing: 3D)
 }
 
 // The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
@@ -471,7 +514,7 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
   out.push(words(x, 0.012, `P${v.rotation}`, 80, ink, { groupId: headGroup, font: NUMBER_FONT }))
   out.push({ id: uid(), kind: 'polyline', color: fill, width: 6, points: [[x + 0.003, 0.15], [x + 0.003 + pw, 0.15]], groupId: headGroup })
   out.push(...rateTable(v.rates ?? { n: 0, won: 0, firstBall: 0 }, x + pw + 0.035, 0.03, fill))
-  out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }, v.cones !== false))
+  out.push(...courtView(so, v.formation, { fill, line: v.discLine ?? discLine(fill) }, v.cones !== false, v.court === '2d'))
   out.push(...setterHeading(v, fill))
   // Bottom right: by reception, and by setter call (the chart is above them), as many as were chosen.
   const recs: [string, string, { fill: string; text: string }][] = [['#', '# pass', { fill: '#DBEAFE', text: '#0F172A' }], ['+', '+ pass', { fill: '#DCFCE7', text: '#0F172A' }], ['!', '! pass', { fill: '#FDE8D0', text: '#0F172A' }]]

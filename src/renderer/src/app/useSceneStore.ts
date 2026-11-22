@@ -106,7 +106,7 @@ export function useSceneStore({ latest, setActiveClipId, setProject, setError }:
   const withReel = useCallback((fn: (r: Reel) => Reel): Reel => {
     const rs = latest.current.reels
     const cur = rs.find(r => r.id === latest.current.reelId)
-    const next = fn(cur ?? newReel(t('シーン {0}', rs.length + 1)))
+    const next = fn(cur ?? newReel(t('シーン {0}', rs.length + 1), latest.current.settings?.range))
     if (cur) record({ kind: 'scene', id: cur.id, value: cur })
     const all = cur ? rs.map(r => (r.id === cur.id ? next : r)) : [...rs, next]
     latest.current = { ...latest.current, reels: all, reelId: next.id, reel: next }
@@ -126,7 +126,7 @@ export function useSceneStore({ latest, setActiveClipId, setProject, setError }:
   }
   // A new empty scene, opened and put in the current video.
   const makeScene = (): Reel => {
-    const r = newReel(t('シーン {0}', latest.current.reels.length + 1))
+    const r = newReel(t('シーン {0}', latest.current.reels.length + 1), latest.current.settings?.range)
     addScenes([r]); latest.current = { ...latest.current, reel: r }; showScene(r.id)
     record([{ kind: 'scene', id: r.id, value: null }, placeInVideo(r.id)], false)
     return r

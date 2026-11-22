@@ -1096,7 +1096,7 @@ export const EN: Record<string, string> = {
   "{0} 点": "{0} pts",
   "セッターのチームのラリー前の得点": "The setter's team's points before the rally",
   "どの段も、何も選ばなければすべて。レセプションで絞るとレセプションからの攻撃だけ、セッターコールで絞るとコールのないツー（SD）は入りません": "In every row, nothing chosen means all. Choosing receptions keeps to attacks from reception; choosing setter calls leaves out dumps (SD), which have none",
-  "。チャプター {0} 個を動画に入れました（VLC の「再生 → チャプター」で飛べます）": ". {0} chapters are in the video (VLC: Playback → Chapter)",
+  "。チャプター {0} 個を動画に入れました（再生ソフトのチャプターから飛べます）": ". {0} chapters are in the video (jump to them from your video player's chapters)",
   "ドラッグで動かす（右下の角で大きさを変える。ダブルクリックでたたむ）": "Drag to move (the bottom-right corner resizes; double-click folds it)",
   "たたむ": "Fold",
   "マッチレポート": "Match report",

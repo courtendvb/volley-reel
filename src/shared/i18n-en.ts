@@ -584,6 +584,8 @@ export const EN: Record<string, string> = {
   "サーブ速度": "Serve speed",
   "アタッカーごとのよく打つコースの扇形": "Each attacker's usual course, as a cone",
   "右下の配分の表。数が少ないほど大きく出ます": "The distribution tables at the bottom right. The fewer, the larger",
+  "コートの見せ方。3D は後ろから見た遠近、2D は真上から見た平面": "How the court is shown: 3D in perspective from behind, 2D flat from above",
+  "コートの見せ方": "How the court is shown",
   "表": "Tables",
   "右下の表": "Tables at the bottom right",
   "すべて表示": "All",

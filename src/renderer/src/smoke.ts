@@ -1958,6 +1958,11 @@ export function installSmoke(h: SmokeHost): void {
       for (const n of ['1', '2', '3']) { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(count, n); count.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700); await api.smokeShot!(`rot-attackers-${n}.png`) }
       await choose('all')
       cone.click(); await sleep(700); await api.smokeShot!('rot-nocones.png'); cone.click(); await sleep(300)
+      // The court flat from above (rot-2d.png), then back to 3D.
+      const look = dialog.querySelector<HTMLSelectElement>(`select[aria-label="${t('コートの見せ方')}"]`)
+      if (!look) throw new Error('no court look on the rotation slide')
+      const lookAs = async (v: string) => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(look, v); look.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700) }
+      await lookAs('2d'); await api.smokeShot!('rot-2d.png'); await lookAs('3d')
       button(dialog, t('作成'))!.click()
       const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')
       await sleep(600)

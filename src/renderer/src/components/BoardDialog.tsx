@@ -4,7 +4,7 @@ import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardP
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
-import { ATTACKER_CARDS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type RotationTables } from '../../../shared/rotationBoard'
+import { ATTACKER_CARDS, COURT_LOOKS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type CourtLook, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
 import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
 import { compareRows as rowsOf, compareSide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
@@ -26,7 +26,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; attackers: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook } // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; court: CourtLook; attackers: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook } // marker 'head': the scene's head, in no marker
 
 // The choices of tables on a rotation slide.
 const TABLE_NAMES: Record<RotationTables, string> = {
@@ -152,6 +152,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   // The spikers' cones on the court, and which tables go at the bottom right.
   const [cones, setCones] = useState(initial?.cones !== false)
   const [tables, setTables] = useState<RotationTables>(initial?.tables ?? 'all')
+  const [court, setCourt] = useState<CourtLook>(initial?.court ?? '3d') // the court in perspective or flat
   const [attackers, setAttackers] = useState(initial?.attackers ?? ATTACKER_CARDS) // with the attackers' cards: how many
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
@@ -236,6 +237,10 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         {skill === 'R' && (
           <div className="filter-row">
             <span className="field-label">{t('表示')}</span>
+            <label className="check" title={t('コートの見せ方。3D は後ろから見た遠近、2D は真上から見た平面')}>{t('コート')}{' '}
+              <select value={court} onChange={e => setCourt(e.target.value as CourtLook)} aria-label={t('コートの見せ方')}>
+                {COURT_LOOKS.map(v => <option key={v} value={v}>{v === '3d' ? '3D' : '2D'}</option>)}
+              </select></label>
             <label className="check" title={t('アタッカーごとのよく打つコースの扇形')}><input type="checkbox" checked={cones} onChange={e => setCones(e.target.checked)} /> {t('コーン')}</label>
             <label className="check" title={t('右下の配分の表。数が少ないほど大きく出ます')}>{t('表')}{' '}
               <select value={tables} onChange={e => setTables(e.target.value as RotationTables)} aria-label={t('右下の表')}>
@@ -324,7 +329,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         </div>}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos && skill !== 'P'}
-          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, attackers, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, court, attackers, split, notes: notes && !oneSetter, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
         {!oneSetter && skill !== 'T' && skill !== 'C' && skill !== 'P' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           {skill !== 'P' && <label className="check" title={skill === 'C' ? t('倉庫にあるチームのロゴを入れます') : t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {skill === 'C' ? t('ロゴ') : t('写真')}</label>}
@@ -358,7 +363,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, attackers, stat, statTop, statLook })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !oneSetter && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, stat, statTop, statLook })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

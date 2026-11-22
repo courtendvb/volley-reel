@@ -1001,3 +1001,12 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .code-raw input { flex: 1; font-family: ui-monospace, Consolas, monospace; }
 .code-raw input[aria-invalid="true"] { border-color: var(--danger, #DC2626); }
 .play-row .edited { margin-left: 4px; color: var(--primary); font-weight: 700; }
+
+/* A match's scout corrections (ScoutEditsDialog). */
+.scout-edits { width: min(720px, 94vw); }
+.scout-edit-list { list-style: none; margin: var(--space-3) 0; padding: 0; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.scout-edit-list li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.scout-edit-list li:last-child { border-bottom: 0; }
+.scout-edit-list .kind { width: 3.5em; flex: none; font-weight: 700; }
+.scout-edit-list code { flex: 1; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.scout-edit-list li.stale { opacity: .55; }

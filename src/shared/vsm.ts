@@ -5,7 +5,7 @@
 // Pure: no file or DOM access.
 import { parseDVW } from './dvw'
 import type { ParsedDVW } from './types'
-import type { CodeEdit } from './codeEdit'
+import { applyScoutEdits, editCount, type ScoutEdits } from './codeEdit'
 
 interface VsmPoint { x: number; y: number }
 interface VsmPlay {
@@ -37,9 +37,16 @@ export interface Vsm {
 export const isVsm = (text: string) => /^\s*\{/.test(text)
 
 // A scout file of either kind.
-// edits: corrections to codes by [3SCOUT] line (codeEdit.ts); a .vsm's lines are those of the DVW text it becomes.
-export function parseScout(text: string, edits?: CodeEdit[]): ParsedDVW {
-  return parseDVW(isVsm(text) ? vsmToDvw(JSON.parse(text) as Vsm) : text, edits)
+// The DVW text of a scout file of either kind.
+export const scoutDvwText = (text: string): string => (isVsm(text) ? vsmToDvw(JSON.parse(text) as Vsm) : text)
+
+// edits: corrections by [3SCOUT] line (codeEdit.ts); a .vsm's lines are those of the DVW text it becomes.
+export function parseScout(text: string, edits?: ScoutEdits): ParsedDVW {
+  const dvw = scoutDvwText(text)
+  if (!edits || !editCount(edits)) return parseDVW(dvw)
+  const r = applyScoutEdits(dvw, edits)
+  const d = parseDVW(r.text, r.sources)
+  return r.stale.edits.length || r.stale.inserts.length ? { ...d, stale: r.stale } : d
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -141,4 +148,83 @@ export function vsmToDvw(v: Vsm): string {
     out.push(`**${si + 1}set;;;;;;;;;;;;;;;;;;;;;;;;;`)
   })
   return out.join('\r\n')
+}
+
+// ---- writing corrections back to a .vsm --------------------------------------------------------------
+
+// Which VolleyStation play each [3SCOUT] line of vsmToDvw's text came from (null: a point or set line), in the
+// same order the lines are written.
+export function vsmScoutRefs(v: Vsm): ({ si: number; ei: number; pi: number } | { si: number; ei: number; pi: null } | null)[] {
+  const out: ({ si: number; ei: number; pi: number } | { si: number; ei: number; pi: null } | null)[] = []
+  ;(v.scout?.sets ?? []).forEach((s, si) => {
+    s.events.forEach((e, ei) => {
+      const plays = e.exchange?.plays
+      if (!plays?.length) return
+      plays.forEach((_p, pi) => out.push({ si, ei, pi }))
+      if (e.exchange?.point && e.score) out.push({ si, ei, pi: null })
+    })
+    out.push(null)
+  })
+  return out
+}
+
+// A play's fields from a DataVolley code, over the play it replaces (its time and path kept). The zones go back
+// the way playCode reads them: a reception, set, block or dig keeps its own spot in startZone.
+export function vsmPlayFromCode(code: string, base: Partial<VsmPlay> = {}): VsmPlay {
+  const ch = (i: number) => { const c = code.charAt(i); return c && c !== '~' ? c : undefined }
+  const num = (i: number) => { const c = ch(i); return c && /\d/.test(c) ? Number(c) : undefined }
+  const skill = code.charAt(3)
+  const combo = code.substring(6, 8)
+  const own = skill === 'R' || skill === 'E' || skill === 'B' || skill === 'D'
+  // VolleyStation's own short code would no longer match the play, so it is left off (its fields are what count).
+  const { code: _vsCode, ...kept } = base as Partial<VsmPlay> & { code?: string }
+  const jersey = Number(code.substring(1, 3))
+  const p: VsmPlay = {
+    ...kept,
+    // the jersey written as the file writes it (VolleyStation: "06")
+    team: code.charAt(0) === 'a' ? 'a' : '*', player: typeof base.player === 'number' ? jersey : pad2(jersey), skill,
+    hitType: ch(4), effect: ch(5), combination: /^[^~]{2}$/.test(combo) ? combo : undefined, targetAttacker: ch(8),
+    skillType: ch(12), players: num(13), special: ch(14), custom: code.length > 15 ? code.substring(15) : undefined,
+  }
+  if (own) {
+    p.startZone = num(10); p.startSubZone = ch(11)
+    if (skill === 'R') { /* the serve's zones stay with the serve */ } else { p.endZone = undefined; p.endSubZone = undefined }
+  } else { p.startZone = num(9); p.endZone = num(10); p.endSubZone = ch(11) }
+  for (const k of Object.keys(p) as (keyof VsmPlay)[]) if (p[k] === undefined) delete p[k]
+  return p
+}
+
+// The .vsm with the corrections laid in: codes changed on their plays, plays taken out, plays put in after
+// the line they follow (time in tenths of a second). Point and set lines are not changed here. Returns the
+// file and the corrections it could not place.
+export function vsmWithEdits(v: Vsm, s: ScoutEdits): { vsm: Vsm; skipped: number } {
+  const refs = vsmScoutRefs(v)
+  const lines = vsmToDvw(v).split('\r\n')
+  const start = lines.indexOf('[3SCOUT]') + 1
+  const codeAt = (i: number) => (lines[start + i] ?? '').split(';')[0]
+  const out = JSON.parse(JSON.stringify(v)) as Vsm
+  let skipped = 0
+  const changes: { si: number; ei: number; pi: number; kind: 'set' | 'drop' | 'add'; play?: VsmPlay; order: number }[] = []
+  for (const e of s.edits ?? []) {
+    const r = refs[e.line]
+    if (!r || r.pi === null || codeAt(e.line) !== e.from) { skipped++; continue }
+    const base = v.scout!.sets![r.si].events[r.ei].exchange!.plays[r.pi]
+    changes.push(e.to === '' ? { ...r, pi: r.pi, kind: 'drop', order: 0 } : { ...r, pi: r.pi, kind: 'set', play: vsmPlayFromCode(e.to, base), order: 0 })
+  }
+  ;(s.inserts ?? []).forEach((ins, n) => {
+    const r = refs[ins.after]
+    if (!r || codeAt(ins.after) !== ins.from) { skipped++; return }
+    const plays = v.scout!.sets![r.si].events[r.ei].exchange!.plays
+    const after = r.pi ?? plays.length - 1
+    changes.push({ si: r.si, ei: r.ei, pi: after, kind: 'add', play: vsmPlayFromCode(ins.code, { time: Math.round(ins.time * 10) }), order: n + 1 })
+  })
+  // Each exchange from its last play back, so the places still to change keep their index.
+  changes.sort((a, b) => a.si - b.si || a.ei - b.ei || b.pi - a.pi || b.order - a.order)
+  for (const c of changes) {
+    const plays = out.scout!.sets![c.si].events[c.ei].exchange!.plays
+    if (c.kind === 'set') plays[c.pi] = c.play!
+    else if (c.kind === 'drop') plays.splice(c.pi, 1)
+    else plays.splice(c.pi + 1, 0, c.play!)
+  }
+  return { vsm: out, skipped }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { codeParts, partsCode, validCode, withCodeEdit } from './codeEdit'
+import { applyScoutEdits, codeParts, partsCode, validCode, withCodeEdit, withInsert } from './codeEdit'
 import { parseDVW } from './dvw'
 
 const LF = String.fromCharCode(10)
@@ -34,16 +34,43 @@ describe('edits', () => {
   })
   it('lays a correction over the file, the fingerprint kept from the file code', () => {
     const plain = parseDVW(FILE)
-    const d = parseDVW(FILE, [{ line: 2, from: 'a01AQ#PA~36BH1', to: 'a01AQ=PA~36BH1' }])
+    const r = applyScoutEdits(FILE, { edits: [{ line: 2, from: 'a01AQ#PA~36BH1', to: 'a01AQ=PA~36BH1' }] })
+    const d = parseDVW(r.text, r.sources)
     const atk = d.plays.find(p => p.line === 2)!
     expect(atk.effect).toBe('=')
     expect(atk.original).toBe('a01AQ#PA~36BH1')
     expect(atk.fingerprint).toBe(plain.plays.find(p => p.line === 2)!.fingerprint)
-    expect(d.staleEdits).toBeUndefined()
+    expect(r.stale.edits).toEqual([])
   })
-  it('leaves out a correction whose line now holds another code', () => {
-    const d = parseDVW(FILE, [{ line: 1, from: 'a09RQ#~~~16AR', to: 'a09RQ=~~~16AR' }])
-    expect(d.plays.find(p => p.line === 1)!.effect).toBe('+')
-    expect(d.staleEdits).toHaveLength(1)
+  it('takes a play out, and later plays keep their fingerprints', () => {
+    const plain = parseDVW(FILE)
+    const r = applyScoutEdits(FILE, { edits: [{ line: 1, from: 'a09RQ+~~~16AR', to: '' }] })
+    const d = parseDVW(r.text, r.sources)
+    expect(d.plays.map(p => p.line)).toEqual([0, 2])
+    expect(d.plays[1].fingerprint).toBe(plain.plays[2].fingerprint)
+    expect(r.text).not.toContain('a09RQ+')
+  })
+  it('puts a play in after a line, at its own time and with no clicks', () => {
+    const r = applyScoutEdits(FILE, { inserts: [{ id: 'x1', after: 1, from: 'a09RQ+~~~16AR', code: 'a09EQ+~~~~3C', time: 103 }] })
+    const d = parseDVW(r.text, r.sources)
+    const put = d.plays.find(p => p.inserted === 'x1')!
+    expect(put).toMatchObject({ skill: 'E', time: 103, line: 1 })
+    expect(d.plays.map(p => p.skill)).toEqual(['S', 'R', 'E', 'A'])
+    expect(put.fingerprint).toContain('+x1')
+  })
+  it('leaves out corrections whose line now holds another code', () => {
+    const r = applyScoutEdits(FILE, { edits: [{ line: 1, from: 'a09RQ#~~~16AR', to: 'a09RQ=~~~16AR' }], inserts: [{ id: 'y', after: 2, from: 'nope', code: '*01DQ+', time: 105 }] })
+    expect(parseDVW(r.text, r.sources).plays.find(p => p.line === 1)!.effect).toBe('+')
+    expect(r.stale.edits).toHaveLength(1)
+    expect(r.stale.inserts).toHaveLength(1)
+  })
+  it('keeps the file as it is with no corrections, line ends too', () => {
+    const crlf = FILE.split(LF).join(String.fromCharCode(13, 10))
+    expect(applyScoutEdits(crlf, {}).text).toBe(crlf)
+  })
+  it('changes, adds and takes off inserts by id', () => {
+    const a = withInsert(undefined, { id: 'a', after: 1, from: 'x', code: '*01DQ+', time: 1 })
+    expect(withInsert(a, { id: 'a', after: 1, from: 'x', code: '*01DQ#', time: 1 })[0].code).toBe('*01DQ#')
+    expect(withInsert(a, { id: 'a', after: 1, from: 'x', code: '', time: 1 })).toEqual([])
   })
 })

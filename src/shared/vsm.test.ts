@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { parseDVW } from './dvw'
-import { isVsm, parseScout, playCode, vsmToDvw, type Vsm } from './vsm'
+import { isVsm, parseScout, playCode, vsmPlayFromCode, vsmToDvw, vsmWithEdits, type Vsm } from './vsm'
 
 const lineup = { home: { positions: { 1: 7, 2: 4, 3: 21, 4: 5, 5: 15, 6: 80 }, setterAt: 3 }, away: { positions: { 1: 99, 2: 21, 3: 77, 4: 90, 5: 10, 6: 9 }, setterAt: 6 } }
 const vsm: Vsm = {
@@ -54,5 +54,33 @@ describe('VolleyStation files', () => {
     expect(b.players).toEqual(a.players)
     const keys = ['code', 'playerKey', 'score', 'homeRot', 'awayRot', 'phase', 'recEffect', 'front', 'before', 'after'] as const
     for (const [i, p] of a.plays.entries()) for (const k of keys) expect(b.plays[i][k], `${i} ${k}`).toEqual(p[k])
+  })
+})
+
+describe('corrections written back to a .vsm', () => {
+  const CRLF = String.fromCharCode(13, 10)
+  const scout = () => { const l = vsmToDvw(vsm).split(CRLF); return l.slice(l.indexOf('[3SCOUT]') + 1) }
+  const code = (i: number) => scout()[i].split(';')[0]
+  it('reads a play back from its code the same way it was written', () => {
+    const plays = vsm.scout!.sets![0].events[0].exchange!.plays
+    plays.forEach((p, k) => expect(playCode(vsmPlayFromCode(playCode(p, plays.slice(0, k)), p), plays.slice(0, k))).toBe(playCode(p, plays.slice(0, k))))
+  })
+  it('changes a play, takes one out and puts one in, and reads back as the corrected DVW', () => {
+    const atk = code(3), dig = code(4)
+    const edits = { edits: [{ line: 3, from: atk, to: atk.replace('#', '/') }, { line: 4, from: dig, to: '' }],
+      inserts: [{ id: 'b', after: 3, from: atk, code: 'a99BQ#~~~~3C', time: 237.5 }] }
+    const r = vsmWithEdits(vsm, edits)
+    expect(r.skipped).toBe(0)
+    const plays = r.vsm.scout!.sets![0].events[0].exchange!.plays
+    expect(plays.map(p => p.skill)).toEqual(['S', 'R', 'E', 'A', 'B'])
+    expect(plays[3].effect).toBe('/')
+    expect(plays[4]).toMatchObject({ team: 'a', player: '99', skill: 'B', effect: '#', startZone: 3, startSubZone: 'C', time: 2375 })
+    expect(vsm.scout!.sets![0].events[0].exchange!.plays).toHaveLength(5) // the original untouched
+    const back = parseScout(JSON.stringify(r.vsm)).plays.map(p => p.code)
+    const laid = parseScout(JSON.stringify(vsm), edits).plays.map(p => p.code)
+    expect(back).toEqual(laid)
+  })
+  it('skips a correction whose line holds another code', () => {
+    expect(vsmWithEdits(vsm, { edits: [{ line: 3, from: 'nope', to: '*04AQ=' }] }).skipped).toBe(1)
   })
 })

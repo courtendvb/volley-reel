@@ -6,8 +6,10 @@ import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
-import { parseScout } from '../shared/vsm'
-import { validCode, withCodeEdit, type CodeEdit } from '../shared/codeEdit'
+import { isVsm, parseScout, scoutDvwText, vsmWithEdits, type Vsm } from '../shared/vsm'
+import { applyScoutEdits, editCount, validCode, withCodeEdit, withInsert, type ScoutEdits, type ScoutInsert } from '../shared/codeEdit'
+
+const scoutEditsOf = (m: Match): ScoutEdits => ({ edits: m.codeEdits, inserts: m.codeInserts })
 import { decodeScout } from '../shared/scoutText'
 
 import { rosterOf, type RosterPlayer } from '../shared/packMaker'
@@ -24,7 +26,7 @@ import { playerIndex, unifyPlayers } from '../shared/players'
 
 // A scout file: a DataVolley .dvw (Windows-1252 or UTF-8 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
-const readScout = async (path: string, edits?: CodeEdit[]): Promise<ParsedDVW> => parseScout(decodeScout(await readFile(path)).text, edits)
+const readScout = async (path: string, edits?: ScoutEdits): Promise<ParsedDVW> => parseScout(decodeScout(await readFile(path)).text, edits)
 const scoutStem = (path: string) => basename(path, extname(path))
 
 const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
@@ -379,10 +381,48 @@ export class Library {
   async setCodeEdit(id: string, line: number, from: string, to: string): Promise<void> {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
-    if (!Number.isInteger(line) || line < 0 || (to !== from && !validCode(to))) throw new Error(t('コードの形が正しくありません: {0}', to))
+    if (!Number.isInteger(line) || line < 0 || (to !== from && to !== '' && !validCode(to))) throw new Error(t('コードの形が正しくありません: {0}', to))
     const edits = withCodeEdit(m.codeEdits, line, from, to)
     const { codeEdits: _old, ...rest } = m
     await this.saveMatch(edits.length ? { ...rest, codeEdits: edits } : rest)
+  }
+
+  // A play put in by hand after a file line, changed (same id) or taken off (code ''): codeEdit.ts ScoutInsert.
+  async setInsert(id: string, ins: ScoutInsert): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!ins.id || !Number.isInteger(ins.after) || ins.after < 0 || !Number.isFinite(ins.time) || (ins.code !== '' && !validCode(ins.code)))
+      throw new Error(t('コードの形が正しくありません: {0}', ins.code))
+    const inserts = withInsert(m.codeInserts, ins)
+    const { codeInserts: _old, ...rest } = m
+    await this.saveMatch(inserts.length ? { ...rest, codeInserts: inserts } : rest)
+  }
+
+  // Takes every correction off a match (the file is as it was all along).
+  async clearScoutEdits(id: string): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    const { codeEdits: _e, codeInserts: _i, ...rest } = m
+    await this.saveMatch(rest)
+  }
+
+  // The scout file with its corrections laid in, written to a new file: a .dvw (from either kind, in the file's
+  // own text encoding) or a .vsm (only from a .vsm). Returns how many corrections could not be placed.
+  async exportScout(id: string, outPath: string, format: 'dvw' | 'vsm'): Promise<number> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
+    const { text, encoding } = decodeScout(await readFile(m.dvwPath))
+    const edits = scoutEditsOf(m)
+    if (format === 'vsm') {
+      if (!isVsm(text)) throw new Error(t('VSM で書き出せるのは、VolleyStation のファイル（.vsm）から取り込んだ試合だけです'))
+      const r = vsmWithEdits(JSON.parse(text) as Vsm, edits)
+      await writeFile(outPath, JSON.stringify(r.vsm), 'utf8')
+      return r.skipped
+    }
+    const r = applyScoutEdits(scoutDvwText(text), edits)
+    await writeFile(outPath, Buffer.from(r.text, encoding === 'utf8' ? 'utf8' : 'latin1'))
+    return r.stale.edits.length + r.stale.inserts.length
   }
 
   // A serve's hit or touch on a match (serveMark.ts); null clears it.
@@ -435,14 +475,14 @@ export class Library {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
-    const dvw = await this.scout(m.dvwPath, m.codeEdits)
-    const all = await Promise.all(this.list().map(o => o.id === id ? dvw : this.scout(o.dvwPath, o.codeEdits).catch(() => null)))
+    const dvw = await this.scout(m.dvwPath, scoutEditsOf(m))
+    const all = await Promise.all(this.list().map(o => o.id === id ? dvw : this.scout(o.dvwPath, scoutEditsOf(o)).catch(() => null)))
     return unifyPlayers(dvw, playerIndex(all.filter(d => d !== null)))
   }
 
-  private async scout(path: string, edits?: CodeEdit[]): Promise<ParsedDVW> {
+  private async scout(path: string, edits?: ScoutEdits): Promise<ParsedDVW> {
     const mtime = (await stat(path)).mtimeMs
-    const key = edits?.length ? `${path}|${JSON.stringify(edits)}` : path // a correction reads the file again
+    const key = edits && editCount(edits) ? `${path}|${JSON.stringify(edits)}` : path // a correction reads the file again
     const had = this.scouts.get(key)
     if (had?.mtime === mtime) return had.dvw
     const dvw = await readScout(path, edits)

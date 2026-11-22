@@ -1,15 +1,14 @@
 // DVW parser. Pure: no file or DOM access.
 // Ported from HTH_videoviewer/dvw-parser.js and m0/lib/dvw.mjs (docs/design.md §7).
 import type { ClickPoint, MatchInfo, ParsedDVW, Play, Player, Rally, Side, Team, PlayerRole } from './types'
-import { editsByLine, staleEdits, type CodeEdit } from './codeEdit'
+import type { ScoutSource } from './codeEdit'
 
 const ROLES: Record<string, PlayerRole> = { 1: 'L', 2: 'OH', 3: 'OP', 4: 'MB', 5: 'S' } // the player's position, as DataVolley numbers them
 
-// edits: corrections to codes by [3SCOUT] line (codeEdit.ts), laid over the file; a play keeps its original
-// code in its fingerprint, so clips and marks made before the correction still find it.
-export function parseDVW(text: string, edits?: CodeEdit[]): ParsedDVW {
-  const byLine = editsByLine(edits)
-  const applied = new Set<number>()
+// sources: for a text corrected by applyScoutEdits (codeEdit.ts), where each scout line came from. A play keeps
+// its file code in its fingerprint, so clips and marks made before a correction still find it; a play put in
+// is known by its insert's id.
+export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
   let scoutLine = -1
   const teams: Team[] = []
   const players: Record<string, Player> = {}
@@ -82,11 +81,10 @@ export function parseDVW(text: string, edits?: CodeEdit[]): ParsedDVW {
     if (section !== '[3SCOUT]') continue
 
     scoutLine++
-    const line = scoutLine
-    const original = c[0]
-    const fix = byLine.get(line)
-    const code = fix && fix.from === original ? fix.to : original
-    if (fix && code !== original) applied.add(line)
+    const src = sources?.[scoutLine]
+    const code = c[0]
+    const line = src?.line ?? scoutLine
+    const original = src && !src.insert ? src.original : code
     if (!code) continue
     const time = parseFloat(c[12])
 
@@ -139,10 +137,11 @@ export function parseDVW(text: string, edits?: CodeEdit[]): ParsedDVW {
     const front = [...row('*', c.slice(15, 18)), ...row('a', c.slice(21, 24))]
     const play: Play = {
       id: plays.length,
-      fingerprint: `${setNum}|${score.home}-${score.away}|${original}|${time}`,
+      fingerprint: `${setNum}|${score.home}-${score.away}|${src?.insert ? `+${src.insert}` : original}|${time}`,
       code,
       line,
       ...(code !== original ? { original } : {}),
+      ...(src?.insert ? { inserted: src.insert } : {}),
       time,
       side,
       jersey,
@@ -205,8 +204,7 @@ export function parseDVW(text: string, edits?: CodeEdit[]): ParsedDVW {
 
   while (teams.length < 2) teams.push({ code: '?', name: '' })
   const allHome = plays.length > 0 && plays.every(p => p.side === '*')
-  const stale = staleEdits(edits, applied)
-  return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames, info, ...(stale.length ? { staleEdits: stale } : {}) }
+  return { date, teams: [teams[0], teams[1]], players, plays, rallies, allHome, codeNames, info }
 }
 
 // A possibility: the serving team got an attack of its own out of the rally. Its serve, its blocks

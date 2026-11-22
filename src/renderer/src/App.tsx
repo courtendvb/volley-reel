@@ -79,6 +79,7 @@ import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs
 import { ServeMarkBar } from './components/ServeMarkBar'
 import { OffsetBar } from './components/OffsetBar'
 import { CodeEditDialog } from './components/CodeEditDialog'
+import { ScoutEditsDialog } from './components/ScoutEditsDialog'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -239,19 +240,43 @@ export function App() {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
   }
-  // A play's code corrected (codeEdit.ts): saved beside the match, then the match read again so every list,
-  // report and court shows the new code.
-  const [codeEditing, setCodeEditing] = useState<PlayRef | null>(null)
-  const saveCode = async (r: PlayRef, to: string) => {
-    const p = r.play
-    if (p.line === undefined) return
+  // A scout file's corrections (codeEdit.ts): a play's code changed, a play taken out or put in. Saved beside the
+  // match, then the match read again so every list, report and court shows them.
+  const [codeEditing, setCodeEditing] = useState<{ ref: PlayRef; mode: 'edit' | 'insert'; time?: number } | null>(null)
+  const [scoutEditsOf, setScoutEditsOf] = useState<string | null>(null) // the match whose corrections are listed
+  const [scoutBusy, setScoutBusy] = useState(false)
+  const insertOf = (matchId: string, id: string | undefined) => (id ? matches[matchId]?.codeInserts?.find(i => i.id === id) : undefined)
+  const scoutChange = async (matchId: string, run: () => Promise<ProjectInfo | null>) => {
+    setScoutBusy(true)
     try {
-      const info = await api.setCodeEdit(r.matchId, p.line, p.original ?? p.code, to)
+      const info = await run()
       if (info) setProject(info)
-      const d = await api.parseMatch(r.matchId)
-      setDvws(prev => ({ ...prev, [r.matchId]: d }))
+      const d = await api.parseMatch(matchId)
+      setDvws(prev => ({ ...prev, [matchId]: d }))
       setCodeEditing(null)
-    } catch (err) { setError(String(err)) }
+    } catch (err) { setError(String(err)) } finally { setScoutBusy(false) }
+  }
+  const saveCode = (r: PlayRef, to: string, mode: 'edit' | 'insert', time?: number) => {
+    const p = r.play, ins = insertOf(r.matchId, p.inserted)
+    if (p.line === undefined) return
+    if (mode === 'insert') {
+      const from = ins ? ins.from : p.original ?? p.code
+      void scoutChange(r.matchId, () => api.setInsert(r.matchId, { id: crypto.randomUUID(), after: p.line!, from, code: to, time: time ?? p.time }))
+    } else if (ins) void scoutChange(r.matchId, () => api.setInsert(r.matchId, { ...ins, code: to }))
+    else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, to))
+  }
+  const deletePlay = (r: PlayRef) => {
+    const p = r.play, ins = insertOf(r.matchId, p.inserted)
+    if (p.line === undefined || !window.confirm(t('このプレーを削除しますか？ シーンに入っているクリップは再生できなくなります。「この試合の修正と書き出し」から元に戻せます'))) return
+    if (ins) void scoutChange(r.matchId, () => api.setInsert(r.matchId, { ...ins, code: '' }))
+    else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, ''))
+  }
+  const exportScout = async (matchId: string, format: 'dvw' | 'vsm') => {
+    setScoutBusy(true)
+    try {
+      const r = await api.exportScout(matchId, format)
+      if (r) setNotice(r.skipped ? t('書き出しました: {0}（使えなかった修正 {1} 件は入っていません）', r.path, r.skipped) : t('書き出しました: {0}', r.path))
+    } catch (err) { setError(String(err)) } finally { setScoutBusy(false) }
   }
   const setOffset = (id: string, offsetSec: number) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
@@ -866,7 +891,7 @@ export function App() {
             />
             {Object.keys(dvws).length
               ? <PlayList refs={results} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={setCodeEditing} />
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={r => setCodeEditing({ ref: r, mode: 'edit' })} />
               : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
           <section className="stage">
@@ -1096,10 +1121,23 @@ export function App() {
         <OverlayDialog settings={overlay} onChange={setOverlay} onTheme={th => { if (settings) void saveSettings({ ...settings, theme: th }) }} onClose={() => setOverlayOpen(false)}
           sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
       )}
-      {codeEditing && dvws[codeEditing.matchId] && (
-        <CodeEditDialog play={codeEditing.play} matchName={matches[codeEditing.matchId]?.name ?? ''}
-          players={Object.values(dvws[codeEditing.matchId].players).filter(p => p.side === codeEditing.play.side).sort((a, b) => a.jersey - b.jersey)}
-          onSave={to => void saveCode(codeEditing, to)} onClose={() => setCodeEditing(null)} />
+      {codeEditing && dvws[codeEditing.ref.matchId] && (
+        <CodeEditDialog key={`${codeEditing.mode}:${codeEditing.ref.matchId}:${codeEditing.ref.play.id}`} play={codeEditing.ref.play} matchName={matches[codeEditing.ref.matchId]?.name ?? ''}
+          players={Object.values(dvws[codeEditing.ref.matchId].players).sort((a, b) => a.jersey - b.jersey)}
+          mode={codeEditing.mode} insertTime={codeEditing.time}
+          onSave={(to, time) => saveCode(codeEditing.ref, to, codeEditing.mode, time)}
+          onDelete={() => deletePlay(codeEditing.ref)}
+          onInsertAfter={() => { const at = codeEditing.ref.play.time, now = playback.current.time - (matches[codeEditing.ref.matchId]?.offsetSec ?? 0)
+            setCodeEditing({ ref: codeEditing.ref, mode: 'insert', time: now > at && now < at + 20 ? now : at + 1 }) }}
+          onList={() => { setScoutEditsOf(codeEditing.ref.matchId); setCodeEditing(null) }}
+          onClose={() => setCodeEditing(null)} />
+      )}
+      {scoutEditsOf && matches[scoutEditsOf] && (
+        <ScoutEditsDialog match={matches[scoutEditsOf]} dvw={dvws[scoutEditsOf]} busy={scoutBusy}
+          onUndoEdit={(line, from) => void scoutChange(scoutEditsOf, () => api.setCodeEdit(scoutEditsOf, line, from, from))}
+          onUndoInsert={id => { const ins = insertOf(scoutEditsOf, id); if (ins) void scoutChange(scoutEditsOf, () => api.setInsert(scoutEditsOf, { ...ins, code: '' })) }}
+          onClearAll={() => void scoutChange(scoutEditsOf, () => api.clearScoutEdits(scoutEditsOf))}
+          onExport={f => void exportScout(scoutEditsOf, f)} onClose={() => setScoutEditsOf(null)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}

@@ -1017,3 +1017,49 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .code-raw input { flex: 1; font-family: ui-monospace, Consolas, monospace; }
 .code-raw input[aria-invalid="true"] { border-color: var(--danger, #DC2626); }
 .play-row .edited { margin-left: 4px; color: var(--primary); font-weight: 700; }
+
+/* A match's scout corrections (ScoutEditsDialog). */
+.scout-edits { width: min(720px, 94vw); }
+.scout-edit-list { list-style: none; margin: var(--space-3) 0; padding: 0; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.scout-edit-list li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.scout-edit-list li:last-child { border-bottom: 0; }
+.scout-edit-list .kind { width: 3.5em; flex: none; font-weight: 700; }
+.scout-edit-list code { flex: 1; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.scout-edit-list li.stale { opacity: .55; }
+
+/* Enter in the play list: the code alone on one line (QuickCodeDialog). */
+.quick-code-backdrop { align-items: flex-start; padding-top: 18vh; }
+.modal.quick-code { width: min(420px, 90vw); padding: var(--space-3); }
+.quick-code input { width: 100%; font: 600 20px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .04em; padding: var(--space-2) var(--space-3); }
+.quick-code input[aria-invalid="true"] { border-color: var(--danger, #DC2626); }
+
+/* The court in the code dialog (CourtPicker): the play's own half at the bottom; drag start → end. */
+.code-court { display: flex; gap: var(--space-4); align-items: flex-start; margin-bottom: var(--space-3); }
+.court-picker { width: 150px; flex: none; touch-action: none; cursor: crosshair; user-select: none; }
+.court-picker .cp-floor { fill: #E8A94F; stroke: #FFFFFF; stroke-width: 2; }
+.court-picker .cp-zone { stroke: rgba(255,255,255,.55); stroke-width: 1; }
+.court-picker .cp-net { stroke: #1E293B; stroke-width: 3; }
+.court-picker .cp-label { font-size: 13px; fill: var(--sub); }
+.court-picker .cp-path { stroke: #F8D20F; stroke-width: 3; }
+.court-picker .cp-start { fill: #22C55E; stroke: #FFFFFF; stroke-width: 2; }
+.court-picker .cp-end { fill: #EF4444; stroke: #FFFFFF; stroke-width: 2; }
+.code-court-side { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+
+/* Correcting a play's clicks by dragging over the video's court (ClickFixLayer). */
+.click-fix { position: absolute; inset: 0; z-index: 6; cursor: crosshair; touch-action: none; background: rgba(15, 23, 42, .12); outline: none; }
+.click-fix svg { position: absolute; inset: 0; pointer-events: none; }
+.click-fix .cf-path { stroke: #F8D20F; stroke-width: 4; }
+.click-fix .cf-start { fill: #22C55E; stroke: #FFF; stroke-width: 2; }
+.click-fix .cf-end { fill: #EF4444; stroke: #FFF; stroke-width: 2; }
+.click-fix-tip { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(15, 23, 42, .85); color: #FFF; padding: 4px 10px; border-radius: 6px; font-size: 13px; pointer-events: none; white-space: nowrap; }
+.click-fix-bar button.on { background: var(--primary); color: #FFF; }
+
+/* Corrections in the list and around it. */
+.quick-code-label { font-size: var(--fs-label); color: var(--sub); margin-bottom: var(--space-1); }
+.quick-code-keys { font-size: var(--fs-label); color: var(--sub); margin-top: var(--space-1); }
+.list-view-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.play-row.deleted { opacity: .45; text-decoration: line-through; cursor: context-menu; }
+.action-notice { display: flex; align-items: center; gap: var(--space-3); }
+.action-notice button.link { font-weight: 700; }
+.code-time { flex-wrap: wrap; }
+.code-time input { max-width: 7em; }

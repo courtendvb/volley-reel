@@ -11,6 +11,7 @@ import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
 import { FREE_MATCHES, type TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
+import type { ScoutInsert } from '../shared/codeEdit'
 import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { strToU8, zipSync } from 'fflate'
 import type { Reel } from '../shared/reel'
@@ -362,9 +363,32 @@ function registerIpc(): void {
     await lib().setOffset(id, offsetSec)
     return project?.info() ?? null
   })
-  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, to: string) => {
-    await lib().setCodeEdit(id, line, from, to)
+  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }) => {
+    await lib().setCodeEdit(id, line, from, patch)
     return project?.info() ?? null
+  })
+  ipcMain.handle('match:setInsert', async (_e, id: string, ins: ScoutInsert) => {
+    await lib().setInsert(id, ins)
+    return project?.info() ?? null
+  })
+  ipcMain.handle('match:clearScoutEdits', async (_e, id: string) => {
+    await lib().clearScoutEdits(id)
+    return project?.info() ?? null
+  })
+  // The corrected scout file, saved where the person picks (next to the original by default, named so it is
+  // not mistaken for it). null: cancelled.
+  ipcMain.handle('match:exportScout', async (_e, id: string, format: 'dvw' | 'vsm') => {
+    mayExport()
+    const m = lib().getMatch(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    const ext = format === 'vsm' ? 'vsm' : 'dvw'
+    const stem = basename(m.dvwPath, extname(m.dvwPath))
+    const r = await dialog.showSaveDialog(win!, { title: t('直したスカウトファイルを書き出す'), defaultPath: join(dirname(m.dvwPath), `${stem} ${t('修正済み')}.${ext}`),
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
+    if (r.canceled || !r.filePath) return null
+    if (r.filePath === m.dvwPath) throw new Error(t('元のスカウトファイルには上書きできません。別の名前にしてください'))
+    const skipped = await lib().exportScout(id, r.filePath, format)
+    return { path: r.filePath, skipped }
   })
   ipcMain.handle('match:setServeMark', (_e, id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => lib().setServeMark(id, fingerprint, patch))
 

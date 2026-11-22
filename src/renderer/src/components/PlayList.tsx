@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { effectName, skillName } from '../../../shared/labels'
-import { MARKER_COLORS, type Marker } from '../../../shared/reel'
+import { MARKERS, MARKER_COLORS, type Marker } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
@@ -20,10 +20,11 @@ interface Props {
   onJump: (r: PlayRef) => void
   reelGroups: Map<string, string> // `${matchId}:${playId}` -> its markers "1,3" ('' = no marker), for plays in the scene
   onMark: (r: PlayRef, m: Marker) => void
+  onEditCode?: (r: PlayRef) => void // right-click: correct the play's code (codeEdit.ts)
 }
 
 // Only the rows in view are rendered: "all matches" can be tens of thousands of plays.
-export function PlayList({ refs, matches, showMatch, currentMatchId, selected, onJump, reelGroups, onMark }: Props) {
+export function PlayList({ refs, matches, showMatch, currentMatchId, selected, onJump, reelGroups, onMark, onEditCode }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(600)
@@ -80,7 +81,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
         key={`${r.matchId}:${r.play.id}`} r={r} top={i * ROW} odd={i % 2 === 1}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
-        marks={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark}
+        marks={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark} onEditCode={onEditCode}
       />,
     )
   }
@@ -94,23 +95,22 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
   )
 }
 
-const MARKERS: Marker[] = [1, 2, 3, 4, 5]
-
 // odd: every other row is shaded a little (by its place in the list, so the stripes stay put while scrolling).
-const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark }: {
+const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark, onEditCode }: {
   r: PlayRef; top: number; odd: boolean; videoTime: number; selected: boolean; now: boolean
-  onJump: (r: PlayRef) => void; marks: string | null; onMark: (r: PlayRef, m: Marker) => void
+  onJump: (r: PlayRef) => void; marks: string | null; onMark: (r: PlayRef, m: Marker) => void; onEditCode?: (r: PlayRef) => void
 }) {
   const p = r.play
   return (
     <div role="listitem" style={{ top, height: ROW }}
       className={`play-row${odd ? ' odd' : ''}${selected ? ' selected' : ''}${now ? ' now' : ''}${marks === '' ? ' in-scene' : ''}`} onClick={() => onJump(r)}
+      onContextMenu={onEditCode && p.line !== undefined ? e => { e.preventDefault(); onEditCode(r) } : undefined}
       title={t('映像 {0}{1}', formatTime(videoTime), marks === '' ? t('・シーンに入っています（マーカーなし）') : '')}>
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
-      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{skillName(p.skill)}{p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {effectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}</span>
+      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{skillName(p.skill)}{p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {effectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}{p.original && <b className="edited" title={t('コードを直しています（元: {0}）', p.original)}>✎</b>}</span>
       <span className="marks">
         {MARKERS.map(m => {
           const on = !!marks && marks.split(',').includes(String(m))

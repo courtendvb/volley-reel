@@ -8,10 +8,10 @@ import type { PlacedSetChart, SlideCones, SlideFlights, SlideHeat, SlideZones } 
 import type { CardLayout, ClipOverlayOverride, OverlayPatch } from './overlay'
 import type { ParsedDVW, Play } from './types'
 
-export type Marker = 1 | 2 | 3 | 4 | 5
+export type Marker = 1 | 2 | 3 | 4 | 5 | 6
 export type Group = Marker | 'none'
-export const MARKERS: Marker[] = [1, 2, 3, 4, 5]
-export const MARKER_COLORS: Record<Marker, string> = { 1: '#2563EB', 2: '#DC2626', 3: '#16A34A', 4: '#D97706', 5: '#9333EA' }
+export const MARKERS: Marker[] = [1, 2, 3, 4, 5, 6]
+export const MARKER_COLORS: Record<Marker, string> = { 1: '#2563EB', 2: '#DC2626', 3: '#16A34A', 4: '#D97706', 5: '#9333EA', 6: '#0891B2' }
 
 export interface Clip {
   id: string
@@ -96,10 +96,23 @@ const uid = () => globalThis.crypto.randomUUID()
 export function newReel(name: string, range?: Partial<RangeDefaults>): Reel {
   return {
     id: uid(), name,
-    markerNames: { 1: '', 2: '', 3: '', 4: '', 5: '' },
+    markerNames: { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '' },
     groupOrder: [...MARKERS],
-    groups: { 1: [], 2: [], 3: [], 4: [], 5: [], none: [] },
+    groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], none: [] },
     clips: {}, scope: 'marked', rangeDefaults: { ...DEFAULT_RANGE, ...cleanRange(range) }, updatedAt: new Date().toISOString(),
+  }
+}
+
+// A scene saved when there were fewer markers (there were five before six): the new ones come in empty,
+// at the end of the play order. Returns the scene itself when nothing was missing.
+export function withAllMarkers(reel: Reel): Reel {
+  const lacking = MARKERS.filter(m => !reel.groups?.[m] || reel.markerNames?.[m] === undefined || !reel.groupOrder?.includes(m))
+  if (!lacking.length) return reel
+  return {
+    ...reel,
+    markerNames: { ...Object.fromEntries(MARKERS.map(m => [m, ''])), ...reel.markerNames } as Record<Marker, string>,
+    groups: { ...Object.fromEntries(MARKERS.map(m => [m, []])), ...reel.groups } as Record<Group, string[]>,
+    groupOrder: [...(reel.groupOrder ?? []).filter(m => MARKERS.includes(m)), ...MARKERS.filter(m => !reel.groupOrder?.includes(m))],
   }
 }
 
@@ -156,7 +169,7 @@ export function markerCardOn(reel: Reel, m: Marker, videoDefault: boolean): bool
   return reel.markerCards?.[m] ?? videoDefault
 }
 
-// Number keys and the list's 1–5: adds that marker (keeping any others), or takes it off when the
+// Number keys and the list's 1–6: adds that marker (keeping any others), or takes it off when the
 // clip has it; null (0) takes every marker off. With `when` (a clip's [match date, video time]) the
 // clip goes into the group in time order — before the first clip that comes later — so a group
 // stays chronological unless it was reordered by hand; without it, at the end.

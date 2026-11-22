@@ -25,6 +25,9 @@
 //         trial {}                  a team of their own with the 30-day trial, once per account
 //         leave { team_id }
 //     → 4xx { error: AccountError }
+//   POST {SUPABASE_URL}/functions/v1/account-prices  { device_token, device_id, team_id }
+//     → PlanPrices: what the plan buttons say, read from Stripe's prices; the annual free days are the
+//       ones account-checkout will give this team (only a team that never paid gets them)
 //   POST {SUPABASE_URL}/functions/v1/account-checkout  { device_token, device_id, team_id, plan }
 //     → { url }: a Stripe Checkout page for the team, opened in the browser. For a team whose renewal
 //       didn't go through, the page of its unpaid invoice instead ({ url, kind: 'invoice' }); paying it
@@ -85,6 +88,30 @@ export type AccountState =
   | ({ kind: 'ok'; status: LeasePayload['status']; until: string | null; daysLeft: number | null } & Signed)
   | ({ kind: 'expired'; reason: 'lease' | AccountError } & Signed)
   | ({ kind: 'no_access' } & Signed)
+
+// A plan's price as Stripe holds it: amount in the currency's smallest unit (yen as is, cents for dollars).
+export interface PlanPrice {
+  amount: number
+  currency: string // ISO 4217, lower case as Stripe gives it: 'jpy'
+  interval: 'month' | 'year'
+  interval_count: number
+  tax: 'inclusive' | 'exclusive' | 'unspecified'
+}
+export interface PlanPrices { monthly: PlanPrice | null; annual: PlanPrice | null; annual_trial_days: number }
+
+// "¥39,600 / year (tax incl.)" in the interface language; null when it can't be said.
+export function priceText(p: PlanPrice | null, lang: string, t: (ja: string, ...a: (string | number)[]) => string): string | null {
+  if (!p || !Number.isFinite(p.amount) || p.amount < 0) return null
+  let money: string
+  try {
+    const f = new Intl.NumberFormat(lang, { style: 'currency', currency: p.currency.toUpperCase() })
+    money = f.format(p.amount / 10 ** (f.resolvedOptions().maximumFractionDigits ?? 0))
+  } catch { return null } // a currency this runtime doesn't know
+  const n = p.interval_count > 1 ? p.interval_count : 0
+  const per = p.interval === 'year' ? (n ? t('{0}年', n) : t('年')) : (n ? t('{0}か月', n) : t('月'))
+  const tax = p.tax === 'inclusive' ? t('（税込）') : p.tax === 'exclusive' ? t('（税別）') : ''
+  return t('{0}／{1}', money, per) + tax
+}
 
 export function b64urlDecode(s: string): Uint8Array {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)

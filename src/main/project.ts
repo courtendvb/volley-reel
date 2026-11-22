@@ -2,13 +2,14 @@
 // uses) and reels/. Matches live in the library and are referenced by id. A pre-v3 project (with
 // its own matches/) is migrated on open: its matches move into the library under the same ids.
 import { cleanLineColors, cleanPointScale, type ChartLineColors } from '../shared/chart'
+import { cleanStrikeHeights, type StrikeHeights } from '../shared/court'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { cleanSavedFilters, type SavedFilter } from '../shared/filter'
 import { cleanHeadline, type HeadlineStyle } from '../shared/annotation'
 import { overlaySettings, type OverlayPatch, type OverlayTheme } from '../shared/overlay'
-import { cleanRange, type RangeDefaults, type Reel } from '../shared/reel'
+import { cleanRange, withAllMarkers, type RangeDefaults, type Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
 import type { Match, ParsedDVW, PlayerRole, ProjectInfo, ProjectSettings } from '../shared/types'
 import { cleanRoles } from '../shared/roles'
@@ -29,6 +30,7 @@ interface ProjectFile {
   lineColors?: ChartLineColors
   pointColors?: ChartLineColors
   pointScale?: number
+  strikeHeights?: StrikeHeights
   roles?: Record<string, PlayerRole>
   overlay?: OverlayPatch
   range?: Partial<RangeDefaults>
@@ -71,6 +73,7 @@ export class Project {
       lineColors: cleanLineColors(saved.lineColors),
       pointColors: cleanLineColors(saved.pointColors),
       pointScale: cleanPointScale(saved.pointScale),
+      strikeHeights: cleanStrikeHeights(saved.strikeHeights),
       roles: cleanRoles(saved.roles),
       matchIds: Array.isArray(saved.matchIds) ? saved.matchIds : [],
       scenesVersion: saved.scenesVersion,
@@ -157,7 +160,7 @@ export class Project {
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.name.localeCompare(b.name))
     return {
       path: this.dir, name: this.file.name, matches, matchIds: [...this.file.matchIds],
-      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.roles ? { roles: this.file.roles } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}), ...(this.file.overlay ? { overlay: this.file.overlay } : {}), ...(this.file.range ? { range: this.file.range } : {}) },
+      settings: { ourTeamCodes: this.file.ourTeamCodes, ...(this.file.lineColors ? { lineColors: this.file.lineColors } : {}), ...(this.file.pointColors ? { pointColors: this.file.pointColors } : {}), ...(this.file.pointScale ? { pointScale: this.file.pointScale } : {}), ...(this.file.strikeHeights ? { strikeHeights: this.file.strikeHeights } : {}), ...(this.file.roles ? { roles: this.file.roles } : {}), ...(this.file.theme ? { theme: this.file.theme } : {}), filters: this.file.filters ?? [], ...(this.file.headline ? { headline: this.file.headline } : {}), ...(this.file.overlay ? { overlay: this.file.overlay } : {}), ...(this.file.range ? { range: this.file.range } : {}) },
       missing: this.library.missing(matches),
     }
   }
@@ -186,6 +189,7 @@ export class Project {
     this.file.lineColors = cleanLineColors(s.lineColors)
     this.file.pointColors = cleanLineColors(s.pointColors)
     this.file.pointScale = cleanPointScale(s.pointScale)
+    this.file.strikeHeights = cleanStrikeHeights(s.strikeHeights)
     this.file.roles = cleanRoles(s.roles)
     const range = cleanRange(s.range)
     this.file.range = Object.keys(range).length ? range : undefined
@@ -201,7 +205,7 @@ export class Project {
       try {
         const { data, fromBackup } = await readJSON<Reel>(join(this.dir, 'reels', f))
         if (fromBackup) this.notices.push(t('リール「{0}」のファイルが読めなかったため、1つ前の保存から復元しました', data.name))
-        out.push(data)
+        out.push(withAllMarkers(data))
       } catch {
         this.notices.push(t('リールのファイル {0} が読めませんでした（ファイルはそのまま残しています）', f))
       }

@@ -15,6 +15,8 @@ interface Props {
   info: string // the output: size, frame rate, fade, cards
   chapters: boolean // YouTube chapters beside the MP4 of the whole video (the video's setting)
   onChapters: (on: boolean) => void
+  quality: { can1080: boolean; height: 720 | 1080 } // 1080p is offered only when every source is at least that high
+  onHeight: (h: 720 | 1080) => void
   state: { status: string; ratio: number; message: string; outPath?: string } | null
   onExport: (key: string) => void
   onCancel: () => void
@@ -24,7 +26,7 @@ interface Props {
 
 // Export, the last tab of the right column: pick what to export (the whole video, the open
 // scene, or one marker group), see what comes out, then one large button. Progress stays here too.
-export function ExportPanel({ targets, info, chapters, onChapters, state, onExport, onCancel, onShowFile, onOpenOverlay }: Props) {
+export function ExportPanel({ targets, info, chapters, onChapters, quality, onHeight, state, onExport, onCancel, onShowFile, onOpenOverlay }: Props) {
   const [pick, setPick] = useState('video')
   const chosen = targets.find(t => t.key === pick) ?? targets[0]
   const busy = state?.status === 'running' || state?.status === 'preparing'
@@ -45,6 +47,14 @@ export function ExportPanel({ targets, info, chapters, onChapters, state, onExpo
         {chosen?.key === 'video' && (
           <label className="check export-court" title={t('シーンの先頭を YouTube のチャプターにしたテキスト（.txt）を MP4 の隣に書き出す（この動画の設定）')}>
             <input type="checkbox" checked={chapters} disabled={busy} onChange={e => onChapters(e.target.checked)} /> {t('YouTube のチャプターも書き出す')}</label>
+        )}
+        {quality.can1080 && (
+          <div className="filter-row export-quality" title={t('元の動画がすべて 1080p 以上なので選べます。720p より大きいファイルになり、書き出しにも時間がかかります（この動画の設定）')}>
+            <span className="field-label">{t('画質')}</span>
+            <div className="segmented" role="radiogroup" aria-label={t('画質')}>
+              {([720, 1080] as const).map(h => <button key={h} role="radio" aria-checked={quality.height === h} className={quality.height === h ? 'on' : ''} disabled={busy} onClick={() => onHeight(h)}>{h}p</button>)}
+            </div>
+          </div>
         )}
         <p className="export-info">{info} <button className="link" onClick={onOpenOverlay}>{t('動画の設定')}</button></p>
         {busy ? (

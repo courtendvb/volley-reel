@@ -63,14 +63,32 @@ function zonesFrom(play: ZonePlay, ownNear: boolean, next?: ZonePlay | null): Pl
 }
 
 // How high the ball is struck, in metres: a jump serve (Q), other serves, an attack, a set. `code` is
-// the shot: the play itself, or what a reception or dig answers.
+// the shot: the play itself, or what a reception or dig answers. These are the usual ones; a project
+// sets its own (ProjectSettings.strikeHeights: a women's or youth team hits lower), and App hands them
+// over as the project's settings change, as it does the chart colours.
 export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
 export const ATTACK_Z = 3.15
 export const SET_Z = 2.4
+export interface StrikeHeights { jumpServe?: number; floatServe?: number; attack?: number; set?: number }
+export const STRIKE_HEIGHTS: Required<StrikeHeights> = { jumpServe: JUMP_SERVE_Z, floatServe: FLOAT_SERVE_Z, attack: ATTACK_Z, set: SET_Z }
+export const STRIKE_HEIGHT_RANGE = { min: 1, max: 4.5, step: 0.05 }
+let heights: Required<StrikeHeights> = STRIKE_HEIGHTS
+export const getStrikeHeights = (): Required<StrikeHeights> => heights
+export function setStrikeHeights(h: StrikeHeights | undefined): void { heights = { ...STRIKE_HEIGHTS, ...cleanStrikeHeights(h) } }
+// Only the heights in range and not the usual ones; undefined when none is left.
+export function cleanStrikeHeights(x: unknown): StrikeHeights | undefined {
+  if (!x || typeof x !== 'object') return undefined
+  const out: StrikeHeights = {}
+  for (const k of Object.keys(STRIKE_HEIGHTS) as (keyof StrikeHeights)[]) {
+    const v = (x as StrikeHeights)[k]
+    if (typeof v === 'number' && v >= STRIKE_HEIGHT_RANGE.min && v <= STRIKE_HEIGHT_RANGE.max && v !== STRIKE_HEIGHTS[k]) out[k] = Math.round(v * 100) / 100
+  }
+  return Object.keys(out).length ? out : undefined
+}
 function strikeHeight(code: string): number {
   const skill = code.charAt(3)
-  return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : skill === 'E' ? SET_Z : 0
+  return skill === 'S' ? (code.charAt(4) === 'Q' ? heights.jumpServe : heights.floatServe) : skill === 'A' ? heights.attack : skill === 'E' ? heights.set : 0
 }
 
 // The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
@@ -107,7 +125,7 @@ export function playPoints(play: ClickPlay & Pick<Play, 'code' | 'shotCode' | 's
   const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
   const shot = play.shotCode ?? play.code, start = on(clicks.start) ?? setFrom, z = strikeHeight(shot)
   return {
-    start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}),
+    start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: heights.attack } : {}),
     ...(clicks.startRough ? { startRough: true } : {}), ...(clicks.endRough ? { endRough: true } : {}),
   }
 }

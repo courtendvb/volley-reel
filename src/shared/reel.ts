@@ -93,13 +93,14 @@ const DEFAULT_SLIDE_SEC = 3
 
 const uid = () => globalThis.crypto.randomUUID()
 
-export function newReel(name: string): Reel {
+// range: the project's seconds (ProjectSettings.range), for a scene made after they were set with none open.
+export function newReel(name: string, range?: Partial<RangeDefaults>): Reel {
   return {
     id: uid(), name,
     markerNames: { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '' },
     groupOrder: [...MARKERS],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], none: [] },
-    clips: {}, scope: 'marked', rangeDefaults: { ...DEFAULT_RANGE }, updatedAt: new Date().toISOString(),
+    clips: {}, scope: 'marked', rangeDefaults: { ...DEFAULT_RANGE, ...cleanRange(range) }, updatedAt: new Date().toISOString(),
   }
 }
 
@@ -411,6 +412,17 @@ export interface RangeDefaults {
 
 export const DEFAULT_RANGE: RangeDefaults = { mode: 'rally', rallyLead: 1.5, rallyTail: 2.5, keyBefore: 3, keyAfter: 4 }
 export const MIN_CLIP_SEC = 0.5
+
+// Seconds as saved or sent: only the known fields, numbers from 0 to 30.
+export function cleanRange(x: unknown): Partial<RangeDefaults> {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>, out: Partial<RangeDefaults> = {}
+  if (o.mode === 'rally' || o.mode === 'keyplay') out.mode = o.mode
+  for (const k of ['rallyLead', 'rallyTail', 'keyBefore', 'keyAfter'] as const) {
+    const n = o[k]
+    if (typeof n === 'number' && isFinite(n) && n >= 0 && n <= 30) out[k] = n
+  }
+  return out
+}
 
 // Reels saved before M4 have no rangeDefaults.
 export function rangeDefaults(r: Reel): RangeDefaults {

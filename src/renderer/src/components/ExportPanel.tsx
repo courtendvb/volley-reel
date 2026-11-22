@@ -43,7 +43,7 @@ export function ExportPanel({ targets, info, chapters, onChapters, quality, onHe
             </label>
           ))}
         </div>
-        <p className="hint">{t('動画の上に見えているもの（コートのグリッド・ゾーン・チャート・トス配分など、表示タブの設定）をそのまま書き出します')}</p>
+        <p className="hint">{t('動画の上に見えているもの（コートのグリッド・ゾーン・チャート・セット配分など、表示タブの設定）をそのまま書き出します')}</p>
         {chosen?.key === 'video' && (
           <label className="check export-court" title={t('シーンの先頭を YouTube のチャプターにしたテキスト（.txt）を MP4 の隣に書き出す（この動画の設定）')}>
             <input type="checkbox" checked={chapters} disabled={busy} onChange={e => onChapters(e.target.checked)} /> {t('YouTube のチャプターも書き出す')}</label>

@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, copyClipTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   setServeSpeed, setSkillTime, setClipCourt, setOverlayOverride, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
-  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers,
+  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers, cleanRange,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -464,5 +464,16 @@ describe('setClipCourt', () => {
     const pinned = setClipCourt(hidden, id, { effect: { on: false } })
     expect(pinned.clips[id].overlayOverride).toEqual({ scoreboard: { hidden: true }, court: { effect: { on: false } } })
     expect(setClipCourt(pinned, id, undefined).clips[id].overlayOverride).toEqual({ scoreboard: { hidden: true } })
+  })
+})
+
+describe('the project\'s clip seconds', () => {
+  it('keeps only known fields, numbers from 0 to 30', () => {
+    expect(cleanRange({ keyBefore: 2, keyAfter: 31, rallyTail: -1, mode: 'keyplay', x: 1 })).toEqual({ keyBefore: 2, mode: 'keyplay' })
+    expect(cleanRange(null)).toEqual({})
+  })
+  it('start a new scene', () => {
+    expect(rangeDefaults(newReel('a', { keyBefore: 5, keyAfter: 6 }))).toEqual({ ...DEFAULT_RANGE, keyBefore: 5, keyAfter: 6 })
+    expect(rangeDefaults(newReel('b'))).toEqual(DEFAULT_RANGE)
   })
 })

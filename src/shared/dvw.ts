@@ -142,6 +142,7 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
       line,
       ...(code !== original ? { original } : {}),
       ...(src?.insert ? { inserted: src.insert } : {}),
+      ...(src?.moved ? { moved: true } : {}),
       time,
       side,
       jersey,

@@ -46,6 +46,8 @@ export interface Play {
   line?: number // its line among the file's [3SCOUT] lines, which a correction names (codeEdit.ts)
   original?: string // the file's code, when a correction changed it
   inserted?: string // a play put in by hand (codeEdit.ts ScoutInsert id); line is the file line it follows
+  moved?: boolean // its clicks were corrected (codeEdit.ts)
+  deleted?: boolean // taken out by a correction: only in ParsedDVW.deleted, shown faded in the list when asked
   cells?: { start: string; end: string } // the line's own clicks as written (columns 5 and 7), before any are moved for a reception, dig or set
   time: number // DVW time (offset not applied)
   side: Side
@@ -95,6 +97,7 @@ export interface ParsedDVW {
   codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
   info?: MatchInfo // for the match report; missing on matches read before it was kept
   stale?: { edits: CodeEdit[]; inserts: ScoutInsert[] } // corrections whose line no longer holds the code they were made on (left out)
+  deleted?: Play[] // the plays a correction took out, as the file has them (for the list only; nothing else counts them)
 }
 
 // The match as the DVW's header tells it: start time, each set's partial scores (at 8, 16, 21), final

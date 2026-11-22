@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyScoutEdits, cellOf, codeParts, partsCode, pointOf, validCode, withCodeEdit, withInsert, withLineEdit } from './codeEdit'
+import { applyScoutEdits, cellOf, codeParts, codeWithClickZones, zoneOfClick, partsCode, pointOf, validCode, withCodeEdit, withInsert, withLineEdit } from './codeEdit'
 import { parseDVW } from './dvw'
 
 const LF = String.fromCharCode(10)
@@ -97,5 +97,31 @@ describe('clicks', () => {
   it('gives an added play its own clicks', () => {
     const r = applyScoutEdits(FILE, { inserts: [{ id: 'c', after: 2, from: 'a01AQ#PA~36BH1', code: '*01DQ+', time: 105, start: '2550', end: '1234' }] })
     expect(parseDVW(r.text, r.sources).plays.find(p => p.inserted === 'c')!.cells).toEqual({ start: '2550', end: '1234' })
+  })
+})
+
+describe('zones from clicks', () => {
+  it('reads the zone and sub-zone a point falls in, a serve behind its end line in its column', () => {
+    expect(zoneOfClick({ u: 0.9, v: 0.05 })).toMatchObject({ zone: 1 })
+    expect(zoneOfClick({ u: 0.5, v: -0.05 })).toMatchObject({ zone: 6 })
+    expect(zoneOfClick({ u: 0.1, v: 0.45 })).toMatchObject({ zone: 4 })
+    expect(zoneOfClick({ u: 0.1, v: 0.95 })).toMatchObject({ zone: 1 }) // the far half: their back right, on our left
+  })
+  it('gives a serve or attack the zones its points say, or null when they agree', () => {
+    const start = cellOf({ u: 0.1, v: 0.45 }), end = cellOf({ u: 0.9, v: 0.95 })
+    const z = zoneOfClick(pointOf(end)!)
+    const fixed = codeWithClickZones('a01AQ#PA~36BH1', start, end)!
+    expect(fixed).toBe(`a01AQ#PA~4${z.zone}${z.sub}H1`)
+    expect(codeWithClickZones(fixed, start, end)).toBeNull()
+    expect(codeWithClickZones('a09RQ+~~~16AR', start, end)).toBeNull()
+  })
+})
+
+describe('deleted plays', () => {
+  it('are kept apart for the list, as the file has them', async () => {
+    const { parseScout } = await import('./vsm')
+    const d = parseScout(FILE, { edits: [{ line: 1, from: 'a09RQ+~~~16AR', to: '' }] })
+    expect(d.plays.some(p => p.line === 1)).toBe(false)
+    expect(d.deleted?.map(p => [p.line, p.code, p.deleted])).toEqual([[1, 'a09RQ+~~~16AR', true]])
   })
 })

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { clipRangeSource } from '../../shared/markRange'
-import { EMPTY_FILTER, type PlayFilter, type PlayRef } from '../../shared/filter'
+import { EMPTY_FILTER, isCorrected, withDeleted, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel } from '../../shared/labels'
 import {
   DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
@@ -81,6 +81,9 @@ import { OffsetBar } from './components/OffsetBar'
 import { CodeEditDialog } from './components/CodeEditDialog'
 import { ScoutEditsDialog } from './components/ScoutEditsDialog'
 import { QuickCodeDialog } from './components/QuickCodeDialog'
+import { codeParts, codeWithClickZones } from '../../shared/codeEdit'
+
+const zonePair = (c: string) => { const z = codeParts(c); return `${z.startZone || '—'} → ${z.endZone || '—'}${z.endSub}` }
 import { ClickFixLayer } from './components/ClickFixLayer'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
@@ -246,6 +249,16 @@ export function App() {
   // match, then the match read again so every list, report and court shows them.
   const [codeEditing, setCodeEditing] = useState<{ ref: PlayRef; mode: 'edit' | 'insert'; time?: number } | null>(null)
   const [quickCode, setQuickCode] = useState<PlayRef | null>(null) // Enter in the list: the code alone, on one line
+  // The one-line window goes on through the list: after a save, the play to open next (found again once the match
+  // is read again, since ids shift when plays are added or taken out).
+  const quickNext = useRef<{ matchId: string; line: number; inserted?: string; dir: 1 | -1; read?: boolean } | null>(null)
+  const quickMove = (from: PlayRef, dir: 1 | -1) => {
+    const res = (latest.current.listRefs ?? latest.current.results).filter(x => !x.play.deleted), i = res.findIndex(x => x.matchId === from.matchId && x.play.id === from.play.id)
+    const n = res[i + dir]
+    if (n && n.play.line !== undefined) { jump(n); setQuickCode(n) }
+  }
+  // The list's view of corrections: only corrected plays, and plays taken out shown faded (right-click brings one back).
+  const [listView, setListView] = useState({ correctedOnly: false, showDeleted: false })
   const [clickFixing, setClickFixing] = useState(false) // dragging on the video's court to correct the selected play's clicks
   const [scoutEditsOf, setScoutEditsOf] = useState<string | null>(null) // the match whose corrections are listed
   const [scoutBusy, setScoutBusy] = useState(false)
@@ -258,7 +271,8 @@ export function App() {
       const d = await api.parseMatch(matchId)
       setDvws(prev => ({ ...prev, [matchId]: d }))
       setCodeEditing(null); setQuickCode(null)
-    } catch (err) { setError(String(err)) } finally { setScoutBusy(false) }
+      if (quickNext.current) quickNext.current.read = true // the list it waits for is the one this reading makes
+    } catch (err) { quickNext.current = null; setError(String(err)) } finally { setScoutBusy(false) }
   }
   const saveCode = (r: PlayRef, to: string, mode: 'edit' | 'insert', extra: { time?: number; start?: string | null; end?: string | null } = {}) => {
     const p = r.play, ins = insertOf(r.matchId, p.inserted)
@@ -276,12 +290,31 @@ export function App() {
       void scoutChange(r.matchId, () => api.setInsert(r.matchId, next))
     } else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, { to, ...cells }))
   }
+  // A play taken out, put back (right-click on its faded row).
+  const restorePlay = (r: PlayRef) => {
+    const p = r.play
+    if (p.line !== undefined) void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.code, { to: p.code }))
+  }
+  // A play taken out at once, with a notice to bring it back (also Ctrl+Z while the notice shows).
   const deletePlay = (r: PlayRef) => {
     const p = r.play, ins = insertOf(r.matchId, p.inserted)
-    if (p.line === undefined || !window.confirm(t('このプレーを削除しますか？ シーンに入っているクリップは再生できなくなります。「この試合の修正と書き出し」から元に戻せます'))) return
-    if (ins) void scoutChange(r.matchId, () => api.setInsert(r.matchId, { ...ins, code: '' }))
-    else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, { to: '' }))
+    if (p.line === undefined) return
+    const label = `S${p.setNum} ${p.score.home}-${p.score.away} #${p.jersey} ${r.name}`
+    if (ins) {
+      void scoutChange(r.matchId, () => api.setInsert(r.matchId, { ...ins, code: '' }))
+      setActionNotice({ text: t('削除しました: {0}', label), undo: () => void scoutChange(r.matchId, () => api.setInsert(r.matchId, ins)) })
+    } else {
+      const was = matches[r.matchId]?.codeEdits?.find(e => e.line === p.line)
+      void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, { to: '' }))
+      setActionNotice({ text: t('削除しました: {0}', label), undo: () => void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code,
+        { to: was?.to && was.to !== '' ? was.to : p.original ?? p.code, start: was?.start ?? null, end: was?.end ?? null })) })
+    }
   }
+  // A notice with an action (bring back a deleted play, match the zones): 10 seconds, like the others.
+  const [actionNotice, setActionNotice] = useState<{ text: string; undo?: () => void; action?: { label: string; run: () => void } } | null>(null)
+  useEffect(() => { if (!actionNotice) return; const id = setTimeout(() => setActionNotice(null), 10_000); return () => clearTimeout(id) }, [actionNotice])
+  const actionRef = useRef(actionNotice)
+  actionRef.current = actionNotice
   const exportScout = async (matchId: string, format: 'dvw' | 'vsm') => {
     setScoutBusy(true)
     try {
@@ -310,7 +343,12 @@ export function App() {
     const codes = new Set(Object.values(targetDvws).flatMap(d => d.plays.filter(p => p.skill === 'E').map(setterCall)).filter(Boolean))
     return [...codes].sort().map(code => ({ code, ...(names[code] ? { name: names[code] } : {}) }))
   }, [targetDvws])
-  const { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter, sceneMatches)
+  const { refsByMatch, scopeRefs, results, deletedResults, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels } = usePlaySearch(project, dvws, matchIds, matchOrder, filter, sceneMatches)
+  const anyCorrections = Object.values(matches).some(m => m.codeEdits?.length || m.codeInserts?.length)
+  const listRefs = useMemo(() => {
+    const shown = listView.correctedOnly ? results.filter(r => isCorrected(r.play)) : results
+    return listView.showDeleted ? withDeleted(shown, deletedResults) : shown
+  }, [results, deletedResults, listView])
   // The scene and marker group of the clip on screen (while 通し plays, the one playing), for the 範囲 of the marks.
   const rangeScene = (playingClipId ? reels.find(r => r.clips[playingClipId]) : null) ?? reel ?? null
   const rangeGroup = rangeScene && playingClipId && rangeScene.clips[playingClipId] ? groupOf(rangeScene, playingClipId) : activeGroup
@@ -485,7 +523,18 @@ export function App() {
     const o = overlaySettings(video ? video.overlay : project?.settings.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
   }, [video, project?.settings.overlay, project?.settings.theme])
-  latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, targetDvws, library, activeGroup }
+  latest.current = { ...latest.current, listRefs, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, targetDvws, library, activeGroup }
+  // After a save from the one-line window: the same play found again in the new list, then the next one opened.
+  useEffect(() => {
+    const q = quickNext.current
+    if (!q?.read) return
+    const rows = listRefs.filter(x => !x.play.deleted)
+    const i = rows.findIndex(r => r.matchId === q.matchId && r.play.line === q.line && (r.play.inserted ?? null) === (q.inserted ?? null))
+    if (i < 0) return
+    quickNext.current = null
+    const n = rows[i + q.dir]
+    if (n && n.play.line !== undefined) { jump(n); setQuickCode(n) }
+  }, [listRefs]) // eslint-disable-line react-hooks/exhaustive-deps
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
     latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
@@ -807,7 +856,7 @@ export function App() {
   useShortcuts({
     latest, paused: settingsOpen || !!quickCode || !!codeEditing || !!scoutEditsOf, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
     scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
-    undoRedo, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o),
+    undoRedo: kind => { const a = actionRef.current; if (kind === 'undo' && a?.undo) { a.undo(); setActionNotice(null) } else undoRedo(kind) }, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o),
     activateClip, whenIn, jump, setAnnTool, trim, markerKey, editCode: r => setQuickCode(r),
     setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
   })
@@ -843,6 +892,14 @@ export function App() {
         error={error} onError={setError} notice={notice} onNotice={setNotice}
         staleSlides={staleSlides} onReloadSlides={paths => void reloadSlideFiles(paths)} onLaterSlides={() => void laterSlides()}
         exportState={exportState} onCloseExport={() => setExportState(null)} />
+      {actionNotice && (
+        <div className="banner notice action-notice">
+          <span>{actionNotice.text}</span>
+          {actionNotice.undo && <button className="link" onClick={() => { actionNotice.undo!(); setActionNotice(null) }}>{t('元に戻す')}</button>}
+          {actionNotice.action && <button className="link" onClick={() => { actionNotice.action!.run(); setActionNotice(null) }}>{actionNotice.action.label}</button>}
+          <button className="link" onClick={() => setActionNotice(null)} aria-label={t('閉じる')}>×</button>
+        </div>
+      )}
 
       {project && Object.keys(project.missing).length > 0 && (
         <div className="missing-bar" role="alert">
@@ -901,8 +958,17 @@ export function App() {
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}
             />
             {Object.keys(dvws).length
-              ? <PlayList refs={results} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={r => setCodeEditing({ ref: r, mode: 'edit' })} />
+              ? <>
+                {anyCorrections && (
+                  <div className="list-view-row">
+                    <span className="field-label">{t('修正')}</span>
+                    <label className="check"><input type="checkbox" checked={listView.correctedOnly} onChange={e => setListView(v => ({ ...v, correctedOnly: e.target.checked }))} /> {t('修正したプレーだけ')}</label>
+                    <label className="check"><input type="checkbox" checked={listView.showDeleted} onChange={e => setListView(v => ({ ...v, showDeleted: e.target.checked }))} /> {t('削除したプレーも表示')}</label>
+                  </div>
+                )}
+                <PlayList refs={listRefs} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={r => (r.play.deleted ? restorePlay(r) : setCodeEditing({ ref: r, mode: 'edit' }))} />
+              </>
               : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
           <section className="stage">
@@ -946,12 +1012,16 @@ export function App() {
                     {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
                     {courtFitting && court}
                     {clickFixing && match.court && selectedPlay && (
-                      <ClickFixLayer size={size} fit={match.court} near={nearSide(match.court, selectedPlay) === selectedPlay.side}
+                      <ClickFixLayer size={size} fit={match.court} near={nearSide(match.court, selectedPlay) === selectedPlay.side} cells={selectedPlay.cells}
                         onCancel={() => setClickFixing(false)}
                         onDone={(start, end) => {
-                          setClickFixing(false)
                           const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id)
-                          if (r) saveCode(r, selectedPlay.code, 'edit', { start, end })
+                          if (!r) return
+                          saveCode(r, selectedPlay.code, 'edit', { start, end })
+                          // The code's zones checked against the new points: one click to match them.
+                          const zoned = codeWithClickZones(selectedPlay.code, start, end)
+                          if (zoned) setActionNotice({ text: t('点の位置のゾーン（{0}）とコードのゾーン（{1}）が違います', zonePair(zoned), zonePair(selectedPlay.code)),
+                            action: { label: t('ゾーンも合わせる'), run: () => { quickNext.current = null; const now = latest.current.results.find(x => x.matchId === r.matchId && x.play.line === r.play.line && !x.play.inserted) ?? r; saveCode(now, zoned, 'edit') } } })
                         }} />
                     )}
                     {shotPick && (
@@ -1016,7 +1086,7 @@ export function App() {
               <div className="serve-mark click-fix-bar">
                 <span className="field-label">{t('座標')}</span>
                 {match.court
-                  ? <button className={clickFixing ? 'on' : ''} onClick={() => setClickFixing(f => !f)}
+                  ? <button className={clickFixing ? 'on' : ''} onClick={() => { if (!clickFixing) { setListRun(false); setFollowPlay(null); playback.pause() } setClickFixing(!clickFixing) }}
                       title={t('動画のコートの上で、このプレーの始まりから終わりへドラッグして座標を直します')}>{clickFixing ? t('やめる') : `◎ ${t('コートで座標を直す')}`}</button>
                   : <span className="muted small">{t('コートのグリッドを合わせると、動画の上で直せます')}</span>}
                 <button className="small" onClick={() => { const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id); if (r) setCodeEditing({ ref: r, mode: 'edit' }) }}>{t('コート図で直す…')}</button>
@@ -1155,6 +1225,9 @@ export function App() {
         <CodeEditDialog key={`${codeEditing.mode}:${codeEditing.ref.matchId}:${codeEditing.ref.play.id}`} play={codeEditing.ref.play} matchName={matches[codeEditing.ref.matchId]?.name ?? ''}
           players={Object.values(dvws[codeEditing.ref.matchId].players).sort((a, b) => a.jersey - b.jersey)}
           mode={codeEditing.mode} insertTime={codeEditing.time}
+          playhead={() => playback.current.time - (matches[codeEditing.ref.matchId]?.offsetSec ?? 0)}
+          frameSec={1 / (matches[codeEditing.ref.matchId]?.fps || 30)}
+          onSeek={sec => playback.seek(sec + (matches[codeEditing.ref.matchId]?.offsetSec ?? 0))}
           clicksEdited={!!matches[codeEditing.ref.matchId]?.codeEdits?.some(e => e.line === codeEditing.ref.play.line && (e.start !== undefined || e.end !== undefined))}
           onSave={(to, extra) => saveCode(codeEditing.ref, to, codeEditing.mode, extra)}
           onDelete={() => deletePlay(codeEditing.ref)}
@@ -1164,8 +1237,10 @@ export function App() {
           onClose={() => setCodeEditing(null)} />
       )}
       {quickCode && (
-        <QuickCodeDialog key={`${quickCode.matchId}:${quickCode.play.id}`} code={quickCode.play.code}
-          onSave={to => saveCode(quickCode, to, 'edit')} onClose={() => setQuickCode(null)} />
+        <QuickCodeDialog key={`${quickCode.matchId}:${quickCode.play.id}:${quickCode.play.code}`} code={quickCode.play.code}
+          label={`S${quickCode.play.setNum} ${quickCode.play.score.home}-${quickCode.play.score.away}  #${quickCode.play.jersey} ${quickCode.name}`}
+          onSave={(to, dir) => { quickNext.current = { matchId: quickCode.matchId, line: quickCode.play.line!, ...(quickCode.play.inserted ? { inserted: quickCode.play.inserted } : {}), dir }; saveCode(quickCode, to, 'edit') }}
+          onMove={dir => quickMove(quickCode, dir)} onClose={() => setQuickCode(null)} />
       )}
       {scoutEditsOf && matches[scoutEditsOf] && (
         <ScoutEditsDialog match={matches[scoutEditsOf]} dvw={dvws[scoutEditsOf]} busy={scoutBusy}

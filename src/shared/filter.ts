@@ -137,6 +137,22 @@ export function buildRefs(matchId: string, dvw: ParsedDVW, settings: ProjectSett
   }))
 }
 
+// Whether a play carries a correction of its scout file (codeEdit.ts): its code, its clicks, or put in by hand.
+export const isCorrected = (p: Play): boolean => !!(p.original || p.moved || p.inserted)
+
+// The list with plays taken out (shown faded) put back where the file had them: before the first row of the same
+// match whose line comes after.
+export function withDeleted(refs: PlayRef[], gone: PlayRef[]): PlayRef[] {
+  if (!gone.length) return refs
+  const out = [...refs]
+  for (const g of gone) {
+    const at = out.findIndex(r => r.matchId === g.matchId && (r.play.line ?? -1) > (g.play.line ?? -1))
+    if (at >= 0) out.splice(at, 0, g)
+    else { const last = out.map(r => r.matchId).lastIndexOf(g.matchId); out.splice(last >= 0 ? last + 1 : out.length, 0, g) }
+  }
+  return out
+}
+
 function detailOf(code: string, skill: string, names: Record<string, string>) {
   const d = codeDetail(code, skill)
   return { ...d, comboName: d.combo ? names[d.combo] ?? null : null }

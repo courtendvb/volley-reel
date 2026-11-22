@@ -112,14 +112,14 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         // Up / Down: the previous / next play in the left list (played like a click on it).
         e.preventDefault()
-        const res = latest.results, s = latest.selected
+        const res = (latest.listRefs ?? latest.results).filter(x => !x.play.deleted), s = latest.selected
         const i = s ? res.findIndex(x => x.matchId === s.matchId && x.play.id === s.playId) : -1
         const next = res[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
         if (next) h.jump(next)
       }
       else if (e.key === 'Enter' && !e.shiftKey && h.focusPane.current === 'list' && latest.selected) {
         // Enter: the selected play's code, on one line, to correct (codeEdit.ts).
-        const s = latest.selected, r = latest.results.find(x => x.matchId === s.matchId && x.play.id === s.playId)
+        const s = latest.selected, r = (latest.listRefs ?? latest.results).find(x => !x.play.deleted && x.matchId === s.matchId && x.play.id === s.playId)
         if (r && r.play.line !== undefined) { e.preventDefault(); h.editCode(r) }
       }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-arrowSec()) }

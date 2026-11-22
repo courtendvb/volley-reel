@@ -4,7 +4,7 @@
 // both ways: every play's code, time, rotations and lineups agree, and its clicks to the grid cell.
 // Pure: no file or DOM access.
 import { parseDVW } from './dvw'
-import type { ParsedDVW } from './types'
+import type { ParsedDVW, Play } from './types'
 import { applyScoutEdits, editCount, type ScoutEdits } from './codeEdit'
 
 interface VsmPoint { x: number; y: number }
@@ -46,7 +46,14 @@ export function parseScout(text: string, edits?: ScoutEdits): ParsedDVW {
   if (!edits || !editCount(edits)) return parseDVW(dvw)
   const r = applyScoutEdits(dvw, edits)
   const d = parseDVW(r.text, r.sources)
-  return r.stale.edits.length || r.stale.inserts.length ? { ...d, stale: r.stale } : d
+  // The plays taken out, read from the file with every other correction laid in, for the list to show faded.
+  const gone = new Set((edits.edits ?? []).filter(e => e.to === '' && !r.stale.edits.includes(e)).map(e => e.line))
+  let deleted: Play[] = []
+  if (gone.size) {
+    const kept = applyScoutEdits(dvw, { ...edits, edits: (edits.edits ?? []).filter(e => e.to !== '') })
+    deleted = parseDVW(kept.text, kept.sources).plays.filter(p => !p.inserted && p.line !== undefined && gone.has(p.line)).map(p => ({ ...p, deleted: true }))
+  }
+  return { ...d, ...(r.stale.edits.length || r.stale.inserts.length ? { stale: r.stale } : {}), ...(deleted.length ? { deleted } : {}) }
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')

@@ -1037,3 +1037,13 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .click-fix .cf-end { fill: #EF4444; stroke: #FFF; stroke-width: 2; }
 .click-fix-tip { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(15, 23, 42, .85); color: #FFF; padding: 4px 10px; border-radius: 6px; font-size: 13px; pointer-events: none; white-space: nowrap; }
 .click-fix-bar button.on { background: var(--primary); color: #FFF; }
+
+/* Corrections in the list and around it. */
+.quick-code-label { font-size: var(--fs-label); color: var(--sub); margin-bottom: var(--space-1); }
+.quick-code-keys { font-size: var(--fs-label); color: var(--sub); margin-top: var(--space-1); }
+.list-view-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.play-row.deleted { opacity: .45; text-decoration: line-through; cursor: context-menu; }
+.action-notice { display: flex; align-items: center; gap: var(--space-3); }
+.action-notice button.link { font-weight: 700; }
+.code-time { flex-wrap: wrap; }
+.code-time input { max-width: 7em; }

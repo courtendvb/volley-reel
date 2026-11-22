@@ -14,7 +14,8 @@ export interface CodeEdit { line: number; from: string; to: string; start?: stri
 export interface ScoutInsert { id: string; after: number; from: string; code: string; time: number; start?: string; end?: string } // time: DVW seconds
 
 // Where a line of the corrected [3SCOUT] came from: a file line (and the code it had), or a play put in.
-export type ScoutSource = { line: number; original: string; insert?: undefined } | { line: number; original: string; insert: string }
+// moved: its clicks were corrected.
+export type ScoutSource = { line: number; original: string; insert?: undefined; moved?: boolean } | { line: number; original: string; insert: string; moved?: boolean }
 
 export interface ScoutEdits { edits?: CodeEdit[]; inserts?: ScoutInsert[] }
 
@@ -86,7 +87,7 @@ export function applyScoutEdits(text: string, s: ScoutEdits): { text: string; so
         if (e.end !== undefined) c[6] = e.end
       }
     }
-    if (keep) { out.push(c.join(';')); sources.push({ line: idx, original }) }
+    if (keep) { out.push(c.join(';')); sources.push({ line: idx, original, ...(e && e.from === original && (e.start !== undefined || e.end !== undefined) ? { moved: true } : {}) }) }
     for (const ins of inserts.get(idx) ?? []) {
       if (ins.from !== original || !validCode(ins.code)) continue
       usedInserts.add(ins.id)
@@ -154,3 +155,33 @@ export function validCode(code: string): boolean {
 
 // How many corrections a match has.
 export const editCount = (s: ScoutEdits) => (s.edits?.length ?? 0) + (s.inserts?.length ?? 0)
+
+// ---- zones from clicks ----------------------------------------------------------------------------------------
+const OWN_ZONES = [[5, 6, 1], [7, 8, 9], [4, 3, 2]] // from the own end line toward the net, left to right (as dvw.ts)
+const OPP_ZONES = [[2, 3, 4], [9, 8, 7], [1, 6, 5]] // from the net toward the far end line
+
+// The zone and sub-zone a click falls in (a point off the court counts in the nearest one, so a serve from
+// behind the end line takes its column's zone).
+export function zoneOfClick(p: { u: number; v: number }): { zone: number; sub: string } {
+  const u = Math.max(0, Math.min(0.9999, p.u)), v = Math.max(0, Math.min(0.9999, p.v))
+  const c = Math.floor(u * 3), r = Math.floor(v * 6), su = u * 3 - c, sv = v * 6 - r
+  const zone = r < 3 ? OWN_ZONES[r][c] : OPP_ZONES[r - 3][c]
+  const sub = r < 3 ? (sv < 0.5 ? (su < 0.5 ? 'D' : 'A') : (su < 0.5 ? 'C' : 'B')) : (sv < 0.5 ? (su < 0.5 ? 'B' : 'C') : (su < 0.5 ? 'A' : 'D'))
+  return { zone, sub }
+}
+
+// For a serve or an attack (whose coded zones are where it started and where it went): the code with its start
+// zone, end zone and end sub-zone taken from its clicks, or null when they already agree (or it has no clicks,
+// or is another skill).
+export function codeWithClickZones(code: string, start: string | undefined, end: string | undefined): string | null {
+  const skill = code.charAt(3)
+  if (skill !== 'S' && skill !== 'A') return null
+  const s = pointOf(start), e = pointOf(end)
+  if (!s && !e) return null
+  const p = codeParts(code)
+  const next = { ...p }
+  if (s) next.startZone = String(zoneOfClick(s).zone)
+  if (e) { const z = zoneOfClick(e); next.endZone = String(z.zone); next.endSub = z.sub }
+  const out = partsCode(next)
+  return out === code ? null : out
+}

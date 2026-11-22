@@ -11,6 +11,7 @@ import type { ClipInfo } from '../components/ReelPanel'
 type OverlayData = { scoreboard: ScoreboardData; caption: CaptionData; speed?: SpeedData | null }
 
 export interface AppLatest {
+  listRefs?: PlayRef[] // the rows the list shows (only corrected plays, deleted ones faded), for ↑ ↓ and Enter
   results: PlayRef[]; filter: PlayFilter; matches: Record<string, Match>; reels: Reel[]; reelId: string | null; reel: Reel | null
   selected: PlayKey | null; activeClipId: string | null; order: Clip[]; clipInfo: (c: Clip) => ClipInfo; selectedAnn: string | null
   overlay: OverlaySettings; settings: ProjectSettings | undefined; videos: Video[]; videoId: string | null; video: Video | null

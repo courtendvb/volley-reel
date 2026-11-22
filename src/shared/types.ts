@@ -9,7 +9,7 @@ import type { SavedFilter } from './filter'
 import type { OverlayPatch, OverlayTheme } from './overlay'
 import type { PackInfo, PackManifest, PhotoTarget } from './pack'
 import type { RosterPlayer } from './packMaker'
-import type { Reel } from './reel'
+import type { RangeDefaults, Reel } from './reel'
 import type { Video } from './video'
 import type { CompareFile, CompareSession } from './videoCompare'
 import type { CompareExportJob } from './compareExport'
@@ -146,6 +146,7 @@ export interface ProjectSettings {
   pointScale?: number // their points' size, 1 = the usual
   strikeHeights?: StrikeHeights // how high serves, attacks and sets are struck on the court's flights, in metres (court.ts); missing: the usual
   roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
+  range?: Partial<RangeDefaults> // the clip seconds (キープレー − / +) while no scene is open; a new scene starts from them
   overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
 }
 

@@ -5,6 +5,7 @@ import { POINT_SCALE, cleanLineColors, cleanPointScale, type ChartLineColors } f
 import { LineColors } from './LineColors'
 import { HEADLINE_SIZE, type HeadlineStyle } from '../../../shared/annotation'
 import type { ProjectSettings } from '../../../shared/types'
+import { STRIKE_HEIGHTS, STRIKE_HEIGHT_RANGE, cleanStrikeHeights, type StrikeHeights } from '../../../shared/court'
 import { ACCENTS, applyAppearance, loadAppearance, type Appearance, type ThemeMode } from '../appearance'
 import { AddonPacks } from './AddonPacks'
 import { TeamLogos } from './TeamLogos'
@@ -51,11 +52,12 @@ export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSa
   const [points, setPoints] = useState<ChartLineColors>(settings.pointColors ?? {})
   const [pointScale, setPointScale] = useState(settings.pointScale ?? 1)
   const preview = useMemo(() => ({ lines, points, pointScale }), [lines, points, pointScale])
+  const [heights, setHeights] = useState<StrikeHeights>(settings.strikeHeights ?? {})
   // The list on the left picks the one setting shown on the right.
   const [here, setHere] = useState('team')
   const page = (id: string) => ({ 'data-section': id, hidden: here !== id })
   const NAV: [string, [string, string][]][] = [
-    [t('このプロジェクト'), [['team', t('対象チーム')], ['headline', t('見出し')], ['lines', t('チャートの色と点')]]],
+    [t('このプロジェクト'), [['team', t('対象チーム')], ['headline', t('見出し')], ['lines', t('チャートの色と点')], ['heights', t('打点の高さ')]]],
     [t('倉庫'), [['logos', t('チームのロゴ')], ['addons', t('アドオン')]]],
     [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['through', t('通しで見る')], ['look', t('アプリの見た目')]]],
     [t('ヘルプ'), [['manual', t('マニュアル')]]],
@@ -64,7 +66,7 @@ export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSa
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], headline, lineColors: cleanLineColors(lines), pointColors: cleanLineColors(points), pointScale: cleanPointScale(pointScale) })
+      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], headline, lineColors: cleanLineColors(lines), pointColors: cleanLineColors(points), pointScale: cleanPointScale(pointScale), strikeHeights: cleanStrikeHeights(heights) })
       onClose()
     } finally {
       setSaving(false)
@@ -138,6 +140,21 @@ export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSa
           <div><button className="link" onClick={() => { setLines({}); setPoints({}); setPointScale(1) }}>{t('既定に戻す')}</button></div>
           <ChartPreview colors={preview} />
           <p className="hint">{t('ディレクションチャートの線と点の色を評価（# + ! - / =）ごとに、点の大きさとあわせて決めます。動画のチャートとデータスライドのすべてに使います（プロジェクトごと）。')}</p>
+        </section>
+
+        <section {...page('heights')}>
+          <span className="field-label wide">{t('打点の高さ')}</span>
+          {([['jumpServe', t('ジャンプサーブ')], ['floatServe', t('フローターサーブ')], ['attack', t('アタック')], ['set', t('セット')]] as [keyof StrikeHeights, string][]).map(([k, label]) => (
+            <div key={k} className="filter-row">
+              <label className="field-label" htmlFor={`strike-${k}`}>{label}</label>
+              <input id={`strike-${k}`} type="number" min={STRIKE_HEIGHT_RANGE.min} max={STRIKE_HEIGHT_RANGE.max} step={STRIKE_HEIGHT_RANGE.step} style={{ width: 72 }}
+                value={heights[k] ?? STRIKE_HEIGHTS[k]} onChange={e => setHeights({ ...heights, [k]: +e.target.value })} />
+              <span>m</span>
+              <span className="muted">{t('既定 {0} m', STRIKE_HEIGHTS[k])}</span>
+            </div>
+          ))}
+          <div><button className="link" onClick={() => setHeights({})}>{t('既定に戻す')}</button></div>
+          <p className="hint">{t('コートに描くボールの軌道が、どの高さから打たれたとするか（メートル）。女子やユースのチームでは低めにします。セットの軌道はアタックの高さで終わります。このプロジェクトのすべての動画とデータスライドに使います。')}</p>
         </section>
 
         <section {...page('logos')}>

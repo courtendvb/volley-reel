@@ -2,7 +2,7 @@ import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
 import type { AccountState, PlanPrices, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
-import type { CourtFit } from './court'
+import type { CourtFit, StrikeHeights } from './court'
 import type { CodeEdit } from './codeEdit'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
@@ -138,6 +138,7 @@ export interface ProjectSettings {
   lineColors?: ChartLineColors // the direction charts' lines by skill and evaluation; missing: the usual
   pointColors?: ChartLineColors // their points the same way
   pointScale?: number // their points' size, 1 = the usual
+  strikeHeights?: StrikeHeights // how high serves, attacks and sets are struck on the court's flights, in metres (court.ts); missing: the usual
   roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
   overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
 }

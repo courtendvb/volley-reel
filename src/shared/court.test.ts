@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART } from './chart'
-import { withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, type CourtFit } from './court'
+import { withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, cleanStrikeHeights, setStrikeHeights, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -143,6 +143,19 @@ describe('playPoints', () => {
     expect(playPoints(reception, fit).startZ).toBe(FLOAT_SERVE_Z)
     expect(playPoints(dig, fit).startZ).toBe(ATTACK_Z)
     expect(playPoints(set, fit)).toMatchObject({ startZ: SET_Z, endZ: ATTACK_Z, arc: 3 }) // EH: a high ball, to the hitter's hand
+  })
+
+  it("takes the project's own heights, and keeps only those in range and not the usual", () => {
+    setStrikeHeights({ jumpServe: 2.8, attack: 2.9 })
+    try {
+      expect(playPoints({ ...serve, code: 'a04SQ+~~~58A' }, fit).startZ).toBe(2.8)
+      expect(playPoints(serve, fit).startZ).toBe(FLOAT_SERVE_Z)
+      expect(playPoints(attack, fit).startZ).toBe(2.9)
+      expect(playPoints(set, fit)).toMatchObject({ startZ: SET_Z, endZ: 2.9 })
+    } finally { setStrikeHeights(undefined) }
+    expect(playPoints(attack, fit).startZ).toBe(ATTACK_Z)
+    expect(cleanStrikeHeights({ jumpServe: JUMP_SERVE_Z, floatServe: 9, attack: 2.876, set: 'x' })).toEqual({ attack: 2.88 })
+    expect(cleanStrikeHeights({ jumpServe: JUMP_SERVE_Z })).toBeUndefined()
   })
 
   it('a hard attack goes straight; a tip or soft one, and a dig of it, arcs', () => {

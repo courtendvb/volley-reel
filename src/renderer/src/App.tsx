@@ -54,7 +54,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -262,7 +262,8 @@ export function App() {
   }
   const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
   setChartColors(chartColors) // before anything below draws a chart
-  const lineKey = JSON.stringify(chartColors) // charts already drawn are drawn again
+  setStrikeHeights(project?.settings.strikeHeights) // and the court's flights
+  const lineKey = JSON.stringify([chartColors, project?.settings.strikeHeights]) // charts and flights already drawn are drawn again
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
   // rally, the serve, reception or attack on screen (the list staying on the play picked).

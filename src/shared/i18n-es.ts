@@ -1783,4 +1783,6 @@ export const ES: Record<string, string> = {
   "直したコードは倉庫に保存し、スカウトファイルは書き換えません。絞り込み・レポート・スライド・コートの表示のすべてに使います": "El código corregido se guarda en la biblioteca; el archivo de scouting no se modifica. Lo usan los filtros, los reportes, las diapositivas y la vista de la cancha",
   "コードを直しています（元: {0}）": "Código corregido (archivo: {0})",
   "コードの形が正しくありません: {0}": "El código no tiene la forma correcta: {0}",
+  "見た目は「動画の設定」": "Aspecto: configuración del video",
+  "出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます": "Aquí se elige qué se muestra; la posición, el tamaño, el diseño y los colores están en la configuración del video",
 }

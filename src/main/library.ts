@@ -7,7 +7,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { isVsm, parseScout, scoutDvwText, vsmWithEdits, type Vsm } from '../shared/vsm'
-import { applyScoutEdits, editCount, validCode, withCodeEdit, withInsert, type ScoutEdits, type ScoutInsert } from '../shared/codeEdit'
+import { applyScoutEdits, editCount, validCode, withInsert, withLineEdit, type ScoutEdits, type ScoutInsert } from '../shared/codeEdit'
 
 const scoutEditsOf = (m: Match): ScoutEdits => ({ edits: m.codeEdits, inserts: m.codeInserts })
 import { decodeScout } from '../shared/scoutText'
@@ -378,11 +378,13 @@ export class Library {
 
   // A correction to one play's code (codeEdit.ts): the line, the file's code there, and the new one (the file's
   // code again takes the correction off). The scout file itself is never written.
-  async setCodeEdit(id: string, line: number, from: string, to: string): Promise<void> {
+  async setCodeEdit(id: string, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }): Promise<void> {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
-    if (!Number.isInteger(line) || line < 0 || (to !== from && to !== '' && !validCode(to))) throw new Error(t('コードの形が正しくありません: {0}', to))
-    const edits = withCodeEdit(m.codeEdits, line, from, to)
+    const to = patch.to
+    if (!Number.isInteger(line) || line < 0 || (to !== undefined && to !== from && to !== '' && !validCode(to))) throw new Error(t('コードの形が正しくありません: {0}', to ?? ''))
+    if ([patch.start, patch.end].some(c => typeof c === 'string' && !/^(\d{4})?$/.test(c))) throw new Error(t('座標が正しくありません'))
+    const edits = withLineEdit(m.codeEdits, line, from, patch)
     const { codeEdits: _old, ...rest } = m
     await this.saveMatch(edits.length ? { ...rest, codeEdits: edits } : rest)
   }
@@ -391,7 +393,8 @@ export class Library {
   async setInsert(id: string, ins: ScoutInsert): Promise<void> {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
-    if (!ins.id || !Number.isInteger(ins.after) || ins.after < 0 || !Number.isFinite(ins.time) || (ins.code !== '' && !validCode(ins.code)))
+    if (!ins.id || !Number.isInteger(ins.after) || ins.after < 0 || !Number.isFinite(ins.time) || (ins.code !== '' && !validCode(ins.code))
+      || [ins.start, ins.end].some(c => c !== undefined && !/^(\d{4})?$/.test(c)))
       throw new Error(t('コードの形が正しくありません: {0}', ins.code))
     const inserts = withInsert(m.codeInserts, ins)
     const { codeInserts: _old, ...rest } = m

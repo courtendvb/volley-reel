@@ -54,7 +54,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -81,6 +81,7 @@ import { OffsetBar } from './components/OffsetBar'
 import { CodeEditDialog } from './components/CodeEditDialog'
 import { ScoutEditsDialog } from './components/ScoutEditsDialog'
 import { QuickCodeDialog } from './components/QuickCodeDialog'
+import { ClickFixLayer } from './components/ClickFixLayer'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -245,6 +246,7 @@ export function App() {
   // match, then the match read again so every list, report and court shows them.
   const [codeEditing, setCodeEditing] = useState<{ ref: PlayRef; mode: 'edit' | 'insert'; time?: number } | null>(null)
   const [quickCode, setQuickCode] = useState<PlayRef | null>(null) // Enter in the list: the code alone, on one line
+  const [clickFixing, setClickFixing] = useState(false) // dragging on the video's court to correct the selected play's clicks
   const [scoutEditsOf, setScoutEditsOf] = useState<string | null>(null) // the match whose corrections are listed
   const [scoutBusy, setScoutBusy] = useState(false)
   const insertOf = (matchId: string, id: string | undefined) => (id ? matches[matchId]?.codeInserts?.find(i => i.id === id) : undefined)
@@ -258,20 +260,27 @@ export function App() {
       setCodeEditing(null); setQuickCode(null)
     } catch (err) { setError(String(err)) } finally { setScoutBusy(false) }
   }
-  const saveCode = (r: PlayRef, to: string, mode: 'edit' | 'insert', time?: number) => {
+  const saveCode = (r: PlayRef, to: string, mode: 'edit' | 'insert', extra: { time?: number; start?: string | null; end?: string | null } = {}) => {
     const p = r.play, ins = insertOf(r.matchId, p.inserted)
     if (p.line === undefined) return
+    const cells = { ...(extra.start !== undefined ? { start: extra.start } : {}), ...(extra.end !== undefined ? { end: extra.end } : {}) }
+    const own = (c: string | null | undefined) => (c === null ? undefined : c) // an insert's clicks are its own: null clears them
     if (mode === 'insert') {
       const from = ins ? ins.from : p.original ?? p.code
-      void scoutChange(r.matchId, () => api.setInsert(r.matchId, { id: crypto.randomUUID(), after: p.line!, from, code: to, time: time ?? p.time }))
-    } else if (ins) void scoutChange(r.matchId, () => api.setInsert(r.matchId, { ...ins, code: to }))
-    else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, to))
+      void scoutChange(r.matchId, () => api.setInsert(r.matchId, { id: crypto.randomUUID(), after: p.line!, from, code: to, time: extra.time ?? p.time,
+        ...(own(extra.start) ? { start: own(extra.start) } : {}), ...(own(extra.end) ? { end: own(extra.end) } : {}) }))
+    } else if (ins) {
+      const next = { ...ins, code: to }
+      if (extra.start !== undefined) { if (own(extra.start)) next.start = own(extra.start); else delete next.start }
+      if (extra.end !== undefined) { if (own(extra.end)) next.end = own(extra.end); else delete next.end }
+      void scoutChange(r.matchId, () => api.setInsert(r.matchId, next))
+    } else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, { to, ...cells }))
   }
   const deletePlay = (r: PlayRef) => {
     const p = r.play, ins = insertOf(r.matchId, p.inserted)
     if (p.line === undefined || !window.confirm(t('このプレーを削除しますか？ シーンに入っているクリップは再生できなくなります。「この試合の修正と書き出し」から元に戻せます'))) return
     if (ins) void scoutChange(r.matchId, () => api.setInsert(r.matchId, { ...ins, code: '' }))
-    else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, ''))
+    else void scoutChange(r.matchId, () => api.setCodeEdit(r.matchId, p.line!, p.original ?? p.code, { to: '' }))
   }
   const exportScout = async (matchId: string, format: 'dvw' | 'vsm') => {
     setScoutBusy(true)
@@ -936,6 +945,15 @@ export function App() {
                     )}
                     {seqPlaying && overlay.transition.fade && <FadeLayer range={here} sec={overlay.transition.durationSec} />}
                     {courtFitting && court}
+                    {clickFixing && match.court && selectedPlay && (
+                      <ClickFixLayer size={size} fit={match.court} near={nearSide(match.court, selectedPlay) === selectedPlay.side}
+                        onCancel={() => setClickFixing(false)}
+                        onDone={(start, end) => {
+                          setClickFixing(false)
+                          const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id)
+                          if (r) saveCode(r, selectedPlay.code, 'edit', { start, end })
+                        }} />
+                    )}
                     {shotPick && (
                       <ShotPick x={shotPick.at.x * size.w} y={shotPick.at.y * size.h} size={size} rows={shotPick.rows} zone={shotPick.zone}
                         onPick={goToShot} onZone={zoneList} onClose={() => setShotPick(null)} />
@@ -993,6 +1011,16 @@ export function App() {
             <div className="stage-work">
             {!cardEdit && match && selectedPlay && stagePanel === 'edit' && (
               <OffsetBar play={selectedPlay} offsetSec={match.offsetSec} onOffset={sec => setOffset(match.id, sec)} />
+            )}
+            {!cardEdit && match && selectedPlay && stagePanel === 'edit' && selectedPlay.line !== undefined && (
+              <div className="serve-mark click-fix-bar">
+                <span className="field-label">{t('座標')}</span>
+                {match.court
+                  ? <button className={clickFixing ? 'on' : ''} onClick={() => setClickFixing(f => !f)}
+                      title={t('動画のコートの上で、このプレーの始まりから終わりへドラッグして座標を直します')}>{clickFixing ? t('やめる') : `◎ ${t('コートで座標を直す')}`}</button>
+                  : <span className="muted small">{t('コートのグリッドを合わせると、動画の上で直せます')}</span>}
+                <button className="small" onClick={() => { const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id); if (r) setCodeEditing({ ref: r, mode: 'edit' }) }}>{t('コート図で直す…')}</button>
+              </div>
             )}
             {!cardEdit && match && listServe && selectedPlay && (
               <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
@@ -1127,7 +1155,8 @@ export function App() {
         <CodeEditDialog key={`${codeEditing.mode}:${codeEditing.ref.matchId}:${codeEditing.ref.play.id}`} play={codeEditing.ref.play} matchName={matches[codeEditing.ref.matchId]?.name ?? ''}
           players={Object.values(dvws[codeEditing.ref.matchId].players).sort((a, b) => a.jersey - b.jersey)}
           mode={codeEditing.mode} insertTime={codeEditing.time}
-          onSave={(to, time) => saveCode(codeEditing.ref, to, codeEditing.mode, time)}
+          clicksEdited={!!matches[codeEditing.ref.matchId]?.codeEdits?.some(e => e.line === codeEditing.ref.play.line && (e.start !== undefined || e.end !== undefined))}
+          onSave={(to, extra) => saveCode(codeEditing.ref, to, codeEditing.mode, extra)}
           onDelete={() => deletePlay(codeEditing.ref)}
           onInsertAfter={() => { const at = codeEditing.ref.play.time, now = playback.current.time - (matches[codeEditing.ref.matchId]?.offsetSec ?? 0)
             setCodeEditing({ ref: codeEditing.ref, mode: 'insert', time: now > at && now < at + 20 ? now : at + 1 }) }}
@@ -1140,7 +1169,7 @@ export function App() {
       )}
       {scoutEditsOf && matches[scoutEditsOf] && (
         <ScoutEditsDialog match={matches[scoutEditsOf]} dvw={dvws[scoutEditsOf]} busy={scoutBusy}
-          onUndoEdit={(line, from) => void scoutChange(scoutEditsOf, () => api.setCodeEdit(scoutEditsOf, line, from, from))}
+          onUndoEdit={(line, from) => void scoutChange(scoutEditsOf, () => api.setCodeEdit(scoutEditsOf, line, from, { to: from, start: null, end: null }))}
           onUndoInsert={id => { const ins = insertOf(scoutEditsOf, id); if (ins) void scoutChange(scoutEditsOf, () => api.setInsert(scoutEditsOf, { ...ins, code: '' })) }}
           onClearAll={() => void scoutChange(scoutEditsOf, () => api.clearScoutEdits(scoutEditsOf))}
           onExport={f => void exportScout(scoutEditsOf, f)} onClose={() => setScoutEditsOf(null)} />

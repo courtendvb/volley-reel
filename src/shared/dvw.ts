@@ -160,6 +160,7 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
       endSub: /[A-D]/.test(code.charAt(11)) ? code.charAt(11) : clickSub(skill === 'E' ? c[4] : c[6], zone(code.charAt(10))),
       startClick: clickPoint(c[4]),
       endClick: clickPoint(c[6]),
+      cells: { start: (c[4] || '').trim(), end: (c[6] || '').trim() },
       rallyId: rally ? rally.id : null,
       before: rally ? contacts.slice(-2).map(x => x.code).reverse() : [],
       phase: rally && skill !== 'S' ? phaseOf(contacts, side, skill) : null,

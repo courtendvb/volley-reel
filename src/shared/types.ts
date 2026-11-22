@@ -46,6 +46,7 @@ export interface Play {
   line?: number // its line among the file's [3SCOUT] lines, which a correction names (codeEdit.ts)
   original?: string // the file's code, when a correction changed it
   inserted?: string // a play put in by hand (codeEdit.ts ScoutInsert id); line is the file line it follows
+  cells?: { start: string; end: string } // the line's own clicks as written (columns 5 and 7), before any are moved for a reception, dig or set
   time: number // DVW time (offset not applied)
   side: Side
   jersey: number
@@ -234,7 +235,8 @@ export interface Api {
   otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
   projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
-  setCodeEdit(id: string, line: number, from: string, to: string): Promise<ProjectInfo | null> // a play's code corrected (to = from takes it off; to '' takes the play out)
+  // A line corrected: its code (to = from: no change; '': the play taken out) and / or its clicks (a cell; null: the file's).
+  setCodeEdit(id: string, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }): Promise<ProjectInfo | null>
   setInsert(id: string, ins: ScoutInsert): Promise<ProjectInfo | null> // a play put in after a line, changed, or taken off (code '')
   clearScoutEdits(id: string): Promise<ProjectInfo | null> // every correction of the match taken off
   exportScout(id: string, format: 'dvw' | 'vsm'): Promise<{ path: string; skipped: number } | null> // the corrected scout file, saved where picked

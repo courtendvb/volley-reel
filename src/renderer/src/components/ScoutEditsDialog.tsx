@@ -23,7 +23,11 @@ export function ScoutEditsDialog({ match: m, dvw, busy, onUndoEdit, onUndoInsert
   const isStale = (line: number) => !!dvw?.stale?.edits.some(e => e.line === line)
   const insStale = (id: string) => !!dvw?.stale?.inserts.some(i => i.id === id)
   const rows = [
-    ...edits.map(e => ({ key: `e${e.line}`, line: e.line, kind: e.to === '' ? t('削除') : t('変更'), text: e.to === '' ? e.from : `${e.from} → ${e.to}`, stale: isStale(e.line), undo: () => onUndoEdit(e.line, e.from) })),
+    ...edits.map(e => {
+      const clicks = e.start !== undefined || e.end !== undefined ? `  ${t('座標')} ${e.start || '—'} → ${e.end || '—'}` : ''
+      const kind = e.to === '' ? t('削除') : e.to === e.from ? t('座標') : t('変更')
+      return { key: `e${e.line}`, line: e.line, kind, text: (e.to === '' ? e.from : e.to === e.from ? e.from : `${e.from} → ${e.to}`) + clicks, stale: isStale(e.line), undo: () => onUndoEdit(e.line, e.from) }
+    }),
     ...inserts.map(i => ({ key: `i${i.id}`, line: i.after + 0.5, kind: t('追加'), text: `${i.code}  (${t('{0} 秒', Math.round(i.time * 10) / 10)})`, stale: insStale(i.id), undo: () => onUndoInsert(i.id) })),
   ].sort((a, b) => a.line - b.line)
   return (

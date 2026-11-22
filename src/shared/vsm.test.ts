@@ -80,6 +80,12 @@ describe('corrections written back to a .vsm', () => {
     const laid = parseScout(JSON.stringify(vsm), edits).plays.map(p => p.code)
     expect(back).toEqual(laid)
   })
+  it('writes corrected clicks as the path of the play, read back as the same cells', () => {
+    const atk = code(3)
+    const r = vsmWithEdits(vsm, { edits: [{ line: 3, from: atk, to: atk, start: '4784', end: '8613' }] })
+    const back = parseScout(JSON.stringify(r.vsm)).plays[3]
+    expect(back.cells).toEqual({ start: '4784', end: '8613' })
+  })
   it('skips a correction whose line holds another code', () => {
     expect(vsmWithEdits(vsm, { edits: [{ line: 3, from: 'nope', to: '*04AQ=' }] }).skipped).toBe(1)
   })

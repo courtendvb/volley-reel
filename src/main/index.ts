@@ -363,8 +363,8 @@ function registerIpc(): void {
     await lib().setOffset(id, offsetSec)
     return project?.info() ?? null
   })
-  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, to: string) => {
-    await lib().setCodeEdit(id, line, from, to)
+  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }) => {
+    await lib().setCodeEdit(id, line, from, patch)
     return project?.info() ?? null
   })
   ipcMain.handle('match:setInsert', async (_e, id: string, ins: ScoutInsert) => {

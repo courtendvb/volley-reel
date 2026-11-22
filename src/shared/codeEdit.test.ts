@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyScoutEdits, codeParts, partsCode, validCode, withCodeEdit, withInsert } from './codeEdit'
+import { applyScoutEdits, cellOf, codeParts, partsCode, pointOf, validCode, withCodeEdit, withInsert, withLineEdit } from './codeEdit'
 import { parseDVW } from './dvw'
 
 const LF = String.fromCharCode(10)
@@ -72,5 +72,30 @@ describe('edits', () => {
     const a = withInsert(undefined, { id: 'a', after: 1, from: 'x', code: '*01DQ+', time: 1 })
     expect(withInsert(a, { id: 'a', after: 1, from: 'x', code: '*01DQ#', time: 1 })[0].code).toBe('*01DQ#')
     expect(withInsert(a, { id: 'a', after: 1, from: 'x', code: '', time: 1 })).toEqual([])
+  })
+})
+
+describe('clicks', () => {
+  it('turns a cell into a point and back', () => {
+    for (const c of ['0001', '4784', '8613', '2550', '9999']) expect(cellOf(pointOf(c)!)).toBe(c)
+    expect(pointOf('')).toBeNull()
+  })
+  it('keeps the code and the clicks in one edit, gone when both are as the file has them', () => {
+    const a = withLineEdit(undefined, 2, 'a01AQ#PA~36BH1', { start: '4784', end: '8613' })
+    expect(a).toEqual([{ line: 2, from: 'a01AQ#PA~36BH1', to: 'a01AQ#PA~36BH1', start: '4784', end: '8613' }])
+    const b = withLineEdit(a, 2, 'a01AQ#PA~36BH1', { to: 'a01AQ=PA~36BH1' })
+    expect(b[0]).toMatchObject({ to: 'a01AQ=PA~36BH1', start: '4784', end: '8613' })
+    expect(withLineEdit(a, 2, 'a01AQ#PA~36BH1', { start: null, end: null })).toEqual([])
+  })
+  it('writes corrected clicks into the line and reads them back', () => {
+    const r = applyScoutEdits(FILE, { edits: [{ line: 2, from: 'a01AQ#PA~36BH1', to: 'a01AQ#PA~36BH1', start: '4784', end: '8613' }] })
+    const atk = parseDVW(r.text, r.sources).plays.find(p => p.line === 2)!
+    expect(atk.cells).toEqual({ start: '4784', end: '8613' })
+    expect(atk.startClick).toEqual(pointOf('4784'))
+    expect(atk.fingerprint).toBe(parseDVW(FILE).plays.find(p => p.line === 2)!.fingerprint)
+  })
+  it('gives an added play its own clicks', () => {
+    const r = applyScoutEdits(FILE, { inserts: [{ id: 'c', after: 2, from: 'a01AQ#PA~36BH1', code: '*01DQ+', time: 105, start: '2550', end: '1234' }] })
+    expect(parseDVW(r.text, r.sources).plays.find(p => p.inserted === 'c')!.cells).toEqual({ start: '2550', end: '1234' })
   })
 })

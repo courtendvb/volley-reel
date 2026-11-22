@@ -194,6 +194,25 @@ export function vsmPlayFromCode(code: string, base: Partial<VsmPlay> = {}): VsmP
   return p
 }
 
+// A DataVolley cell back in VolleyStation's units (the inverse of cell above).
+const vsmPoint = (cell: string): VsmPoint | null => {
+  const i = parseInt(cell)
+  if (!(i > 0)) return null
+  const row = Math.floor((i - 1) / 100), col = (i - 1) % 100
+  return { x: Math.round((col - 8.13) * 11), y: Math.round((row - 9.13) * 22) }
+}
+// A play's path from its corrected clicks (undefined: the clicks were not corrected, the path stays).
+function withPath(p: VsmPlay, start: string | undefined, end: string | undefined): VsmPlay {
+  if (start === undefined && end === undefined) return p
+  const was = p.travelPath ?? []
+  const s = start === undefined ? was[0] ?? null : vsmPoint(start)
+  const e = end === undefined ? (was.length > 1 ? was[was.length - 1] : null) : vsmPoint(end)
+  const path = [s, e].filter((x): x is VsmPoint => !!x)
+  const { travelPath: _old, ...rest } = p
+  // A path's first point is the start: an end without a start is kept as both (VolleyStation has no end alone).
+  return path.length ? { ...rest, travelPath: s ? path : [e!, e!] } : rest
+}
+
 // The .vsm with the corrections laid in: codes changed on their plays, plays taken out, plays put in after
 // the line they follow (time in tenths of a second). Point and set lines are not changed here. Returns the
 // file and the corrections it could not place.
@@ -209,14 +228,14 @@ export function vsmWithEdits(v: Vsm, s: ScoutEdits): { vsm: Vsm; skipped: number
     const r = refs[e.line]
     if (!r || r.pi === null || codeAt(e.line) !== e.from) { skipped++; continue }
     const base = v.scout!.sets![r.si].events[r.ei].exchange!.plays[r.pi]
-    changes.push(e.to === '' ? { ...r, pi: r.pi, kind: 'drop', order: 0 } : { ...r, pi: r.pi, kind: 'set', play: vsmPlayFromCode(e.to, base), order: 0 })
+    changes.push(e.to === '' ? { ...r, pi: r.pi, kind: 'drop', order: 0 } : { ...r, pi: r.pi, kind: 'set', play: withPath(vsmPlayFromCode(e.to, base), e.start, e.end), order: 0 })
   }
   ;(s.inserts ?? []).forEach((ins, n) => {
     const r = refs[ins.after]
     if (!r || codeAt(ins.after) !== ins.from) { skipped++; return }
     const plays = v.scout!.sets![r.si].events[r.ei].exchange!.plays
     const after = r.pi ?? plays.length - 1
-    changes.push({ si: r.si, ei: r.ei, pi: after, kind: 'add', play: vsmPlayFromCode(ins.code, { time: Math.round(ins.time * 10) }), order: n + 1 })
+    changes.push({ si: r.si, ei: r.ei, pi: after, kind: 'add', play: withPath(vsmPlayFromCode(ins.code, { time: Math.round(ins.time * 10) }), ins.start ?? '', ins.end ?? ''), order: n + 1 })
   })
   // Each exchange from its last play back, so the places still to change keep their index.
   changes.sort((a, b) => a.si - b.si || a.ei - b.ei || b.pi - a.pi || b.order - a.order)

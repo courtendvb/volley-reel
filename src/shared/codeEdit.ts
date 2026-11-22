@@ -9,18 +9,44 @@
 // rather than putting it on another play.
 // Pure: no file or DOM access.
 
-export interface CodeEdit { line: number; from: string; to: string } // to '': the line is taken out
-export interface ScoutInsert { id: string; after: number; from: string; code: string; time: number } // time: DVW seconds
+// start / end: the clicks (columns 5 and 7, DataVolley's 100 × 100 cell, '' for none), when they were corrected.
+export interface CodeEdit { line: number; from: string; to: string; start?: string; end?: string } // to '': the line is taken out
+export interface ScoutInsert { id: string; after: number; from: string; code: string; time: number; start?: string; end?: string } // time: DVW seconds
 
 // Where a line of the corrected [3SCOUT] came from: a file line (and the code it had), or a play put in.
 export type ScoutSource = { line: number; original: string; insert?: undefined } | { line: number; original: string; insert: string }
 
 export interface ScoutEdits { edits?: CodeEdit[]; inserts?: ScoutInsert[] }
 
-// The edits after one play's code is set (to its original: the edit goes; to '': the line is taken out).
-export function withCodeEdit(edits: CodeEdit[] | undefined, line: number, from: string, to: string): CodeEdit[] {
+// The edits after one line's code and / or clicks are set. to: the new code (the file's: no code change; '': the
+// line taken out); start / end: a cell, or null for the file's click again. An edit that changes nothing goes.
+export function withLineEdit(edits: CodeEdit[] | undefined, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }): CodeEdit[] {
+  const had = (edits ?? []).find(e => e.line === line && e.from === from)
   const rest = (edits ?? []).filter(e => e.line !== line)
-  return to === from ? rest : [...rest, { line, from, to }].sort((a, b) => a.line - b.line)
+  const next: CodeEdit = { line, from, to: patch.to ?? had?.to ?? from }
+  const start = patch.start === undefined ? had?.start : patch.start ?? undefined
+  const end = patch.end === undefined ? had?.end : patch.end ?? undefined
+  if (start !== undefined) next.start = start
+  if (end !== undefined) next.end = end
+  const changes = next.to !== from || next.start !== undefined || next.end !== undefined
+  return changes ? [...rest, next].sort((a, b) => a.line - b.line) : rest
+}
+
+// The edits after one play's code is set (to its original: no code change; to '': the line is taken out).
+export const withCodeEdit = (edits: CodeEdit[] | undefined, line: number, from: string, to: string): CodeEdit[] => withLineEdit(edits, line, from, { to })
+
+// A click as DataVolley's cell (row * 100 + column + 1, four digits) and back; the point is in the coding team's
+// half and up (u across 0..1, v from its own end line 0 to the far one 1, the net at 0.5), as dvw.ts reads it.
+export function cellOf(p: { u: number; v: number }): string {
+  const col = Math.max(0, Math.min(99, Math.round(((p.u * 3 + 0.5) * 100) / 4 - 0.5)))
+  const row = Math.max(0, Math.min(99, Math.round(((p.v * 6 + 0.5) * 100) / 7 - 0.5)))
+  return String(row * 100 + col + 1).padStart(4, '0')
+}
+export function pointOf(cell: string | undefined): { u: number; v: number } | null {
+  const i = parseInt(cell ?? '')
+  if (!(i > 0)) return null
+  const row = Math.floor((i - 1) / 100), col = (i - 1) % 100
+  return { u: (((col + 0.5) * 4) / 100 - 0.5) / 3, v: (((row + 0.5) * 7) / 100 - 0.5) / 6 }
 }
 
 // The inserts after one is put in, changed (same id) or taken off (code '').
@@ -53,7 +79,12 @@ export function applyScoutEdits(text: string, s: ScoutEdits): { text: string; so
     if (e && e.from === original) {
       usedEdits.add(idx)
       if (e.to === '') keep = false
-      else c[0] = e.to
+      else {
+        c[0] = e.to
+        if (e.start !== undefined || e.end !== undefined) while (c.length < 7) c.push('')
+        if (e.start !== undefined) c[4] = e.start
+        if (e.end !== undefined) c[6] = e.end
+      }
     }
     if (keep) { out.push(c.join(';')); sources.push({ line: idx, original }) }
     for (const ins of inserts.get(idx) ?? []) {
@@ -61,7 +92,8 @@ export function applyScoutEdits(text: string, s: ScoutEdits): { text: string; so
       usedInserts.add(ins.id)
       const n = raw.split(';')
       n[0] = ins.code
-      if (n.length > 6) { n[4] = ''; n[6] = '' } // no clicks of its own
+      while (n.length < 7) n.push('')
+      n[4] = ins.start ?? ''; n[6] = ins.end ?? '' // its own clicks, if any were put
       if (n.length > 12) n[12] = String(Math.round(ins.time * 10) / 10) // tenths, as a .vsm's DVW text has them
       out.push(n.join(';'))
       sources.push({ line: idx, original: ins.code, insert: ins.id })

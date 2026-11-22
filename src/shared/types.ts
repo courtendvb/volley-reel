@@ -1,6 +1,6 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState, TeamAction } from './account'
+import type { AccountState, PlanPrices, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
 import type { CodeEdit } from './codeEdit'
@@ -258,6 +258,7 @@ export interface Api {
   accountSignIn(email: string, code: string): Promise<AccountState>
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
   accountSignOut(): Promise<AccountState>
   accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads

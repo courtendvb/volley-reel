@@ -42,6 +42,7 @@ export interface SmokeOpts {
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
+  fold?: boolean // the list rows' six markers (only those on, all on the selected row) and the right column folded by click and Ctrl+B
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   serveTouch?: boolean // a serve's hit and its reception's touch marked on the trim bar: the measured speed in the bar and the caption
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
@@ -175,6 +176,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
+    if (opts.fold) return smokeFold(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1211,6 +1213,46 @@ export function installSmoke(h: SmokeHost): void {
     const t0 = Date.now()
     await waitFor(() => (!playback.current.seq && !full()) || null, 90000, 'back after the play ends')
     return { maximize: { ...maxed, escKeepsPlaying, leftAfterSec: +((Date.now() - t0) / 1000).toFixed(1), clips: Object.keys(built.clips).length } }
+  }
+
+  // The list's markers and the right column folded. A play marked 1 and 6 shows just those two on its
+  // row, the selected row shows all six, the others none; the right column folds from its » with a
+  // real click (the video gets wider), Ctrl+B opens and folds it, and a part's name on the strip opens
+  // the column at that part.
+  const smokeFold = async (res: PlayRef[]) => {
+    let built = addClips(newReel('fold smoke'), [res[0]].map(r => ({ matchId: r.matchId, play: r.play }))).reel
+    const id = built.groups.none[0]
+    built = toggleMarker(toggleMarker(built, id, 1), id, 6)
+    setReels(rs => [...rs, built]); setReelId(built.id)
+    await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'fold reel')
+    jump(res[1])
+    await waitFor(() => document.querySelector('.play-row.selected') || null, 5000, 'selected row')
+    await sleep(300)
+    const visible = (row: Element) => [...row.querySelectorAll<HTMLElement>('.mark')].filter(b => b.offsetParent).map(b => b.textContent)
+    const rows = [...document.querySelectorAll('.play-row')]
+    const marks = {
+      selected: visible(document.querySelector('.play-row.selected')!),
+      others: rows.filter(r => !r.classList.contains('selected')).map(visible).filter(v => v.length),
+    }
+    const w = (sel: string) => Math.round(document.querySelector<HTMLElement>(sel)?.getBoundingClientRect().width ?? -1)
+    const folded = () => document.querySelector('.workspace')?.classList.contains('right-folded') ?? false
+    const before = { video: w('.video-box'), right: w('.right-col') }
+    await api.smokeShot!('fold-open.png')
+    const btn = document.querySelector<HTMLElement>('.right-tabs .right-fold')!.getBoundingClientRect()
+    await api.smokeDrag!([[btn.left + btn.width / 2, btn.top + btn.height / 2]])
+    await waitFor(() => folded() || null, 5000, 'folded by »')
+    await sleep(400)
+    const after = { video: w('.video-box'), right: w('.right-col') }
+    await api.smokeShot!('fold-closed.png')
+    const ctrlB = async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true })); await sleep(200) }
+    await ctrlB(); const openedByKey = !folded()
+    await ctrlB(); const foldedByKey = folded()
+    const tab = [...document.querySelectorAll<HTMLElement>('.right-strip-tab')].find(b => b.textContent === t('書き出し'))!.getBoundingClientRect()
+    await api.smokeDrag!([[tab.left + tab.width / 2, tab.top + tab.height / 2]])
+    await waitFor(() => !folded() || null, 5000, 'opened from the strip')
+    await sleep(200)
+    const openTab = document.querySelector('.right-tabs [aria-selected=true]')?.textContent
+    return { fold: { marks, before, after, openedByKey, foldedByKey, openTab } }
   }
 
   // Which way plays go on screen: unknown before the court is fitted, then the 向き buttons in the

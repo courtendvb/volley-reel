@@ -78,6 +78,7 @@ import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
 import { ServeMarkBar } from './components/ServeMarkBar'
 import { OffsetBar } from './components/OffsetBar'
+import { CodeEditDialog } from './components/CodeEditDialog'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -237,6 +238,20 @@ export function App() {
   const setCourt = (id: string, court: CourtFit | null) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  // A play's code corrected (codeEdit.ts): saved beside the match, then the match read again so every list,
+  // report and court shows the new code.
+  const [codeEditing, setCodeEditing] = useState<PlayRef | null>(null)
+  const saveCode = async (r: PlayRef, to: string) => {
+    const p = r.play
+    if (p.line === undefined) return
+    try {
+      const info = await api.setCodeEdit(r.matchId, p.line, p.original ?? p.code, to)
+      if (info) setProject(info)
+      const d = await api.parseMatch(r.matchId)
+      setDvws(prev => ({ ...prev, [r.matchId]: d }))
+      setCodeEditing(null)
+    } catch (err) { setError(String(err)) }
   }
   const setOffset = (id: string, offsetSec: number) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
@@ -851,7 +866,7 @@ export function App() {
             />
             {Object.keys(dvws).length
               ? <PlayList refs={results} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={setCodeEditing} />
               : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
           <section className="stage">
@@ -1080,6 +1095,11 @@ export function App() {
       {overlayOpen && video && (
         <OverlayDialog settings={overlay} onChange={setOverlay} onTheme={th => { if (settings) void saveSettings({ ...settings, theme: th }) }} onClose={() => setOverlayOpen(false)}
           sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
+      )}
+      {codeEditing && dvws[codeEditing.matchId] && (
+        <CodeEditDialog play={codeEditing.play} matchName={matches[codeEditing.matchId]?.name ?? ''}
+          players={Object.values(dvws[codeEditing.matchId].players).filter(p => p.side === codeEditing.play.side).sort((a, b) => a.jersey - b.jersey)}
+          onSave={to => void saveCode(codeEditing, to)} onClose={() => setCodeEditing(null)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}

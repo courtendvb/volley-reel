@@ -989,3 +989,15 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .compare-fit { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
 .cmp-playbtn { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmp-list button.cur { background: var(--primary-light); font-weight: 600; box-shadow: inset 3px 0 0 var(--primary); }
+
+/* Correcting a play's code (CodeEditDialog): the parts in a grid, the code as text below. */
+.code-edit { width: min(640px, 92vw); }
+.code-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-2) var(--space-3); margin: var(--space-3) 0; }
+.code-field { display: flex; align-items: center; gap: var(--space-2); }
+.code-field .field-label { width: 72px; flex: none; }
+.code-field select, .code-field input { flex: 1; min-width: 0; }
+.code-raw { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.code-raw .field-label { width: 72px; flex: none; }
+.code-raw input { flex: 1; font-family: ui-monospace, Consolas, monospace; }
+.code-raw input[aria-invalid="true"] { border-color: var(--danger, #DC2626); }
+.play-row .edited { margin-left: 4px; color: var(--primary); font-weight: 700; }

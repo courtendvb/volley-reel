@@ -18,7 +18,7 @@ import { captionPhoto, findPhoto } from '../../shared/pack'
 import { playTimes, serveMarkOf } from '../../shared/serveMark'
 import { DEFAULT_GRID_STYLE, courtQuad, flightTiming, homography, nearSide, playZones, playerMarks, project } from '../../shared/court'
 import { assetImage } from './assets'
-import { t } from '../../shared/i18n'
+import { cap, t } from '../../shared/i18n'
 import type { AppLatest } from './app/appState'
 import { clipPlayedSec } from '../../shared/timing'
 
@@ -358,7 +358,7 @@ export function installSmoke(h: SmokeHost): void {
     log.card = { title: scene().markerCardTitles?.[1], background: latest.current.overlay.titleCard.background,
       planName: currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1)?.kind === 'card' ? (currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1) as { card: { name: string } }).card.name : null }
     // The scene's rows for the screenshot (the head section on top).
-    ;[...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === t('シーン'))?.click(); await sleep(300)
+    ;[...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === cap(t('シーン')))?.click(); await sleep(300)
     return { ...log, videoExport: opts.videoExportTo ?? null, exported }
   }
 

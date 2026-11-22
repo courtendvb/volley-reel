@@ -8,7 +8,7 @@ import type { PlayRef } from '../../../shared/filter'
 import { formatLength, pad2 } from '../format'
 import { InlineTitle } from './InlineTitle'
 import { NameSelect } from './NameSelect'
-import { t } from '../../../shared/i18n'
+import { cap, t } from '../../../shared/i18n'
 import { keyName } from '../../../shared/keys'
 
 export interface ClipInfo {
@@ -265,9 +265,9 @@ export function ReelPanel(p: Props) {
   return (
     <aside className="reel-panel">
       <div className="reel-head">
-        <span className="panel-kicker">{t('シーン')}</span>
+        <span className="panel-kicker">{cap(t('シーン'))}</span>
         <NameSelect name={reel.name} label={t('シーンの名前を変更')} onRename={name => change({ ...reel, name })}>
-          <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={t('シーン')}>
+          <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={cap(t('シーン'))}>
             {p.videoSceneIds ? (
               <>
                 <optgroup label={t('この動画のシーン')}>

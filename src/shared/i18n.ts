@@ -14,6 +14,11 @@ let lang: Lang = 'ja'
 export function setLang(l: Lang): void { lang = l === 'en' || l === 'es' ? l : 'ja' }
 export function getLang(): Lang { return lang }
 
+// For a label that starts a line on its own (a tab, a field name, a button): the translation
+// with its first letter capitalised, where the same word is lowercase inside a sentence
+// (t('シーン') is "scene" in "Couldn't save the scene" but "Scene" on its tab). Japanese is unchanged.
+export function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1) }
+
 export function t(ja: string, ...args: (string | number | null | undefined)[]): string {
   const s = lang === 'en' ? EN[ja] ?? ja : lang === 'es' ? ES[ja] ?? EN[ja] ?? ja : ja
   return args.length ? s.replace(/\{(\d+)\}/g, (m, i) => (args[+i] === undefined || args[+i] === null ? '' : String(args[+i]))) : s

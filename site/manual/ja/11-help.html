@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>困ったとき — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="よくある質問とお問い合わせ">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><a href="06-draw.html">6. 動画に描く</a></li>
+        <li><a href="07-court.html">7. コートの表示</a></li>
+        <li><a href="08-data.html">8. データスライドとレポート</a></li>
+        <li><a href="09-compare.html">9. 比較動画</a></li>
+        <li><a href="10-export.html">10. 書き出しの詳細</a></li>
+        <li><a href="11-help.html" aria-current="page">11. 困ったとき</a></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>11. 困ったとき</h1>
+<p class="m-lead">よくある困りごとと、その直し方です。解決しないときは、下のお問い合わせ先までご連絡ください。</p>
+
+<h2 id="files">動画や DVW が見つからない</h2>
+<p>動画や DVW のファイルを移したり、名前を変えたり、外付けのドライブを外したりすると、倉庫から見つからなくなります。見つからないファイルの横に出る<span class="ui">場所を指定…</span>で、今の場所を選び直してください。取り込み直す必要はありません。</p>
+
+<h2 id="timing">クリップの場面がずれている</h2>
+<p>クリップは DVW に記録された時刻で切り出します。試合全体が同じだけずれているときは、アプリで直せます。</p>
+<ol class="m-steps">
+  <li>プレー一覧でサーブを 1 つ選び、動画の下の<span class="ui">編集</span>タブを開きます。</li>
+  <li>動画をそのサーブを打った瞬間に合わせます（<kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> で 1 コマずつ）。</li>
+  <li><b>時刻合わせ</b>の<span class="ui">◎ ここをこのプレーの時刻にする</span>を押します。この試合のすべてのプレーが同じだけ動きます。</li>
+</ol>
+<p><span class="ui">−0.5秒</span> <span class="ui">+0.5秒</span> で少しずつ直すことも、<span class="ui">ずれを 0 に戻す</span>で元に戻すこともできます。試合の途中からずれ方が変わるときは、DataVolley や VolleyStation で動画との時刻合わせを直した DVW を、<span class="ui">場所を指定…</span>から読み直してください。1 本だけ少しずれるときは、そのクリップの IN・OUT を直します。</p>
+
+<h2 id="court">コートの表示がずれる</h2>
+<p>グリッドの四隅がコートの角に合っていないか、手前のチームが違っています。<span class="ui">表示</span>タブの「コートの準備」で、四隅と<b>手前のチーム（第 1 セット）</b>を直してください（<a href="03-project.html#court">3 章</a>）。カメラが試合の途中で動いた動画では、合わない場面が出ます。</p>
+
+<h2 id="play">動画が再生できない・取り込みに時間がかかる</h2>
+<p>そのままでは再生できない形式の動画は、取り込みのときに再生できる形式に変換します。長い動画では数分かかることがあります。</p>
+
+<h2 id="export">書き出しや取り込みができない</h2>
+<ul class="dots">
+  <li><b>ログインしていない</b>：書き出しと 2 試合目からの取り込みにはログインが必要です（<a href="01-start.html#login">1 章</a>）。</li>
+  <li><b>お試しや契約が終わった</b>：ログインの画面の<span class="ui">契約を確認</span>から契約できます。作ったプロジェクトは開いて編集できます。</li>
+  <li><b>更新の支払いが済んでいない</b>：ログインの画面に出る<span class="ui">未払いの請求を支払う</span>から、Stripe の請求書のページで支払うと、すぐ使えるようになります。</li>
+  <li><b>長くインターネットにつないでいない</b>：ログインの確認は 30 日まで有効です。一度つないでアプリを開いてください。</li>
+  <li><b>確認コードが届かない</b>：迷惑メールのフォルダを見て、それでもなければ<span class="ui">もう一度送る</span>を押します。</li>
+</ul>
+
+<h2 id="update">更新できない</h2>
+<p>Windows で更新に失敗すると、<span class="ui">ダウンロードページを開く</span>が出ます。そこから新しい版を入れ直してください。セキュリティソフトが止めていることもあります。原因を探すための記録（update.log）は<span class="ui">記録を見る</span>で開けるので、お問い合わせのときに添えてください。Mac は自動では更新されないので、製品サイトから新しい版を入れ替えます。</p>
+
+<h2 id="data">データの置き場所</h2>
+<ul class="dots">
+  <li>動画と DVW は、取り込んだもとの場所のままです。アプリがコピーや移動をすることはありません。</li>
+  <li>倉庫のフォルダに、試合の一覧、コートのグリッド、プロジェクト（projects フォルダ）が入っています。別のパソコンへ移すときは、倉庫のフォルダごと移し、<span class="ui">倉庫を変更</span>で選びます。動画と DVW の場所が変わるときは、<span class="ui">場所を指定…</span>で選び直します。</li>
+  <li>削除したシーンや動画、倉庫から外した試合は、それぞれのフォルダの deleted に移るだけで、すぐには消えません。</li>
+</ul>
+
+<h2 id="contact">お問い合わせ</h2>
+<p><a href="mailto:syncscout@courtend.net">syncscout@courtend.net</a> までメールでご連絡ください。アプリのバージョン（画面左上の v0.2.40 など）、Windows か Mac か、起きたことと、そのときの画面の写真があると早く調べられます。</p>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="10-export.html"><small>前へ</small>書き出しの詳細</a></nav>
+  </main>
+</div>
+</body>
+</html>

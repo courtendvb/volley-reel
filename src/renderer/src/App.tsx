@@ -14,18 +14,19 @@ import { FilterPanel } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
+import { setStopSec } from './keys'
 import { TrimBar } from './components/TrimBar'
-import { RIGHT_TABS, RightTabs, type RightTab } from './components/RightTabs'
+import { RIGHT_TABS, RightStrip, RightTabs, type RightTab } from './components/RightTabs'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
 import { AnnotationTools, KIND_LABEL } from './components/AnnotationTools'
 import { HeadlineBar } from './components/HeadlineBar'
 import { ObjectTimeline } from './components/ObjectTimeline'
 import { mergeScoped, scopeOf, type ScopedAnnotations } from '../../shared/annotationScope'
-import { courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
-import { captionData, followAt, followWindows, overlaySettings, scoreboardData, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { captionData, followAt, followWindows, overlaySettings, scoreboardData, withTeamColors, type FollowWindow, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { FORECAST_AHEAD_SEC, courtWindows, setFreezes, type CourtWindow } from '../../shared/courtFollow'
 import { OverlayLayer } from './components/OverlayLayer'
 import { OverlayDialog } from './components/OverlayDialog'
-import { ClipOverlayRow, ServeSpeedCheck } from './components/ClipOverlayRow'
+import { ClipOverlayRow, LineupCheck, ListOverlayChecks, ServeSpeedCheck } from './components/ClipOverlayRow'
 import { addScene, planScene, planVideo, type Card, type PlanItem } from '../../shared/video'
 import { assetImage, packAssetId } from './assets'
 import { isZonePaint, type ImageLookup } from '../../shared/annotation'
@@ -40,6 +41,9 @@ import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { PresetDialog } from './components/PresetDialog'
 import { usePresetVideos } from './app/usePresetVideos'
 import { Home, MissingNote } from './components/Home'
+import { CompareView } from './components/CompareView'
+import { CompareMenu } from './components/CompareMenu'
+import { useCompare } from './app/useCompare'
 import { ScanDialog } from './components/ScanDialog'
 import { MatchPicker } from './components/MatchPicker'
 import { VideoPane } from './components/VideoPane'
@@ -50,7 +54,7 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -73,6 +77,8 @@ import { useShortcuts } from './app/useShortcuts'
 import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
 import { ServeMarkBar } from './components/ServeMarkBar'
+import { OffsetBar } from './components/OffsetBar'
+import { CodeEditDialog } from './components/CodeEditDialog'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -84,6 +90,7 @@ const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the 
 
 
 
+const NOTICE_SEC = 10
 export function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
@@ -131,9 +138,13 @@ export function App() {
   const toggleExtra = useCallback((id: string) => setExtraSel(xs => (xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])), [])
   useEffect(() => { setEditPoints(false); setCropping(false) }, [selectedAnn])
   const [overlayOpen, setOverlayOpen] = useState(false)
+  // The teams' colors (library, by team code): the rotation lineup's discs.
+  const [teamColors, setTeamColors] = useState<Record<string, string>>({})
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // A notice says what just happened; it goes by itself after 10 seconds (a click closes it sooner).
+  useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), NOTICE_SEC * 1000); return () => clearTimeout(id) }, [notice])
   // The latest state for callbacks and steps in the same tick; filled in on every render below.
   const latest = useRef<AppLatest>({ overlayData: null, exportState: null, notice: null, dvwsRef: null, library: null, projectPath: null, activeGroup: null } as AppLatest)
   const {
@@ -150,6 +161,8 @@ export function App() {
     latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId,
     setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record, checkSlideFiles,
   })
+  const cmp = useCompare(setError)
+  useEffect(() => { if (library) void api.listTeamColors().then(setTeamColors).catch(() => undefined) }, [!!library])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // The court grid's look is this computer's, for every match; the corners belong to each match.
   const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
@@ -158,6 +171,9 @@ export function App() {
   // The right column's tab, kept on this computer.
   const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })
   useEffect(() => { try { localStorage.setItem('vr.rightTab', rightTab) } catch { /* not kept */ } }, [rightTab])
+  // The right column folded to a thin strip, for a bigger video; kept on this computer.
+  const [rightFolded, setRightFolded] = useState(() => { try { return localStorage.getItem('vr.rightFolded') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('vr.rightFolded', rightFolded ? '1' : '0') } catch { /* not kept */ } }, [rightFolded])
   // The one panel under the video (StageTabs), or none for the biggest video; kept on this computer.
   const [stagePanel, setStagePanel] = useState<StagePanel | null>(() => { try { const v = localStorage.getItem('vr.stagePanel'); return v === 'none' ? null : (STAGE_PANELS as readonly string[]).includes(v ?? '') ? v as StagePanel : v === 'display' || v === 'court' ? 'view' : 'edit' } catch { return 'edit' } })
   useEffect(() => { try { localStorage.setItem('vr.stagePanel', stagePanel ?? 'none') } catch { /* not kept */ } }, [stagePanel])
@@ -226,9 +242,28 @@ export function App() {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : court ? { ...m, court } : (({ court: _c, ...rest }) => rest)(m))) })
     void api.setMatchCourt(id, court).then(p => p && setProject(p)).catch(err => setError(String(err)))
   }
+  // A play's code corrected (codeEdit.ts): saved beside the match, then the match read again so every list,
+  // report and court shows the new code.
+  const [codeEditing, setCodeEditing] = useState<PlayRef | null>(null)
+  const saveCode = async (r: PlayRef, to: string) => {
+    const p = r.play
+    if (p.line === undefined) return
+    try {
+      const info = await api.setCodeEdit(r.matchId, p.line, p.original ?? p.code, to)
+      if (info) setProject(info)
+      const d = await api.parseMatch(r.matchId)
+      setDvws(prev => ({ ...prev, [r.matchId]: d }))
+      setCodeEditing(null)
+    } catch (err) { setError(String(err)) }
+  }
+  const setOffset = (id: string, offsetSec: number) => {
+    setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
+    void api.setMatchOffset(id, offsetSec).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
   const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
   setChartColors(chartColors) // before anything below draws a chart
-  const lineKey = JSON.stringify(chartColors) // charts already drawn are drawn again
+  setStrikeHeights(project?.settings.strikeHeights) // and the court's flights
+  const lineKey = JSON.stringify([chartColors, project?.settings.strikeHeights]) // charts and flights already drawn are drawn again
   const selectedPlay = match && selected?.matchId === match.id ? dvws[match.id]?.plays[selected.playId] ?? null : null
   // The play the court's marks on the video are drawn for: the selected one, or while 通し plays a
   // rally, the serve, reception or attack on screen (the list staying on the play picked).
@@ -247,7 +282,7 @@ export function App() {
   // The scene and marker group of the clip on screen (while 通し plays, the one playing), for the 範囲 of the marks.
   const rangeScene = (playingClipId ? reels.find(r => r.clips[playingClipId]) : null) ?? reel ?? null
   const rangeGroup = rangeScene && playingClipId && rangeScene.clips[playingClipId] ? groupOf(rangeScene, playingClipId) : activeGroup
-  // A clip can leave the player's marks off (自動表示's 選手の表示): the clip on screen, or while 通し plays, the one playing.
+  // A clip can leave the player's marks off (自動表示's 分析表示): the clip on screen, or while 通し plays, the one playing.
   const courtClip = (playingClipId ? rangeScene?.clips[playingClipId] : null) ?? (reel && activeClipId ? reel.clips[activeClipId] : null) ?? null
   const hideMarks = !!courtClip?.overlayOverride?.courtMarks?.hidden
   const sharesNow = !!followPlay?.shares
@@ -407,7 +442,7 @@ export function App() {
     setFilter({ ...EMPTY_FILTER, skills: [p.skill], persons: [p.playerKey], endZones: [shotPick!.zone!] })
     setShotPick(null)
   }
-  // The 1–5 buttons on a list row: add the play to the scene with that marker (again: clear it).
+  // The 1–6 buttons on a list row: add the play to the scene with that marker (again: clear it).
   const markPlay = useCallback((ref: PlayRef, m: Marker) => {
     withReel(r => {
       const { reel: next, ids } = addClips(r, [{ matchId: ref.matchId, play: ref.play }], 'none', extractRef.current)
@@ -416,10 +451,11 @@ export function App() {
   }, [withReel])
 
   // The project's colors win over the video's (videos made before project colors keep their own).
+  // No video open (the left list's plays only): the project's own display settings.
   const overlay = useMemo(() => {
-    const o = overlaySettings(video?.overlay)
+    const o = overlaySettings(video ? video.overlay : project?.settings.overlay)
     return project?.settings.theme ? { ...o, theme: project.settings.theme } : o
-  }, [video?.overlay, project?.settings.theme])
+  }, [video, project?.settings.overlay, project?.settings.theme])
   latest.current = { ...latest.current, results, filter, matches, reels, reelId, reel, videos, videoId, video, orderOf, infoFor, selected, activeClipId, order, clipInfo, selectedAnn, overlay, settings, notice, dvwsRef: dvws, targetDvws, library, activeGroup }
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
     latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
@@ -437,7 +473,7 @@ export function App() {
   // 通し: the display's windows (followData), for the court's marks to follow them; the play they last took.
   const followDataRef = useRef<{ key: string; windows: FollowWindow[]; court: CourtWindow[] } | null>(null)
   const followSel = useRef<number | null>(null)
-  const sharesArmed = useRef(false) // the set distribution shows only once the picture has actually stopped, not on the frames before it
+  const sharesOn = useRef(false) // the set distribution shows only while the picture is stopped, not on the frames before or after it
   const [listRun, setListRun] = useState(false)
   // Which list the Up / Down keys walk: the one clicked last (left: plays, right: the scene's clips).
   const focusPane = useRef<'list' | 'scene'>('list')
@@ -482,8 +518,9 @@ export function App() {
     if (run?.rallyId !== undefined && playback.attachedKey === run.matchId && s.time >= run.start && s.time <= run.end) {
       const f = followDataRef.current, at = f && f.key === run.matchId ? followAt(f.court, s.time) : -1
       let w = at >= 0 ? f!.court[at] : null
-      if (w?.shares && !sharesArmed.current) { if (s.holdAt !== null) sharesArmed.current = true; else w = null }
-      else if (!w?.shares) sharesArmed.current = false
+      if (w?.shares && s.holdAt === null) w = null
+      if (!w?.shares && sharesOn.current) { sharesOn.current = false; if (!w) setFollowPlay(null) } // gone as the picture runs again
+      if (w?.shares) sharesOn.current = true
       if (w && w.playId !== followSel.current) { followSel.current = w.playId; setFollowPlay({ matchId: run.matchId, playId: w.playId, ...(w.shares ? { shares: true } : {}) }) }
     }
     // Only inside this play's window: right after a jump the time can still be the old one.
@@ -611,8 +648,8 @@ export function App() {
     const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
     const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
     const speed = kmh && tm.touchSec !== undefined ? { kmh, touchSec: tm.touchSec } : null
-    return { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
-  }, [dvws, settings, overlay, packs, video?.captionNames, matches])
+    return { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], matches[c.matchId]?.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
+  }, [dvws, settings, overlay, packs, video?.captionNames, matches, teamColors])
   const activeOverlay = overlayData(active)
   // No clip on screen: the scoreboard and caption follow the playhead over the left list's plays in
   // this match (as the video's settings have them), each from its contact until the next listed play's,
@@ -629,8 +666,9 @@ export function App() {
       ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
       : pick && selectedPlay ? [{ from: pick.in, to: pick.out, playId: selectedPlay.id }] : []
     // The court's marks have windows of their own (a serve stays longer, a good reception's set gets a stop).
-    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter) : windows
-    const holds = listThrough ? setFreezes(d.plays, match.offsetSec).map(f => ({ at: f.at, sec: f.sec })) : []
+    const stop = setStopSec()
+    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter, stop, gridStyle.forecast === false ? 0 : FORECAST_AHEAD_SEC) : windows
+    const holds = listThrough ? setFreezes(d.plays, match.offsetSec, stop).map(f => ({ at: f.at, sec: f.sec })) : []
     const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
     return {
       key: match.id, windows, court, holds,
@@ -640,13 +678,13 @@ export function App() {
         let v = cache.get(playId)
         if (!v) {
           const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
-          v = { scoreboard: scoreboardData(d, play, settings?.ourTeamCodes ?? []), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
+          v = { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], match.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
           cache.set(playId, v)
         }
         return v
       },
     }
-  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract])
+  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract, settingsOpen, gridStyle.forecast]) // settingsOpen: the set stop's length is read again once the settings close
   followDataRef.current = followData
   // 通し stops the picture before a set after a good reception, for the set distribution to be read.
   useEffect(() => {
@@ -667,7 +705,7 @@ export function App() {
   const activeAnns = useMemo(() => (activeScoped ? mergeScoped(activeScoped) : []), [activeScoped])
   const activeScopeOf = useCallback((annId: string) => (activeScoped ? scopeOf(activeScoped, annId) : null), [activeScoped])
   latest.current.overlayData = overlayData
-  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget } = useExport(
+  const { exportState, setExportState, startExport, exportScenes, exportMarker, exportClip, exportTargets, exportInfo, exportTarget, quality } = useExport(
     { video, reel, reels, overlay, matches, settings, dvws, infoFor, orderOf }, latest, currentPlan, gridStyleRef, cardFramePhoto)
   latest.current.exportState = exportState
   const exportBadge = exportState?.status === 'running' || exportState?.status === 'preparing' ? `${Math.round(exportState.ratio * 100)}%` : exportState?.status === 'done' ? '✓' : undefined
@@ -726,9 +764,10 @@ export function App() {
   }, [editingTitleCard, cardEdit, cardEditCard, reels, video, dvws, packs, logoCodes, placeImage, setCardAnns, setAnnTool])
 
   const setOverlay = useCallback((s: OverlaySettings) => {
-    const v = latest.current.video
+    const v = latest.current.video, st = latest.current.settings
     if (v) updateVideo({ ...v, overlay: s, updatedAt: new Date().toISOString() })
-  }, [updateVideo])
+    else if (st) void saveSettings({ ...st, overlay: s })
+  }, [updateVideo, saveSettings])
 
   const trim = useCallback((edge: 'in' | 'out', t: number | null) => {
     const { reel: r, activeClipId: id, clipInfo: info, matches: ms } = latest.current
@@ -741,7 +780,7 @@ export function App() {
   useShortcuts({
     latest, paused: settingsOpen, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
     scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
-    undoRedo, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o),
+    undoRedo, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o), toggleRight: () => setRightFolded(f => !f),
     activateClip, whenIn, jump, setAnnTool, trim, markerKey,
     setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
   })
@@ -768,6 +807,7 @@ export function App() {
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         {project && <button onClick={() => setAnalysisOpen(true)} title={t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る')}>{t('分析')}</button>}
+        {!project && !cmp.open && <CompareMenu compares={cmp.compares} onOpenMenu={() => void cmp.refresh()} onNew={cmp.newCompare} onOpen={cmp.openCompare} onDelete={s => void cmp.deleteCompare(s)} />}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
       </header>
@@ -802,7 +842,9 @@ export function App() {
           )}
         </div>
       )}
-      {!project ? (
+      {!project && cmp.open ? (
+        <CompareView key={cmp.open.id} initial={cmp.open} library={library} onExit={cmp.closeCompare} onError={setError} />
+      ) : !project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
           onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
           onRelocate={(id, part) => void relocate(id, part)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
@@ -811,7 +853,7 @@ export function App() {
           <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
           <button className="primary" onClick={() => setPicker('edit')}>{t('試合を選ぶ')}</button></div>
       ) : (
-        <main className={`workspace${focusEdit ? ' focus-edit' : ''}`}>
+        <main className={`workspace${focusEdit ? ' focus-edit' : ''}${rightFolded ? ' right-folded' : ''}`}>
           <aside className="sidebar" onPointerDownCapture={() => { focusPane.current = 'list' }}>
             <CheckPicker className="match-select" label={t('検索する試合')} all={t('すべての試合（{0}）', project.matches.length)}
               options={project.matches.map(m => ({ key: m.id, label: m.name }))} selected={matchIds}
@@ -833,7 +875,7 @@ export function App() {
             />
             {Object.keys(dvws).length
               ? <PlayList refs={results} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} />
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={setCodeEditing} />
               : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
           <section className="stage">
@@ -907,6 +949,8 @@ export function App() {
                 <button className="link" aria-expanded={cardToolsOpen} onClick={() => setCardToolsOpen(o => !o)}>{cardToolsOpen ? '▾' : '▸'} {t('図形')}</button>
               </div>
             )}
+            {/* The work area takes only the room the video leaves, and scrolls: a tall panel never shrinks the video. */}
+            <div className="stage-work">
             {cardEditCard && cardTool === 'objects' && (
               <div className="stage-panel" hidden={!cardToolsOpen}>
               <AnnotationTools
@@ -919,6 +963,7 @@ export function App() {
               />
               </div>
             )}
+            </div>
             {!cardEdit && match && (
               <StageTabs panel={stagePanel} onPanel={setStagePanel} clip={!!(active && activeInfo?.range && active.matchId === matchId)} fitting={courtFitting}>
                 {active && activeInfo?.range && active.matchId === matchId && (stagePanel === 'edit' || stagePanel === 'objects') && (
@@ -927,6 +972,10 @@ export function App() {
                 )}
               </StageTabs>
             )}
+            <div className="stage-work">
+            {!cardEdit && match && selectedPlay && stagePanel === 'edit' && (
+              <OffsetBar play={selectedPlay} offsetSec={match.offsetSec} onOffset={sec => setOffset(match.id, sec)} />
+            )}
             {!cardEdit && match && listServe && selectedPlay && (
               <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
                 onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />
@@ -934,7 +983,7 @@ export function App() {
             {!cardEdit && match && (
               <div className="stage-panel" hidden={stagePanel !== 'view' && !courtFitting}>
               {!(active && activeInfo?.ref && activeInfo.range && active.matchId === matchId) && (
-                <div className="ann-row clip-overlay"><span className="field-label">{t('自動表示')}</span><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /></div>
+                <div className="ann-row clip-overlay"><span className="field-label" title={video ? t('この動画の設定です') : t('動画を開いていないときの設定です（プロジェクトに保存。新しく作る動画もこの設定から始まります）')}>{t('自動表示')}</span><ListOverlayChecks overlay={overlay} onOverlay={setOverlay} /><ServeSpeedCheck overlay={overlay} onOverlay={setOverlay} /><LineupCheck overlay={overlay} onOverlay={setOverlay} />{video && <button className="link look-link" onClick={() => setOverlayOpen(true)} title={t('出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます')}>{t('見た目は「動画の設定」')}</button>}</div>
               )}
               <CourtBar playSkill={selectedPlay?.skill ?? null} setterCalls={setterCalls} match={match} fitting={courtFitting} onFitting={setCourtFitting}
                 style={pinClip?.overlayOverride?.court ? clipCourtStyle(gridStyle, selectedPlay?.skill, pinClip.overlayOverride.court) : gridStyle}
@@ -999,6 +1048,7 @@ export function App() {
             )}
             {!cardEdit && active && activeInfo?.ref && activeInfo.range && active.matchId === matchId && (
               <div className="stage-panel" hidden={stagePanel !== 'view'}>
+              {video && <button className="link look-link look-link-clip" onClick={() => setOverlayOpen(true)} title={t('出すかどうかはここで、位置・大きさ・デザイン・配色は「動画の設定」で決めます')}>{t('見た目は「動画の設定」')}</button>}
               <ClipOverlayRow
                 override={active.overlayOverride} overlay={overlay} onOverlay={setOverlay}
                 autoName={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showName: true }).name ?? '' : ''}
@@ -1015,8 +1065,10 @@ export function App() {
               />
               </div>
             )}
+            </div>
           </section>
           <div className="right-col" onPointerDownCapture={() => { focusPane.current = 'scene' }}>
+            {rightFolded && <RightStrip tab={rightTab} badge={exportBadge} onOpen={tab => { setRightTab(tab); setRightFolded(false) }} />}
             {(['head', 'list'] as const).map(part => {
               const panel = <VideoPanel key={part} part={part}
               videos={videos} video={video} scenes={reels} sceneStats={sceneStats} currentSceneId={reelId}
@@ -1031,7 +1083,7 @@ export function App() {
                         />
               return part === 'head' ? panel : (
                 <Fragment key={part}>
-                  <RightTabs tab={rightTab} onTab={setRightTab} badge={exportBadge} />
+                  <RightTabs tab={rightTab} onTab={setRightTab} badge={exportBadge} onFold={() => setRightFolded(true)} />
                   <div className="right-pane" hidden={rightTab !== 'video'}>{panel}</div>
                 </Fragment>
               )
@@ -1057,7 +1109,7 @@ export function App() {
               onPick={async (pack, photo) => { await placeImage(() => api.usePackPhoto(pack, photo), true) }} />
             </div>
             <div className="right-pane" hidden={rightTab !== 'export'}>
-            <ExportPanel targets={exportTargets} info={exportInfo} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} state={exportState} onExport={exportTarget}
+            <ExportPanel targets={exportTargets} info={exportInfo} chapters={overlay.chapters.enabled} onChapters={on => setOverlay({ ...overlay, chapters: { enabled: on } })} quality={quality} onHeight={h => setOverlay({ ...overlay, output: { height: h } })} state={exportState} onExport={exportTarget}
               onCancel={() => void api.cancelExport()} onShowFile={p => void api.showInFolder(p)} onOpenOverlay={() => setOverlayOpen(true)} />
             </div>
           </div>
@@ -1065,8 +1117,13 @@ export function App() {
       )}
 
       {overlayOpen && video && (
-        <OverlayDialog settings={overlay} onChange={setOverlay} onClose={() => setOverlayOpen(false)}
+        <OverlayDialog settings={overlay} onChange={setOverlay} onTheme={th => { if (settings) void saveSettings({ ...settings, theme: th }) }} onClose={() => setOverlayOpen(false)}
           sample={overlaySample(overlayData(active ?? order[0] ?? (reel ? Object.values(reel.clips)[0] : null) ?? null), reel)} />
+      )}
+      {codeEditing && dvws[codeEditing.matchId] && (
+        <CodeEditDialog play={codeEditing.play} matchName={matches[codeEditing.matchId]?.name ?? ''}
+          players={Object.values(dvws[codeEditing.matchId].players).filter(p => p.side === codeEditing.play.side).sort((a, b) => a.jersey - b.jersey)}
+          onSave={to => void saveCode(codeEditing, to)} onClose={() => setCodeEditing(null)} />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
@@ -1094,7 +1151,7 @@ export function App() {
           onImport={m => { setBoardOpen(false); setBoardEdit(null); if (reel) void putSlide(spotAt(groupRows(reel, m), m, 0), 'file') }} />
       )}
       {settingsOpen && settings && (
-        <SettingsDialog settings={settings} theme={overlay.theme} teams={projectTeams} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
+        <SettingsDialog settings={settings} teams={projectTeams} teamColors={teamColors} onTeamColors={setTeamColors} onSave={saveSettings} onClose={() => setSettingsOpen(false)}
           onLanguage={l => void (async () => { await flushAll(); await api.setLanguage(l); location.reload() })()} />
       )}
     </div>

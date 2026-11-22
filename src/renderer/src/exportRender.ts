@@ -2,17 +2,16 @@
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
 import { BLINK_ON, drawAnnotation, emphasisOf, emphasisSec, isAnimated, type Anim, type Annotation, type Emphasis } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
-import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
-import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
+import { exportHeight, lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { FLIGHTS_LEAD_SEC, landingFxEnd, FLIGHTS_SEC, clipCourtStyle, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
+import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawForecast, forecastOn, forecastSteps, landingFxEnd, FLIGHTS_SEC, clipCourtStyle, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
-export const EXPORT_HEIGHT = 720
 const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
 const DRAW_STEPS_PER_SEC = 15 // an object being drawn in: steps a second (at most DRAW_STEPS)
@@ -30,14 +29,16 @@ interface Deps {
   courtStyle?: GridStyle // the grid's look, as in the player
 }
 
-// 720p at the source aspect, at the source frame rate when every match shares one (else 30).
-function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: number; height: number; fpsStr: string } {
+// 720p (1080p when picked and every source is that high, exportHeight) at the source aspect, at the source frame
+// rate when every match shares one (else 30).
+function exportFormat(clips: Clip[], matches: Record<string, Match>, overlay: OverlaySettings): { width: number; height: number; fpsStr: string } {
   const ms = [...new Set(clips.map(c => c.matchId))].map(id => matches[id]).filter(Boolean)
   const first = ms[0]
+  const height = exportHeight(overlay, ms.map(m => m.height))
   const aspect = first?.width && first.height ? first.width / first.height : 16 / 9
-  const width = Math.round((EXPORT_HEIGHT * aspect) / 2) * 2
+  const width = Math.round((height * aspect) / 2) * 2
   const rates = new Set(ms.map(m => m.fpsStr))
-  return { width, height: EXPORT_HEIGHT, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
+  return { width, height, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
 }
 
 // chapters: where YouTube chapters start, as plan indexes (planVideoChapters); kept on the job as item indexes.
@@ -66,7 +67,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
 
 export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[], chaptersText = false): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
-  const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
+  const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches, overlay)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
   const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations),
     ...plan.flatMap(p => (p.kind === 'clip' ? d.markerAnnotations(p.sceneId, p.group) : [])),
@@ -130,6 +131,7 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const tabStyle = d.courtStyle
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
+  const lineup = data && overlay.lineup.enabled && !o?.scoreboard?.hidden ? data.scoreboard.lineup ?? null : null
   // The court as the player shows it (grid, zones, the player's marks and charts, as set on the 表示
   // tab), on every clip of a match whose court is fitted.
   const court = tabStyle ? d.court?.(c, sceneId, group) ?? null : null
@@ -153,12 +155,13 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   const always = anns.filter(whole)
   const flies = !!court?.flight && flightMoves(courtStyle!, court.zones)
   const ripples = !!court?.flight && !!rippleImpact(courtStyle!, court.zones)
-  if (court || showSb || showCap || always.length) {
+  if (court || showSb || showCap || lineup || always.length) {
     layers.push({
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
         if (court) drawCourt(ctx, W, H, court.fit, courtStyle!, court.zones, flies ? null : 1, ripples ? null : undefined)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, lookTheme(overlay))
+        if (lineup) drawLineup(ctx, W, H, lineup, overlay.lineup, lookTheme(overlay))
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, lookTheme(overlay), packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),
@@ -176,8 +179,29 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
       if (to - from < 0.001) continue
       layers.push({ from, to, png: await png(ctx => {
         if (court!.zones?.player?.flights) drawFlights(ctx, W, H, court!.zones.player.flights, i / steps)
-        if (hasFlight(courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !courtStyle!.noLift)
+        if (hasFlight(courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !courtStyle!.noLift, i === steps ? resultTintOf(courtStyle!, court!.zones, 0) : undefined) // the last step is from the landing: in the result's colour
       }) })
+    }
+  }
+  // The forecast, in steps (each its own layer): from the clip's first frame the flight's ghost, the
+  // landing's ring and zone, the count-in on the hit; gone just after the landing.
+  if (court?.flight && forecastOn(courtStyle!, court.zones)) {
+    const { startSec, sec } = court.flight
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of forecastSteps(sec)) {
+      const from = playedOf(startSec + st.from), to = playedOf(startSec + st.to)
+      if (startSec + st.to <= r.in || startSec + st.from >= r.out || to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawForecast(ctx, W, H, court.fit, courtStyle!, court.zones!, { t: st.t, dur: sec })) })
+    }
+  }
+  // After the landing, in steps (each its own layer): the result's badge pops in, hold, and fade.
+  if (court?.flight && afterOn(courtStyle!, court.zones)) {
+    const land = court.flight.startSec + court.flight.sec
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of afterSteps()) {
+      const from = playedOf(land + st.from), to = playedOf(land + st.to)
+      if (land + st.from >= r.out || land + st.to <= r.in || to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawAfter(ctx, W, H, court.fit, courtStyle!, court.zones!, st.at)) })
     }
   }
   // The ripple from the landing, in steps (each its own layer): it spreads, stays, fades, and is gone.

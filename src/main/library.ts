@@ -7,6 +7,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseScout } from '../shared/vsm'
+import { validCode, withCodeEdit, type CodeEdit } from '../shared/codeEdit'
 import { decodeScout } from '../shared/scoutText'
 
 import { rosterOf, type RosterPlayer } from '../shared/packMaker'
@@ -23,7 +24,7 @@ import { playerIndex, unifyPlayers } from '../shared/players'
 
 // A scout file: a DataVolley .dvw (Windows-1252 or UTF-8 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
-const readScout = async (path: string): Promise<ParsedDVW> => parseScout(decodeScout(await readFile(path)).text)
+const readScout = async (path: string, edits?: CodeEdit[]): Promise<ParsedDVW> => parseScout(decodeScout(await readFile(path)).text, edits)
 const scoutStem = (path: string) => basename(path, extname(path))
 
 const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
@@ -144,6 +145,23 @@ export class Library {
     await mkdir(projectAssets, { recursive: true })
     await copyPictures(item.annotations, join(this.dir, 'palette-assets'), projectAssets)
     return item.annotations
+  }
+
+  // Team colors (the rotation lineup's discs): team-colors.json, #RRGGBB by team code, shared by every project.
+  async teamColors(): Promise<Record<string, string>> {
+    const f = join(this.dir, 'team-colors.json')
+    if (!existsSync(f)) return {}
+    const { data } = await readJSON<Record<string, unknown>>(f)
+    return Object.fromEntries(Object.entries(data).filter(([k, v]) => /^[A-Z0-9]{1,8}$/.test(k) && typeof v === 'string' && /^#[0-9A-F]{6}$/i.test(v)).map(([k, v]) => [k, (v as string).toUpperCase()]))
+  }
+
+  async setTeamColor(code: string, color: string | null): Promise<Record<string, string>> {
+    const c = cleanCode(code), all = await this.teamColors()
+    if (color === null) delete all[c]
+    else if (/^#[0-9A-F]{6}$/i.test(color)) all[c] = color.toUpperCase()
+    else throw new Error(t('色が不正です: {0}', color))
+    await writeJSON(join(this.dir, 'team-colors.json'), all)
+    return all
   }
 
   // Team logos for title cards: logos/<CODE>.<ext>, one per three-letter code, shared by every project.
@@ -347,6 +365,26 @@ export class Library {
     await this.saveMatch(next)
   }
 
+  // How far the DVW's times sit from the video's (DVW time + offset = video time): set when the scout file's
+  // times are off for this video, so every play of the match moves by the same amount.
+  async setOffset(id: string, offsetSec: number): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!Number.isFinite(offsetSec) || Math.abs(offsetSec) > Math.max(m.durationSec, 1)) throw new Error(t('ずれの秒数が不正です'))
+    await this.saveMatch({ ...m, offsetSec: Math.round(offsetSec * 1000) / 1000 })
+  }
+
+  // A correction to one play's code (codeEdit.ts): the line, the file's code there, and the new one (the file's
+  // code again takes the correction off). The scout file itself is never written.
+  async setCodeEdit(id: string, line: number, from: string, to: string): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!Number.isInteger(line) || line < 0 || (to !== from && !validCode(to))) throw new Error(t('コードの形が正しくありません: {0}', to))
+    const edits = withCodeEdit(m.codeEdits, line, from, to)
+    const { codeEdits: _old, ...rest } = m
+    await this.saveMatch(edits.length ? { ...rest, codeEdits: edits } : rest)
+  }
+
   // A serve's hit or touch on a match (serveMark.ts); null clears it.
   async setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> {
     const m = this.matches.get(id)
@@ -397,17 +435,18 @@ export class Library {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
-    const dvw = await this.scout(m.dvwPath)
-    const all = await Promise.all(this.list().map(o => o.id === id ? dvw : this.scout(o.dvwPath).catch(() => null)))
+    const dvw = await this.scout(m.dvwPath, m.codeEdits)
+    const all = await Promise.all(this.list().map(o => o.id === id ? dvw : this.scout(o.dvwPath, o.codeEdits).catch(() => null)))
     return unifyPlayers(dvw, playerIndex(all.filter(d => d !== null)))
   }
 
-  private async scout(path: string): Promise<ParsedDVW> {
+  private async scout(path: string, edits?: CodeEdit[]): Promise<ParsedDVW> {
     const mtime = (await stat(path)).mtimeMs
-    const had = this.scouts.get(path)
+    const key = edits?.length ? `${path}|${JSON.stringify(edits)}` : path // a correction reads the file again
+    const had = this.scouts.get(key)
     if (had?.mtime === mtime) return had.dvw
-    const dvw = await readScout(path)
-    this.scouts.set(path, { mtime, dvw })
+    const dvw = await readScout(path, edits)
+    this.scouts.set(key, { mtime, dvw })
     return dvw
   }
 

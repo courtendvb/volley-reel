@@ -3,7 +3,7 @@
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
 import type { Ctx } from './court'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CaptionStat, type CardKind, type CardLayout, type LookTheme, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CaptionStat, type CardKind, type CardLayout, type LineupData, type LookTheme, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
 
@@ -118,6 +118,49 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
     }
   }
   if (photo && s.photo) drawCaptionPhoto(ctx, photo, s.anchor, { x, y, w: total, h }, k, theme)
+  ctx.restore()
+}
+
+// Both teams' six on a small court seen from above, the net across the middle, as a broadcast shows a
+// lineup: the team by the camera (d.near; without a grid, the left-hand one, ours) below it, the other above, each team's
+// jerseys where its positions stand (P4 P3 P2 in front, P5 P6 P1 behind). No formation: the positions
+// as the rotation has them. A team's color (the library's) fills its discs; without one ours takes the
+// accent and the other white. A team faces the net: the one below has its left, P4, on the picture's left;
+// the one above has it on the picture's right.
+const LOWER_CELL: Record<number, [number, number]> = { 4: [0, 0], 3: [1, 0], 2: [2, 0], 5: [0, 1], 6: [1, 1], 1: [2, 1] } // [column, row]; row 0 is next to the net
+const UPPER_CELL: Record<number, [number, number]> = { 2: [0, 1], 3: [1, 1], 4: [2, 1], 1: [0, 0], 6: [1, 0], 5: [2, 0] } // row 1 is next to the net
+export function drawLineup(ctx: Ctx, W: number, H: number, d: LineupData, s: OverlaySettings['lineup'], theme: LookTheme): void {
+  const k = (H / 720) * s.scale, L = lookOf(theme, k)
+  const pitchX = 40 * k, pitchY = 34 * k, disc = 15 * k, pad = 12 * k, head = 22 * k, netGap = 12 * k
+  const half = pitchY * 2, w = pad * 2 + pitchX * 3, h = head * 2 + half * 2 + netGap
+  const numFont = font(17 * k), codeFont = font(12 * k, 400)
+  const light = (theme.look ?? 'slant') === 'light'
+  const { x, y } = place(s.anchor, w, h, W, H)
+  ctx.save()
+  L.begin(ctx)
+  L.shape(ctx, 'plate', x, y, w, h, { tl: 12 * k, br: 12 * k }, { l: true, r: true })
+  L.texts(ctx)
+  ctx.textBaseline = 'middle'
+  const gx = x + pad, floor = light ? '#E4E4E4' : mix(theme.base, '#FFFFFF', 0.1)
+  const upTop = y + head, lowTop = upTop + half + netGap
+  fillRect(ctx, floor, gx - 4 * k, upTop, pitchX * 3 + 8 * k, half)
+  fillRect(ctx, floor, gx - 4 * k, lowTop, pitchX * 3 + 8 * k, half)
+  fillRect(ctx, L.sub, x + 6 * k, upTop + half + netGap / 2 - 1 * k, w - 12 * k, 2 * k) // the net
+  const down = d.near === 'right' ? d.right : d.left, up = d.near === 'right' ? d.left : d.right // the camera's side below the net
+  text(ctx, up.code, gx, y + head / 2 + 1 * k, codeFont, L.sub, 0.2 * 12 * k)
+  text(ctx, down.code, gx, lowTop + half + head / 2 - 1 * k, codeFont, L.text, 0.2 * 12 * k)
+  const dot = (cx: number, cy: number, n: number, fill: string) => {
+    ctx.fillStyle = fill
+    ctx.beginPath(); ctx.arc(cx, cy, disc, 0, Math.PI * 2); ctx.fill()
+    ctx.textAlign = 'center'
+    text(ctx, String(n), cx, cy + 1 * k, numFont, onColor(fill), 0)
+    ctx.textAlign = 'left'
+  }
+  // Without team colors ours (the scoreboard's left) takes the accent and the other white, wherever each stands.
+  const leftFill = d.left.color ?? theme.accent, rightFill = d.right.color ?? (light ? '#444444' : '#FFFFFF')
+  const lower = d.near === 'right' ? rightFill : leftFill, upper = d.near === 'right' ? leftFill : rightFill
+  up.jerseys.forEach((n, i) => { const [c, r] = UPPER_CELL[i + 1]; dot(gx + pitchX * c + pitchX / 2, upTop + pitchY * r + pitchY / 2, n, upper) })
+  down.jerseys.forEach((n, i) => { const [c, r] = LOWER_CELL[i + 1]; dot(gx + pitchX * c + pitchX / 2, lowTop + pitchY * r + pitchY / 2, n, lower) })
   ctx.restore()
 }
 

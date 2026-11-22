@@ -5,6 +5,7 @@
 // Pure: no file or DOM access.
 import { parseDVW } from './dvw'
 import type { ParsedDVW } from './types'
+import type { CodeEdit } from './codeEdit'
 
 interface VsmPoint { x: number; y: number }
 interface VsmPlay {
@@ -36,8 +37,9 @@ export interface Vsm {
 export const isVsm = (text: string) => /^\s*\{/.test(text)
 
 // A scout file of either kind.
-export function parseScout(text: string): ParsedDVW {
-  return parseDVW(isVsm(text) ? vsmToDvw(JSON.parse(text) as Vsm) : text)
+// edits: corrections to codes by [3SCOUT] line (codeEdit.ts); a .vsm's lines are those of the DVW text it becomes.
+export function parseScout(text: string, edits?: CodeEdit[]): ParsedDVW {
+  return parseDVW(isVsm(text) ? vsmToDvw(JSON.parse(text) as Vsm) : text, edits)
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')

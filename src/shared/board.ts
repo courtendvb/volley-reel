@@ -7,7 +7,7 @@ import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type Dir
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
-import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type RotationTables, type SideOutRate } from './rotationBoard'
+import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type CourtLook, type RotationTables, type SideOutRate } from './rotationBoard'
 import { setChart, type SetChart } from './setChart'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
@@ -227,8 +227,10 @@ export interface BoardConfig {
   discLine?: string // and the outline of its players' discs
   cones?: boolean // a rotation slide: the spikers' cones (missing: shown)
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
+  court?: CourtLook // and its court, in perspective or flat (missing: 3D)
   attackers?: number // and with the attackers there, how many (missing: three)
   compareProject?: string // a comparison: our own team's project (its folder), whose figures go left
+  compareRows?: string[] // and the figures it shows, SKILL_ROWS ids (missing: DEFAULT_COMPARE_ROWS)
   stat?: StatKind // a table of figures: of which skill
   statTop?: number // and how many players, most plays first (missing: STAT_ROWS)
   statLook?: StatLook // and its colours (missing: STAT_LOOK)
@@ -251,8 +253,10 @@ export interface BoardOptions {
   discLine?: string // and their outline
   cones?: boolean // and the spikers' cones (missing: shown)
   tables?: RotationTables // and which tables (missing: all six)
+  court?: CourtLook // and the court in perspective or flat (missing: 3D)
   attackers?: number // and with the attackers' cards, how many (missing: three)
   compare?: { left: CompareSide; right: CompareSide } // a comparison: our team, and the team of this project
+  compareRows?: string[] // and which figures (missing: DEFAULT_COMPARE_ROWS)
   stat?: StatKind // a table of figures: of which skill (missing: attacks)
   statTop?: number // and how many players (missing: STAT_ROWS)
   statLook?: StatLook // and its colours (missing: STAT_LOOK)
@@ -354,7 +358,7 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[]; setCharts?: PlacedSetChart[] } {
   if (skill === 'C') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
-    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink) : [], charts: [], noteIds: [] }
+    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink, opts.compareRows) : [], charts: [], noteIds: [] }
   }
   if (skill === 'P') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', kind = opts.stat ?? 'attack'
@@ -372,7 +376,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const cards = p && opts.tables === 'attackers' ? attackerCards(p.attackers?.[r] ?? [], h => chartWidth(h) / ASPECT, opts.attackers) : null
     const look = { ...(opts.style ?? DEFAULT_CHART), points: true, lines: false, heat: false, scope: 'player' as const, name: false, stats: false }
     const cardCharts: PlacedChart[] = (cards?.charts ?? []).map(c => ({ chart: directionChart(c.attacker.plays[0], look, () => c.attacker.plays), x: c.x, y: c.y, h: c.h }))
-    return { annotations: p ? [...rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink), ...(cards?.annotations ?? [])] : [], charts: cardCharts, noteIds: [],
+    return { annotations: p ? [...rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(opts.court === '2d' ? { court: '2d' as const } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink), ...(cards?.annotations ?? [])] : [], charts: cardCharts, noteIds: [],
       ...(sc ? { setCharts: [{ chart: sc, ...ROTATION_CHART }] } : {}) }
   }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }

@@ -120,7 +120,7 @@ export function useSceneStore({ latest, setActiveClipId, setProject, setError }:
   const placeInVideo = (sceneId: string): Snapshot => {
     const v = latest.current.video
     if (v) { const was = videoSnap(v.id); putVideo(addScene(v, sceneId)); return was }
-    const nv = newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId])
+    const nv = newVideo(t('動画 {0}', latest.current.videos.length + 1), [sceneId], latest.current.settings?.overlay)
     addVideo(nv)
     return { kind: 'video', id: nv.id, value: null }
   }
@@ -142,7 +142,7 @@ export function useSceneStore({ latest, setActiveClipId, setProject, setError }:
   }
   // A new video starts empty; its scenes are added (or made) for it. Switching videos shows one of its scenes.
   const createVideo = () => {
-    const v = newVideo(t('動画 {0}', latest.current.videos.length + 1), [])
+    const v = newVideo(t('動画 {0}', latest.current.videos.length + 1), [], latest.current.settings?.overlay)
     addVideo(v); record({ kind: 'video', id: v.id, value: null }, false)
     setReelId(null); setActiveClipId(null)
   }

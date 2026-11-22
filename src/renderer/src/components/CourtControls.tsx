@@ -1,13 +1,14 @@
 // Small parts the 表示 tab's court bar is built from, so a setting reads the same wherever it is.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ChartCorner } from '../../../shared/chart'
 import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 // A "?" that opens the long explanation of a setting, so the control's own title can stay one
 // short line. Each string of `text` is one paragraph. Closes on a click elsewhere or Escape.
 export function Help({ text }: { text: string[] }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLSpanElement>(null)
+  const { anchor: ref, style } = useAnchoredPop<HTMLSpanElement>(open, 'above-left')
   useEffect(() => {
     if (!open) return
     const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
@@ -19,7 +20,7 @@ export function Help({ text }: { text: string[] }) {
   return (
     <span className="help-wrap" ref={ref}>
       <button type="button" className="help-btn" aria-label={t('説明')} aria-expanded={open} onClick={() => setOpen(o => !o)}>?</button>
-      {open && <div className="help-pop" role="note">{text.map((p, i) => <p key={i}>{p}</p>)}</div>}
+      {open && <div className="help-pop" role="note" style={style}>{text.map((p, i) => <p key={i}>{p}</p>)}</div>}
     </span>
   )
 }

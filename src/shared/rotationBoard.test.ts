@@ -78,6 +78,17 @@ describe('a rotation', () => {
     expect(tip({})).toBe(true)
     expect(tip({ cones: false })).toBe(false)
   })
+  it('draws the court flat from above when asked: plain discs, no ball shading, all on the picture', () => {
+    const formation = rotationFormation([d], 'HTH', 2, rotationLineup([d], 'HTH', 2), 'S')
+    const make = (o: object) => rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation, ...o }, 'both', '#0F172A')
+    const balls = (anns: ReturnType<typeof make>) => anns.filter(a => a.kind === 'circle' && a.shade === 'ball').length
+    expect(balls(make({}))).toBeGreaterThan(0)
+    const flat = make({ court: '2d' })
+    expect(balls(flat)).toBe(0)
+    expect(flat.filter(a => a.kind === 'circle').length).toBeGreaterThanOrEqual(formation.length + 3) // the players and the three blockers
+    expect(flat.flatMap(a => (a.kind === 'text' ? [a.text] : []))).toEqual(expect.arrayContaining(['Z4', 'Quick', 'Z2/1', 'Pipe']))
+    for (const a of flat) if (a.kind === 'rect' || a.kind === 'circle') { expect(a.x).toBeGreaterThanOrEqual(0); expect(a.x + a.w).toBeLessThanOrEqual(1); expect(a.y + a.h).toBeLessThanOrEqual(1) }
+  })
 })
 
 describe('where the side-out team stands, and its attacks', () => {

@@ -5,6 +5,7 @@ import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
+import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
 import { FREE_MATCHES, type TeamAction } from '../shared/account'
@@ -14,15 +15,18 @@ import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pac
 import { strToU8, zipSync } from 'fflate'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
+import type { CompareSession, CompareSource } from '../shared/videoCompare'
+import { runLength, type CompareExportJob, type CompareExportSide, type CompareRunSide } from '../shared/compareExport'
 import type { ExportJob, ImportProgress, Match, ParsedDVW, PickedAsset, ProjectInit, ProjectSettings, ProjectSummary, SlideFile } from '../shared/types'
 import { Exporter } from './export'
 import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './updater'
 import { Library } from './library'
+import { CompareStore } from './compare'
 import { Project } from './project'
 import { readSettings, recentProjects, rememberProject, saveSettings } from './appSettings'
 import { lastFolder, rememberFolder, type ExportKind } from '../shared/exportFolders'
 import { corruptFirstReel, registerSmokeIpc, runSmoke, type SmokeContext } from './smokeRun'
-import { grabFrame, rawFrame } from './media'
+import { grabFrame, probe, rawFrame } from './media'
 import { setMacMenu } from './macMenu'
 import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
@@ -47,6 +51,8 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 let library: Library | null = null
 let project: Project | null = null
+let lastCompareDir: string | null = null
+let compares!: CompareStore // set when the app is ready
 const exporter = new Exporter()
 let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
@@ -103,7 +109,7 @@ const remembered = (kind: ExportKind, dir: string) => {
 app.whenReady().then(async () => {
   // The interface language (設定 → Language); the first start follows Windows' display language.
   // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
-  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
+  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : app.getLocale().startsWith('es') ? 'es' : 'en'))
   account = new Account({
     dir: app.getPath('userData'),
     appVersion: app.getVersion(),
@@ -115,6 +121,7 @@ app.whenReady().then(async () => {
       decrypt: (s: string) => safeStorage.decryptString(Buffer.from(s, 'base64')),
     } : {}),
   })
+  compares = new CompareStore(join(app.getPath('userData'), 'compare'))
   protocol.handle('media', serveMedia)
   if (process.platform === 'darwin') setMacMenu()
   registerIpc()
@@ -193,6 +200,18 @@ function registerIpc(): void {
     mayImport(pairs.length)
     return importPairs(l, pairs, p => e.sender.send('import:progress', p))
   })
+
+  // Video comparison: files with no DVW, and the saved sessions (shared/videoCompare.ts).
+  ipcMain.handle('compare:pickVideo', async e => {
+    const r = await dialog.showOpenDialog(win!, { title: t('比べる動画を選択'), properties: ['openFile'], filters: [{ name: t('動画'), extensions: ['mp4', 'mov', 'm4v', 'mts', 'm2ts', 'mkv', 'avi', 'webm'] }] })
+    if (r.canceled || !r.filePaths[0]) return null
+    return compares.open(r.filePaths[0], p => e.sender.send('import:progress', p))
+  })
+  ipcMain.handle('compare:openVideo', (e, path: string) => compares.open(path, p => e.sender.send('import:progress', p)))
+  ipcMain.handle('compare:parseMatch', (_e, id: string) => lib().parse(id)) // no project is open in a comparison
+  ipcMain.handle('compare:list', () => compares.list())
+  ipcMain.handle('compare:save', (_e, s: CompareSession) => compares.save(s))
+  ipcMain.handle('compare:remove', (_e, id: string) => compares.remove(id))
 
   ipcMain.handle('project:recent', () => recentProjects())
 
@@ -339,6 +358,14 @@ function registerIpc(): void {
     return project?.info() ?? null
   })
 
+  ipcMain.handle('match:setOffset', async (_e, id: string, offsetSec: number) => {
+    await lib().setOffset(id, offsetSec)
+    return project?.info() ?? null
+  })
+  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, to: string) => {
+    await lib().setCodeEdit(id, line, from, to)
+    return project?.info() ?? null
+  })
   ipcMain.handle('match:setServeMark', (_e, id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => lib().setServeMark(id, fingerprint, patch))
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
@@ -378,6 +405,32 @@ function registerIpc(): void {
       if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
     })
   })
+  // A comparison to MP4: each side's source made playable, then one ffmpeg run in the background (export:event, export:cancel).
+  // Where a comparison's MP4 goes: no project is open, so the save dialog starts where the last one was saved (first: Videos).
+  ipcMain.handle('compare:choosePath', async (_e, name: string) => {
+    mayExport()
+    const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'compare'
+    const dir = lastCompareDir && existsSync(lastCompareDir) ? lastCompareDir : app.getPath('videos')
+    const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
+    if (r.canceled || !r.filePath) return null
+    lastCompareDir = dirname(r.filePath)
+    return r.filePath
+  })
+  ipcMain.handle('compare:export', async (e, job: CompareExportJob) => {
+    mayExport()
+    if (exporter.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
+    const side = async (s: CompareExportSide): Promise<CompareRunSide> => {
+      const file = await compareFile(s.source, p => e.sender.send('import:progress', p))
+      const info = await probe(file)
+      return { file, width: info.width, height: info.height, durationSec: info.durationSec, startSec: Math.max(0, s.startSec), view: s.view }
+    }
+    const left = await side(job.left), right = await side(job.right)
+    const durationSec = runLength(job.durationSec, left, right)
+    if (durationSec < 0.5) throw new Error(t('再生位置から先の長さが足りません。位置を戻してください'))
+    void exporter.runCompare({ left, right, layout: job.layout, overlayAlpha: Math.min(1, Math.max(0, job.overlayAlpha)), durationSec, outPath: job.outPath }, ev => {
+      if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
+    })
+  })
   ipcMain.handle('export:cancel', () => exporter.cancel())
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
@@ -387,6 +440,7 @@ function registerIpc(): void {
   ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
+  ipcMain.handle('account:prices', () => account.prices())
   ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
   ipcMain.handle('account:team', (_e, a: TeamAction) => withAccount(() => account.teamAction(a)))
   // The preload reads the language synchronously, so the interface's text is right from its first paint.
@@ -394,6 +448,13 @@ function registerIpc(): void {
   ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })
   // The renderer has saved: no flush on the way out, straight into the installer.
   ipcMain.handle('update:install', () => { updating = installUpdate() })
+  // The manual ships with the app (electron-builder extraResources: site/), so it opens without the internet, in the
+  // computer's browser. Japanese only for now; page: a chapter's file name (05-scene.html), else the index.
+  ipcMain.handle('app:manual', (_e, page?: string) => {
+    const site = app.isPackaged ? join(process.resourcesPath, 'site') : join(app.getAppPath(), 'site')
+    const name = page && /^[0-9a-z-]+\.html$/.test(page) ? page : 'index.html'
+    return shell.openExternal(pathToFileURL(join(site, 'manual', 'ja', name)).href)
+  })
   ipcMain.handle('update:help', (_e, what: 'page' | 'log') => (what === 'page' ? shell.openExternal(RELEASES_PAGE) : shell.showItemInFolder(updateLogPath())))
 
   ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
@@ -408,6 +469,8 @@ function registerIpc(): void {
   ipcMain.handle('palette:move', (_e, id: string, to: number) => lib().movePaletteItem(id, to))
   ipcMain.handle('palette:lock', (_e, id: string, locked: boolean) => lib().lockPaletteItem(id, locked))
   ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
+  ipcMain.handle('teamColor:list', () => library?.teamColors() ?? {})
+  ipcMain.handle('teamColor:set', (_e, code: string, color: string | null) => lib().setTeamColor(code, color))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {
     const l = lib()
@@ -636,9 +699,20 @@ async function saveAsset(data: Uint8Array, ext: string): Promise<string> {
   return id
 }
 
+// The file <video> plays for a side of a comparison (a library match's, or a chosen file made playable).
+async function compareFile(src: CompareSource, progress: (p: ImportProgress) => void): Promise<string> {
+  if (src.kind === 'match') {
+    const f = library?.getMatch(src.matchId)?.videoPath
+    if (!f || !existsSync(f)) throw new Error(t('動画が見つかりません（試合 {0}）', src.matchId))
+    return f
+  }
+  const f = await compares.open(src.path, progress)
+  return compares.fileOf(f.token)!
+}
+
 async function serveMedia(req: Request): Promise<Response> {
   const id = new URL(req.url).hostname
-  const file = library?.getMatch(id)?.videoPath
+  const file = compares?.fileOf(id) ?? library?.getMatch(id)?.videoPath
   if (!file || !existsSync(file)) return new Response('not found', { status: 404 })
   const size = (await stat(file)).size
   const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') ?? '')

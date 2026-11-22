@@ -6,6 +6,8 @@ import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { effectName, skillName } from './labels'
 import type { ParsedDVW, Play } from './types'
+import type { CourtFit } from './court'
+import { nearSide } from './courtGeometry'
 import { matchReport, type MatchReport } from './report'
 import { t } from './i18n'
 
@@ -32,6 +34,8 @@ export interface OverlaySettings {
   playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean; showStats?: boolean }
   // A serve's measured speed (hit to the reception's touch, serveMark.ts) on its own plate, from the touch on.
   serveSpeed: { enabled: boolean; anchor: Anchor; scale: number }
+  // The six players of each team on a small court, as a broadcast shows them (drawLineup).
+  lineup: { enabled: boolean; anchor: Anchor; scale: number }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
@@ -48,7 +52,17 @@ export interface OverlaySettings {
   court: { enabled: boolean }
   // YouTube chapters (a .txt beside the MP4) when the whole video is exported.
   chapters: { enabled: boolean }
+  // The MP4's height. 1080 is offered only when every video in the export is at least 1080 high (exportHeight):
+  // most volleyball footage is 720p, and a larger export would not be sharper than its source.
+  output: { height: ExportHeight }
 }
+
+export type ExportHeight = 720 | 1080
+// Whether 1080p can be picked: every match video in the export is at least 1080 high.
+export const can1080 = (heights: (number | undefined)[]): boolean => heights.length > 0 && heights.every(h => (h ?? 0) >= 1080)
+// The height the MP4 is made at: the one picked, when the sources allow it; else 720.
+export const exportHeight = (s: Pick<OverlaySettings, 'output'>, heights: (number | undefined)[]): ExportHeight =>
+  s.output.height === 1080 && can1080(heights) ? 1080 : 720
 
 // x / y: the title's top-left (0..1 of the frame), so a longer title only grows to the right and down;
 // scale: 1 = default size. A scene or video card's layout saved before origin was its title's centre:
@@ -94,10 +108,12 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   scoreboard: { enabled: true, anchor: 'tl', scale: 1, showSets: true }, // top left: the headline sits at the top middle
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true, photo: false },
   serveSpeed: { enabled: true, anchor: 'tr', scale: 1 },
+  lineup: { enabled: false, anchor: 'br', scale: 1 },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
   chapters: { enabled: false },
+  output: { height: 720 },
 }
 
 // What gets saved: any part may be missing, and missing parts fall back to the defaults.
@@ -112,10 +128,12 @@ export function overlaySettings(saved: OverlayPatch | undefined): OverlaySetting
     scoreboard: { ...DEFAULT_OVERLAY.scoreboard, ...(s.scoreboard ?? {}) },
     playerCaption: { ...DEFAULT_OVERLAY.playerCaption, ...(s.playerCaption ?? {}) },
     serveSpeed: { ...DEFAULT_OVERLAY.serveSpeed, ...(s.serveSpeed ?? {}) },
+    lineup: { ...DEFAULT_OVERLAY.lineup, ...(s.lineup ?? {}) },
     titleCard: { ...DEFAULT_OVERLAY.titleCard, ...(s.titleCard ?? {}) },
     transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
     court: { ...DEFAULT_OVERLAY.court, ...(s.court ?? {}) },
     chapters: { ...DEFAULT_OVERLAY.chapters, ...(s.chapters ?? {}) },
+    output: { height: s.output?.height === 1080 ? 1080 : 720 },
   }
 }
 
@@ -124,6 +142,21 @@ export interface ScoreboardData {
   ptsL: number; ptsR: number
   setsL: number; setsR: number
   winner: 'L' | 'R' | null // who took this rally
+  lineup?: LineupData | null // who is on court (the lineups at the serve); missing: the file has none
+}
+
+// Both teams' six on court, left and right as in the scoreboard: jerseys P1 to P6 (liberos are not in them).
+export interface LineupSide { code: string; jerseys: number[]; color?: string } // color: the team's (library), #RRGGBB
+// near: the team by the camera in the video (the grid's 手前, swapped as the teams change ends), drawn
+// below the net; missing (no grid fitted): the left team is.
+export interface LineupData { left: LineupSide; right: LineupSide; near?: 'left' | 'right' }
+
+// The scoreboard data with the teams' colors on its lineup (by team code; a team without one keeps none).
+export function withTeamColors(d: ScoreboardData, colors: Record<string, string>): ScoreboardData {
+  const l = d.lineup
+  if (!l) return d
+  const side = (s: LineupSide): LineupSide => (colors[s.code.toUpperCase()] ? { ...s, color: colors[s.code.toUpperCase()] } : s)
+  return { ...d, lineup: { ...l, left: side(l.left), right: side(l.right) } }
 }
 
 // A serve's measured speed and when its plate comes up: the reception's touch (a video time).
@@ -154,8 +187,8 @@ export function captionStats(dvw: ParsedDVW, play: Play): CaptionStat[] | null {
 }
 
 // Our team always on the left (design §3.7); scrimmages and all-home files keep home on the left.
-// The score is the one before the rally.
-export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): ScoreboardData {
+// The score is the one before the rally. fit: the match's court grid, for which team is by the camera.
+export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[], fit?: Pick<CourtFit, 'nearSet1'> | null): ScoreboardData {
   const side = dvw.allHome ? '*' : ourSide(dvw.teams, ourCodes) ?? '*'
   const homeLeft = side === '*'
   const [home, away] = dvw.teams
@@ -166,6 +199,10 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
     ptsL: homeLeft ? play.score.home : play.score.away, ptsR: homeLeft ? play.score.away : play.score.home,
     setsL: homeLeft ? play.setsBefore.home : play.setsBefore.away, setsR: homeLeft ? play.setsBefore.away : play.setsBefore.home,
     winner: won === null ? null : (won === '*') === homeLeft ? 'L' : 'R',
+    ...(rally?.court?.home.length === 6 && rally.court.away.length === 6
+      ? { lineup: { left: { code: (homeLeft ? home : away).code, jerseys: homeLeft ? rally.court.home : rally.court.away }, right: { code: (homeLeft ? away : home).code, jerseys: homeLeft ? rally.court.away : rally.court.home },
+          ...(fit ? { near: (nearSide(fit as CourtFit, play) === '*') === homeLeft ? 'left' as const : 'right' as const } : {}) } }
+      : {}),
   }
 }
 

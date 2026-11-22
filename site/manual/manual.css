@@ -1,0 +1,75 @@
+/* The manual: a reading page. It takes the product site's colors and type (../site.css) and adds a
+   chapter list on the side, numbered steps, screenshots with captions and short notes. */
+.m-top { background: var(--slate); color: var(--on-slate); }
+.m-top .bar { min-height: 56px; }
+.m-top a { color: var(--on-slate); text-decoration: none; }
+.m-top .brand a:hover, .m-top .nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+.m-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; padding-block: 36px 64px; }
+@media (max-width: 860px) { .m-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 20px 48px; } }
+
+.m-toc { position: sticky; top: 20px; align-self: start; font-size: 15px; }
+.m-toc h2 { font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--sub); margin-bottom: 8px; }
+.m-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.m-toc a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; color: var(--ink); }
+.m-toc a:hover { background: var(--surface); }
+.m-toc a[aria-current="page"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.m-toc .soon { display: block; padding: 6px 10px; color: var(--sub); }
+@media (max-width: 860px) {
+  .m-toc { position: static; }
+  .m-toc ol { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: 4px; }
+}
+
+.m-body { max-width: 860px; min-width: 0; }
+/* The site's headings are the broadcast look (condensed italic capitals); a manual reads plainer. */
+.m-body h1, .m-body h2, .m-body h3, .m-toc h2 { font-family: var(--body); font-style: normal; text-transform: none; letter-spacing: normal; text-wrap: pretty; }
+.m-body h1 { font-size: 34px; line-height: 1.25; font-weight: 800; margin-bottom: 12px; }
+.m-body .m-lead { font-size: 19px; color: var(--sub); margin-bottom: 28px; }
+.m-body h2 { font-size: 24px; line-height: 1.3; font-weight: 800; margin: 44px 0 12px; padding-top: 4px; scroll-margin-top: 16px; }
+.m-body h3 { font-size: 19px; font-weight: 700; margin: 28px 0 8px; }
+.m-body p { margin: 0 0 14px; }
+.m-body ul.dots { list-style: disc; padding-left: 1.4em; margin: 0 0 16px; }
+.m-body ul.dots li { margin: 4px 0; }
+.m-body a { color: var(--accent); }
+.m-body b { font-weight: 700; }
+.m-body kbd, .m-body .ui { font: inherit; font-weight: 700; }
+.m-body kbd { display: inline-block; min-width: 1.6em; padding: 0 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); font-size: .88em; text-align: center; }
+
+/* Numbered steps */
+.m-steps { counter-reset: step; list-style: none; padding: 0; margin: 0 0 20px; display: grid; gap: 10px; }
+.m-steps > li { counter-increment: step; position: relative; padding-left: 44px; min-height: 32px; }
+.m-steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 16px; display: grid; place-items: center; }
+
+/* Screenshots */
+.m-shot { margin: 8px 0 26px; }
+.m-shot img { border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); background: var(--surface); }
+.m-shot.narrow img { max-width: 520px; }
+.m-shot figcaption { font-size: 15px; color: var(--sub); margin-top: 8px; }
+
+/* Notes */
+.m-note { border-left: 4px solid var(--accent); background: var(--surface); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 0 0 20px; font-size: 16px; }
+.m-note.warn { border-left-color: var(--red); }
+.m-note p:last-child, .m-note ul:last-child { margin-bottom: 0; }
+.m-note strong { display: block; margin-bottom: 4px; }
+
+/* Tables */
+.m-table { width: 100%; border-collapse: collapse; margin: 0 0 20px; font-size: 16px; background: var(--surface); border-radius: 8px; overflow: hidden; }
+.m-table th, .m-table td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.m-table th { font-weight: 700; background: var(--page); }
+.m-table tr:last-child td { border-bottom: 0; }
+.m-scroll { overflow-x: auto; }
+
+/* Chapter cards on the index */
+.m-cards { list-style: none; padding: 0; margin: 0 0 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.m-cards a, .m-cards .soon { display: block; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-decoration: none; color: var(--ink); }
+.m-cards a:hover { border-color: var(--accent); }
+.m-cards b { display: block; font-size: 18px; margin-bottom: 4px; }
+.m-cards i { font-style: normal; color: var(--accent); font-weight: 700; margin-right: 6px; }
+.m-cards span { display: block; font-size: 15px; color: var(--sub); }
+.m-cards .soon { opacity: .6; }
+
+/* Previous / next */
+.m-pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); }
+.m-pager a { text-decoration: none; font-weight: 700; color: var(--accent); }
+.m-pager small { display: block; font-weight: 400; color: var(--sub); }
+.m-pager .next { margin-left: auto; text-align: right; }

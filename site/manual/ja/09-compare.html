@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>比較動画 — SyncScout Video Editor マニュアル</title>
+<meta name="description" content="2 本の動画を並べて見比べる">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,600;1,700;1,800&family=Barlow:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="../../site.css">
+<link rel="stylesheet" href="../manual.css">
+</head>
+<body>
+<header class="m-top">
+  <div class="wrap bar">
+    <span class="brand"><a href="index.html">SyncScout <small>Video Editor マニュアル</small></a></span>
+    <nav class="nav" aria-label="サイト">
+      <a href="../../ja.html">製品サイト</a>
+      <a href="../../ja.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap m-layout">
+  <nav class="m-toc" aria-label="章">
+    <h2>目次</h2>
+    <ol>
+        <li><a href="index.html">マニュアル</a></li>
+        <li><a href="01-start.html">1. はじめに</a></li>
+        <li><a href="02-import.html">2. 試合を取り込む</a></li>
+        <li><a href="03-project.html">3. プロジェクトを作る</a></li>
+        <li><a href="04-find.html">4. プレーを探す</a></li>
+        <li><a href="05-scene.html">5. シーンと動画を作る</a></li>
+        <li><a href="06-draw.html">6. 動画に描く</a></li>
+        <li><a href="07-court.html">7. コートの表示</a></li>
+        <li><a href="08-data.html">8. データスライドとレポート</a></li>
+        <li><a href="09-compare.html" aria-current="page">9. 比較動画</a></li>
+        <li><a href="10-export.html">10. 書き出しの詳細</a></li>
+        <li><a href="11-help.html">11. 困ったとき</a></li>
+    </ol>
+  </nav>
+  <main class="m-body">
+<h1>9. 比較動画</h1>
+<p class="m-lead">2 本の動画を左右や上下に並べ、同じ瞬間に合わせて見比べます。フォームの違いや、別の試合での同じ場面を比べるのに使います。プロジェクトとは別の画面で、DVW のない動画も使えます。</p>
+<figure class="m-shot"><img src="../img/ja/compare.jpg" alt="2 試合のアタックを左右に並べ、打った瞬間で同期したところ。" loading="lazy"><figcaption>2 試合のアタックを左右に並べ、打った瞬間で同期したところ。</figcaption></figure>
+<h2 id="new">比較を作る</h2>
+<ol class="m-steps">
+  <li>ホーム右上の<span class="ui">比較動画 ▾</span>から<span class="ui">新しい比較を作る</span>を押します。</li>
+  <li>左と右それぞれの<span class="ui">動画を選ぶ ▾</span>で、倉庫の試合を選びます。DVW のない動画は<span class="ui">ファイルから選ぶ…</span>で選びます。</li>
+  <li>倉庫の試合なら、<span class="ui">プレー ▾</span>で見たいプレーを選ぶと、その場面に移ります。</li>
+  <li>両方を同じ瞬間（サーブを打った瞬間など）に合わせ、<span class="ui">いまの位置で同期</span>を押します。</li>
+</ol>
+<p>同期すると、<span class="ui">両方再生</span>（<kbd>Space</kbd>）で左右が一緒に動きます。ずれは <span class="ui">−1f</span> <span class="ui">+1f</span> で 1 コマずつ直せます。それぞれの ▶ は、その側だけを再生します。操作している側には青い枠が付きます。</p>
+
+<h2 id="layout">並べ方と拡大</h2>
+<ul class="dots">
+  <li><b>左右</b>・<b>上下</b>・<b>重ねる</b>から選びます。重ねるでは、<b>重ね具合</b>のスライダーで右の動画の透け方を変えます。</li>
+  <li>動画の上でホイールを回すと拡大、ドラッグで移動します。<b>拡大を連動</b>にすると、片方の拡大がもう片方にも同じだけ効きます。</li>
+  <li><span class="ui">コートで縮尺を合わせる</span>は、両方ともコートのグリッドを合わせた倉庫の試合のとき、2 つのコートの四隅が重なるように拡大と位置を合わせます。</li>
+</ul>
+
+<h2 id="save">保存と書き出し</h2>
+<p>比較は自動で保存され、<span class="ui">比較動画 ▾</span>の一覧から開き直せます。一覧には名前が出るので、画面の上の欄で名前を付けておくと見分けやすくなります。<span class="ui">MP4に書き出し</span>で、今の位置の前後（前・後の秒数）を、見えている拡大のまま 1 本の MP4 にします。音声は入りません。</p>
+    <nav class="m-pager" aria-label="前後の章"><a class="prev" href="08-data.html"><small>前へ</small>データスライドとレポート</a><a class="next" href="10-export.html"><small>次へ</small>書き出しの詳細</a></nav>
+  </main>
+</div>
+</body>
+</html>

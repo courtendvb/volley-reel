@@ -1,15 +1,18 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState, TeamAction } from './account'
+import type { AccountState, PlanPrices, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
-import type { CourtFit } from './court'
+import type { CourtFit, StrikeHeights } from './court'
+import type { CodeEdit } from './codeEdit'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
-import type { OverlayTheme } from './overlay'
+import type { OverlayPatch, OverlayTheme } from './overlay'
 import type { PackInfo, PackManifest, PhotoTarget } from './pack'
 import type { RosterPlayer } from './packMaker'
 import type { Reel } from './reel'
 import type { Video } from './video'
+import type { CompareFile, CompareSession } from './videoCompare'
+import type { CompareExportJob } from './compareExport'
 import type { ClipTiming } from './timing'
 
 export type Side = '*' | 'a'
@@ -38,8 +41,10 @@ export interface ClickPoint { u: number; v: number }
 
 export interface Play {
   id: number // order of appearance; the skip rule in dvw.ts is fixed so this is stable per file
-  fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift
+  fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift (the original code, before any correction)
   code: string
+  line?: number // its line among the file's [3SCOUT] lines, which a correction names (codeEdit.ts)
+  original?: string // the file's code, when a correction changed it
   time: number // DVW time (offset not applied)
   side: Side
   jersey: number
@@ -87,6 +92,7 @@ export interface ParsedDVW {
   allHome: boolean // every play coded as '*': side can't tell the teams apart
   codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
   info?: MatchInfo // for the match report; missing on matches read before it was kept
+  staleEdits?: CodeEdit[] // corrections whose line no longer holds the code they were made on (left out)
 }
 
 // The match as the DVW's header tells it: start time, each set's partial scores (at 8, 16, 21), final
@@ -118,6 +124,7 @@ export interface Match {
   importedAt: string
   court?: CourtFit // the court grid fitted to this video (missing: not fitted yet)
   serveMarks?: Record<string, ServeMark> // by play fingerprint: serves' hits and touches marked by hand (serveMark.ts)
+  codeEdits?: CodeEdit[] // corrections to the scout file's codes, laid over it when read (codeEdit.ts); the file is not written
 }
 
 // A serve's hit and its reception's touch, video times marked by hand frame by frame.
@@ -131,7 +138,9 @@ export interface ProjectSettings {
   lineColors?: ChartLineColors // the direction charts' lines by skill and evaluation; missing: the usual
   pointColors?: ChartLineColors // their points the same way
   pointScale?: number // their points' size, 1 = the usual
+  strikeHeights?: StrikeHeights // how high serves, attacks and sets are struck on the court's flights, in metres (court.ts); missing: the usual
   roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
+  overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
 }
 
 export interface ProjectInfo {
@@ -207,6 +216,14 @@ export interface Api {
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
+  pickCompareVideo(): Promise<CompareFile | null> // a video file for one side of a comparison (no DVW needed)
+  openCompareVideo(path: string): Promise<CompareFile> // the same file again, from a saved comparison
+  parseCompareMatch(id: string): Promise<ParsedDVW> // a library match's DVW, with no project open
+  listCompares(): Promise<CompareSession[]>
+  saveCompare(s: CompareSession): Promise<void>
+  removeCompare(id: string): Promise<void>
+  chooseCompareExportPath(defaultName: string): Promise<string | null> // the MP4's place; needs no project
+  exportCompare(job: CompareExportJob): Promise<void> // in the background; progress and the result arrive as export events
   createProject(init: ProjectInit): Promise<ProjectInfo | null> // in <library>/projects/<name>, or a folder the user picks
   openProject(path?: string): Promise<ProjectInfo | null> // asks for a folder when no path
   openMatchProject(matchId: string, code: string): Promise<ProjectInfo> // one match with that team as ours: its project made before, else a new one
@@ -216,6 +233,8 @@ export interface Api {
   otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
   projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
+  setCodeEdit(id: string, line: number, from: string, to: string): Promise<ProjectInfo | null> // a play's code corrected (to = from takes it off)
+  setMatchOffset(id: string, offsetSec: number): Promise<ProjectInfo | null> // DVW time + offset = video time, for every play of the match
   setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
@@ -232,6 +251,7 @@ export interface Api {
   onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
   updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
+  openManual(page?: string): Promise<void> // the manual shipped with the app, in the browser (a chapter's file name, or the index)
   appVersion(): Promise<string>
   // The SyncScout account (shared/account.ts). enabled: false until the release that asks for one.
   account(): Promise<{ enabled: boolean; state: AccountState }>
@@ -239,6 +259,7 @@ export interface Api {
   accountSignIn(email: string, code: string): Promise<AccountState>
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
   accountSignOut(): Promise<AccountState>
   accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads
@@ -279,6 +300,8 @@ export interface Api {
   movePaletteItem(id: string, to: number): Promise<Palette>
   lockPaletteItem(id: string, locked: boolean): Promise<Palette>
   usePaletteItem(id: string): Promise<Annotation[]> // its objects, with their pictures now in the project
+  listTeamColors(): Promise<Record<string, string>> // library: #RRGGBB by team code, for the rotation lineup
+  setTeamColor(code: string, color: string | null): Promise<Record<string, string>>
   listLogos(): Promise<Record<string, string>>
   pickLogo(code: string): Promise<Record<string, string>>
   removeLogo(code: string): Promise<Record<string, string>>

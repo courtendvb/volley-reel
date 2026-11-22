@@ -1,0 +1,10 @@
+const list = await (await fetch('http://127.0.0.1:9333/json')).json()
+const page = list.find(t => t.type === 'page' && !t.url.startsWith('devtools'))
+const ws = new WebSocket(page.webSocketDebuggerUrl)
+await new Promise(r => { ws.onopen = r })
+let id = 0; const wait = new Map()
+ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && wait.has(m.id)) { wait.get(m.id)(m); wait.delete(m.id) } }
+const send = (method, params = {}) => new Promise(r => { const i = ++id; wait.set(i, r); ws.send(JSON.stringify({ id: i, method, params })) })
+const [x, y] = process.argv.slice(2).map(Number)
+for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 })
+console.log('clicked', x, y); process.exit(0)

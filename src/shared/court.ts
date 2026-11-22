@@ -9,18 +9,23 @@ import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
 import { rangePlays, type RangeSource } from './markRange'
 import { drawLandingFx, landingFxStill, type FxTrack } from './courtFx'
-import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
+import { afterPhase, drawResultMark, playResult } from './courtResult'
+import { drawForecastCount, drawForecastGhost, drawForecastTarget, drawForecastZone, forecastPhase } from './courtForecast'
+import { COURT_L_M, COURT_W_M, HEAT_SUB_SIGMA_M, HEAT_ZONE_SIGMA_M, RIPPLE_COLOR, RIPPLE_HOLD_SEC, RIPPLE_REVEAL_SEC, type SlideHeat, drawHeat, drawRippleFloor, drawRipplePin } from './courtHeat'
 import { COLS, type CourtFit, type Ctx, HALF, type Pt, ROWS, type Spot, courtCamera, homography, inPixels, nearSide, project, serveSpot, spotArea, zoneCell } from './courtGeometry'
 export * from './courtGeometry'
 export * from './courtStyle'
 export * from './courtHeat'
 export * from './courtFx'
+export * from './courtForecast'
+export * from './courtResult'
 export interface PlayZones {
   start: Spot | null
   end: Spot | null
   points?: PlayPoints // where the scout clicked, in court units (playMarks)
   player?: PlayerMarks // the player's other shots, for the court tab's heatmap and serve paths
   skill?: string // the play's, for the style of its player marks (markStyle)
+  effect?: string // the play's evaluation, for what shows after it lands (courtResult.ts)
 }
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
 interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
@@ -58,14 +63,32 @@ function zonesFrom(play: ZonePlay, ownNear: boolean, next?: ZonePlay | null): Pl
 }
 
 // How high the ball is struck, in metres: a jump serve (Q), other serves, an attack, a set. `code` is
-// the shot: the play itself, or what a reception or dig answers.
+// the shot: the play itself, or what a reception or dig answers. These are the usual ones; a project
+// sets its own (ProjectSettings.strikeHeights: a women's or youth team hits lower), and App hands them
+// over as the project's settings change, as it does the chart colours.
 export const JUMP_SERVE_Z = 3.1
 export const FLOAT_SERVE_Z = 3
 export const ATTACK_Z = 3.15
 export const SET_Z = 2.4
+export interface StrikeHeights { jumpServe?: number; floatServe?: number; attack?: number; set?: number }
+export const STRIKE_HEIGHTS: Required<StrikeHeights> = { jumpServe: JUMP_SERVE_Z, floatServe: FLOAT_SERVE_Z, attack: ATTACK_Z, set: SET_Z }
+export const STRIKE_HEIGHT_RANGE = { min: 1, max: 4.5, step: 0.05 }
+let heights: Required<StrikeHeights> = STRIKE_HEIGHTS
+export const getStrikeHeights = (): Required<StrikeHeights> => heights
+export function setStrikeHeights(h: StrikeHeights | undefined): void { heights = { ...STRIKE_HEIGHTS, ...cleanStrikeHeights(h) } }
+// Only the heights in range and not the usual ones; undefined when none is left.
+export function cleanStrikeHeights(x: unknown): StrikeHeights | undefined {
+  if (!x || typeof x !== 'object') return undefined
+  const out: StrikeHeights = {}
+  for (const k of Object.keys(STRIKE_HEIGHTS) as (keyof StrikeHeights)[]) {
+    const v = (x as StrikeHeights)[k]
+    if (typeof v === 'number' && v >= STRIKE_HEIGHT_RANGE.min && v <= STRIKE_HEIGHT_RANGE.max && v !== STRIKE_HEIGHTS[k]) out[k] = Math.round(v * 100) / 100
+  }
+  return Object.keys(out).length ? out : undefined
+}
 function strikeHeight(code: string): number {
   const skill = code.charAt(3)
-  return skill === 'S' ? (code.charAt(4) === 'Q' ? JUMP_SERVE_Z : FLOAT_SERVE_Z) : skill === 'A' ? ATTACK_Z : skill === 'E' ? SET_Z : 0
+  return skill === 'S' ? (code.charAt(4) === 'Q' ? heights.jumpServe : heights.floatServe) : skill === 'A' ? heights.attack : skill === 'E' ? heights.set : 0
 }
 
 // The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
@@ -102,7 +125,7 @@ export function playPoints(play: ClickPlay & Pick<Play, 'code' | 'shotCode' | 's
   const setFrom = !end || play.skill !== 'E' ? null : middle ? { x: middle.u0 + middle.du / 2, y: middle.v0 + middle.dv / 2 } : on(SETTER_SPOT)
   const shot = play.shotCode ?? play.code, start = on(clicks.start) ?? setFrom, z = strikeHeight(shot)
   return {
-    start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: ATTACK_Z } : {}),
+    start, end, ...(start && z ? { startZ: z, arc: shotPath(shot, play.setTo).arc } : {}), ...(play.skill === 'E' ? { endZ: heights.attack } : {}),
     ...(clicks.startRough ? { startRough: true } : {}), ...(clicks.endRough ? { endRough: true } : {}),
   }
 }
@@ -161,8 +184,8 @@ export interface ChartSource { filtered?: () => Play[]; name?: string; setterNam
 export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, all: () => Play[], source?: ChartSource): PlayerMarks | null {
   const style = markStyle(style0, play.skill)
   const plays = () => rangePlays(style.range, play, all, source?.ranges)
-  // A set, or an attack after one: the setter's distribution in that rotation.
-  const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
+  // A set, an attack after one, or a reception: the setter's distribution in that rotation.
+  const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A' || play.skill === 'R') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
   const setMarks: PlayerMarks = setsAll ? {
     ...(style.setChart ? { setChart: setsAll } : {}),
     ...(style.setCourt ? { setCourt: { chart: setsAll, near: nearSide(fit, play) === play.side, layer: style.setCourt.layer } } : {}),
@@ -211,7 +234,7 @@ export function servePath(play: Pick<Play, 'startClick' | 'endClick' | 'code'>):
 // plays and style: for the player's other shots (playerMarks), when the court tab shows them.
 export function playMarks(play: Play, fit: CourtFit, next?: ZonePlay | null, style?: GridStyle, plays?: () => Play[], source?: ChartSource): PlayZones {
   const player = style && plays ? playerMarks(play, fit, style, plays, source) : null
-  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, ...(player ? { player } : {}) }
+  return { ...playZones(play, fit, next), points: playPoints(play, fit), skill: play.skill, effect: play.effect, ...(player ? { player } : {}) }
 }
 
 // An attacker's cones: from where they hit, five equal angles over the other half, each with its share
@@ -358,7 +381,7 @@ const FLIGHT_STEPS = 32
 
 // The flight up to `progress` (0–1): the point in the air and its mark on the floor, the curve so
 // far with the ball at its tip, and the landing point once it is there.
-export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true): void {
+export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones: PlayZones, progress: number, lift = true, tint?: string): void {
   const p = zones.points
   if (!p?.start || !p.end || !p.startZ) return
   const camera = courtCamera(inPixels(fit, w, h), w, h)
@@ -371,7 +394,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   if (done > 0) {
     const n = Math.max(1, Math.ceil(FLIGHT_STEPS * done))
     ctx.save()
-    ctx.strokeStyle = '#FACC15'
+    ctx.strokeStyle = tint ?? '#FACC15'
     ctx.lineWidth = lineW
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -386,7 +409,7 @@ export function drawFlight(ctx: Ctx, w: number, h: number, fit: CourtFit, zones:
   }
   drawPoint(ctx, air, START_COLOR, w, p.startRough)
   if (lift && done >= 1 && p.endZ) drawLift(ctx, project(H, b.x, b.y), at(1), w)
-  if (done >= 1) drawPoint(ctx, at(1), END_COLOR, w, p.endRough)
+  if (done >= 1) drawPoint(ctx, at(1), tint ?? END_COLOR, w, p.endRough)
   else if (done > 0) drawPoint(ctx, at(done), '#FFFFFF', w)
 }
 
@@ -509,11 +532,63 @@ export function drawRipple(ctx: Ctx, w: number, h: number, fit: CourtFit, style0
 // The ball's track on the floor, for the trail effect: from where it was hit, when the scout clicked it.
 const trackOf = (zones: PlayZones | null | undefined): FxTrack | null => (zones?.points?.start ? { start: zones.points.start } : null)
 
+// 先読み: whether a serve or attack shows what comes next before it happens (courtForecast.ts). It goes
+// with the growing curve (the whole curve shown for the clip needs no preview) and is on unless turned off.
+export function forecastOn(style0: GridStyle, zones: PlayZones | null | undefined): boolean {
+  const style = markStyle(style0, zones?.skill)
+  return style.forecast !== false && !style.flightStill && hasFlight(style, zones) && (zones?.skill === 'S' || zones?.skill === 'A')
+}
+
+// 着弾のあと: whether a serve or an attack shows its result once it has landed (courtResult.ts); each part is on unless turned off.
+export function afterOn(style0: GridStyle, zones: PlayZones | null | undefined): boolean {
+  const style = markStyle(style0, zones?.skill)
+  return (zones?.skill === 'S' || zones?.skill === 'A') && (style.resultMark !== false || style.resultTint !== false)
+}
+// The colour the curve and the landing take after a landing at `after` seconds (a result with a colour, the tint on).
+export function resultTintOf(style: GridStyle, zones: PlayZones | null | undefined, after: number | null | undefined): string | undefined {
+  return after != null && after >= 0 && style.resultTint !== false ? playResult(zones?.skill, zones?.effect)?.color ?? undefined : undefined
+}
+// The result's badge `sec` seconds after the landing (over the court; the export draws it on a layer of its own).
+export function drawAfter(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, sec: number): void {
+  const phase = afterPhase(sec)
+  if (!phase || !afterOn(style0, zones)) return
+  const style = markStyle(style0, zones.skill), result = playResult(zones.skill, zones.effect), H = homography(inPixels(fit, w, h))
+  if (style.resultMark !== false && result) {
+    const e = zones.points?.end, mid = zones.end ? spotArea(zones.end, false) : null
+    const at = e ? project(H, e.x, e.y) : mid ? project(H, mid.u0 + mid.du / 2, mid.v0 + mid.dv / 2) : null
+    if (at) drawResultMark(ctx, at, result, phase, w)
+  }
+}
+
+// The forecast at `t` seconds from the hit (`dur`: the time in the air). 'under': the zone and the
+// dashed line, beneath the curve; 'over': the landing ring and the count-in, above it; 'both': on a layer of its own (the export's).
+export function drawForecast(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones, fc: { t: number; dur: number }, part: 'under' | 'over' | 'both' = 'both'): void {
+  const p = zones.points, phase = forecastPhase(fc.t, fc.dur)
+  if (!phase || !forecastOn(style0, zones) || !p?.start || !p.end || !p.startZ) return
+  const style = markStyle(style0, zones.skill)
+  const H = homography(inPixels(fit, w, h)), camera = courtCamera(inPixels(fit, w, h), w, h)
+  if (!camera) return
+  const a = p.start, b = p.end
+  if (part !== 'over') {
+    // A zone the plain picture doesn't already light (it does when the landing is a zone, not a click).
+    if (zones.end && !p.endRough) {
+      const { u0, v0, du, dv } = spotArea(zones.end, style.detail === 'sub')
+      drawForecastZone(ctx, [project(H, u0, v0), project(H, u0 + du, v0), project(H, u0 + du, v0 + dv), project(H, u0, v0 + dv)], phase, END_COLOR)
+    }
+    const path = Array.from({ length: FLIGHT_STEPS + 1 }, (_, i) => { const s = i / FLIGHT_STEPS; return camera(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, flightZ(p, s)) })
+    drawForecastGhost(ctx, path, phase, w, fc.t)
+  }
+  if (part !== 'under') {
+    drawForecastTarget(ctx, (mx, my) => project(H, b.x + mx / COURT_W_M, b.y + my / COURT_L_M), phase, w, style0.rippleColor ?? RIPPLE_COLOR)
+    drawForecastCount(ctx, camera(a.x, a.y, flightZ(p, 0)), phase, w)
+  }
+}
+
 // flight: how far the curve has gone (hasFlight), or null to leave it out (the export draws it on its own layers).
 // ripple: seconds since the ripple starts (rippleImpact, rippleStart); undefined shows it as it
 // stays after it has spread; null leaves it out (the export draws it on its own layers).
-export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null): void {
-  const style = markStyle(style0, zones?.skill)
+export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0: GridStyle, zones: PlayZones | null, flight: number | null = 1, ripple?: number | null, forecast?: { t: number; dur: number } | null, after?: number | null): void {
+  const style = markStyle(style0, zones?.skill), tint = resultTintOf(style, zones, after)
   const H = homography(inPixels(fit, w, h))
   const at = (u: number, v: number) => project(H, u, v)
   const area = (s: Spot) => spotArea(s, style.detail === 'sub')
@@ -533,7 +608,8 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   const fxKind = style0.rippleKind ?? 'ripple'
   if (impact && ripple !== null && fxKind === 'ripple') drawRippleFloor(ctx, w, h, fit, null, style.heatOpacity, { sec: ripple ?? still, impact, color: style0.rippleColor })
   if (zones?.player?.cones) drawCones(ctx, w, h, zones.player.cones)
-  if (zones?.player?.setCourt) drawSetCourt(ctx, w, h, fit, zones.player.setCourt)
+  // The shares are put up last, over the arrows and flights that would otherwise cross them.
+  const shares = zones?.player?.setCourt ? drawSetCourt(ctx, w, h, fit, zones.player.setCourt) : []
   const pts = style.detail === 'point' ? zones?.points : null // a click, where the DVW has one, takes the zone's place
   if (style.playZones && zones) {
     ctx.save()
@@ -549,8 +625,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     ctx.lineCap = 'round'
     const lw = (style.lineWidth * h) / 720
     ctx.lineWidth = lw
-    for (let col = 0; col <= COLS; col++) line(at(col / COLS, 0), at(col / COLS, 1))
-    for (let row = 0; row <= ROWS; row++) {
+    const r0 = style.gridSide === 'bottom' ? HALF : 0, r1 = style.gridSide === 'top' ? HALF : ROWS // the rows the grid spans (net to end line, or the other way)
+    for (let col = 0; col <= COLS; col++) line(at(col / COLS, r0 / ROWS), at(col / COLS, r1 / ROWS))
+    for (let row = r0; row <= r1; row++) {
       const net = row === HALF
       ctx.lineWidth = net ? lw * 2.5 : lw
       ctx.setLineDash(net ? [12, 6] : [])
@@ -561,9 +638,10 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
   }
 
   if (zones?.player?.landings) drawLandings(ctx, w, h, zones.player.landings)
+  if (forecast && zones) drawForecast(ctx, w, h, fit, style0, zones, forecast, 'under')
   if (zones?.player?.flights && flight !== null) drawFlights(ctx, w, h, zones.player.flights, flight)
   if (hasFlight(style, zones) && courtCamera(inPixels(fit, w, h), w, h)) {
-    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift)
+    if (flight !== null) drawFlight(ctx, w, h, fit, zones!, flight, !style.noLift, tint)
   } else if (style.playZones && zones) {
     // From the click, or the middle of the lit zone or sub-zone, to the other.
     const mid = (s: Spot) => { const { u0, v0, du, dv } = area(s); return at(u0 + du / 2, v0 + dv / 2) }
@@ -576,14 +654,17 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     const endAir = camera && pts?.end && pts.endZ ? camera(pts.end.x, pts.end.y, pts.endZ) : null
     if (pts?.end && endAir && !style.noLift) drawLift(ctx, at(pts.end.x, pts.end.y), endAir, w)
     const a = air ?? place(pts?.start, zones.start), b = endAir ?? place(pts?.end, zones.end)
-    if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320))
+    if (a && b) drawArrow(ctx, a, b, Math.max(3, w / 320), tint)
     if (air ?? ground) drawPoint(ctx, (air ?? ground)!, START_COLOR, w, pts?.startRough)
-    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), END_COLOR, w, pts.endRough)
+    if (pts?.end) drawPoint(ctx, endAir ?? at(pts.end.x, pts.end.y), tint ?? END_COLOR, w, pts.endRough)
   }
+  if (forecast && zones) drawForecast(ctx, w, h, fit, style0, zones, forecast, 'over')
   if (impact && ripple !== null) {
     if (fxKind === 'ripple') drawRipplePin(ctx, w, h, fit, impact, ripple ?? still, style0.rippleColor)
     else drawLandingFx(ctx, w, h, fit, fxKind, impact, ripple ?? landingFxStill[fxKind], style0.rippleColor, trackOf(zones))
   }
+  if (after != null && zones) drawAfter(ctx, w, h, fit, style0, zones, after)
+  if (shares.length) drawShareLabels(ctx, shares, Math.max(11, w / 55), courtCamera(inPixels(fit, w, h), w, h))
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
@@ -622,14 +703,14 @@ function ringOr(ctx: Ctx, rough: boolean, color: string): void {
   ctx.lineWidth = width; ctx.strokeStyle = '#FFFFFF'
 }
 
-function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {
+function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number, color = '#FACC15'): void {
   const len = Math.hypot(b.x - a.x, b.y - a.y)
   if (len < 1) return
   const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, head = Math.min(len * 0.4, width * 5)
   const base = { x: b.x - ux * head, y: b.y - uy * head }
   ctx.save()
-  ctx.strokeStyle = '#FACC15'
-  ctx.fillStyle = '#FACC15'
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
   ctx.lineWidth = width
   ctx.lineCap = 'round'
   ctx.shadowColor = 'rgba(0,0,0,0.6)'
@@ -647,10 +728,12 @@ function drawArrow(ctx: Ctx, a: Pt, b: Pt, width: number): void {
 // The setter's distribution on the court in the picture, on their team's half: where each set was
 // given (coloured by where it went: filled a kill, open in play, a cross a point lost), or each place
 // painted by its share with its name and share, the most set to framed red and the least blue.
-function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt): void {
+// Returns the places' names and shares, for drawCourt to put up over everything else.
+function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt): ShareLabel[] {
   const H = homography(inPixels(fit, w, h))
   // The team's view (u from its left, v from its end line) as court units, then the picture.
-  const on = (u: number, v: number) => (s.near ? project(H, u, 1 - v) : project(H, 1 - u, v))
+  const unit = (u: number, v: number) => (s.near ? { x: u, y: 1 - v } : { x: 1 - u, y: v })
+  const on = (u: number, v: number) => { const c = unit(u, v); return project(H, c.x, c.y) }
   const c = s.chart
   ctx.save()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
@@ -668,7 +751,7 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
       }
     }
     ctx.restore()
-    return
+    return []
   }
   const top = Math.max(...SET_TARGETS.map(k => c.by[k].n), 1), { most, least } = setExtremes(c)
   const labels: ShareLabel[] = []
@@ -679,28 +762,40 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
     ctx.beginPath(); ring.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath()
     ctx.globalAlpha = 0.2 + 0.45 * (n / top); ctx.fillStyle = SET_COLORS[k]; ctx.fill(); ctx.globalAlpha = 1
     if (k === most || k === least) { ctx.strokeStyle = k === most ? '#DC2626' : '#2563EB'; ctx.lineWidth = Math.max(3.5, w / 220); ctx.stroke() }
-    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on((a.u[0] + a.u[1]) / 2, (a.v[0] + a.v[1]) / 2) })
+    const mu = (a.u[0] + a.u[1]) / 2, mv = (a.v[0] + a.v[1]) / 2
+    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on(mu, mv), court: unit(mu, mv), rise: n / top })
   }
-  drawShareLabels(ctx, labels, Math.max(11, w / 55))
   ctx.restore()
+  return labels
 }
 
-// A place's name and share, centred on the place. From a low camera the court is squashed and the
-// places lie close together on the picture (Zone3 and Pipe above all), so the labels are laid out
-// together: two lines when they clear one another, else one line, smaller and smaller, and last of
-// all pushed apart downward.
-interface ShareLabel { name: string; share: string; x: number; y: number }
-function drawShareLabels(ctx: Ctx, labels: ShareLabel[], fs: number): void {
-  type Box = { l: ShareLabel; text: [string, number, number][]; x0: number; x1: number; y0: number; y1: number }
+// A place's name and share. Where the corners give the camera, each stands on a pole over its place,
+// taller the more was set there (SHARE_POLE_M, plus up to SHARE_RISE_M for the most), so it reads
+// above the arrows and flights on the floor; else it lies on the place. On a dark plate either way.
+// From a low camera the places lie close together on the picture (Zone3 and Pipe above all), so the
+// labels are laid out together: two lines when they clear one another, else one line, smaller and
+// smaller, and last of all pushed apart upward.
+interface ShareLabel { name: string; share: string; x: number; y: number; court: Pt; rise: number }
+export const SHARE_POLE_M = 1.2, SHARE_RISE_M = 1.6
+function drawShareLabels(ctx: Ctx, floor: ShareLabel[], fs: number, camera: ((u: number, v: number, z: number) => Pt) | null): void {
+  // Standing: each label's bottom at the top of its pole. Lying: centred on the place.
+  const labels = floor.map(l => ({ ...l, foot: { x: l.x, y: l.y }, ...(camera ? camera(l.court.x, l.court.y, SHARE_POLE_M + SHARE_RISE_M * l.rise) : {}) }))
+  type Label = (typeof labels)[number]
+  type Box = { l: Label; text: [string, number, number][]; x0: number; x1: number; y0: number; y1: number }
   const width = (text: string, size: number) => { ctx.font = `bold ${size}px sans-serif`; return ctx.measureText(text).width }
+  const shift = (b: Box, dy: number): Box => ({ ...b, y0: b.y0 + dy, y1: b.y1 + dy, text: b.text.map(([t, y, f]) => [t, y + dy, f] as [string, number, number]) })
+  const pad = fs * 0.3
   const lay = (two: boolean, scale: number): Box[] => labels.map(l => {
     const f = fs * scale
+    let b: Box
     if (two) {
-      const half = Math.max(width(l.name, f * 0.8), width(l.share, f)) / 2
-      return { l, text: [[l.name, l.y - f * 0.55, f * 0.8], [l.share, l.y + f * 0.45, f]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 1.1, y1: l.y + f * 0.95 }
+      const half = Math.max(width(l.name, f * 0.8), width(l.share, f)) / 2 + pad
+      b = { l, text: [[l.name, l.y - f * 0.55, f * 0.8], [l.share, l.y + f * 0.45, f]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 1.1, y1: l.y + f * 0.95 }
+    } else {
+      const t = `${l.name} ${l.share}`, half = width(t, f * 0.9) / 2 + pad
+      b = { l, text: [[t, l.y, f * 0.9]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 0.6, y1: l.y + f * 0.6 }
     }
-    const t = `${l.name} ${l.share}`, half = width(t, f * 0.9) / 2
-    return { l, text: [[t, l.y, f * 0.9]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 0.55, y1: l.y + f * 0.55 }
+    return camera ? shift(b, l.y - b.y1) : b
   })
   const clash = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
   const clear = (bs: Box[]) => bs.every((a, i) => bs.every((b, j) => j <= i || !clash(a, b)))
@@ -708,20 +803,32 @@ function drawShareLabels(ctx: Ctx, labels: ShareLabel[], fs: number): void {
   let boxes: Box[] | null = null
   for (const [two, scale] of tries) { const bs = lay(two, scale); if (clear(bs)) { boxes = bs; break } }
   if (!boxes) {
-    boxes = lay(false, 0.55).sort((a, b) => a.l.y - b.l.y)
+    // Pushed apart: standing labels upward (on taller poles), lying ones downward.
+    boxes = lay(false, 0.55).sort((a, b) => (camera ? b.l.y - a.l.y : a.l.y - b.l.y))
     for (let i = 1; i < boxes.length; i++) {
       for (let j = 0; j < i; j++) {
-        if (!clash(boxes[i], boxes[j])) continue
-        const dy = boxes[j].y1 - boxes[i].y0
-        boxes[i] = { ...boxes[i], y0: boxes[i].y0 + dy, y1: boxes[i].y1 + dy, text: boxes[i].text.map(([t, y, f]) => [t, y + dy, f] as [string, number, number]) }
+        if (clash(boxes[i], boxes[j])) boxes[i] = shift(boxes[i], camera ? boxes[j].y0 - boxes[i].y1 : boxes[j].y1 - boxes[i].y0)
       }
     }
   }
-  ctx.lineJoin = 'round'; ctx.strokeStyle = '#000000'; ctx.fillStyle = '#FFFFFF'
-  for (const b of boxes) {
-    for (const [text, y, f] of b.text) {
-      ctx.font = `bold ${f}px sans-serif`; ctx.lineWidth = Math.max(2.5, f * 0.18)
-      ctx.strokeText(text, b.l.x, y); ctx.fillText(text, b.l.x, y)
+  ctx.save()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+  if (camera) {
+    // The poles first, all of them under every plate: a white line up from a dot on the floor.
+    const lw = Math.max(1.5, fs / 9)
+    ctx.strokeStyle = '#FFFFFF'; ctx.fillStyle = '#FFFFFF'; ctx.lineWidth = lw
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = lw * 2
+    for (const b of boxes) {
+      ctx.beginPath(); ctx.moveTo(b.l.foot.x, b.l.foot.y); ctx.lineTo(b.l.x, b.y1); ctx.stroke()
+      ctx.beginPath(); ctx.arc(b.l.foot.x, b.l.foot.y, lw * 1.8, 0, Math.PI * 2); ctx.fill()
     }
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0
   }
+  for (const b of boxes) {
+    ctx.fillStyle = 'rgba(15,23,42,0.78)'
+    ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, fs * 0.3); ctx.fill()
+    ctx.fillStyle = '#FFFFFF'
+    for (const [text, y, f] of b.text) { ctx.font = `bold ${f}px sans-serif`; ctx.fillText(text, b.l.x, y) }
+  }
+  ctx.restore()
 }

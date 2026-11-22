@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
 import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 interface Props {
   override: ClipOverlayOverride | undefined
@@ -20,6 +21,7 @@ const SB_POSITIONS: [Anchor, string][] = [['tl', t('左上')], ['tc', t('中央�
 
 export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange, videoName, canVideo, onVideoName }: Props) {
   const [gear, setGear] = useState(false)
+  const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
   // Where a name typed here goes: the player's name in the whole video (the default), or this clip only.
   const ownName = o?.playerCaption?.name
   const [scope, setScope] = useState<'video' | 'clip'>(ownName || !canVideo ? 'clip' : 'video')
@@ -61,8 +63,9 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       <label className="check"><input type="checkbox" checked={!o?.playerCaption?.hidden}
         onChange={e => write({ ...o, playerCaption: { ...o?.playerCaption, hidden: !e.target.checked } })} /> {t('テロップ')}</label>
       <label className="check" title={t('ヒートマップ・落下点・軌道・コーン・チャート・トスのチャート・着弾の波紋を、このクリップでは出さない。グリッドと選んだプレーのゾーンは出たまま（書き出しも同じ）。ほかのクリップは変わらない')}>
-        <input type="checkbox" checked={!o?.courtMarks?.hidden} onChange={e => write({ ...o, courtMarks: { hidden: !e.target.checked } })} /> {t('選手の表示')}</label>
+        <input type="checkbox" checked={!o?.courtMarks?.hidden} onChange={e => write({ ...o, courtMarks: { hidden: !e.target.checked } })} /> {t('分析表示')}</label>
       <ServeSpeedCheck overlay={s} onOverlay={onOverlay} />
+      <LineupCheck overlay={s} onOverlay={onOverlay} />
       <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       {canVideo && (
@@ -76,10 +79,10 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
       <input className="ov-text wide" value={line} placeholder={autoLine} aria-label={t('テロップの2行目（空欄で自動）')}
         onChange={e => setLine(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
       <span className="spacer" />
-      <span className="ov-gear-wrap">
+      <span className="ov-gear-wrap" ref={gearPop.anchor}>
         <button className="ov-gear" aria-label={t('タイトルカードとフェード')} aria-expanded={gear} title={t('タイトルカードの秒数とフェード（動画全体）。配色は上部の「設定」')} onClick={() => setGear(g => !g)}>⚙</button>
         {gear && (
-          <div className="ov-gear-pop" role="dialog" aria-label={t('タイトルカード')}>
+          <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('タイトルカード')}>
             <label className="check">{t('タイトルカード（シーン・マーカー）')}
               <input type="number" min={1} max={8} step={0.5} value={s.titleCard.durationSec} aria-label={t('タイトルカードの秒数（一括）')}
                 onChange={e => { const n = parseFloat(e.target.value); if (n >= 1 && n <= 8) onOverlay({ ...s, titleCard: { ...s.titleCard, durationSec: n } }) }} /> {t('秒')}</label>
@@ -103,5 +106,31 @@ export function ServeSpeedCheck({ overlay: s, onOverlay }: { overlay: OverlaySet
   return (
     <label className="check" title={t('ヒットとタッチを打ったサーブの速度を、タッチのコマから動画に出します（この動画のすべて）')}>
       <input type="checkbox" checked={s.serveSpeed.enabled} onChange={e => onOverlay({ ...s, serveSpeed: { ...s.serveSpeed, enabled: e.target.checked } })} /> {t('サーブ速度')}</label>
+  )
+}
+
+// With no clip open: the scoreboard and its place, and the caption, for every play followed in the
+// list (the video's settings, or the project's while no video is open).
+export function ListOverlayChecks({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <>
+      <label className="check"><input type="checkbox" checked={s.scoreboard.enabled}
+        onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, enabled: e.target.checked } })} /> {t('スコアボード')}</label>
+      <select className="ov-pos" aria-label={t('スコアボードの位置')} value={s.scoreboard.anchor}
+        onChange={e => onOverlay({ ...s, scoreboard: { ...s.scoreboard, anchor: e.target.value as Anchor } })}>
+        {SB_POSITIONS.map(([a, l]) => <option key={a} value={a}>{l}</option>)}
+        {!SB_POSITIONS.some(([a]) => a === s.scoreboard.anchor) && <option value={s.scoreboard.anchor}>{t('下')}</option>}
+      </select>
+      <label className="check"><input type="checkbox" checked={s.playerCaption.enabled}
+        onChange={e => onOverlay({ ...s, playerCaption: { ...s.playerCaption, enabled: e.target.checked } })} /> {t('テロップ')}</label>
+    </>
+  )
+}
+
+// Both teams' six on a small court (the video's setting).
+export function LineupCheck({ overlay: s, onOverlay }: { overlay: OverlaySettings; onOverlay: (s: OverlaySettings) => void }) {
+  return (
+    <label className="check" title={t('両チームのコート上の6人を、小さなコートに背番号で出します（この動画のすべて。位置と大きさは「動画の設定」）')}>
+      <input type="checkbox" checked={s.lineup.enabled} onChange={e => onOverlay({ ...s, lineup: { ...s.lineup, enabled: e.target.checked } })} /> {t('ローテーション')}</label>
   )
 }

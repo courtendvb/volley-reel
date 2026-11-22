@@ -1,18 +1,109 @@
-// Corrections to a scout file's codes, kept beside the match (Match.codeEdits) and laid over the file when it
-// is read: the file itself is never written. An edit names the [3SCOUT] line (its index among that section's
-// lines) and the code it had, so it applies only while the file still says that there; a file changed since
-// leaves the edit out (staleEdits) rather than putting it on another play.
+// Corrections to a scout file, kept beside the match and laid over the file when it is read: the file itself
+// is never written. Three kinds, each naming a [3SCOUT] line (its index among that section's non-empty lines)
+// and the code the file had there, so it applies only while the file still says that:
+// - a code changed (CodeEdit, to: the new code)
+// - a line taken out (CodeEdit, to: '')
+// - a play put in after a line (ScoutInsert: its code and video-file time, the rest copied from that line)
+// applyScoutEdits writes the corrected DVW text and says where each of its scout lines came from; reading
+// (parseDVW) and writing out a corrected .dvw both use it. A file changed since leaves an edit out (stale)
+// rather than putting it on another play.
 // Pure: no file or DOM access.
 
-export interface CodeEdit { line: number; from: string; to: string }
+// start / end: the clicks (columns 5 and 7, DataVolley's 100 × 100 cell, '' for none), when they were corrected.
+export interface CodeEdit { line: number; from: string; to: string; start?: string; end?: string } // to '': the line is taken out
+export interface ScoutInsert { id: string; after: number; from: string; code: string; time: number; start?: string; end?: string } // time: DVW seconds
 
-// By line, for parseDVW.
-export const editsByLine = (edits: CodeEdit[] | undefined): Map<number, CodeEdit> => new Map((edits ?? []).map(e => [e.line, e]))
+// Where a line of the corrected [3SCOUT] came from: a file line (and the code it had), or a play put in.
+// moved: its clicks were corrected.
+export type ScoutSource = { line: number; original: string; insert?: undefined; moved?: boolean } | { line: number; original: string; insert: string; moved?: boolean }
 
-// The edits after one play's code is set (to its original: the edit goes).
-export function withCodeEdit(edits: CodeEdit[] | undefined, line: number, from: string, to: string): CodeEdit[] {
+export interface ScoutEdits { edits?: CodeEdit[]; inserts?: ScoutInsert[] }
+
+// The edits after one line's code and / or clicks are set. to: the new code (the file's: no code change; '': the
+// line taken out); start / end: a cell, or null for the file's click again. An edit that changes nothing goes.
+export function withLineEdit(edits: CodeEdit[] | undefined, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }): CodeEdit[] {
+  const had = (edits ?? []).find(e => e.line === line && e.from === from)
   const rest = (edits ?? []).filter(e => e.line !== line)
-  return to === from ? rest : [...rest, { line, from, to }].sort((a, b) => a.line - b.line)
+  const next: CodeEdit = { line, from, to: patch.to ?? had?.to ?? from }
+  const start = patch.start === undefined ? had?.start : patch.start ?? undefined
+  const end = patch.end === undefined ? had?.end : patch.end ?? undefined
+  if (start !== undefined) next.start = start
+  if (end !== undefined) next.end = end
+  const changes = next.to !== from || next.start !== undefined || next.end !== undefined
+  return changes ? [...rest, next].sort((a, b) => a.line - b.line) : rest
+}
+
+// The edits after one play's code is set (to its original: no code change; to '': the line is taken out).
+export const withCodeEdit = (edits: CodeEdit[] | undefined, line: number, from: string, to: string): CodeEdit[] => withLineEdit(edits, line, from, { to })
+
+// A click as DataVolley's cell (row * 100 + column + 1, four digits) and back; the point is in the coding team's
+// half and up (u across 0..1, v from its own end line 0 to the far one 1, the net at 0.5), as dvw.ts reads it.
+export function cellOf(p: { u: number; v: number }): string {
+  const col = Math.max(0, Math.min(99, Math.round(((p.u * 3 + 0.5) * 100) / 4 - 0.5)))
+  const row = Math.max(0, Math.min(99, Math.round(((p.v * 6 + 0.5) * 100) / 7 - 0.5)))
+  return String(row * 100 + col + 1).padStart(4, '0')
+}
+export function pointOf(cell: string | undefined): { u: number; v: number } | null {
+  const i = parseInt(cell ?? '')
+  if (!(i > 0)) return null
+  const row = Math.floor((i - 1) / 100), col = (i - 1) % 100
+  return { u: (((col + 0.5) * 4) / 100 - 0.5) / 3, v: (((row + 0.5) * 7) / 100 - 0.5) / 6 }
+}
+
+// The inserts after one is put in, changed (same id) or taken off (code '').
+export function withInsert(inserts: ScoutInsert[] | undefined, ins: ScoutInsert): ScoutInsert[] {
+  const had = (inserts ?? []).some(i => i.id === ins.id)
+  const rest = (inserts ?? []).filter(i => i.id !== ins.id)
+  if (!ins.code) return rest
+  return had ? (inserts ?? []).map(i => (i.id === ins.id ? ins : i)) : [...rest, ins]
+}
+
+// The corrected DVW text, and per corrected scout line where it came from; edits and inserts whose line no
+// longer holds their code are returned as stale and left out. Line ends stay as the file has them.
+export function applyScoutEdits(text: string, s: ScoutEdits): { text: string; sources: ScoutSource[]; stale: { edits: CodeEdit[]; inserts: ScoutInsert[] } } {
+  const edits = new Map((s.edits ?? []).map(e => [e.line, e]))
+  const inserts = new Map<number, ScoutInsert[]>()
+  for (const i of s.inserts ?? []) inserts.set(i.after, [...(inserts.get(i.after) ?? []), i])
+  const usedEdits = new Set<number>(), usedInserts = new Set<string>()
+  const nl = text.includes('\r\n') ? '\r\n' : '\n'
+  const out: string[] = [], sources: ScoutSource[] = []
+  let section = '', idx = -1
+  for (const raw of text.split(/\r?\n/)) {
+    const l = raw.trim()
+    if (l.startsWith('[')) section = l
+    if (section !== '[3SCOUT]' || !l || l.startsWith('[')) { out.push(raw); continue }
+    idx++
+    const c = raw.split(';')
+    const original = c[0].trim()
+    const e = edits.get(idx)
+    let keep = true
+    if (e && e.from === original) {
+      usedEdits.add(idx)
+      if (e.to === '') keep = false
+      else {
+        c[0] = e.to
+        if (e.start !== undefined || e.end !== undefined) while (c.length < 7) c.push('')
+        if (e.start !== undefined) c[4] = e.start
+        if (e.end !== undefined) c[6] = e.end
+      }
+    }
+    if (keep) { out.push(c.join(';')); sources.push({ line: idx, original, ...(e && e.from === original && (e.start !== undefined || e.end !== undefined) ? { moved: true } : {}) }) }
+    for (const ins of inserts.get(idx) ?? []) {
+      if (ins.from !== original || !validCode(ins.code)) continue
+      usedInserts.add(ins.id)
+      const n = raw.split(';')
+      n[0] = ins.code
+      while (n.length < 7) n.push('')
+      n[4] = ins.start ?? ''; n[6] = ins.end ?? '' // its own clicks, if any were put
+      if (n.length > 12) n[12] = String(Math.round(ins.time * 10) / 10) // tenths, as a .vsm's DVW text has them
+      out.push(n.join(';'))
+      sources.push({ line: idx, original: ins.code, insert: ins.id })
+    }
+  }
+  return {
+    text: out.join(nl), sources,
+    stale: { edits: (s.edits ?? []).filter(e => !usedEdits.has(e.line)), inserts: (s.inserts ?? []).filter(i => !usedInserts.has(i.id)) },
+  }
 }
 
 // A play's code, DataVolley's layout: side, jersey (2), skill, hit type, evaluation, attack combination or
@@ -62,7 +153,35 @@ export function validCode(code: string): boolean {
   return /^[*a]\d\d[SRABDE][HMQTUNO~][#+!\-/=~]/.test(code) && !/[;\r\n]/.test(code)
 }
 
-// The edits whose line no longer holds the code they were made on (the file was changed or replaced).
-export function staleEdits(edits: CodeEdit[] | undefined, applied: Set<number>): CodeEdit[] {
-  return (edits ?? []).filter(e => !applied.has(e.line))
+// How many corrections a match has.
+export const editCount = (s: ScoutEdits) => (s.edits?.length ?? 0) + (s.inserts?.length ?? 0)
+
+// ---- zones from clicks ----------------------------------------------------------------------------------------
+const OWN_ZONES = [[5, 6, 1], [7, 8, 9], [4, 3, 2]] // from the own end line toward the net, left to right (as dvw.ts)
+const OPP_ZONES = [[2, 3, 4], [9, 8, 7], [1, 6, 5]] // from the net toward the far end line
+
+// The zone and sub-zone a click falls in (a point off the court counts in the nearest one, so a serve from
+// behind the end line takes its column's zone).
+export function zoneOfClick(p: { u: number; v: number }): { zone: number; sub: string } {
+  const u = Math.max(0, Math.min(0.9999, p.u)), v = Math.max(0, Math.min(0.9999, p.v))
+  const c = Math.floor(u * 3), r = Math.floor(v * 6), su = u * 3 - c, sv = v * 6 - r
+  const zone = r < 3 ? OWN_ZONES[r][c] : OPP_ZONES[r - 3][c]
+  const sub = r < 3 ? (sv < 0.5 ? (su < 0.5 ? 'D' : 'A') : (su < 0.5 ? 'C' : 'B')) : (sv < 0.5 ? (su < 0.5 ? 'B' : 'C') : (su < 0.5 ? 'A' : 'D'))
+  return { zone, sub }
+}
+
+// For a serve or an attack (whose coded zones are where it started and where it went): the code with its start
+// zone, end zone and end sub-zone taken from its clicks, or null when they already agree (or it has no clicks,
+// or is another skill).
+export function codeWithClickZones(code: string, start: string | undefined, end: string | undefined): string | null {
+  const skill = code.charAt(3)
+  if (skill !== 'S' && skill !== 'A') return null
+  const s = pointOf(start), e = pointOf(end)
+  if (!s && !e) return null
+  const p = codeParts(code)
+  const next = { ...p }
+  if (s) next.startZone = String(zoneOfClick(s).zone)
+  if (e) { const z = zoneOfClick(e); next.endZone = String(z.zone); next.endSub = z.sub }
+  const out = partsCode(next)
+  return out === code ? null : out
 }

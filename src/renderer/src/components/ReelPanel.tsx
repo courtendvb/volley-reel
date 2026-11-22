@@ -81,7 +81,7 @@ export function ReelPanel(p: Props) {
     return (
       <aside className="reel-panel">
         <div className="reel-head"><button className="primary" onClick={p.onNewReel}>{t('シーンを作成')}</button></div>
-        <p className="muted pad">{t('プレー一覧の 1〜5 ボタンか数字キー 1〜5 で、プレーをシーンに入れられます。')}</p>
+        <p className="muted pad">{t('プレー一覧の 1〜6 ボタンか数字キー 1〜6 で、プレーをシーンに入れられます。')}</p>
       </aside>
     )
   }
@@ -432,7 +432,7 @@ export function ReelPanel(p: Props) {
           </div>
         </>
       )}
-      {!Object.keys(reel.clips).length && <p className="hint pad-x">{t('数字キー 1〜5 で選択中のクリップにマーカーを付ける（複数入れられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でメモ（並べ替え用）、「メモ順」でマーカーをメモの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、マーカーの見出しを右クリックで先頭にスライドを入れる。')}</p>}
+      {!Object.keys(reel.clips).length && <p className="hint pad-x">{t('数字キー 1〜6 で選択中のクリップにマーカーを付ける（複数入れられる。同じ数字で外す、0 ですべて外す）。Shift+1〜6 でメモ（並べ替え用）、「メモ順」でマーカーをメモの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、マーカーの見出しを右クリックで先頭にスライドを入れる。')}</p>}
     </aside>
   )
 }
@@ -450,7 +450,7 @@ function TagChip({ tag, onChange }: { tag: string | undefined; onChange: (t: str
   }
   return (
     <button className={`tag-chip${tag ? '' : ' empty'}`} style={tag ? tagColor(tag) : undefined}
-      title={tag ? t('メモ「{0}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません', tag) : t('メモを付ける（並べ替え用のメモ。Shift+1〜5 でも付けられる）')}
+      title={tag ? t('メモ「{0}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません', tag) : t('メモを付ける（並べ替え用のメモ。Shift+1〜6 でも付けられる）')}
       onClick={e => { e.stopPropagation(); setEditing(true) }}>{tag || '＋'}</button>
   )
 }

@@ -29,6 +29,7 @@ interface ShortcutHandlers {
   pasteObjects: () => boolean
   pasteImage: () => void
   toggleShortcuts: () => void
+  toggleRight: () => void // fold / unfold the right column
   activateClip: (c: Clip, g?: Group) => void
   whenIn: (s: Reel) => (c: Clip) => [string, number]
   jump: (r: PlayRef) => void
@@ -80,6 +81,7 @@ export function useShortcuts(handlers: ShortcutHandlers) {
           void api.clipboardKind().then(kind => { if (kind === 'image') hRef.current.pasteImage(); else hRef.current.pasteObjects() })
         }
         else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); h.undoRedo('redo') }
+        else if (k === 'b' && !e.shiftKey) { e.preventDefault(); h.toggleRight() }
         return
       }
       if (e.altKey) return
@@ -132,15 +134,15 @@ export function useShortcuts(handlers: ShortcutHandlers) {
         const { reel: r, activeClipId: id } = latest
         if (r && id && r.clips[id]?.matchId === playback.attachedKey) { e.preventDefault(); h.trim(e.key === '[' ? 'in' : 'out', playback.current.time) }
       }
-      else if (e.shiftKey && /^(Digit|Numpad)[0-5]$/.test(e.code)) {
-        // Shift + 1–5: the active clip's tag (the same number takes it off; Shift + 0 always does).
+      else if (e.shiftKey && /^(Digit|Numpad)[0-6]$/.test(e.code)) {
+        // Shift + 1–6: the active clip's tag (the same number takes it off; Shift + 0 always does).
         // By key position, as Shift + a digit types a symbol on most layouts.
         const { reel: r, activeClipId: id } = latest
         if (!r || !id || !r.clips[id]) return
         e.preventDefault()
         h.setTag(e.code.slice(-1))
       }
-      else if (/^[0-5]$/.test(e.key)) { e.preventDefault(); h.markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
+      else if (/^[0-6]$/.test(e.key)) { e.preventDefault(); h.markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

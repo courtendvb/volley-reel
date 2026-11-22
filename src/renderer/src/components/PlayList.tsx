@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { effectName, skillName } from '../../../shared/labels'
-import { MARKER_COLORS, type Marker } from '../../../shared/reel'
+import { MARKERS, MARKER_COLORS, type Marker } from '../../../shared/reel'
 import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
@@ -94,8 +94,6 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
     </div>
   )
 }
-
-const MARKERS: Marker[] = [1, 2, 3, 4, 5]
 
 // odd: every other row is shaded a little (by its place in the list, so the stripes stay put while scrolling).
 const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark, onEditCode }: {

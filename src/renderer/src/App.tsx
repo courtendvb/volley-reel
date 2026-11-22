@@ -6,7 +6,7 @@ import {
   DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
-import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo } from '../../shared/types'
+import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo, ProjectSettings } from '../../shared/types'
 import { SlidePickDialog } from './components/SlidePickDialog'
 import { CheckPicker } from './components/CheckPicker'
 import { ShotPick, type ShotRow } from './components/ShotPick'
@@ -306,6 +306,9 @@ export function App() {
     return n
   }, [reels])
   const offTarget = useCallback((matchId: string) => !!project && !project.matchIds.includes(matchId), [project])
+  // The list's clip seconds: the open scene's, or the project's while no scene is open (a new match).
+  const rangeOf = (r: Reel | null, st: ProjectSettings | undefined) => (r ? rangeDefaults(r) : { ...DEFAULT_RANGE, ...(st?.range ?? {}) })
+  const listRange = useMemo(() => rangeOf(reel, settings), [reel, settings])
   // A clip's range uses its own scene's length defaults, so a video mixing scenes stays right.
   const infoFor = useCallback((c: Clip, scene: Reel | null): ClipInfo => {
     const m = matches[c.matchId], d = dvws[c.matchId], play = d?.plays[c.playId]
@@ -490,7 +493,7 @@ export function App() {
       // Played as the list's, not as a clip: the display follows the rally (followData).
       setActiveClipId(null)
       followSel.current = r.play.id
-      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      const d = rangeOf(latest.current.reel, latest.current.settings)
       const start = Math.max(0, rally.serveTime - d.rallyLead + m.offsetSec)
       listRunRef.current = { matchId: r.matchId, playId: r.play.id, start, end: rally.lastActionTime + d.rallyTail + LIST_RALLY_LINGER_SEC + m.offsetSec, rallyId: r.play.rallyId! }
       setListRun(true)
@@ -498,7 +501,7 @@ export function App() {
       return
     }
     if (extractRef.current === 'keyplay') {
-      const d = latest.current.reel ? rangeDefaults(latest.current.reel) : DEFAULT_RANGE
+      const d = rangeOf(latest.current.reel, latest.current.settings)
       listRunRef.current = { matchId: r.matchId, playId: r.play.id, start: t - d.keyBefore, end: t + d.keyAfter }
       setListRun(true)
       playback.seekIn(r.matchId, Math.max(0, t - d.keyBefore), { play: true })
@@ -655,7 +658,7 @@ export function App() {
     if (!match || !d) return null
     // 通し: the rally's serves, receptions and attacks as each happens, whatever the list shows. Else the
     // play picked, for the whole of its window (what the list plays of it), from its start.
-    const defaults = reel ? rangeDefaults(reel) : DEFAULT_RANGE
+    const defaults = listRange
     const pick = !listThrough && selectedPlay ? defaultRange(d, selectedPlay, match.offsetSec, defaults, extract) : null
     const windows = listThrough
       ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
@@ -679,7 +682,7 @@ export function App() {
         return v
       },
     }
-  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract, settingsOpen, gridStyle.forecast]) // settingsOpen: the set stop's length is read again once the settings close
+  }, [match, dvws, reel, overlay, video?.captionNames, settings?.ourTeamCodes, packs, listThrough, selectedPlay, extract, settingsOpen, gridStyle.forecast, listRange]) // settingsOpen: the set stop's length is read again once the settings close
   followDataRef.current = followData
   // 通し stops the picture before a set after a good reception, for the set distribution to be read.
   useEffect(() => {
@@ -863,7 +866,7 @@ export function App() {
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
             <FilterPanel
               filter={filter} onChange={setFilter} people={people} details={details} targetCode={settings?.ourTeamCodes[0] ?? ''} extract={extract} onExtract={setExtract} through={listThrough} onThrough={setListThrough}
-              range={reel ? rangeDefaults(reel) : DEFAULT_RANGE} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : null}
+              range={listRange} onRange={reel ? d => updateReel({ ...reel, rangeDefaults: d, updatedAt: new Date().toISOString() }) : settings ? d => void saveSettings({ ...settings, range: d }) : null}
               shown={results.length} total={scopeRefs.length} teamFilterLimited={teamFilterLimited} dirUnknown={dirUnknown}
               onAddAll={() => addPlays(results)}
               saved={settings?.filters ?? []} onSaved={filters => { if (settings) void saveSettings({ ...settings, filters }, false) }}

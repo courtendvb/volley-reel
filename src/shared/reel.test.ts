@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, copyClipTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
-  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers,
+  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers, cleanRange,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -440,5 +440,16 @@ describe('a clip into another scene', () => {
     expect(markersOf(again.reel, tc[0])).toEqual([1, 3])
     expect(Object.keys(again.reel.clips)).toHaveLength(1)
     expect(copyClipTo(src.clips[c[1]], to0, []).reel.groups.none).toEqual([tc[0]])
+  })
+})
+
+describe('the project\'s clip seconds', () => {
+  it('keeps only known fields, numbers from 0 to 30', () => {
+    expect(cleanRange({ keyBefore: 2, keyAfter: 31, rallyTail: -1, mode: 'keyplay', x: 1 })).toEqual({ keyBefore: 2, mode: 'keyplay' })
+    expect(cleanRange(null)).toEqual({})
+  })
+  it('start a new scene', () => {
+    expect(rangeDefaults(newReel('a', { keyBefore: 5, keyAfter: 6 }))).toEqual({ ...DEFAULT_RANGE, keyBefore: 5, keyAfter: 6 })
+    expect(rangeDefaults(newReel('b'))).toEqual(DEFAULT_RANGE)
   })
 })

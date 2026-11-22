@@ -120,8 +120,14 @@ export interface ChartBox { x: number; y: number; h: number }
 const HEAD = 0.075, MARGIN_X = 0.05, MARGIN_Y = 0.16 // of the panel's height; of the court's width at each side
 const courtWidth = (h: number, named: boolean) => (h * (1 - (named ? HEAD : 0))) / (2 + MARGIN_Y * 2)
 const panelWidth = (h: number, named: boolean) => courtWidth(h, named) * (1 + MARGIN_X * 2)
-// A chart's width for a height, both in the same units, with no title bar.
-export const chartWidth = (h: number) => panelWidth(h, false)
+// A chart's width for a height, both in the same units, with no title bar (named: with it).
+export const chartWidth = (h: number, named = false) => panelWidth(h, named)
+// Where the court lies in a chart drawn in this box: its left, top (the attacker's end line) and width;
+// a point of the chart (x across, y end line to end line) is at left + x * w, top + y * 2 * w.
+export function chartCourt({ x, y, h }: ChartBox, named: boolean): { left: number; top: number; w: number } {
+  const pw = panelWidth(h, named), cw = courtWidth(h, named)
+  return { left: x + (pw - cw) / 2, top: y + (named ? h * HEAD : 0) + cw * MARGIN_Y, w: cw }
+}
 export function chartBox(w: number, h: number, where: ChartCorner | 'center', scale = 1, named = false): ChartBox {
   if (where === 'center') { const ph = h * 0.92; return { x: (w - panelWidth(ph, named)) / 2, y: h * 0.04, h: ph } }
   const ph = Math.min(h * 0.96, h * 0.6 * scale), edge = h * 0.02
@@ -165,8 +171,8 @@ const TEXT = '#0F172A', OFF_COURT = 0.3 // points further off the court than thi
 
 export function drawChart(ctx: Ctx, chart: DirectionChart, { x, y, h }: ChartBox): void {
   const { dots, stats, look, name, skill } = chart
-  const pw = panelWidth(h, look.name), cw = courtWidth(h, look.name), head = look.name ? h * HEAD : 0
-  const left = x + (pw - cw) / 2, top = y + head + cw * MARGIN_Y
+  const pw = panelWidth(h, look.name), head = look.name ? h * HEAD : 0
+  const { left, top, w: cw } = chartCourt({ x, y, h }, !!look.name)
   const at = (p: Pt): Pt => ({ x: left + p.x * cw, y: top + p.y * 2 * cw })
   const inView = (p: Pt | null): p is Pt => !!p && p.x > -OFF_COURT && p.x < 1 + OFF_COURT && p.y > -OFF_COURT / 2 && p.y < 1 + OFF_COURT / 2
   const thin = Math.max(1, cw / 170), r = Math.max(1.8, cw / 47) * projectScale

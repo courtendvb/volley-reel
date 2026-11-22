@@ -41,9 +41,12 @@ export function cleanSetChart(x: unknown): SetChartStyle {
 }
 // The distribution laid on the court in the video: where the sets were given, or each place's share.
 export type SetCourtLayer = 'spots' | 'shares'
-export interface SetCourtStyle { layer: SetCourtLayer }
+// How the shares are written on the court: on poles with the place's name (missing: the usual), or the
+// number alone lying on the floor.
+export type SetShareLook = 'poles' | 'floor'
+export interface SetCourtStyle { layer: SetCourtLayer; look?: SetShareLook }
 export const DEFAULT_SET_COURT: SetCourtStyle = { layer: 'shares' }
-export const cleanSetCourt = (x: unknown): SetCourtStyle => ({ layer: (x as Partial<SetCourtStyle> | null)?.layer === 'spots' ? 'spots' : 'shares' })
+export const cleanSetCourt = (x: unknown): SetCourtStyle => ({ layer: (x as Partial<SetCourtStyle> | null)?.layer === 'spots' ? 'spots' : 'shares', ...((x as Partial<SetCourtStyle> | null)?.look === 'floor' ? { look: 'floor' as const } : {}) })
 
 // Where a set went, as a place: the set's own target attacker (the 9th character of its code, as the
 // scout coded it: F the front-row attacker on the left, C the centre, B the one behind the setter on
@@ -176,6 +179,27 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     scores ? `Pts ${scores.map(b => SCORE_BANDS.find(x => x.band === b)!.label).join(', ')}` : '',
   ].filter(Boolean).join(' · ')
   return total ? { title: nameOf(set), rotation, rotLabel, filtered, dots, total, kills, errors, by } : null
+}
+
+// The sets one attacker was given, from the attacks with the set before each (null: none, as after a
+// dig straight over): where each set was given, coloured by where the attack came from, marked by how
+// it ended. Null when there were no sets.
+export function attackerSetChart(attacks: { attack: Play; set: Play | null }[], title = ''): SetChart | null {
+  const by = Object.fromEntries(SET_TARGETS.map(k => [k, { n: 0, kills: 0 }])) as SetChart['by']
+  const dots: SetDot[] = []
+  let kills = 0, errors = 0
+  for (const { attack, set } of attacks) {
+    if (!set || set.skill !== 'E') continue
+    const target = setTarget(attack, set.playerKey)
+    if (!target) continue
+    const result = resultOf(attack.effect)
+    by[target].n++
+    if (result === 'kill') { by[target].kills++; kills++ }
+    if (result === 'lost') errors++
+    const at = spot(set.startClick ?? null)
+    dots.push({ at, click: at ? set.startClick ?? null : null, target, result })
+  }
+  return dots.length ? { title, rotation: null, rotLabel: 'All', filtered: '', dots, total: dots.length, kills, errors, by } : null
 }
 
 // A click as seen across the net: the team's half with its end line at the top and the net at the

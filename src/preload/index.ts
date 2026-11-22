@@ -50,6 +50,7 @@ const api: Api = {
   accountSignIn: (email, code) => ipcRenderer.invoke('account:signIn', email, code),
   accountRefresh: teamId => ipcRenderer.invoke('account:refresh', teamId),
   accountCheckout: plan => ipcRenderer.invoke('account:checkout', plan),
+  accountPrices: () => ipcRenderer.invoke('account:prices'),
   accountSignOut: () => ipcRenderer.invoke('account:signOut'),
   accountTeam: a => ipcRenderer.invoke('account:team', a),
   lang: ipcRenderer.sendSync('app:lang'),

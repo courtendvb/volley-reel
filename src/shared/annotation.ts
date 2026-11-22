@@ -430,6 +430,13 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
   ctx.lineCap = 'round'
   ctx.strokeStyle = a.color
   ctx.fillStyle = a.color
+  // One object that can't be drawn is skipped: a canvas error here would otherwise take down the
+  // whole screen (it runs inside React effects) or the export.
+  try { drawKind(ctx, a, W, H, s, images) } catch (e) { console.error(`オブジェクト（${a.kind}）を描けませんでした`, e) }
+  ctx.restore()
+}
+
+function drawKind(ctx: Ctx, a: Annotation, W: number, H: number, s: number, images?: ImageLookup): void {
   switch (a.kind) {
     case 'text': drawText(ctx, a, W, H, s); break
     case 'image': {
@@ -475,7 +482,9 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
     case 'circle': case 'rect': {
       ctx.beginPath()
       if (a.kind === 'rect') ctx.rect(a.x * W, a.y * H, a.w * W, a.h * H)
-      else ctx.ellipse((a.x + a.w / 2) * W, (a.y + a.h / 2) * H, (a.w / 2) * W, (a.h / 2) * H, 0, 0, Math.PI * 2)
+      // A circle being drawn up or to the left has a negative w / h until it is let go, and
+      // ellipse() throws on a negative radius.
+      else ctx.ellipse((a.x + a.w / 2) * W, (a.y + a.h / 2) * H, Math.abs(a.w / 2) * W, Math.abs(a.h / 2) * H, 0, 0, Math.PI * 2)
       fillAndStroke(ctx, a, a.width * s, { x: a.x * W, y: a.y * H, w: a.w * W, h: a.h * H })
       break
     }
@@ -488,7 +497,6 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
       else { ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = a.width * s; setDash(ctx, a.dash, a.width * s); ctx.stroke() }
     }
   }
-  ctx.restore()
 }
 
 // A ring going out from the object, t of the way (0..1): from just outside it, larger and fainter as

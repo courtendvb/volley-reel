@@ -9,7 +9,7 @@ import { logoColor } from '../assets'
 import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
 import { compareRows as rowsOf, compareSide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
 import { MOST_ROWS, STAT_COLUMNS, STAT_KINDS, STAT_LOOK, STAT_ROWS, STAT_STRIPE, type StatKind, type StatLook } from '../../../shared/statsBoard'
-import { t } from '../../../shared/i18n'
+import { cap, t } from '../../../shared/i18n'
 
 // What a chart shows: points, lines and a heatmap, any of them together, and how strong the lines are;
 // on a serve's, whether the points and heatmap take in where it was served from as well.
@@ -202,7 +202,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
       <div className="modal board-dialog" role="dialog" aria-label={t('データスライド')} onClick={e => e.stopPropagation()}>
         <h2>{t('データスライド')}</h2>
         <div className="filter-row">
-          <span className="field-label">{t('プレー')}</span>
+          <span className="field-label">{cap(t('プレー'))}</span>
           <div className="segmented" role="radiogroup">
             {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')], ['T', t('サーブの狙い')], ['C', t('チーム比較')], ['P', t('個人スタッツ')]] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>

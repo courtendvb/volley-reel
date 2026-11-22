@@ -20,6 +20,12 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
     return (matchOrder === 'new' ? [...ms].reverse() : ms).flatMap(m => refsByMatch[m.id] ?? [])
   }, [matchIds, refsByMatch, project, matchOrder])
   const results = useMemo(() => applyFilter(scopeRefs, filter), [scopeRefs, filter])
+  // Plays a correction took out, in the matches in scope, as the filter would show them (the list shows them faded).
+  const deletedResults = useMemo(() => {
+    if (!settings) return []
+    const ms = (project?.matches ?? []).filter(m => (!matchIds.length || matchIds.includes(m.id)) && dvws[m.id]?.deleted?.length)
+    return applyFilter(ms.flatMap(m => buildRefs(m.id, { ...dvws[m.id], plays: dvws[m.id].deleted! }, settings, m.court)), filter)
+  }, [dvws, settings, project, matchIds, filter])
   const people = useMemo(() => listPeople(scopeRefs), [scopeRefs])
   // Detailed search choices: those found in the plays in scope (of the chosen skills, when any).
   const details = useMemo(() => detailOptions(filter.skills.length ? scopeRefs.filter(r => filter.skills.includes(r.play.skill)) : scopeRefs), [scopeRefs, filter.skills])
@@ -34,5 +40,5 @@ export function usePlaySearch(project: ProjectInfo | null, dvws: Record<string, 
   }, [project, matchOrder, sceneMatches])
   const matchLabels = useMemo(() => labelMatches([...(project?.matches ?? []), ...sceneMatches], settings?.ourTeamCodes ?? []), [project, settings, sceneMatches])
 
-  return { refsByMatch, scopeRefs, results, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels }
+  return { refsByMatch, scopeRefs, results, deletedResults, people, details, teamFilterLimited, dirUnknown, matchRank, matchLabels }
 }

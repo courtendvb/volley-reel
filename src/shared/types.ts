@@ -3,7 +3,7 @@ import type { Lang } from './i18n'
 import type { AccountState, PlanPrices, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit, StrikeHeights } from './court'
-import type { CodeEdit } from './codeEdit'
+import type { CodeEdit, ScoutInsert } from './codeEdit'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
 import type { OverlayPatch, OverlayTheme } from './overlay'
@@ -45,6 +45,10 @@ export interface Play {
   code: string
   line?: number // its line among the file's [3SCOUT] lines, which a correction names (codeEdit.ts)
   original?: string // the file's code, when a correction changed it
+  inserted?: string // a play put in by hand (codeEdit.ts ScoutInsert id); line is the file line it follows
+  moved?: boolean // its clicks were corrected (codeEdit.ts)
+  deleted?: boolean // taken out by a correction: only in ParsedDVW.deleted, shown faded in the list when asked
+  cells?: { start: string; end: string } // the line's own clicks as written (columns 5 and 7), before any are moved for a reception, dig or set
   time: number // DVW time (offset not applied)
   side: Side
   jersey: number
@@ -92,7 +96,8 @@ export interface ParsedDVW {
   allHome: boolean // every play coded as '*': side can't tell the teams apart
   codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
   info?: MatchInfo // for the match report; missing on matches read before it was kept
-  staleEdits?: CodeEdit[] // corrections whose line no longer holds the code they were made on (left out)
+  stale?: { edits: CodeEdit[]; inserts: ScoutInsert[] } // corrections whose line no longer holds the code they were made on (left out)
+  deleted?: Play[] // the plays a correction took out, as the file has them (for the list only; nothing else counts them)
 }
 
 // The match as the DVW's header tells it: start time, each set's partial scores (at 8, 16, 21), final
@@ -125,6 +130,7 @@ export interface Match {
   court?: CourtFit // the court grid fitted to this video (missing: not fitted yet)
   serveMarks?: Record<string, ServeMark> // by play fingerprint: serves' hits and touches marked by hand (serveMark.ts)
   codeEdits?: CodeEdit[] // corrections to the scout file's codes, laid over it when read (codeEdit.ts); the file is not written
+  codeInserts?: ScoutInsert[] // plays put in by hand (codeEdit.ts)
 }
 
 // A serve's hit and its reception's touch, video times marked by hand frame by frame.
@@ -234,7 +240,11 @@ export interface Api {
   otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
   projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
-  setCodeEdit(id: string, line: number, from: string, to: string): Promise<ProjectInfo | null> // a play's code corrected (to = from takes it off)
+  // A line corrected: its code (to = from: no change; '': the play taken out) and / or its clicks (a cell; null: the file's).
+  setCodeEdit(id: string, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }): Promise<ProjectInfo | null>
+  setInsert(id: string, ins: ScoutInsert): Promise<ProjectInfo | null> // a play put in after a line, changed, or taken off (code '')
+  clearScoutEdits(id: string): Promise<ProjectInfo | null> // every correction of the match taken off
+  exportScout(id: string, format: 'dvw' | 'vsm'): Promise<{ path: string; skipped: number } | null> // the corrected scout file, saved where picked
   setMatchOffset(id: string, offsetSec: number): Promise<ProjectInfo | null> // DVW time + offset = video time, for every play of the match
   setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>

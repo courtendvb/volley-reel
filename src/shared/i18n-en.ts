@@ -1813,4 +1813,6 @@ export const EN: Record<string, string> = {
   "直したスカウトファイルを書き出す": "Write out the corrected scout file",
   "足したプレーを消す": "Remove the added play",
   "足す": "Add",
+  "Enter で保存、Esc で閉じる": "Enter saves, Esc closes",
+  "選んでいるプレーのコードを直す": "Correct the selected play’s code",
 }

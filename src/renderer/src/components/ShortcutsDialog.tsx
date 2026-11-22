@@ -21,6 +21,7 @@ const groups = (): { title: string; keys: [string, string][] }[] => [
     keys: [
       ['↑ / ↓', t('前 / 次のプレーへ')],
       ['D / F', t('シーンの前 / 次のクリップへ')],
+      ['Enter', t('選んでいるプレーのコードを直す')],
     ],
   },
   {

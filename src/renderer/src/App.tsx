@@ -80,6 +80,7 @@ import { ServeMarkBar } from './components/ServeMarkBar'
 import { OffsetBar } from './components/OffsetBar'
 import { CodeEditDialog } from './components/CodeEditDialog'
 import { ScoutEditsDialog } from './components/ScoutEditsDialog'
+import { QuickCodeDialog } from './components/QuickCodeDialog'
 import { playTimes, serveMarkOf, withServeMark } from '../../shared/serveMark'
 
 const api = window.api
@@ -243,6 +244,7 @@ export function App() {
   // A scout file's corrections (codeEdit.ts): a play's code changed, a play taken out or put in. Saved beside the
   // match, then the match read again so every list, report and court shows them.
   const [codeEditing, setCodeEditing] = useState<{ ref: PlayRef; mode: 'edit' | 'insert'; time?: number } | null>(null)
+  const [quickCode, setQuickCode] = useState<PlayRef | null>(null) // Enter in the list: the code alone, on one line
   const [scoutEditsOf, setScoutEditsOf] = useState<string | null>(null) // the match whose corrections are listed
   const [scoutBusy, setScoutBusy] = useState(false)
   const insertOf = (matchId: string, id: string | undefined) => (id ? matches[matchId]?.codeInserts?.find(i => i.id === id) : undefined)
@@ -253,7 +255,7 @@ export function App() {
       if (info) setProject(info)
       const d = await api.parseMatch(matchId)
       setDvws(prev => ({ ...prev, [matchId]: d }))
-      setCodeEditing(null)
+      setCodeEditing(null); setQuickCode(null)
     } catch (err) { setError(String(err)) } finally { setScoutBusy(false) }
   }
   const saveCode = (r: PlayRef, to: string, mode: 'edit' | 'insert', time?: number) => {
@@ -794,10 +796,10 @@ export function App() {
   }, [updateReel])
 
   useShortcuts({
-    latest, paused: settingsOpen, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
+    latest, paused: settingsOpen || !!quickCode || !!codeEditing || !!scoutEditsOf, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
     scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
     undoRedo, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o),
-    activateClip, whenIn, jump, setAnnTool, trim, markerKey,
+    activateClip, whenIn, jump, setAnnTool, trim, markerKey, editCode: r => setQuickCode(r),
     setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
   })
 
@@ -1131,6 +1133,10 @@ export function App() {
             setCodeEditing({ ref: codeEditing.ref, mode: 'insert', time: now > at && now < at + 20 ? now : at + 1 }) }}
           onList={() => { setScoutEditsOf(codeEditing.ref.matchId); setCodeEditing(null) }}
           onClose={() => setCodeEditing(null)} />
+      )}
+      {quickCode && (
+        <QuickCodeDialog key={`${quickCode.matchId}:${quickCode.play.id}`} code={quickCode.play.code}
+          onSave={to => saveCode(quickCode, to, 'edit')} onClose={() => setQuickCode(null)} />
       )}
       {scoutEditsOf && matches[scoutEditsOf] && (
         <ScoutEditsDialog match={matches[scoutEditsOf]} dvw={dvws[scoutEditsOf]} busy={scoutBusy}

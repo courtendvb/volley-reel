@@ -1010,3 +1010,9 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .scout-edit-list .kind { width: 3.5em; flex: none; font-weight: 700; }
 .scout-edit-list code { flex: 1; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
 .scout-edit-list li.stale { opacity: .55; }
+
+/* Enter in the play list: the code alone on one line (QuickCodeDialog). */
+.quick-code-backdrop { align-items: flex-start; padding-top: 18vh; }
+.modal.quick-code { width: min(420px, 90vw); padding: var(--space-3); }
+.quick-code input { width: 100%; font: 600 20px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .04em; padding: var(--space-2) var(--space-3); }
+.quick-code input[aria-invalid="true"] { border-color: var(--danger, #DC2626); }

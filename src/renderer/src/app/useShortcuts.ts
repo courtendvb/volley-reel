@@ -32,6 +32,7 @@ interface ShortcutHandlers {
   activateClip: (c: Clip, g?: Group) => void
   whenIn: (s: Reel) => (c: Clip) => [string, number]
   jump: (r: PlayRef) => void
+  editCode: (r: PlayRef) => void // Enter on a play in the list: its code, corrected in place
   setAnnTool: (t: Tool) => void
   trim: (edge: 'in' | 'out', t: number | null) => void
   setTag: (n: string) => void
@@ -115,6 +116,11 @@ export function useShortcuts(handlers: ShortcutHandlers) {
         const i = s ? res.findIndex(x => x.matchId === s.matchId && x.play.id === s.playId) : -1
         const next = res[e.key === 'ArrowDown' ? i + 1 : i < 0 ? 0 : i - 1]
         if (next) h.jump(next)
+      }
+      else if (e.key === 'Enter' && !e.shiftKey && h.focusPane.current === 'list' && latest.selected) {
+        // Enter: the selected play's code, on one line, to correct (codeEdit.ts).
+        const s = latest.selected, r = latest.results.find(x => x.matchId === s.matchId && x.play.id === s.playId)
+        if (r && r.play.line !== undefined) { e.preventDefault(); h.editCode(r) }
       }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? playback.stepFrames(-1) : playback.nudge(-arrowSec()) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? playback.stepFrames(1) : playback.nudge(arrowSec()) }

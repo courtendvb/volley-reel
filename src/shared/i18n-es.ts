@@ -1813,4 +1813,6 @@ export const ES: Record<string, string> = {
   "直したスカウトファイルを書き出す": "Exportar el archivo de scouting corregido",
   "足したプレーを消す": "Quitar la jugada agregada",
   "足す": "Agregar",
+  "Enter で保存、Esc で閉じる": "Enter guarda, Esc cierra",
+  "選んでいるプレーのコードを直す": "Corregir el código de la jugada seleccionada",
 }

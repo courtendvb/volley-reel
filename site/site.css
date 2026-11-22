@@ -268,3 +268,21 @@ footer p + p { margin-top: 6px; }
 .dl-all a[data-rec] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .dl-help { color: var(--sub); font-size: 14px; line-height: 1.6; }
 .dl .btn[hidden] { display: none; }
+
+/* Feature cards: one picture per feature, the name, then a line on what it does.
+   Two across inside a half-width column, four across in "more". */
+.feats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; list-style: none; }
+.feats li { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.feats img { width: 100%; height: auto; aspect-ratio: 16 / 10; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px var(--shadow); }
+.feats b { font-size: 17px; font-weight: 700; }
+.feats span { color: var(--sub); font-size: 16px; line-height: 1.5; }
+.source .feats { margin-top: 6px; }
+.more-feats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px 20px; }
+.more-note { margin-top: 28px; color: var(--sub); font-size: 16px; }
+.steps img { width: 100%; height: auto; aspect-ratio: 16 / 10; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 8px 22px rgba(0, 0, 0, .35); }
+@media (max-width: 1040px) {
+  .more-feats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .feats, .more-feats { grid-template-columns: minmax(0, 1fr); }
+}

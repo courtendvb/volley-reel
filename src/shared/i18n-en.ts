@@ -1,6 +1,10 @@
 // English for the interface (see i18n.ts): Japanese as written in the code → English.
 // Keys are the exact strings passed to t(); {0}, {1}… are the values filled in.
 export const EN: Record<string, string> = {
+  "このクリップだけ別の表示": "This clip looks its own way",
+  "このクリップだけ、下の表示（ゾーンの細かさ・着弾の演出・選手の全本数）を自分の設定にする。オンにした時点の設定が入り、あとから「表示」を変えてもこのクリップは変わらない。書き出しも同じ": "Gives this clip its own settings for what is below (zone detail, landing effect, the player's shots). It starts as the settings now, and changing the 表示 tab later does not change this clip. The export is the same",
+  "下の変更は、このクリップだけに入ります。グリッドと手前のチームは、これまでどおり試合の設定です": "Changes below go to this clip only. The grid and the near team stay the match's",
+  "このクリップは別の種類のプレーなので、ここは「表示」の設定のままです": "This clip is another kind of play, so this follows the 表示 tab's settings",
   "いまのプレー: {0}": "Current play: {0}",
   "コートが重なりました": "The courts are laid on each other",
   "合わせました。カメラの角度の違いによるずれが残っています（約 {0}%）": "Matched. A difference in camera angle leaves some offset (about {0}%)",

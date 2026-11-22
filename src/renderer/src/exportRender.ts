@@ -8,7 +8,7 @@ import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawForecast, forecastOn, forecastSteps, landingFxEnd, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
+import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawForecast, forecastOn, forecastSteps, landingFxEnd, FLIGHTS_SEC, clipCourtStyle, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
@@ -128,13 +128,16 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
   const data = d.overlayData(c)
   const o = c.overlayOverride
-  const courtStyle = d.courtStyle && o?.courtMarks?.hidden ? withoutPlayerMarks(d.courtStyle) : d.courtStyle // the clip can leave the player's marks off
+  const tabStyle = d.courtStyle
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
   const lineup = data && overlay.lineup.enabled && !o?.scoreboard?.hidden ? data.scoreboard.lineup ?? null : null
   // The court as the player shows it (grid, zones, the player's marks and charts, as set on the 表示
   // tab), on every clip of a match whose court is fitted.
-  const court = courtStyle ? d.court?.(c, sceneId, group) ?? null : null
+  const court = tabStyle ? d.court?.(c, sceneId, group) ?? null : null
+  // The clip's own look when it pins one (by its play's kind), and without the player's marks when it leaves them off.
+  const pinned = tabStyle && clipCourtStyle(tabStyle, court?.zones?.skill, o?.court)
+  const courtStyle = pinned && o?.courtMarks?.hidden ? withoutPlayerMarks(pinned) : pinned
   // Windows in seconds into the clip as played: slow stretches stretch them, and an object shown at
   // a held moment stays up while it is held (shared/timing.ts).
   const ps = pieces(r.in, r.out, c.timing), played = playedSec(ps)
@@ -203,11 +206,11 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   }
   // The ripple from the landing, in steps (each its own layer): it spreads, stays, fades, and is gone.
   if (ripples) {
-    const land = rippleStart(court!.flight!, d.courtStyle!)
+    const land = rippleStart(court!.flight!, courtStyle!)
     const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
     for (const st of rippleSteps()) {
       const from = playedOf(land + st.from), to = playedOf(land + st.to)
-      if (st.from >= landingFxEnd(d.courtStyle!.rippleKind ?? 'ripple') || land + st.from >= r.out || to - from < 0.001) continue
+      if (st.from >= landingFxEnd(courtStyle!.rippleKind ?? 'ripple') || land + st.from >= r.out || to - from < 0.001) continue
       layers.push({ from, to, png: await png(ctx => drawRipple(ctx, W, H, court!.fit, courtStyle!, court!.zones!, st.at)) })
     }
   }

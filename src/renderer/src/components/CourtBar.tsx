@@ -20,6 +20,9 @@ interface Props {
   onAuto: () => Promise<void>
   playSkill: string | null // the selected play's skill: its tab of the player marks opens
   setterCalls: { code: string; name?: string }[] // the setter calls in the matches, for the set filter
+  // The clip on screen can look its own way (overlayOverride.court): this is its switch. `style` then is how that clip looks,
+  // and what is changed here that is the clip's goes to the clip. Not given: no clip to pin to.
+  pin?: { on: boolean; onChange: (on: boolean) => void }
 }
 
 // The chart's own settings, shown to the right of its checkbox.
@@ -60,10 +63,13 @@ const tabName = (k: MarkSkill) => MARK_TABS.find(([x]) => x === k)![1]
 // The court grid for the match on screen: fit its corners, what to show, which team is near. What
 // is laid over the selected play from the player's other plays is set for each kind of play on its
 // own tab (a serve, an attack, a set), with only what applies to it; the selected play's tab opens.
-export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto, playSkill, setterCalls }: Props) {
+export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, onAuto, playSkill, setterCalls, pin }: Props) {
   const selected = markSkill(playSkill)
-  const [tab, setTab] = useState<MarkSkill>(selected ?? 'A')
+  const [openTab, setTab] = useState<MarkSkill>(selected ?? 'A')
   useEffect(() => { if (selected) setTab(selected) }, [selected])
+  // A clip that looks its own way has the marks of its own kind of play only: the other tabs are the tab's.
+  const pinned = !!pin?.on
+  const tab: MarkSkill = pinned && selected ? selected : openTab
   const m: PlayerMarkStyle = s.bySkill?.[tab] ?? {}
   const put = <K extends keyof PlayerMarkStyle>(key: K, value: PlayerMarkStyle[K] | undefined) => {
     const { [key]: _old, ...rest } = m
@@ -142,6 +148,13 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
       {/* 2. What the one selected play shows. */}
       <section className="court-group">
         <h3 className="court-group-head" title={t('一覧やシーンで選んだプレー 1 本の表示')}>{t('選んだ1本')}</h3>
+        {pin && (
+          <div className="ann-row">
+            <label className={`check${pinned ? ' on' : ''}`} title={t('このクリップだけ、下の表示（ゾーンの細かさ・着弾の演出・選手の全本数）を自分の設定にする。オンにした時点の設定が入り、あとから「表示」を変えてもこのクリップは変わらない。書き出しも同じ')}>
+              <input type="checkbox" checked={pinned} onChange={e => pin.onChange(e.target.checked)} /> {t('このクリップだけ別の表示')}</label>
+            {pinned && <span className="muted small">{t('下の変更は、このクリップだけに入ります。グリッドと手前のチームは、これまでどおり試合の設定です')}</span>}
+          </div>
+        )}
         <Layer label={t('ゾーン')} title={t('選んだプレーの開始ゾーン（緑）と終了ゾーン（赤）')} on={s.playZones} onToggle={on => onStyle({ ...s, playZones: on })}
           help={[t('サブゾーン: ゾーンを4分割した A〜D で塗り、矢印もその中心から中心へ。DVW にサブゾーンがないところはゾーン全体。座標: スカウトがクリックした位置を点で出す（レセプション・ディグはボールが来た位置）。サーブ・アタックは打点の高さ（既定はジャンプサーブ 3.1 m、フローター 3 m、アタック 3.15 m。設定の「打点の高さ」で変えられる）の空中から矢印が出る。セットは 2.4 m からアタッカーの打点まで（セットの開始座標がない DVW はセットのゾーンの中央、ゾーンもなければネット際のセッター位置から）。座標がないプレーはゾーンを塗り、ゾーンの中央を近似の位置として白抜きの点で出す（軌道は破線）')]}>
           <select value={s.detail} aria-label={t('ゾーンの細かさ')} title={t('ゾーンの細かさ')} onChange={e => onStyle({ ...s, detail: e.target.value as GridStyle['detail'] })}>
@@ -184,8 +197,9 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         </div>
       </section>
 
-      {/* 3. The selected play's player, over all their matches: per kind of play, and from which plays. */}
-      <section className="court-group">
+      {/* 3. The selected play's player, over all their matches: per kind of play, and from which plays. A pinned clip of
+          another kind of play (a block, a dig...) has no marks of its own to set. */}
+      {!(pinned && !selected) && <section className="court-group">
         <div className="ann-row mark-tabs-row">
           <h3 className="court-group-head" title={t('選んだプレーの選手の、全試合の分を重ねる。サーブ・アタック・セットで別々に決める')}>{t('選手の全本数')}</h3>
           <div className="segmented" role="tablist" aria-label={t('プレーの種類')}>
@@ -193,7 +207,8 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               const n = Object.entries(s.bySkill?.[k] ?? {}).filter(([key, v]) => key !== 'range' && v).length
               return (
                 <button key={k} role="tab" aria-selected={tab === k} className={`${tab === k ? 'on' : ''}${selected === k ? ' current' : ''}`} onClick={() => setTab(k)}
-                  title={selected === k ? t('いま選んでいるプレー') : t('{0}を選んだときに出すもの', label)}>
+                  disabled={pinned && selected !== k}
+                  title={pinned && selected !== k ? t('このクリップは別の種類のプレーなので、ここは「表示」の設定のままです') : selected === k ? t('いま選んでいるプレー') : t('{0}を選んだときに出すもの', label)}>
                   {label}{n > 0 && <span className="mark-count">{n}</span>}
                 </button>
               )
@@ -277,7 +292,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
             <div className="layer-opts"><SetFilterButton value={m.setFilter ?? {}} calls={setterCalls} onChange={f => put('setFilter', setFilterCount(f) ? f : undefined)} /></div>
           </div>
         )}
-      </section>
+      </section>}
     </div>
   )
 }

@@ -35,7 +35,8 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
     const pc = next.playerCaption
     const cap = pc && (pc.hidden || pc.name || pc.line) ? { ...(pc.hidden ? { hidden: true } : {}), ...(pc.name ? { name: pc.name } : {}), ...(pc.line ? { line: pc.line } : {}) } : undefined
     const marks = next.courtMarks?.hidden ? { hidden: true } : undefined
-    onChange(sb || cap || marks ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}), ...(marks ? { courtMarks: marks } : {}) } : undefined)
+    const court = next.court // the clip's own court look is set on the 表示 tab: it goes through as it is
+    onChange(sb || cap || marks || court ? { ...(sb ? { scoreboard: sb } : {}), ...(cap ? { playerCaption: cap } : {}), ...(marks ? { courtMarks: marks } : {}), ...(court ? { court } : {}) } : undefined)
   }
   const commit = () => {
     const n = name.trim() || undefined

@@ -1,6 +1,7 @@
 // Automatic overlays from the scout data (design §3.7): scoreboard, player caption, title card.
 // Settings live on the reel; each clip can hide an element or rewrite the caption.
 import type { Annotation } from './annotation'
+import type { ClipCourtStyle } from './courtStyle'
 import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { effectName, skillName } from './labels'
@@ -86,6 +87,7 @@ export interface ClipOverlayOverride {
   scoreboard?: { hidden?: boolean }
   playerCaption?: { hidden?: boolean; name?: string; line?: string }
   courtMarks?: { hidden?: boolean } // the player's marks on the court (heatmap, landings, flights, cones, charts, the ripple) are left off this clip
+  court?: ClipCourtStyle // this clip looks its own way (courtStyle.ts): its own detail, landing effect and marks, whatever the 表示 tab says
 }
 
 export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [

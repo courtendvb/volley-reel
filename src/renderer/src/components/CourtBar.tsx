@@ -244,23 +244,29 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
             help={tab === 'E' ? [t('そのセッターのそのローテーションのトスを、動画の隅にチャートで出す。点はトスを上げた位置、色は上げた先（Zone4 青・Zone3 緑・Zone2 赤・Zone1 濃い赤・Pipe 紫・SD 黄）、塗りは決定、白抜きは決まらず、×は失点。コートの上に配分（いちばん多い先は赤枠、少ない先は青枠）（全試合の分。書き出しも同じ）')] : undefined}>
             {m.setChart && (
               <>
-                <select value={m.setChart.view ?? 'auto'} aria-label={t('トス配分の見せ方')} title={t('点はトスを上げた位置（DVW にセットの座標が要る）。ゾーンはアタックのゾーンだけで、行き先ごとの割合を塗る。自動は、座標のあるセットが半分以上なら点')}
+                <select value={m.setChart.view ?? 'auto'} aria-label={t('セット配分の見せ方')} title={t('点はトスを上げた位置（DVW にセットの座標が要る）。ゾーンはアタックのゾーンだけで、行き先ごとの割合を塗る。自動は、座標のあるセットが半分以上なら点')}
                   onChange={e => { const { view: _v, ...rest } = m.setChart!; const v = e.target.value as SetChartView; put('setChart', v === 'auto' ? rest : { ...rest, view: v }) }}>
                   <option value="auto">{t('自動')}</option><option value="points">{t('トスの位置（点）')}</option><option value="zones">{t('ゾーンだけ（簡略）')}</option>
                 </select>
                 <label className="check" title={t('オン: ネットを上にして、セッターの側から見る。オフ: ネットを下にして、相手の側から見る')}><input type="checkbox" checked={!!m.setChart.flip} onChange={e => { const { flip: _f, ...rest } = m.setChart!; put('setChart', e.target.checked ? { ...rest, flip: true } : rest) }} /> {t('上下反転')}</label>
-                <Placement corner={m.setChart.corner} scale={m.setChart.scale} cornerLabel={t('トス配分の位置')} scaleLabel={t('トス配分の大きさ')}
+                <Placement corner={m.setChart.corner} scale={m.setChart.scale} cornerLabel={t('セット配分の位置')} scaleLabel={t('セット配分の大きさ')}
                   onCorner={corner => put('setChart', { ...m.setChart!, corner })} onScale={scale => put('setChart', { ...m.setChart!, scale })} />
               </>
             )}
           </Layer>
         )}
         {tab === 'E' && (
-          <Layer label={t('トス配分')} title={t('そのセッターのそのローテーションのトス配分を、動画のコートにそのまま重ねる（書き出しも同じ）')} on={!!m.setCourt} onToggle={on => put('setCourt', on ? DEFAULT_SET_COURT : undefined)}
-            help={[t('そのセッターのそのローテーションのトス配分を、動画のコートにそのまま重ねる。「配分」は上げた先のエリアを割合の濃さで塗り、いちばん多い先を赤枠、少ない先を青枠で囲む。「トスの位置」はトスを上げた位置を点で出す（DVW にセットの座標が要る。書き出しも同じ）')]}>
+          <Layer label={t('セット配分')} title={t('そのセッターのそのローテーションのセット配分を、動画のコートにそのまま重ねる（書き出しも同じ）')} on={!!m.setCourt} onToggle={on => put('setCourt', on ? DEFAULT_SET_COURT : undefined)}
+            help={[t('そのセッターのそのローテーションのセット配分を、動画のコートにそのまま重ねる。「配分」は上げた先のエリアを割合の濃さで塗り、いちばん多い先を赤枠、少ない先を青枠で囲む。「トスの位置」はトスを上げた位置を点で出す（DVW にセットの座標が要る。書き出しも同じ）')]}>
             {m.setCourt && (
-              <select aria-label={t('コートに重ねるもの')} value={m.setCourt.layer} onChange={e => put('setCourt', { layer: e.target.value as SetCourtLayer })}>
+              <select aria-label={t('コートに重ねるもの')} value={m.setCourt.layer} onChange={e => put('setCourt', { ...m.setCourt!, layer: e.target.value as SetCourtLayer })}>
                 <option value="shares">{t('配分')}</option><option value="spots">{t('トスの位置')}</option>
+              </select>
+            )}
+            {m.setCourt?.layer === 'shares' && (
+              <select aria-label={t('割合の書き方')} title={t('割合の書き方。ポール: エリア名と割合を札にしてポールで立てる。床: 割合の数字だけを床に書く')} value={m.setCourt.look ?? 'poles'}
+                onChange={e => put('setCourt', { layer: 'shares', ...(e.target.value === 'floor' ? { look: 'floor' as const } : {}) })}>
+                <option value="poles">{t('ポール')}</option><option value="floor">{t('床に数字')}</option>
               </select>
             )}
           </Layer>

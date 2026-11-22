@@ -3,7 +3,7 @@
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
 import type { PlacedChart } from './board'
-import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_TARGETS, drawSetChart, setChart, setChartBox, setExtremes, type SetChart, type SetCourtLayer } from './setChart'
+import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_NAMES, SET_TARGETS, drawSetChart, setChart, setChartBox, setExtremes, type SetChart, type SetCourtLayer, type SetShareLook } from './setChart'
 import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
@@ -30,7 +30,7 @@ export interface PlayZones {
 interface ShotMarks extends SlideHeat { plays: Play[] } // points[i] is where plays[i] landed
 interface PlayerMarks { heat?: ShotMarks; flights?: SlideFlights; landings?: ShotMarks; cones?: SlideCones; chart?: DirectionChart; setChart?: SetChart; setCourt?: SetCourt }
 // The setter's distribution on the court in the picture, on their team's half (near: by the camera).
-interface SetCourt { chart: SetChart; near: boolean; layer: SetCourtLayer }
+interface SetCourt { chart: SetChart; near: boolean; layer: SetCourtLayer; look?: SetShareLook }
 // x across, y far to near; outside 0–1 is off the court. startZ, endZ: the metres above those spots
 // (a set ends at the hitter's hand; the rest land); arc: how far the ball's path rises above the
 // straight line between them, in metres.
@@ -170,7 +170,7 @@ export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & Z
   const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A' || play.skill === 'R') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
   const setMarks: PlayerMarks = setsAll ? {
     ...(style.setChart ? { setChart: setsAll } : {}),
-    ...(style.setCourt ? { setCourt: { chart: setsAll, near: nearSide(fit, play) === play.side, layer: style.setCourt.layer } } : {}),
+    ...(style.setCourt ? { setCourt: { chart: setsAll, near: nearSide(fit, play) === play.side, layer: style.setCourt.layer, ...(style.setCourt.look ? { look: style.setCourt.look } : {}) } } : {}),
   } : {}
   const sets = Object.keys(setMarks).length ? setMarks : null
   if (play.skill !== 'S' && play.skill !== 'A') return sets
@@ -646,7 +646,9 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     else drawLandingFx(ctx, w, h, fit, fxKind, impact, ripple ?? landingFxStill[fxKind], style0.rippleColor, trackOf(zones))
   }
   if (after != null && zones) drawAfter(ctx, w, h, fit, style0, zones, after)
-  if (shares.length) drawShareLabels(ctx, shares, Math.max(16, w / 32), at)
+  // The shares: standing on poles with the place's name (the usual), or the number alone on the floor.
+  if (shares.length && zones?.player?.setCourt?.look === 'floor') drawShareFloor(ctx, shares, Math.max(16, w / 32), at)
+  else if (shares.length) drawSharePoles(ctx, shares, Math.max(11, w / 55), courtCamera(inPixels(fit, w, h), w, h))
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
 }
@@ -745,20 +747,85 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
     ctx.globalAlpha = 0.2 + 0.45 * (n / top); ctx.fillStyle = SET_COLORS[k]; ctx.fill(); ctx.globalAlpha = 1
     if (k === most || k === least) { ctx.strokeStyle = k === most ? '#DC2626' : '#2563EB'; ctx.lineWidth = Math.max(3.5, w / 220); ctx.stroke() }
     const mu = (a.u[0] + a.u[1]) / 2, mv = (a.v[0] + a.v[1]) / 2
-    labels.push({ share: `${Math.round((n / c.total) * 100)}%`, ...on(mu, mv), court: unit(mu, mv) })
+    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on(mu, mv), court: unit(mu, mv), rise: n / top })
   }
   ctx.restore()
   return labels
 }
 
-// Each place's share, written on the floor: the number lies on the court as the camera sees it
+// A place's name and share, laid on the court by one of the two looks below.
+interface ShareLabel { name: string; share: string; x: number; y: number; court: Pt; rise: number }
+
+// SetShareLook 'poles' (the usual): A place's name and share. Where the corners give the camera, each stands on a pole over its place,
+// taller the more was set there (SHARE_POLE_M, plus up to SHARE_RISE_M for the most), so it reads
+// above the arrows and flights on the floor; else it lies on the place. On a dark plate either way.
+// From a low camera the places lie close together on the picture (Zone3 and Pipe above all), so the
+// labels are laid out together: two lines when they clear one another, else one line, smaller and
+// smaller, and last of all pushed apart upward.
+export const SHARE_POLE_M = 1.2, SHARE_RISE_M = 1.6
+function drawSharePoles(ctx: Ctx, floor: ShareLabel[], fs: number, camera: ((u: number, v: number, z: number) => Pt) | null): void {
+  // Standing: each label's bottom at the top of its pole. Lying: centred on the place.
+  const labels = floor.map(l => ({ ...l, foot: { x: l.x, y: l.y }, ...(camera ? camera(l.court.x, l.court.y, SHARE_POLE_M + SHARE_RISE_M * l.rise) : {}) }))
+  type Label = (typeof labels)[number]
+  type Box = { l: Label; text: [string, number, number][]; x0: number; x1: number; y0: number; y1: number }
+  const width = (text: string, size: number) => { ctx.font = `bold ${size}px sans-serif`; return ctx.measureText(text).width }
+  const shift = (b: Box, dy: number): Box => ({ ...b, y0: b.y0 + dy, y1: b.y1 + dy, text: b.text.map(([t, y, f]) => [t, y + dy, f] as [string, number, number]) })
+  const pad = fs * 0.3
+  const lay = (two: boolean, scale: number): Box[] => labels.map(l => {
+    const f = fs * scale
+    let b: Box
+    if (two) {
+      const half = Math.max(width(l.name, f * 0.8), width(l.share, f)) / 2 + pad
+      b = { l, text: [[l.name, l.y - f * 0.55, f * 0.8], [l.share, l.y + f * 0.45, f]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 1.1, y1: l.y + f * 0.95 }
+    } else {
+      const t = `${l.name} ${l.share}`, half = width(t, f * 0.9) / 2 + pad
+      b = { l, text: [[t, l.y, f * 0.9]], x0: l.x - half, x1: l.x + half, y0: l.y - f * 0.6, y1: l.y + f * 0.6 }
+    }
+    return camera ? shift(b, l.y - b.y1) : b
+  })
+  const clash = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+  const clear = (bs: Box[]) => bs.every((a, i) => bs.every((b, j) => j <= i || !clash(a, b)))
+  const tries: [boolean, number][] = [[true, 1], [false, 1], [false, 0.85], [false, 0.7], [false, 0.55]]
+  let boxes: Box[] | null = null
+  for (const [two, scale] of tries) { const bs = lay(two, scale); if (clear(bs)) { boxes = bs; break } }
+  if (!boxes) {
+    // Pushed apart: standing labels upward (on taller poles), lying ones downward.
+    boxes = lay(false, 0.55).sort((a, b) => (camera ? b.l.y - a.l.y : a.l.y - b.l.y))
+    for (let i = 1; i < boxes.length; i++) {
+      for (let j = 0; j < i; j++) {
+        if (clash(boxes[i], boxes[j])) boxes[i] = shift(boxes[i], camera ? boxes[j].y0 - boxes[i].y1 : boxes[j].y1 - boxes[i].y0)
+      }
+    }
+  }
+  ctx.save()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+  if (camera) {
+    // The poles first, all of them under every plate: a white line up from a dot on the floor.
+    const lw = Math.max(1.5, fs / 9)
+    ctx.strokeStyle = '#FFFFFF'; ctx.fillStyle = '#FFFFFF'; ctx.lineWidth = lw
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = lw * 2
+    for (const b of boxes) {
+      ctx.beginPath(); ctx.moveTo(b.l.foot.x, b.l.foot.y); ctx.lineTo(b.l.x, b.y1); ctx.stroke()
+      ctx.beginPath(); ctx.arc(b.l.foot.x, b.l.foot.y, lw * 1.8, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0
+  }
+  for (const b of boxes) {
+    ctx.fillStyle = 'rgba(15,23,42,0.78)'
+    ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, fs * 0.3); ctx.fill()
+    ctx.fillStyle = '#FFFFFF'
+    for (const [text, y, f] of b.text) { ctx.font = `bold ${f}px sans-serif`; ctx.fillText(text, b.l.x, y) }
+  }
+  ctx.restore()
+}
+
+// SetShareLook 'floor': each place's share, written on the floor: the number lies on the court as the camera sees it
 // (narrower far away, flattened by the angle; never flatter than SHARE_FLAT_MIN, so it still reads),
 // white with a dark edge and nothing else around it. Drawn after the arrows so none crosses it.
 // Numbers that would overlap on the picture (Zone3 and Pipe from a low camera) are made smaller
 // together, and last of all pushed apart.
-interface ShareLabel { share: string; x: number; y: number; court: Pt }
 const SHARE_FLAT_MIN = 0.5
-function drawShareLabels(ctx: Ctx, labels: ShareLabel[], fs: number, at: (u: number, v: number) => Pt): void {
+function drawShareFloor(ctx: Ctx, labels: ShareLabel[], fs: number, at: (u: number, v: number) => Pt): void {
   // The floor at a place, as two picture vectors of the same length in metres: across (to the right
   // on the picture) and along the court (toward the camera).
   const floorAt = (c: Pt) => {

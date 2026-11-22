@@ -4,22 +4,21 @@ import { PaletteColor } from './PaletteColor'
 import { POINT_SCALE, cleanLineColors, cleanPointScale, type ChartLineColors } from '../../../shared/chart'
 import { LineColors } from './LineColors'
 import { HEADLINE_SIZE, type HeadlineStyle } from '../../../shared/annotation'
-import type { OverlayTheme } from '../../../shared/overlay'
 import type { ProjectSettings } from '../../../shared/types'
 import { ACCENTS, applyAppearance, loadAppearance, type Appearance, type ThemeMode } from '../appearance'
 import { AddonPacks } from './AddonPacks'
 import { TeamLogos } from './TeamLogos'
-import { ThemePicker } from './ThemePicker'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
 import { IS_MAC, keyName } from '../../../shared/keys'
 import { FONTS } from '../fonts'
 import { SET_STOP_MAX_SEC, arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec, setSetStopSec, setStopSec } from '../keys'
 
+const api = window.api
+
 // Fonts every computer of its kind has; the list a project's headline can pick from.
 
 interface Props {
   settings: ProjectSettings
-  theme: OverlayTheme // the overlay colors in use now
   teams: { code: string; name: string }[] // the teams in the project's matches, opponents first
   teamColors: Record<string, string> // the library's, by team code
   onTeamColors: (c: Record<string, string>) => void
@@ -29,9 +28,16 @@ interface Props {
 }
 
 // 自チームのチームコード、オーバーレイの配色、チームのロゴ (design §3.2), add-on packs, and the app's own look.
-export function SettingsDialog({ settings, theme: themeNow, teams, teamColors, onTeamColors, onSave, onClose, onLanguage }: Props) {
+// The manual's chapters (site/manual/ja/), opened from the Help page of the settings.
+const MANUAL_CHAPTERS: [string, string][] = [
+  ['01-start.html', '1. はじめに'], ['02-import.html', '2. 試合を取り込む'], ['03-project.html', '3. プロジェクトを作る'],
+  ['04-find.html', '4. プレーを探す'], ['05-scene.html', '5. シーンと動画を作る'], ['06-draw.html', '6. 動画に描く'],
+  ['07-court.html', '7. コートの表示'], ['08-data.html', '8. データスライドとレポート'], ['09-compare.html', '9. 比較動画'],
+  ['10-export.html', '10. 書き出しの詳細'], ['11-help.html', '11. 困ったとき'],
+]
+
+export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSave, onClose, onLanguage }: Props) {
   const [code, setCode] = useState(settings.ourTeamCodes[0] ?? '') // one target team per project
-  const [theme, setTheme] = useState<OverlayTheme>(settings.theme ?? themeNow)
   // The app's look shows at once and is kept at once, like the logos (it isn't part of the project).
   const [look, setLook] = useState<Appearance>(loadAppearance)
   const changeLook = (a: Appearance) => { setLook(a); applyAppearance(a) }
@@ -49,15 +55,16 @@ export function SettingsDialog({ settings, theme: themeNow, teams, teamColors, o
   const [here, setHere] = useState('team')
   const page = (id: string) => ({ 'data-section': id, hidden: here !== id })
   const NAV: [string, [string, string][]][] = [
-    [t('このプロジェクト'), [['team', t('対象チーム')], ['theme', t('配色')], ['headline', t('見出し')], ['lines', t('チャートの色と点')]]],
+    [t('このプロジェクト'), [['team', t('対象チーム')], ['headline', t('見出し')], ['lines', t('チャートの色と点')]]],
     [t('倉庫'), [['logos', t('チームのロゴ')], ['addons', t('アドオン')]]],
     [t('このパソコン'), [['lang', 'Language / 言語'], ['keys', t('キー操作')], ['through', t('通しで見る')], ['look', t('アプリの見た目')]]],
+    [t('ヘルプ'), [['manual', t('マニュアル')]]],
   ]
 
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], theme, headline, lineColors: cleanLineColors(lines), pointColors: cleanLineColors(points), pointScale: cleanPointScale(pointScale) })
+      await onSave({ ...settings, ourTeamCodes: code ? [code] : [], headline, lineColors: cleanLineColors(lines), pointColors: cleanLineColors(points), pointScale: cleanPointScale(pointScale) })
       onClose()
     } finally {
       setSaving(false)
@@ -86,12 +93,6 @@ export function SettingsDialog({ settings, theme: themeNow, teams, teamColors, o
             {teams.map(t => <option key={t.code} value={t.code}>{`${t.code} — ${t.name}`}</option>)}
           </select>
           <p className="hint">{t('プロジェクトの中では、ホームでもアウェイでもこのチームが「自チーム」です（検索のチーム、スコアボードの左側）。')}</p>
-        </section>
-
-        <section {...page('theme')}>
-          <span className="field-label wide">{t('配色（プロジェクト全体）')}</span>
-          <ThemePicker value={theme} onChange={setTheme} />
-          <p className="hint">{t('スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。')}</p>
         </section>
 
         <section {...page('headline')}>
@@ -149,6 +150,15 @@ export function SettingsDialog({ settings, theme: themeNow, teams, teamColors, o
           <span className="field-label wide">{t('アドオン')}</span>
           <AddonPacks />
           <p className="hint">{t('リーグの選手写真などを別ファイル（.vrpack）で足します。倉庫に保存し、すべてのプロジェクトで使います（すぐ保存されます）。写真は右の「選手写真」から入れます。')}</p>
+        </section>
+
+        <section {...page('manual')}>
+          <span className="field-label wide">{t('マニュアル')}</span>
+          <div className="filter-row"><button className="primary" onClick={() => void api.openManual()}>{t('マニュアルを開く')}</button></div>
+          <ul className="manual-chapters">
+            {MANUAL_CHAPTERS.map(([file, title]) => <li key={file}><button className="link" onClick={() => void api.openManual(file)}>{title}</button></li>)}
+          </ul>
+          <p className="hint">{t('使い方の説明を、パソコンのブラウザで開きます。アプリに入っているので、インターネットにつながっていなくても読めます（今は日本語だけです）。')}</p>
         </section>
 
         <section {...page('lang')}>

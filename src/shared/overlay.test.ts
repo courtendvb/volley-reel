@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { DEFAULT_OVERLAY, captionData, lookTheme, overlaySettings, scoreboardData, withTeamColors } from './overlay'
+import { DEFAULT_OVERLAY, can1080, captionData, exportHeight, lookTheme, overlaySettings, scoreboardData, withTeamColors } from './overlay'
 
 // HTH away in this made-up match; SATO appears twice on HTH so names get an initial.
 const D = parseDVW(`[3TEAMS]
@@ -134,5 +134,26 @@ describe('the design of the overlays', () => {
   it('hands the drawing the colors with the design', () => {
     expect(lookTheme(overlaySettings({ look: 'float' }))).toEqual({ ...DEFAULT_OVERLAY.theme, look: 'float' })
     expect(lookTheme(DEFAULT_OVERLAY).look).toBe('slant')
+  })
+})
+
+describe('export height', () => {
+  const at = (h: 720 | 1080) => ({ output: { height: h } })
+  it('offers 1080p only when every source is at least 1080 high', () => {
+    expect(can1080([1080, 1080])).toBe(true)
+    expect(can1080([2160])).toBe(true)
+    expect(can1080([1080, 720])).toBe(false)
+    expect(can1080([undefined])).toBe(false)
+    expect(can1080([])).toBe(false)
+  })
+  it('makes 1080p only when picked and the sources allow it', () => {
+    expect(exportHeight(at(1080), [1080])).toBe(1080)
+    expect(exportHeight(at(1080), [1080, 720])).toBe(720)
+    expect(exportHeight(at(720), [1080])).toBe(720)
+  })
+  it('reads a saved height, 720 when missing or odd', () => {
+    expect(overlaySettings(undefined).output.height).toBe(720)
+    expect(overlaySettings({ output: { height: 1080 } }).output.height).toBe(1080)
+    expect(overlaySettings({ output: { height: 480 as 720 } }).output.height).toBe(720)
   })
 })

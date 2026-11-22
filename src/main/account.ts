@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { hostname } from 'node:os'
 import {
   EDITOR_APP, gate, leaseState, refreshDue, splitLease, type Gate, type GateRefusal,
-  type AccountError, type AccountState, type LeasePayload, type LeaseResponse, type LeaseTeam, type TeamAction,
+  type AccountError, type AccountState, type LeasePayload, type PlanPrices, type LeaseResponse, type LeaseTeam, type TeamAction,
 } from '../shared/account'
 
 export const SUPABASE_URL = 'https://ciokifeakrkigonhwbyf.supabase.co'
@@ -214,6 +214,17 @@ export class Account {
     const r = await this.call<{ url?: string }>('/functions/v1/account-checkout', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id, plan })
     if (!r.url?.startsWith('https://')) throw new AccountFailure('server', 'no checkout url')
     return r.url
+  }
+
+  // What the plan buttons say: the prices from Stripe and this team's annual free days. null when it
+  // can't be known now (offline, signed out, the server can't read Stripe): the buttons go without.
+  async prices(): Promise<PlanPrices | null> {
+    const token = this.deviceToken(), p = this.lease()
+    if (!token || !p) return null
+    try {
+      const r = await this.call<PlanPrices>('/functions/v1/account-prices', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id, app: EDITOR_APP })
+      return r && (r.monthly || r.annual) ? { monthly: r.monthly ?? null, annual: r.annual ?? null, annual_trial_days: Number(r.annual_trial_days) || 0 } : null
+    } catch { return null }
   }
 
   // Signs this computer out. The device id stays: it is this computer, not the account.

@@ -29,7 +29,7 @@ const cards = (o: Partial<OverlaySettings['titleCard']>): OverlaySettings => ({ 
 const describePlan = (items: ReturnType<typeof planVideo>) => items.map(it => it.kind === 'card' ? `[${it.card.marker ?? 'scene'}:${it.card.name}]` : `${D.plays[it.clip.playId].code.slice(0, 6)}`)
 
 describe('videos made of scenes', () => {
-  const attack = { ...scene('7番のアタック', [0, 1, 2], [1, 2, 1]), markerNames: { 1: 'Kills', 2: 'Others', 3: '', 4: '', 5: '' } }
+  const attack = { ...scene('7番のアタック', [0, 1, 2], [1, 2, 1]), markerNames: { 1: 'Kills', 2: 'Others', 3: '', 4: '', 5: '', 6: '' } }
   const serve = scene('サーブ', [3], [1])
   const scenes = { [attack.id]: attack, [serve.id]: serve }
   const video = newVideo('7番用', [attack.id, serve.id])
@@ -169,8 +169,8 @@ describe('chapters in the MP4', () => {
 })
 
 describe('chapters for a scene or a marker', () => {
-  const scene = { id: 's1', name: 'Serve', markerNames: { 1: 'Jump', 2: 'Float', 3: '', 4: '', 5: '' } } as unknown as Reel
-  const other = { id: 's2', name: 'Attack', markerNames: { 1: 'Left', 2: '', 3: '', 4: '', 5: '' } } as unknown as Reel
+  const scene = { id: 's1', name: 'Serve', markerNames: { 1: 'Jump', 2: 'Float', 3: '', 4: '', 5: '', 6: '' } } as unknown as Reel
+  const other = { id: 's2', name: 'Attack', markerNames: { 1: 'Left', 2: '', 3: '', 4: '', 5: '', 6: '' } } as unknown as Reel
   const clip = (sceneId: string, group: number | 'none') => ({ kind: 'clip', clip: {} as Clip, sceneId, group }) as PlanItem
   const card = (marker: number | null) => ({ kind: 'card', card: { marker, name: '', match: null }, durationSec: 2 }) as PlanItem
   const slide = { kind: 'card', card: { marker: null, name: '', match: null, slide: {} }, durationSec: 5 } as unknown as PlanItem

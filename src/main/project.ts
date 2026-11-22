@@ -8,7 +8,7 @@ import { basename, join } from 'node:path'
 import { cleanSavedFilters, type SavedFilter } from '../shared/filter'
 import { cleanHeadline, type HeadlineStyle } from '../shared/annotation'
 import { overlaySettings, type OverlayPatch, type OverlayTheme } from '../shared/overlay'
-import type { Reel } from '../shared/reel'
+import { withAllMarkers, type Reel } from '../shared/reel'
 import { newVideo, type Video } from '../shared/video'
 import type { Match, ParsedDVW, PlayerRole, ProjectInfo, ProjectSettings } from '../shared/types'
 import { cleanRoles } from '../shared/roles'
@@ -198,7 +198,7 @@ export class Project {
       try {
         const { data, fromBackup } = await readJSON<Reel>(join(this.dir, 'reels', f))
         if (fromBackup) this.notices.push(t('リール「{0}」のファイルが読めなかったため、1つ前の保存から復元しました', data.name))
-        out.push(data)
+        out.push(withAllMarkers(data))
       } catch {
         this.notices.push(t('リールのファイル {0} が読めませんでした（ファイルはそのまま残しています）', f))
       }

@@ -3,7 +3,7 @@ import type { Match, Side as TeamSide } from '../../../shared/types'
 import { MAX_ZOOM, MIN_ZOOM, type CompareSource, type ComparePane as PaneState, type PaneGesture, type Side } from '../../../shared/videoCompare'
 import { currentPlay, filterPlayRows, isNear, NO_FILTER, playerChoices, type PlayJumpFilter, type PlayJumpRow } from '../../../shared/comparePlays'
 import { formatTime } from '../format'
-import { t } from '../../../shared/i18n'
+import { cap, t } from '../../../shared/i18n'
 
 // What a side plays: a library match's video or a chosen file, once it is playable.
 export interface PaneMedia { src: string; fps: number; width: number; height: number; label: string }
@@ -210,7 +210,7 @@ function PlayMenu({ rows, nearSet1, time, onJump }: { rows: PlayJumpRow[]; nearS
   useEffect(() => { if (open) listRef.current?.querySelector('.cur')?.scrollIntoView({ block: 'center' }) }, [open])
   return (
     <div className="cmp-source" ref={ref}>
-      <button className="cmp-playbtn" onClick={() => setOpen(o => !o)} aria-expanded={open} title={cur ? t('いまのプレー: {0}', playText(cur)) : t('プレーを選んで、その少し前へ移る')}>{cur ? playText(cur) : t('プレー')} ▾</button>
+      <button className="cmp-playbtn" onClick={() => setOpen(o => !o)} aria-expanded={open} title={cur ? t('いまのプレー: {0}', playText(cur)) : t('プレーを選んで、その少し前へ移る')}>{cur ? playText(cur) : cap(t('プレー'))} ▾</button>
       {open && (
         <div className="cmp-menu cmp-plays">
           <div className="cmp-filters">

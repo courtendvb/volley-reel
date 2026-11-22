@@ -1,8 +1,9 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState, TeamAction } from './account'
+import type { AccountState, PlanPrices, TeamAction } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit } from './court'
+import type { CodeEdit } from './codeEdit'
 import type { SavedFilter } from './filter'
 // Types shared by main, preload and renderer.
 import type { OverlayPatch, OverlayTheme } from './overlay'
@@ -40,8 +41,10 @@ export interface ClickPoint { u: number; v: number }
 
 export interface Play {
   id: number // order of appearance; the skip rule in dvw.ts is fixed so this is stable per file
-  fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift
+  fingerprint: string // `${setNum}|${home}-${away}|${code}|${time}` — re-links clips if ids shift (the original code, before any correction)
   code: string
+  line?: number // its line among the file's [3SCOUT] lines, which a correction names (codeEdit.ts)
+  original?: string // the file's code, when a correction changed it
   time: number // DVW time (offset not applied)
   side: Side
   jersey: number
@@ -89,6 +92,7 @@ export interface ParsedDVW {
   allHome: boolean // every play coded as '*': side can't tell the teams apart
   codeNames: Record<string, string> // attack combinations and setter calls ([3ATTACKCOMBINATION], [3SETTERCALL]): code -> name
   info?: MatchInfo // for the match report; missing on matches read before it was kept
+  staleEdits?: CodeEdit[] // corrections whose line no longer holds the code they were made on (left out)
 }
 
 // The match as the DVW's header tells it: start time, each set's partial scores (at 8, 16, 21), final
@@ -120,6 +124,7 @@ export interface Match {
   importedAt: string
   court?: CourtFit // the court grid fitted to this video (missing: not fitted yet)
   serveMarks?: Record<string, ServeMark> // by play fingerprint: serves' hits and touches marked by hand (serveMark.ts)
+  codeEdits?: CodeEdit[] // corrections to the scout file's codes, laid over it when read (codeEdit.ts); the file is not written
 }
 
 // A serve's hit and its reception's touch, video times marked by hand frame by frame.
@@ -227,6 +232,8 @@ export interface Api {
   otherProjects(): Promise<ProjectSummary[]> // the projects in <library>/projects and the recent ones, but the open one
   projectDvws(path: string): Promise<{ name: string; code: string; dvws: ParsedDVW[]; failed: string[] }> // that project's matches, parsed
   setMatchCourt(id: string, court: CourtFit | null): Promise<ProjectInfo | null> // null: forget the fit
+  setCodeEdit(id: string, line: number, from: string, to: string): Promise<ProjectInfo | null> // a play's code corrected (to = from takes it off)
+  setMatchOffset(id: string, offsetSec: number): Promise<ProjectInfo | null> // DVW time + offset = video time, for every play of the match
   setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
@@ -243,6 +250,7 @@ export interface Api {
   onUpdateEvent(cb: (e: UpdateEvent) => void): () => void
   installUpdate(): Promise<void> // after saving: restart into the downloaded version
   updateHelp(what: 'page' | 'log'): Promise<void> // the releases page in the browser, or update.log in its folder
+  openManual(page?: string): Promise<void> // the manual shipped with the app, in the browser (a chapter's file name, or the index)
   appVersion(): Promise<string>
   // The SyncScout account (shared/account.ts). enabled: false until the release that asks for one.
   account(): Promise<{ enabled: boolean; state: AccountState }>
@@ -250,6 +258,7 @@ export interface Api {
   accountSignIn(email: string, code: string): Promise<AccountState>
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
   accountSignOut(): Promise<AccountState>
   accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads

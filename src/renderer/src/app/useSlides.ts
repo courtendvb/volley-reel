@@ -1,6 +1,7 @@
 // Slides in a scene: blank pages, PDF pages and pictures (they remember their file, to be read again
 // when it changes), the picture on screen, and data slides comparing players. Blank and on-screen
-// slides open for editing right away. Also saving the cards and slides as a picture or a PDF.
+// slides open for editing right away. Also saving the cards and slides as a picture, a PDF, or a
+// PowerPoint file of the ones picked.
 import { useMemo, useState, type RefObject } from 'react'
 import { boardSlide, keptByHand, type BoardPhoto } from '../../../shared/board'
 import { logoKey } from '../../../shared/serveTargetBoard'
@@ -8,11 +9,14 @@ import { markStyle, type GridStyle } from '../../../shared/court'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { findPhoto, type PackInfo } from '../../../shared/pack'
 import { pdfFromJpegs } from '../../../shared/pdf'
+import { SHAPES_FIRST_RID, pptxFromSlides } from '../../../shared/pptx'
+import { editableInPptx, slideShapes, type ShapeImage } from '../../../shared/pptxShapes'
 import { chronological, groupRows, markersOf, newSlide, putSlides, setSlide, spotAt, type Clip, type Group, type Marker, type Reel, type Slide, type SlideSpot } from '../../../shared/reel'
 import { withRoles } from '../../../shared/roles'
+import type { Annotation } from '../../../shared/annotation'
 import type { ImportProgress, ParsedDVW, ProjectSettings, SlideFile } from '../../../shared/types'
 import { slideCard } from '../../../shared/video'
-import { pdfPages } from '../assets'
+import { pdfPages, preloadAssets } from '../assets'
 import type { BoardChoice } from '../components/BoardDialog'
 import type { SlideHow } from '../components/ReelPanel'
 import { CARD_H, CARD_W, cardImages } from '../exportRender'
@@ -101,7 +105,7 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
   const [boardOpen, setBoardOpen] = useState(false)
   const [boardEdit, setBoardEdit] = useState<Slide | null>(null) // the card whose make-up is being changed
   const makeBoard = async (c: BoardChoice) => {
-    const { setView, setLayout, rotations, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched, teamColor, discLine, cones, tables, attackers, compare, compareProject, attack } = c, perSlide = columns.length
+    const { setView, setLayout, rotations, display, skill, columns, split, notes, noteSize, noteFills, photos: withPhotos, background, marker, team, searched, teamColor, discLine, cones, tables, court, attackers, compare, compareProject, compareRows, stat, statTop, statLook, attack } = c, perSlide = columns.length
     const old = boardEdit
     setBoardOpen(false); setBoardEdit(null)
     try {
@@ -126,8 +130,8 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
       const runs = skill === 'C' ? [{ part: [], rotation: undefined }] : skill === 'R' ? rotations.map(rotation => ({ part: columns.slice(0, 1), rotation })) : Array.from({ length: Math.ceil(columns.length / perSlide) }, (_, k) => ({ part: columns.slice(k * perSlide, (k + 1) * perSlide), rotation: undefined as number | undefined }))
       for (const [i, { part, rotation }] of runs.entries()) {
         const s = newSlide({ kind: 'blank', color: background }, old?.durationSec ?? BOARD_SEC)
-        const { annotations, charts, noteIds, setCharts } = boardSlide(part, skill, { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation, teamColor, discLine, ...(cones ? {} : { cones: false }), ...(tables !== 'all' ? { tables } : {}), ...(tables === 'attackers' ? { attackers } : {}) } : {}), split, notes, noteSize, noteFills, background, display, ...(skill === 'D' ? { attack } : {}), ...(compare ? { compare } : {}), ...(skill !== 'C' && markStyle(gridStyle, skill).chart ? { style: markStyle(gridStyle, skill).chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
-        const config = { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation, teamColor, discLine, ...(cones ? {} : { cones: false }), ...(tables !== 'all' ? { tables } : {}), ...(tables === 'attackers' ? { attackers } : {}) } : {}), display, skill, team, ...(compareProject ? { compareProject } : {}), ...(skill === 'D' ? { attack } : {}), split, notes, noteSize, noteFills, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null, ...(x.attention ? { attention: true } : {}) })) }
+        const { annotations, charts, noteIds, setCharts } = boardSlide(part, skill, { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation, teamColor, discLine, ...(cones ? {} : { cones: false }), ...(tables !== 'all' ? { tables } : {}), ...(tables === 'attackers' ? { attackers } : {}), ...(court === '2d' ? { court } : {}) } : {}), split, notes, noteSize, noteFills, background, display, ...(skill === 'D' ? { attack } : {}), ...(compare ? { compare, compareRows } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), ...(skill !== 'C' && markStyle(gridStyle, skill).chart ? { style: markStyle(gridStyle, skill).chart } : {}), ...(i ? {} : { noteTexts: kept.noteTexts }) }, photos)
+        const config = { setView, ...(skill === 'E' ? { setLayout } : {}), ...(rotation ? { rotation, teamColor, discLine, ...(cones ? {} : { cones: false }), ...(tables !== 'all' ? { tables } : {}), ...(tables === 'attackers' ? { attackers } : {}), ...(court === '2d' ? { court } : {}) } : {}), display, skill, team, ...(compareProject ? { compareProject } : {}), ...(skill === 'D' ? { attack } : {}), ...(skill === 'C' ? { compareRows } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), split, notes, noteSize, noteFills, photos: withPhotos, background, searched, columns: part.map(x => ({ key: x.key, code: x.code ?? null, ...(x.attention ? { attention: true } : {}) })) }
         list.push({ ...s, annotations: i ? annotations : [...annotations, ...kept.hand], charts, ...(setCharts ? { setCharts } : {}), board: { config, made: annotations.map(a => a.id), noteIds } })
       }
       if (old && cardEdit?.sceneId) {
@@ -150,19 +154,29 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
     }
   }
 
-  // The open card as a picture, or all the scene's cards and slides, in order, as a PDF.
-  const saveCards = async (as: 'png' | 'pdf', slide: Slide) => {
+  // The scene's slides in the order they play (just this one when it is in no scene).
+  const sceneSlides = (slide: Slide): Slide[] => {
+    const scene = latest.current.reel
+    return scene ? ['head' as const, ...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
+  }
+  const sceneName = () => latest.current.reel?.name || t('データスライド')
+
+  // Slides to pick from for a PowerPoint file, with the one open when it was asked for.
+  const [pptxPick, setPptxPick] = useState<{ slides: Slide[]; current: string } | null>(null)
+
+  // The open card as a picture; all the scene's cards and slides, in order, as a PDF; or (pptx) a
+  // choice of them, saved by savePptx.
+  const saveCards = async (as: 'png' | 'pdf' | 'pptx', slide: Slide) => {
     try {
-      const scene = latest.current.reel
-      const name = scene?.name || t('データスライド')
+      const name = sceneName()
+      if (as === 'pptx') { setPptxPick({ slides: sceneSlides(slide), current: slide.id }); return }
       if (as === 'png') {
         const [png] = await cardImages([slideCard(slide)], overlay, gridStyle.heatOpacity, 'image/png')
         const path = await api.saveCard(name, 'png', png)
         if (path) setNotice(t('書き出しました: {0}', path))
         return
       }
-      const all = scene ? ['head' as const, ...scene.groupOrder, 'none' as const].flatMap(g => groupRows(scene, g).flatMap(r => (r.kind === 'slide' ? [r.slide] : []))) : [slide]
-      const pages = await cardImages(all.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
+      const pages = await cardImages(sceneSlides(slide).map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg')
       const path = await api.saveCard(name, 'pdf', pdfFromJpegs(pages.map(jpeg => ({ jpeg, width: CARD_W, height: CARD_H }))))
       if (path) setNotice(t('書き出しました: {0}', path))
     } catch (e) {
@@ -170,5 +184,44 @@ export function useSlides({ latest, dvws, settings, packs, gridStyle, overlay, a
     }
   }
 
-  return { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards }
+  // The picked slides, in the scene's order, one to a PowerPoint slide. Editable: the objects on them
+  // go in as PowerPoint shapes over the slide's picture (drawn without them), so they can be moved there.
+  const savePptx = async (slides: Slide[], editable: boolean) => {
+    try {
+      const name = sceneName()
+      const images = editable ? await shapeImages(slides) : null
+      const leaveOut = images ? (a: Annotation) => editableInPptx(a, images) : undefined
+      const pics = await cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg', undefined, leaveOut)
+      const measure = new OffscreenCanvas(CARD_W, CARD_H).getContext('2d')!
+      const deck = pics.map((data, i) => ({
+        picture: { data, type: 'jpeg' as const, width: CARD_W, height: CARD_H },
+        ...(images ? { shapes: slideShapes(slides[i].annotations, { cx: 12192000, cy: 6858000, ctx: measure, W: CARD_W, H: CARD_H, image: images, firstRid: SHAPES_FIRST_RID }) } : {}),
+      }))
+      const path = await api.saveCard(name, 'pptx', pptxFromSlides(deck, name))
+      if (path) { setPptxPick(null); setNotice(t('書き出しました: {0}', path)) }
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+  // The pictures placed on the slides, as their files (PNG or JPEG) with their size.
+  const shapeImages = async (slides: Slide[]): Promise<(assetId: string) => ShapeImage | null> => {
+    const ids = [...new Set(slides.flatMap(s => s.annotations.flatMap(a => (a.kind === 'image' ? [a.assetId] : []))))]
+    const decoded = await preloadAssets(ids)
+    const got = new Map<string, ShapeImage>()
+    try {
+      for (const id of ids) {
+        const bmp = decoded.lookup(id) as ImageBitmap | null
+        const data = await api.readAsset(id).catch(() => null)
+        const type = data?.[0] === 0x89 && data[1] === 0x50 ? 'png' : data?.[0] === 0xff && data[1] === 0xd8 ? 'jpeg' : null
+        if (bmp && data && type) got.set(id, { data, type, width: bmp.width, height: bmp.height })
+      }
+    } finally {
+      decoded.release()
+    }
+    return id => got.get(id) ?? null
+  }
+  // Small pictures of slides, for picking them.
+  const slideThumbs = (slides: Slide[]) => cardImages(slides.map(slideCard), overlay, gridStyle.heatOpacity, 'image/jpeg', { w: 320, h: 180 })
+
+  return { putSlide, frameAfterClip, boardDvws, boardOpen, setBoardOpen, boardEdit, setBoardEdit, makeBoard, saveCards, pptxPick, setPptxPick, savePptx, slideThumbs }
 }

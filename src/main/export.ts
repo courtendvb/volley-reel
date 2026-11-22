@@ -6,11 +6,13 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ExportEvent, ExportItem, ExportJob } from '../shared/types'
+import type { ExportEvent, ExportItem, ExportJob, ExportLayer } from '../shared/types'
 import { chapterMetadata, chapterText } from '../shared/video'
-import { clipPlayedSec, pieces } from '../shared/timing'
+import { compareArgs, type CompareRun } from '../shared/compareExport'
+import { clipPlayedSec } from '../shared/timing'
 import { ffmpegBin } from './ffmpegPath'
 import { probe } from './media'
+import { fps, retime } from './retime'
 import { t } from '../shared/i18n'
 
 class ExportCancelled extends Error {
@@ -92,6 +94,28 @@ export class Exporter {
     }
   }
 
+  // A video comparison (shared/compareExport.ts): one ffmpeg run, reported like any export.
+  async runCompare(run: CompareRun, emit: (e: ExportEvent) => void): Promise<void> {
+    if (this.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
+    this.running = true
+    this.cancelled = false
+    const t0 = Date.now()
+    const elapsed = () => (Date.now() - t0) / 1000
+    let result: ExportEvent
+    try {
+      emit({ type: 'progress', ratio: 0, item: 0, items: 1, elapsedSec: 0 })
+      await this.ffmpeg(compareArgs(run), sec => emit({ type: 'progress', ratio: Math.min(1, sec / run.durationSec), item: 0, items: 1, elapsedSec: elapsed() }))
+      result = { type: 'done', outPath: run.outPath, elapsedSec: elapsed(), footageSec: run.durationSec, sizeBytes: (await stat(run.outPath)).size }
+    } catch (e) {
+      if (e instanceof ExportCancelled || this.cancelled) { await rm(run.outPath, { force: true }); result = { type: 'cancelled' } }
+      else result = { type: 'error', message: (e as Error).message }
+    } finally {
+      this.child = null
+      this.running = false
+    }
+    emit(result)
+  }
+
   cancel(): void {
     if (!this.running) return
     this.cancelled = true
@@ -115,12 +139,6 @@ export class Exporter {
       })
     })
   }
-}
-
-// '30000/1001' or '30' as a number.
-function fps(fpsStr: string): number {
-  const [n, d] = fpsStr.split('/').map(Number)
-  return d ? n / d : n
 }
 
 // Same settings for every segment so the concat demuxer can join them without re-encoding.
@@ -163,7 +181,7 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
     const png = join(dir, `clip${i}-layer${j}.png`)
     await writeFile(png, l.png)
     const from = l.from ?? 0, to = l.to ?? dur
-    const enable = l.from !== undefined || l.to !== undefined ? `:enable='between(t,${from.toFixed(3)},${to.toFixed(3)})'` : ''
+    const enable = layerEnable(l, from, to)
     if (l.fadeIn || l.fadeOut) {
       // A fading layer is the picture looped over the clip, its alpha faded at its window's ends.
       args.push('-loop', '1', '-framerate', job.fpsStr, '-t', dur.toFixed(3), '-i', png)
@@ -181,19 +199,15 @@ async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string
   return [...args, '-filter_complex', fc, '-map', `[${last}]`, ...enc, join(dir, `seg${String(i).padStart(4, '0')}.mp4`)]
 }
 
-// The clip's slow stretches and holds as a filter chain on the trimmed clip (times from 0 at IN), or
-// null when it has none: each piece cut from a copy of the clip, slowed by stretching its timestamps
-// or held by cloning one frame, then joined and put back on the frame rate.
-function retime(it: Extract<ExportItem, { kind: 'clip' }>, fpsStr: string): string | null {
-  const ps = pieces(it.in, it.out, it.timing)
-  if (ps.length < 2 && !(ps[0]?.kind === 'play' && ps[0].rate !== 1)) return null
-  const frame = 1 / fps(fpsStr), last = Math.max(0, it.out - it.in - frame)
-  const parts = ps.map((p, k) => {
-    if (p.kind === 'play') return `[r${k}]trim=start=${(p.from - it.in).toFixed(4)}:end=${(p.to - it.in).toFixed(4)},setpts=(PTS-STARTPTS)/${p.rate}[q${k}]`
-    const at = Math.min(last, Math.max(0, p.at - it.in))
-    return `[r${k}]trim=start=${at.toFixed(4)}:end=${(at + frame).toFixed(4)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${Math.max(0, p.sec - frame).toFixed(4)}[q${k}]`
-  })
-  return `split=${ps.length}${ps.map((_, k) => `[r${k}]`).join('')};${parts.join(';')};${ps.map((_, k) => `[q${k}]`).join('')}concat=n=${ps.length}:v=1:a=0,fps=${fpsStr}`
+// ":enable='…'" for a layer with a window (and a share of each period in it), or ''.
+export function layerEnable(l: Pick<ExportLayer, 'from' | 'to' | 'every'>, from: number, to: number): string {
+  const f = (n: number) => n.toFixed(3)
+  const parts = [...(l.from !== undefined || l.to !== undefined || l.every ? [`between(t,${f(from)},${f(to)})`] : [])]
+  if (l.every) {
+    const m = `mod(t-${f(from)},${f(l.every.period)})`
+    parts.push(`gte(${m},${f(l.every.at)})`, `lt(${m},${f(l.every.at + l.every.len)})`)
+  }
+  return parts.length ? `:enable='${parts.join('*')}'` : ''
 }
 
 // ",fade=in…,fade=out…" for an item of dur seconds (at most a third of it each), or ''.

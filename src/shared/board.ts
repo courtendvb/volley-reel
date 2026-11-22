@@ -7,18 +7,21 @@ import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type Dir
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
-import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type RotationTables, type SideOutRate } from './rotationBoard'
+import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type CourtLook, type RotationTables, type SideOutRate } from './rotationBoard'
 import { setBefore, setChart, type SetChart } from './setChart'
 import { SETTER_ROW_NAMES, attackLayoutOf, attackSlide, codeColumn, conditionColumn, setterRowOf, type AttackCondition, type AttackLayout, type SetterRow } from './attackBoard'
 import { logoKey, serveTargetSlide, teamReceptions, type Received } from './serveTargetBoard'
 import type { PlacedSetChart } from './court'
 import { compareSlide, type CompareSide } from './compare'
+import { STAT_SKILL, statRows, statsSlide, type StatKind, type StatLook } from './statsBoard'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
 // E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets;
-// D: one attacker's slide to set the defence against (attackBoard.ts); T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns;
-// C: the team's skills against our own team's, from another project (compare.ts), no columns
-export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C' | 'D'
+// D: one attacker's slide to set the defence against (attackBoard.ts);
+// T: a team's receptions against the serves (serveTargetBoard.ts), its receivers as the columns;
+// C: the team's skills against our own team's, from another project (compare.ts), no columns;
+// P: a table of the team's players' serves, attacks or receptions (statsBoard.ts), its players as the columns
+export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C' | 'P' | 'D'
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -40,12 +43,15 @@ export interface BoardPlayer {
   attackers?: Record<number, RotationAttacker[]> // and the team's attackers with the most attacks in each
   receptions?: Received[] // a serve-target slide: all the team's receptions (the same list on each of its players)
   setOf?: Map<Play, Play | null> // an attacker's slide: the set before each attack
+  wins?: Set<Play> // a table of figures: the plays whose rally their team won
+  matches?: number // and the team's matches
 }
 
-// Everyone who served or attacked, most plays first. keep: only these plays (the search).
-export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean): BoardPlayer[] {
+// Everyone who served or attacked, most plays first. keep: only these plays (the search). stat: a
+// table of figures, of which skill.
+export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: Play) => boolean, stat: StatKind = 'attack'): BoardPlayer[] {
   // A rotation is read from its setter's sets, a serve target from the receptions; a comparison only needs the teams (who attacked).
-  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' || skill0 === 'D' ? 'A' : skill0
+  const skill = skill0 === 'R' ? 'E' : skill0 === 'T' ? 'R' : skill0 === 'C' || skill0 === 'D' ? 'A' : skill0 === 'P' ? STAT_SKILL[stat] : skill0
   const out = new Map<string, BoardPlayer>()
   for (const d of dvws) {
     for (const [i, p] of d.plays.entries()) {
@@ -57,7 +63,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
       had.plays.push(p)
       if (skill === 'E') (had.follow ??= []).push(attackAfter(d.plays, i))
       if (skill0 === 'D') (had.setOf ??= new Map()).set(p, setBefore(d.plays, p))
-      if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) had.won++
+      if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) { had.won++; if (skill0 === 'P') (had.wins ??= new Set()).add(p) }
       out.set(key, had)
     }
   }
@@ -77,6 +83,10 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
   if (skill0 === 'D') {
     const codeNames = Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>
     for (const p of out.values()) p.callNames = codeNames // the attack codes' names
+  }
+  if (skill0 === 'P') {
+    const matches = (team: string) => dvws.filter(d => d.teams.some(x => x.code.toUpperCase() === team)).length
+    for (const p of out.values()) p.matches = matches(p.team)
   }
   if (skill0 === 'T') {
     const byTeam = new Map<string, Received[]>()
@@ -225,9 +235,14 @@ export interface BoardConfig {
   discLine?: string // and the outline of its players' discs
   cones?: boolean // a rotation slide: the spikers' cones (missing: shown)
   tables?: RotationTables // and its tables at the bottom right (missing: all six)
+  court?: CourtLook // and its court, in perspective or flat (missing: 3D)
   attackers?: number // and with the attackers there, how many (missing: three)
   compareProject?: string // a comparison: our own team's project (its folder), whose figures go left
   attack?: AttackBoard // an attacker's slide: its columns and what its attacks are kept to
+  compareRows?: string[] // and the figures it shows, SKILL_ROWS ids (missing: DEFAULT_COMPARE_ROWS)
+  stat?: StatKind // a table of figures: of which skill
+  statTop?: number // and how many players, most plays first (missing: STAT_ROWS)
+  statLook?: StatLook // and its colours (missing: STAT_LOOK)
 }
 // An attacker's slide (attackBoard.ts): a column per condition, the attacks kept to when the setter was in
 // the front or back row (missing: both), and our blockers and diggers put on to move into place.
@@ -253,9 +268,14 @@ export interface BoardOptions {
   discLine?: string // and their outline
   cones?: boolean // and the spikers' cones (missing: shown)
   tables?: RotationTables // and which tables (missing: all six)
+  court?: CourtLook // and the court in perspective or flat (missing: 3D)
   attackers?: number // and with the attackers' cards, how many (missing: three)
   compare?: { left: CompareSide; right: CompareSide } // a comparison: our team, and the team of this project
   attack?: AttackBoard
+  compareRows?: string[] // and which figures (missing: DEFAULT_COMPARE_ROWS)
+  stat?: StatKind // a table of figures: of which skill (missing: attacks)
+  statTop?: number // and how many players (missing: STAT_ROWS)
+  statLook?: StatLook // and its colours (missing: STAT_LOOK)
 }
 const ASPECT = 16 / 9, MIN_SECOND = 3 // a second type with fewer serves than this stays in the main chart
 const TOP = 0.095, EDGE = 0.012
@@ -366,7 +386,12 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
   }
   if (skill === 'C') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
-    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink) : [], charts: [], noteIds: [] }
+    return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink, opts.compareRows) : [], charts: [], noteIds: [] }
+  }
+  if (skill === 'P') {
+    const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', kind = opts.stat ?? 'attack'
+    const rows = statRows(kind, columns.map(c => ({ player: c.player, plays: c.plays, wins: c.wins ?? new Set() })), opts.statTop)
+    return { annotations: statsSlide(kind, columns[0]?.team ?? '', columns[0]?.matches ?? 0, rows, ink, opts.statLook), charts: [], noteIds: [] }
   }
   if (skill === 'T') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
@@ -379,7 +404,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const cards = p && opts.tables === 'attackers' ? attackerCards(p.attackers?.[r] ?? [], h => chartWidth(h) / ASPECT, opts.attackers) : null
     const look = { ...(opts.style ?? DEFAULT_CHART), points: true, lines: false, heat: false, scope: 'player' as const, name: false, stats: false }
     const cardCharts: PlacedChart[] = (cards?.charts ?? []).map(c => ({ chart: directionChart(c.attacker.plays[0], look, () => c.attacker.plays), x: c.x, y: c.y, h: c.h }))
-    return { annotations: p ? [...rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink), ...(cards?.annotations ?? [])] : [], charts: cardCharts, noteIds: [],
+    return { annotations: p ? [...rotationSlide({ rotation: r, team: p.team, setter: p.player, sets: p.sets ?? [], formation: p.formations?.[r] ?? [], callNames: p.callNames, ...(opts.teamColor ? { teamColor: opts.teamColor } : {}), ...(opts.discLine ? { discLine: opts.discLine } : {}), ...(opts.cones === false ? { cones: false } : {}), ...(opts.tables ? { tables: opts.tables } : {}), ...(opts.court === '2d' ? { court: '2d' as const } : {}), ...(photos[p.key] ? { photo: photos[p.key] } : {}), ...(photos[logoKey(p.team)] ? { logo: photos[logoKey(p.team)] } : {}), ...(p.sideOut?.[r] ? { rates: p.sideOut[r] } : {}) }, opts.setView ?? 'both', ink), ...(cards?.annotations ?? [])] : [], charts: cardCharts, noteIds: [],
       ...(sc ? { setCharts: [{ chart: sc, ...ROTATION_CHART }] } : {}) }
   }
   if (skill === 'E' && opts.setLayout) return { annotations: columns[0] ? setterSlide(columns[0], opts.setLayout, opts, photos[columns[0].key]) : [], charts: [], noteIds: [] }

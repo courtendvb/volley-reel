@@ -17,6 +17,7 @@ import type { DiscPart } from './disc'
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
 export type Dash = 'solid' | 'dash' | 'dot'
 export type Heads = 'end' | 'both' | 'none'
+export type Emphasis = 'pulse' | 'blink' | 'ripple'
 
 interface Base {
   id: string
@@ -29,6 +30,11 @@ interface Base {
   groupId?: string // objects with the same group id are selected and moved together
   fadeIn?: number // seconds it fades in from when it appears (show time, else the clip's IN)
   fadeOut?: number // seconds it fades out before it leaves (hide time, else the clip's OUT)
+  drawIn?: number // seconds it takes to be drawn when it appears: a line grows from its start, an outline goes round (fade-in is then not used)
+  // Once drawn, while it shows, again and again: pulse swells and settles, blink goes out and back,
+  // ripple sends a ring out from it (from an arrow's tip) that fades as it spreads.
+  emphasis?: Emphasis
+  pulse?: boolean // older files: emphasis 'pulse'
   locked?: boolean // part of the background (a data slide's court): drawn, but not picked by a click
 }
 
@@ -162,13 +168,72 @@ export function withGroups(list: Annotation[], ids: string[]): string[] {
   return list.filter(a => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map(a => a.id)
 }
 
+// Zone paint (cells painted from the zone panel) is one object: its cells share a group, and what is set
+// on one of them (when it shows, its fades, its format, where it lives) is set on all. The ids that
+// go with this one: the whole zone paint for a painted cell, else just itself.
+export const isZonePaint = (a: Annotation | undefined): boolean => a?.kind === 'polygon' && !!a.cell
+export function asOneObject(list: Annotation[], id: string): string[] {
+  const a = list.find(x => x.id === id)
+  return a && isZonePaint(a) && a.groupId ? list.filter(x => x.groupId === a.groupId && isZonePaint(x)).map(x => x.id) : [id]
+}
+// The same change made on one object on the others: the keys it changed, set or removed (never its
+// id, place or shape).
+const OWN_KEYS = new Set(['id', 'kind', 'points', 'cell', 'groupId', 'x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2'])
+export function sameChange(before: Annotation, after: Annotation, on: Annotation): Annotation {
+  const b = before as unknown as Record<string, unknown>, a = after as unknown as Record<string, unknown>
+  const next = { ...on } as unknown as Record<string, unknown>
+  for (const k of new Set([...Object.keys(b), ...Object.keys(a)])) {
+    if (OWN_KEYS.has(k) || JSON.stringify(b[k]) === JSON.stringify(a[k])) continue
+    if (k in a) next[k] = a[k]; else delete next[k]
+  }
+  return next as unknown as Annotation
+}
+
 // How opaque an object is at time t from its own fades (1 when it has none or is past them).
+// Drawing it in replaces the fade-in.
 export function fadeAlpha(a: Annotation, t: number, clip: { in: number; out: number }): number {
-  if (!a.fadeIn && !a.fadeOut) return 1
+  const fadeIn = a.drawIn ? 0 : a.fadeIn
+  if (!fadeIn && !a.fadeOut) return 1
   const from = a.showFrom ?? clip.in, to = a.showTo ?? clip.out
-  const fin = a.fadeIn ? Math.min(1, Math.max(0, (t - from) / a.fadeIn)) : 1
+  const fin = fadeIn ? Math.min(1, Math.max(0, (t - from) / fadeIn)) : 1
   const fout = a.fadeOut ? Math.min(1, Math.max(0, (to - t) / a.fadeOut)) : 1
   return Math.min(fin, fout)
+}
+
+// How an object moves at a moment. reveal: how much of it is drawn (0..1), while it is being drawn
+// in; pulse / ripple: where it is in a swell or a ring's spread (0..1), once drawn; hidden: off for
+// a moment of its blinking. Undefined: still, as it is.
+export interface Anim { reveal?: number; pulse?: number; ripple?: number; hidden?: boolean }
+export const PULSE_SEC = 1.2 // one swell and settle
+export const BLINK_SEC = 1.0 // one blink: on, then off
+export const BLINK_ON = 0.6 // the share of a blink it shows
+export const RIPPLE_SEC = 1.5 // one ring, from the object out until it has faded
+const PULSE_GROW = 0.12 // at the top of a swell, this much larger
+const RIPPLE_GROW = 0.5 // a ring spreads this share of the object's size (at least RIPPLE_MIN px at 720p)
+const RIPPLE_MIN = 36
+export const emphasisOf = (a: Annotation): Emphasis | undefined => a.emphasis ?? (a.pulse ? 'pulse' : undefined)
+export const emphasisSec = (e: Emphasis): number => (e === 'pulse' ? PULSE_SEC : e === 'blink' ? BLINK_SEC : RIPPLE_SEC)
+export const isAnimated = (a: Annotation): boolean => !!(a.drawIn || emphasisOf(a))
+
+// An object with its emphasis set (none: undefined), the older pulse flag dropped.
+export function withEmphasis(a: Annotation, e: Emphasis | undefined): Annotation {
+  const { emphasis: _e, pulse: _p, ...rest } = a
+  return (e ? { ...rest, emphasis: e } : rest) as Annotation
+}
+
+// The motion at time t, seconds into the object's showing (from its show time, else the clip's IN).
+export function animAt(a: Annotation, t: number, clip: { in: number; out: number }): Anim | undefined {
+  return animAfter(a, t - (a.showFrom ?? clip.in))
+}
+export function animAfter(a: Annotation, since: number): Anim | undefined {
+  const d = a.drawIn ?? 0
+  if (d > 0 && since < d) return { reveal: Math.max(0, since / d) }
+  const e = emphasisOf(a)
+  if (!e) return undefined
+  const k = Math.max(0, since - d) / emphasisSec(e), phase = k - Math.floor(k)
+  if (e === 'pulse') return { pulse: phase }
+  if (e === 'ripple') return { ripple: phase }
+  return phase < BLINK_ON ? undefined : { hidden: true }
 }
 
 export function visibleAt(a: Annotation, t: number, clip: { in: number; out: number }): boolean {
@@ -333,10 +398,34 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
   return null
 }
 
-export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup): void {
+export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, images?: ImageLookup, anim?: Anim): void {
+  if (anim?.hidden) return
   const s = H / REF_HEIGHT
+  if (anim?.ripple !== undefined) drawRipple(ctx, a, W, H, s, anim.ripple)
   ctx.save()
   ctx.globalAlpha *= a.opacity ?? 1
+  if (anim?.pulse !== undefined) {
+    // A swell about the object's middle: up and back down, eased at both ends.
+    const k = 1 + (PULSE_GROW * (1 - Math.cos(2 * Math.PI * anim.pulse))) / 2
+    const b = bounds(ctx, a, W, H), cx = (b.x + b.w / 2) * W, cy = (b.y + b.h / 2) * H
+    ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy)
+  }
+  const reveal = anim?.reveal
+  if (reveal !== undefined && reveal < 1) {
+    if (reveal <= 0) { ctx.restore(); return }
+    if (a.kind === 'arrow' || a.kind === 'freehand' || a.kind === 'polyline') a = partOf(a, reveal, W, H)
+    else if (a.kind === 'polygon' && a.points.length === 3) {
+      // A triangle is almost always a direction cone: it opens out from its tip (the hit point; the
+      // triangle tool's first point) as it fades in, rather than having its outline traced.
+      const e = 1 - (1 - reveal) ** 3, [tx, ty] = a.points[0]
+      a = { ...a, points: a.points.map(([x, y]) => [tx + (x - tx) * e, ty + (y - ty) * e] as Pt) }
+      ctx.globalAlpha *= Math.min(1, reveal * 1.5)
+    } else if (a.kind === 'rect' || a.kind === 'circle' || a.kind === 'polygon') {
+      drawOutlineIn(ctx, a, reveal, W, H, s)
+      ctx.restore()
+      return
+    } else ctx.globalAlpha *= reveal // text and pictures have no line to draw along: they fade in
+  }
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   ctx.strokeStyle = a.color
@@ -402,6 +491,97 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
   ctx.restore()
 }
 
+// A ring going out from the object, t of the way (0..1): from just outside it, larger and fainter as
+// it goes. Round around a circle or a numbered circle, a rounded box around the rest, a circle out
+// from an arrow's tip. In the object's colour (a boxed text's box colour), under the object.
+function drawRipple(ctx: Ctx, a: Annotation, W: number, H: number, s: number, t: number): void {
+  ctx.save()
+  ctx.globalAlpha *= (a.opacity ?? 1) * 0.95 * (1 - t)
+  ctx.strokeStyle = a.kind === 'text' ? a.box?.fill ?? a.color : a.color
+  ctx.lineWidth = Math.max(4, 'width' in a && a.width > 0 ? a.width : 4) * s
+  ctx.beginPath()
+  if (a.kind === 'arrow') {
+    const r0 = Math.max(a.width * 3.2, 14) * s
+    ctx.arc(a.x2 * W, a.y2 * H, r0 + Math.max(r0 * 2, RIPPLE_MIN * s) * t, 0, Math.PI * 2)
+  } else {
+    // The same distance out all round, so a thin box's ring stays a ring around it.
+    const b = bounds(ctx, a, W, H), pad = 6 * s, hw = (b.w * W) / 2 + pad, hh = (b.h * H) / 2 + pad
+    const out = Math.max(RIPPLE_GROW * Math.max(hw, hh), RIPPLE_MIN * s) * t
+    const cx = (b.x + b.w / 2) * W, cy = (b.y + b.h / 2) * H, rx = hw + out, ry = hh + out
+    if (a.kind === 'circle' || (a.kind === 'text' && a.box?.circle)) ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+    else ctx.roundRect(cx - rx, cy - ry, rx * 2, ry * 2, Math.min(rx, ry) * 0.3)
+  }
+  ctx.stroke()
+  ctx.restore()
+}
+
+// The first share of a line's length (0..1): an arrow up to a tip that has come that far along it,
+// head and all; a freehand line or polyline cut there.
+function partOf<T extends ArrowAnnotation | PointsAnnotation>(a: T, share: number, W: number, H: number): T {
+  if (a.kind === 'arrow') {
+    if (!(a.c1 && a.c2)) return { ...a, x2: a.x1 + (a.x2 - a.x1) * share, y2: a.y1 + (a.y2 - a.y1) * share }
+    // The curve's t at that share of its length, found on the curve cut into small pieces.
+    const q: Cubic = [[a.x1, a.y1], a.c1, a.c2, [a.x2, a.y2]], n = 64
+    const pts = Array.from({ length: n + 1 }, (_, i) => cubicAt(q, i / n))
+    const at = cutAt(pts, share, W, H), t = (at.i + at.f) / n
+    const p = subCubic(q, 0, t)
+    return { ...a, c1: p[1], c2: p[2], x2: p[3][0], y2: p[3][1] }
+  }
+  const pa = a as PointsAnnotation
+  return { ...pa, points: cutPoints(pa.points, share, W, H) } as T
+}
+
+// Where a share of a polyline's length falls: in piece i (from point i to i + 1), f of the way along it.
+function cutAt(pts: Pt[], share: number, W: number, H: number): { i: number; f: number } {
+  const lens = pts.slice(1).map((q, i) => Math.hypot((q[0] - pts[i][0]) * W, (q[1] - pts[i][1]) * H))
+  let left = lens.reduce((x, y) => x + y, 0) * Math.min(1, share)
+  for (let i = 0; i < lens.length; i++) {
+    if (left <= lens[i] || i === lens.length - 1) return { i, f: lens[i] ? Math.min(1, left / lens[i]) : 1 }
+    left -= lens[i]
+  }
+  return { i: 0, f: 0 }
+}
+
+export function cutPoints(pts: Pt[], share: number, W: number, H: number): Pt[] {
+  if (pts.length < 2) return pts
+  const { i, f } = cutAt(pts, share, W, H), p = pts[i], q = pts[i + 1]
+  return [...pts.slice(0, i + 1), [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]]
+}
+
+// A closed shape's outline as points, back to where it starts: a box from its top left, an ellipse
+// from its top, both clockwise.
+function ringOf(a: Extract<Annotation, { kind: 'rect' | 'circle' | 'polygon' }>): Pt[] {
+  if (a.kind === 'polygon') return a.points.length ? [...a.points, a.points[0]] : []
+  if (a.kind === 'rect') return [[a.x, a.y], [a.x + a.w, a.y], [a.x + a.w, a.y + a.h], [a.x, a.y + a.h], [a.x, a.y]]
+  return Array.from({ length: 73 }, (_, i) => {
+    const ang = -Math.PI / 2 + (i / 72) * Math.PI * 2
+    return [a.x + a.w / 2 + (a.w / 2) * Math.cos(ang), a.y + a.h / 2 + (a.h / 2) * Math.sin(ang)] as Pt
+  })
+}
+
+// A closed shape being drawn in: its outline goes round from the top (clockwise), and its fill comes
+// up as the outline does.
+function drawOutlineIn(ctx: Ctx, a: Extract<Annotation, { kind: 'rect' | 'circle' | 'polygon' }>, share: number, W: number, H: number, s: number): void {
+  const ring = ringOf(a)
+  if (ring.length < 2) return
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+  ctx.strokeStyle = a.color
+  if (a.fill) {
+    ctx.save(); ctx.globalAlpha *= share
+    ctx.beginPath()
+    if (a.kind === 'circle') ctx.ellipse((a.x + a.w / 2) * W, (a.y + a.h / 2) * H, (a.w / 2) * W, (a.h / 2) * H, 0, 0, Math.PI * 2)
+    else { for (const [x, y] of ring) ctx.lineTo(x * W, y * H); ctx.closePath() }
+    fillAndStroke(ctx, a, 0, a.kind === 'polygon' ? undefined : { x: a.x * W, y: a.y * H, w: a.w * W, h: a.h * H })
+    ctx.restore()
+  }
+  const lw = a.width * s
+  if (lw <= 0) return
+  const part = cutPoints(ring, share, W, H)
+  ctx.beginPath()
+  for (const [x, y] of part) ctx.lineTo(x * W, y * H)
+  ctx.globalAlpha *= a.lineOpacity ?? 1; ctx.lineWidth = lw; setDash(ctx, a.dash, lw); ctx.stroke()
+}
+
 // Canvas has no perspective transform, so the picture is cut into a mesh of small triangles, each
 // drawn with the affine transform that puts it where the perspective map sends its corners. Each
 // triangle is clipped a little larger than itself so no seams show between them.
@@ -461,7 +641,6 @@ const textLines = (t: string): string[] => t.split('\n')
 function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number, H: number, s: number): void {
   let px = a.size * s, lh = px * 1.2
   setTextFont(ctx, px, a.bold !== false, a.font)
-  ctx.textBaseline = 'top'
   const lines = textLines(a.text)
   let widths = lines.map(l => ctx.measureText(l).width), wMax = Math.max(...widths)
   const cell = a.box?.height ? a.box : null
@@ -503,20 +682,21 @@ function drawText(ctx: Ctx, a: Extract<Annotation, { kind: 'text' }>, W: number,
       ctx.strokeRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad); ctx.restore()
     }
   }
-  // A number alone in a box (a jersey number) sits in its middle by the ink of its digits: the font's
-  // line box leaves digits high in some fonts.
-  let ty = cell ? y + (cell.height! * H - 2 * cell.padding * s - lh * lines.length) / 2 : y
-  if (a.box && !cell && lines.length === 1 && /^\d+$/.test(lines[0])) {
-    const m = ctx.measureText(lines[0])
-    ty = y + lh / 2 - (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2
-  }
+  // Each line sits in the middle of its line box by the ink of capitals and kanji ('H漢'), drawn on
+  // the alphabetic baseline: where a font puts its glyphs in its own box differs a lot from font to
+  // font, and drawing from the top of that box left the text high (like a superscript) in some.
+  // A number alone in a box (a jersey number) goes by the ink of its own digits.
+  ctx.textBaseline = 'alphabetic'
+  const top = cell ? y + (cell.height! * H - 2 * cell.padding * s - lh * lines.length) / 2 : y
+  const ink = ctx.measureText(a.box && !cell && lines.length === 1 && /^\d+$/.test(lines[0]) ? lines[0] : 'H漢')
+  const base = top + lh / 2 + (ink.actualBoundingBoxAscent - ink.actualBoundingBoxDescent) / 2
   // A black outline keeps light text readable on a bright court (on by default).
   if (a.outline !== false && a.color.toUpperCase() !== '#0F172A') {
     ctx.save(); ctx.lineWidth = Math.max(3, px * 0.18); ctx.strokeStyle = '#000000'; ctx.lineJoin = 'round'
-    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), ty + i * lh)); ctx.restore()
+    lines.forEach((l, i) => ctx.strokeText(l, lineX(i), base + i * lh)); ctx.restore()
   }
   ctx.fillStyle = a.color
-  lines.forEach((l, i) => ctx.fillText(l, lineX(i), ty + i * lh))
+  lines.forEach((l, i) => ctx.fillText(l, lineX(i), base + i * lh))
 }
 
 function fillAndStroke(ctx: Ctx, a: Fillable & { color: string; dash?: Dash; lineOpacity?: number }, lw: number, box?: { x: number; y: number; w: number; h: number }): void {

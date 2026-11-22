@@ -5,6 +5,9 @@ import { displayName } from './dvw'
 import { ourSide } from './filter'
 import { effectName, skillName } from './labels'
 import type { ParsedDVW, Play } from './types'
+import type { CourtFit } from './court'
+import { nearSide } from './courtGeometry'
+import { matchReport, type MatchReport } from './report'
 import { t } from './i18n'
 
 export type Anchor = 'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br'
@@ -27,9 +30,11 @@ export interface OverlaySettings {
   look?: TelopLook // missing = slant
   scoreboard: { enabled: boolean; anchor: Anchor; scale: number; showSets: boolean }
   // photo: the player's photo from the player packs, above a caption at the bottom (below one at the top).
-  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean }
+  playerCaption: { enabled: boolean; anchor: Anchor; scale: number; showNumber: boolean; showName: boolean; showSkill: boolean; showEvaluation: boolean; photo: boolean; showStats?: boolean }
   // A serve's measured speed (hit to the reception's touch, serveMark.ts) on its own plate, from the touch on.
   serveSpeed: { enabled: boolean; anchor: Anchor; scale: number }
+  // The six players of each team on a small court, as a broadcast shows them (drawLineup).
+  lineup: { enabled: boolean; anchor: Anchor; scale: number }
   // enabled = a card before each marker group; sceneCards = a card with the scene name before each scene.
   // markerLayout / sceneLayout: where the title sits and how big, set in the card editor.
   titleCard: { enabled: boolean; sceneCards: boolean; durationSec: number; showMarkerName: boolean; showMatch: boolean
@@ -46,7 +51,17 @@ export interface OverlaySettings {
   court: { enabled: boolean }
   // YouTube chapters (a .txt beside the MP4) when the whole video is exported.
   chapters: { enabled: boolean }
+  // The MP4's height. 1080 is offered only when every video in the export is at least 1080 high (exportHeight):
+  // most volleyball footage is 720p, and a larger export would not be sharper than its source.
+  output: { height: ExportHeight }
 }
+
+export type ExportHeight = 720 | 1080
+// Whether 1080p can be picked: every match video in the export is at least 1080 high.
+export const can1080 = (heights: (number | undefined)[]): boolean => heights.length > 0 && heights.every(h => (h ?? 0) >= 1080)
+// The height the MP4 is made at: the one picked, when the sources allow it; else 720.
+export const exportHeight = (s: Pick<OverlaySettings, 'output'>, heights: (number | undefined)[]): ExportHeight =>
+  s.output.height === 1080 && can1080(heights) ? 1080 : 720
 
 // x / y: the title's top-left (0..1 of the frame), so a longer title only grows to the right and down;
 // scale: 1 = default size. A scene or video card's layout saved before origin was its title's centre:
@@ -70,6 +85,7 @@ export function sceneTopLeft(L: CardLayout): CardLayout {
 export interface ClipOverlayOverride {
   scoreboard?: { hidden?: boolean }
   playerCaption?: { hidden?: boolean; name?: string; line?: string }
+  courtMarks?: { hidden?: boolean } // the player's marks on the court (heatmap, landings, flights, cones, charts, the ripple) are left off this clip
 }
 
 export const THEME_PRESETS: { name: string; theme: OverlayTheme }[] = [
@@ -90,10 +106,12 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   scoreboard: { enabled: true, anchor: 'tl', scale: 1, showSets: true }, // top left: the headline sits at the top middle
   playerCaption: { enabled: true, anchor: 'bl', scale: 1, showNumber: true, showName: true, showSkill: true, showEvaluation: true, photo: false },
   serveSpeed: { enabled: true, anchor: 'tr', scale: 1 },
+  lineup: { enabled: false, anchor: 'br', scale: 1 },
   titleCard: { enabled: false, sceneCards: true, durationSec: 2, showMarkerName: true, showMatch: true },
   transition: { fade: false, durationSec: 0.3 },
   court: { enabled: false },
   chapters: { enabled: false },
+  output: { height: 720 },
 }
 
 // What gets saved: any part may be missing, and missing parts fall back to the defaults.
@@ -108,10 +126,12 @@ export function overlaySettings(saved: OverlayPatch | undefined): OverlaySetting
     scoreboard: { ...DEFAULT_OVERLAY.scoreboard, ...(s.scoreboard ?? {}) },
     playerCaption: { ...DEFAULT_OVERLAY.playerCaption, ...(s.playerCaption ?? {}) },
     serveSpeed: { ...DEFAULT_OVERLAY.serveSpeed, ...(s.serveSpeed ?? {}) },
+    lineup: { ...DEFAULT_OVERLAY.lineup, ...(s.lineup ?? {}) },
     titleCard: { ...DEFAULT_OVERLAY.titleCard, ...(s.titleCard ?? {}) },
     transition: { ...DEFAULT_OVERLAY.transition, ...(s.transition ?? {}) },
     court: { ...DEFAULT_OVERLAY.court, ...(s.court ?? {}) },
     chapters: { ...DEFAULT_OVERLAY.chapters, ...(s.chapters ?? {}) },
+    output: { height: s.output?.height === 1080 ? 1080 : 720 },
   }
 }
 
@@ -120,17 +140,53 @@ export interface ScoreboardData {
   ptsL: number; ptsR: number
   setsL: number; setsR: number
   winner: 'L' | 'R' | null // who took this rally
+  lineup?: LineupData | null // who is on court (the lineups at the serve); missing: the file has none
+}
+
+// Both teams' six on court, left and right as in the scoreboard: jerseys P1 to P6 (liberos are not in them).
+export interface LineupSide { code: string; jerseys: number[]; color?: string } // color: the team's (library), #RRGGBB
+// near: the team by the camera in the video (the grid's 手前, swapped as the teams change ends), drawn
+// below the net; missing (no grid fitted): the left team is.
+export interface LineupData { left: LineupSide; right: LineupSide; near?: 'left' | 'right' }
+
+// The scoreboard data with the teams' colors on its lineup (by team code; a team without one keeps none).
+export function withTeamColors(d: ScoreboardData, colors: Record<string, string>): ScoreboardData {
+  const l = d.lineup
+  if (!l) return d
+  const side = (s: LineupSide): LineupSide => (colors[s.code.toUpperCase()] ? { ...s, color: colors[s.code.toUpperCase()] } : s)
+  return { ...d, lineup: { ...l, left: side(l.left), right: side(l.right) } }
 }
 
 // A serve's measured speed and when its plate comes up: the reception's touch (a video time).
 export interface SpeedData { kmh: number; touchSec: number }
 
 // photo: the player's photo in a pack (shared/pack.ts captionPhoto), when the caption shows one.
-export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null }
+export interface CaptionData { number: number | null; name: string | null; line: string | null; photo?: { pack: string; photo: string } | null; stats?: CaptionStat[] | null }
+
+// A figure shown beside the caption: what it is, the percentage, and the count it comes from.
+export interface CaptionStat { label: string; value: string; count: string } // count '': none shown
+
+// The player's figures for the skill of the play, over the whole match (the match report's lines):
+// serve ERR% and BP%, attack KILL% and EFF% (EFF without a count: its top is no number of plays),
+// reception #+% and #%. Null for other skills, or when the
+// player has none of that skill in the match.
+const reports = new WeakMap<ParsedDVW, MatchReport>()
+export function captionStats(dvw: ParsedDVW, play: Play): CaptionStat[] | null {
+  if (play.skill !== 'S' && play.skill !== 'A' && play.skill !== 'R') return null
+  let r = reports.get(dvw)
+  if (!r) { r = matchReport(dvw); reports.set(dvw, r) }
+  const line = r.teams[play.side === '*' ? 0 : 1].players.find(p => p.jersey === play.jersey)
+  if (!line) return null
+  const stat = (label: string, n: number, of: number, count = true): CaptionStat => ({ label, value: `${Math.round((n / of) * 100)}%`, count: count ? `${n}/${of}` : '' })
+  if (play.skill === 'S') { const s = line.serve; return s.tot ? [stat('ERR', s.err, s.tot), stat('BP', s.brk, s.tot)] : null }
+  if (play.skill === 'A') { const a = line.att; return a.tot ? [stat('KILL', a.pts, a.tot), stat('EFF', a.pts - a.err - a.blo, a.tot, false)] : null }
+  const c = line.rec
+  return c.tot ? [stat('#+', c.pos, c.tot), stat('#', c.exc, c.tot)] : null
+}
 
 // Our team always on the left (design §3.7); scrimmages and all-home files keep home on the left.
-// The score is the one before the rally.
-export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): ScoreboardData {
+// The score is the one before the rally. fit: the match's court grid, for which team is by the camera.
+export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[], fit?: Pick<CourtFit, 'nearSet1'> | null): ScoreboardData {
   const side = dvw.allHome ? '*' : ourSide(dvw.teams, ourCodes) ?? '*'
   const homeLeft = side === '*'
   const [home, away] = dvw.teams
@@ -141,6 +197,10 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[]): 
     ptsL: homeLeft ? play.score.home : play.score.away, ptsR: homeLeft ? play.score.away : play.score.home,
     setsL: homeLeft ? play.setsBefore.home : play.setsBefore.away, setsR: homeLeft ? play.setsBefore.away : play.setsBefore.home,
     winner: won === null ? null : (won === '*') === homeLeft ? 'L' : 'R',
+    ...(rally?.court?.home.length === 6 && rally.court.away.length === 6
+      ? { lineup: { left: { code: (homeLeft ? home : away).code, jerseys: homeLeft ? rally.court.home : rally.court.away }, right: { code: (homeLeft ? away : home).code, jerseys: homeLeft ? rally.court.away : rally.court.home },
+          ...(fit ? { near: (nearSide(fit as CourtFit, play) === '*') === homeLeft ? 'left' as const : 'right' as const } : {}) } }
+      : {}),
   }
 }
 
@@ -153,5 +213,27 @@ export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['play
     number: s.showNumber ? play.jersey : null,
     name: s.showName ? name : null,
     line: o?.line !== undefined && o.line.trim() !== '' ? o.line.trim().toUpperCase() : autoLine,
+    ...(s.showStats ? { stats: captionStats(dvw, play) } : {}),
   }
+}
+
+// Following the playhead over a match (the left list's plays, no clip on screen): each play's
+// scoreboard and caption from just before its contact until the next play's, or for at most holdSec.
+// So watching plays in a row, the display moves to each play as it happens. Times are video times.
+export interface FollowWindow { from: number; to: number; playId: number }
+export const FOLLOW_LEAD_SEC = 0.3 // up this long before the contact
+export function followWindows(plays: { id: number; time: number }[], offsetSec: number, holdSec: number): FollowWindow[] {
+  const sorted = [...plays].sort((a, b) => a.time - b.time || a.id - b.id)
+  return sorted.map((p, i) => {
+    const from = p.time + offsetSec - FOLLOW_LEAD_SEC, next = sorted[i + 1]
+    const to = Math.min(p.time + offsetSec + holdSec, next ? next.time + offsetSec - FOLLOW_LEAD_SEC : Infinity)
+    return { from, to, playId: p.id }
+  }).filter(w => w.to > w.from)
+}
+
+// The window at time t (the last that has begun and not ended), or -1.
+export function followAt(ws: FollowWindow[], t: number): number {
+  let lo = 0, hi = ws.length - 1, found = -1
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (ws[mid].from <= t) { found = mid; lo = mid + 1 } else hi = mid - 1 }
+  return found >= 0 && t <= ws[found].to ? found : -1
 }

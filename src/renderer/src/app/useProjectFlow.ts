@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { EMPTY_FILTER, type PlayFilter } from '../../../shared/filter'
 import { relink, type Reel } from '../../../shared/reel'
 import { settingsChange } from '../../../shared/settingsUndo'
-import type { ImportProgress, LibraryInfo, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, RecentProject, ScanResult } from '../../../shared/types'
+import type { ImportProgress, LibraryInfo, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, RecentProject, ScanResult } from '../../../shared/types'
 import type { Video } from '../../../shared/video'
 import { resetAssets } from '../assets'
 import { playback } from '../playback'
@@ -20,6 +20,7 @@ interface Host {
   project: ProjectInfo | null
   setProject: (p: ProjectInfo | null) => void
   setDvws: (d: Record<string, ParsedDVW>) => void
+  setSceneMatches: (m: Match[]) => void // matches the scenes use that aren't the project's targets
   setMatchId: Set<string | null>
   setMatchIds: Set<string[]>
   setFilter: (f: PlayFilter) => void
@@ -40,7 +41,7 @@ interface Host {
 }
 
 export function useProjectFlow(h: Host) {
-  const { latest, project, setProject, setDvws, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId, setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record } = h
+  const { latest, project, setProject, setDvws, setSceneMatches, setMatchId, setMatchIds, setFilter, setSelected, setActiveClipId, setReels, setReelId, setVideos, setVideoId, setError, setNotice, setProgress, markSaved, clearHistory, flushAll, record } = h
   const [library, setLibrary] = useState<LibraryInfo | null>(null)
   const [recent, setRecent] = useState<RecentProject[]>([])
   const [scan, setScan] = useState<ScanResult | null>(null)
@@ -66,15 +67,25 @@ export function useProjectFlow(h: Host) {
     setProject(p)
     setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
     setMatchIds(ids => ids.filter(id => p?.matches.some(m => m.id === id)))
-    if (!p) { setDvws({}); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
+    if (!p) { setDvws({}); setSceneMatches([]); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
     const parsed: Record<string, ParsedDVW> = {}
     for (const m of p.matches) {
       try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
     }
     if (gen !== loadGen.current) return
-    setDvws(parsed)
     const listed = await api.listReels()
     if (gen !== loadGen.current) return
+    // Matches the scenes' clips use but the project no longer searches (taken off its list): loaded
+    // too, so those clips keep their plays. Only a match gone from the library stays missing.
+    const used = [...new Set(listed.flatMap(r => Object.values(r.clips).map(c => c.matchId)))].filter(id => !parsed[id])
+    const lib = used.length ? await api.getLibrary() : null
+    const extra = (lib?.matches ?? []).filter(m => used.includes(m.id))
+    for (const m of extra) {
+      try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
+    }
+    if (gen !== loadGen.current) return
+    setSceneMatches(extra.filter(m => parsed[m.id]))
+    setDvws(parsed)
     const vids = await api.listVideos()
     if (gen !== loadGen.current) return
     // Scenes whose clips were re-pointed to their plays (the DVW changed) count as unsaved, so the
@@ -133,6 +144,19 @@ export function useProjectFlow(h: Host) {
     if (r.project) await loadProject(r.project)
     setNotice(r.note)
   })
+  const deleteMatch = (m: Match) => guard(async () => {
+    const users = await api.matchUsers(m.id)
+    const note = users.length ? t('\n{0} 個のプロジェクトがこの試合を使っています（{1}）。そこでは検索の対象から外れ、シーンのクリップは再生できなくなります。', users.length, users.join('、')) : ''
+    if (!confirm(t('試合「{0}」を倉庫から削除しますか？{1}\n動画と DVW のファイルは消えません。（matches/deleted/ に移動します）', m.name, note))) return
+    const r = await api.deleteMatch(m.id)
+    setLibrary(r.library)
+    setNotice(t('試合「{0}」を削除しました', m.name))
+  })
+  const deleteProject = (r: RecentProject) => guard(async () => {
+    if (!confirm(t('プロジェクト「{0}」を削除しますか？\n{1}\nフォルダごとゴミ箱に移します（試合の動画と DVW は消えません）。', r.name, r.path))) return
+    setRecent(await api.deleteProject(r.path))
+    setNotice(t('プロジェクト「{0}」をゴミ箱に移しました', r.name))
+  })
   const importOne = () => guard(async () => { const m = await api.importMatch(); if (m) setLibrary(await api.getLibrary()) })
   const pickerDone = (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => guard(async () => {
     setPicker(null)
@@ -161,6 +185,6 @@ export function useProjectFlow(h: Host) {
 
   return {
     library, setLibrary, recent, scan, setScan, picker, setPicker, loadProject,
-    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, pickerDone, projectTeams, saveSettings,
+    openProject, openMatch, goHome, chooseLibrary, scanFolders, importPairs, relocate, importOne, deleteMatch, deleteProject, pickerDone, projectTeams, saveSettings,
   }
 }

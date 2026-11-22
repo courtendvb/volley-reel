@@ -1,13 +1,16 @@
 import { PaletteColor } from './PaletteColor'
 import { useEffect, useRef } from 'react'
 import { TELOP_LOOKS, lookTheme, type Anchor, type CaptionData, type OverlaySettings, type ScoreboardData } from '../../../shared/overlay'
-import { cardBackground, drawCaption, drawScoreboard, drawServeSpeed, drawTitleCard } from '../../../shared/overlayDraw'
+import { cardBackground, drawCaption, drawLineup, drawScoreboard, drawServeSpeed, drawTitleCard } from '../../../shared/overlayDraw'
 import { t } from '../../../shared/i18n'
 import { packPhotoImage } from '../assets'
+import { ThemePicker } from './ThemePicker'
+import type { OverlayTheme } from '../../../shared/overlay'
 
 interface Props {
   settings: OverlaySettings
   onChange: (s: OverlaySettings) => void
+  onTheme: (t: OverlayTheme) => void // the colors are the project's, for every video
   onClose: () => void
   sample: { scoreboard: ScoreboardData; caption: CaptionData; card: { marker: number; name: string; match: string | null } }
 }
@@ -17,7 +20,7 @@ const PREVIEW_W = 560, PREVIEW_H = 315
 
 // Reel-wide settings for the automatic overlays (design §3.7): every element separately, plus colors.
 // Changes apply at once; the preview draws on the current video frame.
-export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props) {
+export function OverlayDialog({ settings: s, onChange, onTheme, onClose, sample }: Props) {
   const frame = useRef<HTMLCanvasElement>(null)
   const card = useRef<HTMLCanvasElement>(null)
   const set = <K extends Exclude<keyof OverlaySettings, 'look'>>(k: K, patch: Partial<OverlaySettings[K]>) => onChange({ ...s, [k]: { ...s[k], ...patch } })
@@ -32,8 +35,9 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
     if (s.scoreboard.enabled) drawScoreboard(ctx, c.width, c.height, sample.scoreboard, s.scoreboard, lookTheme(s))
     if (s.playerCaption.enabled) drawCaption(ctx, c.width, c.height, sample.caption, s.playerCaption, lookTheme(s), packPhotoImage(sample.caption.photo))
     if (s.serveSpeed.enabled) drawServeSpeed(ctx, c.width, c.height, 98, s.serveSpeed, lookTheme(s))
+    if (s.lineup.enabled) drawLineup(ctx, c.width, c.height, { left: { code: sample.scoreboard.left, jerseys: [1, 4, 7, 9, 11, 14] }, right: { code: sample.scoreboard.right, jerseys: [2, 5, 6, 8, 10, 12] } }, s.lineup, lookTheme(s))
     const t = card.current
-    if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, s.theme)
+    if (t) drawTitleCard(t.getContext('2d')!, t.width, t.height, sample.card, s.titleCard, lookTheme(s))
   }, [s, sample])
 
   const check = (label: string, value: boolean, on: (v: boolean) => void) => (
@@ -61,12 +65,13 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
           <div className="ov-settings">
             <section>
               <span className="field-label">{t('配色')}</span>
-              <p className="hint">{t('配色はプロジェクト全体の設定です。上部の「設定」で変えます。')}</p>
+              <ThemePicker value={s.theme} onChange={onTheme} />
+              <p className="hint">{t('スコアボード・テロップ・タイトルカードの色。プロジェクトのすべての動画に使います。')}</p>
             </section>
 
             <section>
               <span className="field-label">{t('デザイン')}</span>
-              <div className="ov-looks" role="radiogroup" aria-label={t('スコアボード・テロップ・サーブ速度のデザイン')}>
+              <div className="ov-looks" role="radiogroup" aria-label={t('スコアボード・テロップ・サーブ速度・タイトルカードのデザイン')}>
                 {TELOP_LOOKS.map(l => (
                   <LookButton key={l.look} name={l.name} on={(s.look ?? 'slant') === l.look} settings={{ ...s, look: l.look }} sample={sample}
                     onPick={() => onChange(l.look === 'slant' ? (({ look: _l, ...rest }) => rest)(s) : { ...s, look: l.look })} />
@@ -88,6 +93,8 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
                 {check(t('名前'), s.playerCaption.showName, v => set('playerCaption', { showName: v }))}
                 {check(t('スキル'), s.playerCaption.showSkill, v => set('playerCaption', { showSkill: v }))}
                 {check(t('評価'), s.playerCaption.showEvaluation, v => set('playerCaption', { showEvaluation: v }))}
+                <span title={t('テロップの横に、その試合でのその選手の数字を出す。サーブ: ミス率・BP%／アタック: 決定率・効果率／レセプション: #+%・#%（それぞれ本数も）')}>
+                  {check(t('統計'), !!s.playerCaption.showStats, v => set('playerCaption', { showStats: v }))}</span>
                 {check(t('写真（選手写真パックから。下のテロップは上に、上のテロップは下に出す）'), s.playerCaption.photo, v => set('playerCaption', { photo: v }))}
               </div>
             </section>
@@ -96,6 +103,12 @@ export function OverlayDialog({ settings: s, onChange, onClose, sample }: Props)
               <div className="filter-row">{check(t('サーブ速度'), s.serveSpeed.enabled, v => set('serveSpeed', { enabled: v }))}<span className="spacer" />
                 {anchor(s.serveSpeed.anchor, v => set('serveSpeed', { anchor: v }), t('サーブ速度の位置'))}{scale(s.serveSpeed.scale, v => set('serveSpeed', { scale: v }), t('サーブ速度のサイズ'))}</div>
               <p className="hint">{t('ヒットとタッチを打ったサーブに、タッチのコマから出ます')}</p>
+            </section>
+
+            <section>
+              <div className="filter-row">{check(t('ローテーション（6人の並び）'), s.lineup.enabled, v => set('lineup', { enabled: v }))}<span className="spacer" />
+                {anchor(s.lineup.anchor, v => set('lineup', { anchor: v }), t('ローテーションの位置'))}{scale(s.lineup.scale, v => set('lineup', { scale: v }), t('ローテーションのサイズ'))}</div>
+              <p className="hint">{t('両チームのコート上の6人を、小さなコートに背番号で出します。左が自チーム（スコアボードと同じ並び）')}</p>
             </section>
 
             <section>

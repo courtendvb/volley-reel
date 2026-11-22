@@ -17,7 +17,7 @@ export interface AppLatest {
   orderOf: (s: Reel) => Clip[]; infoFor: (c: Clip, scene: Reel | null) => ClipInfo
   overlayData: null | ((c: Clip | null) => OverlayData | null)
   exportState: null | { status: string; ratio: number; message: string; outPath?: string }; notice: string | null
-  dvwsRef: null | Record<string, ParsedDVW>; library: LibraryInfo | null; projectPath: string | null; activeGroup: Group | null
+  dvwsRef: null | Record<string, ParsedDVW>; targetDvws?: Record<string, ParsedDVW>; library: LibraryInfo | null; projectPath: string | null; activeGroup: Group | null
 }
 
 // The marker group a clip is worked on in: the one it was opened from if it is still in it, else its

@@ -1,20 +1,22 @@
 // Turns a video plan (scenes → marker groups → clips, with title cards) into an ExportJob, with
 // every overlay drawn to PNG by the preview's functions (design §3.8). Main does the ffmpeg work.
-import { drawAnnotation, type Annotation } from '../../shared/annotation'
+import { BLINK_ON, drawAnnotation, emphasisOf, emphasisSec, isAnimated, type Anim, type Annotation, type Emphasis } from '../../shared/annotation'
 import type { Card } from '../../shared/video'
-import { lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
-import { drawCaption, drawCard, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
+import { exportHeight, lookTheme, type CaptionData, type OverlaySettings, type ScoreboardData, type SpeedData } from '../../shared/overlay'
+import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } from '../../shared/overlayDraw'
 import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
 import type { ImageLookup } from '../../shared/annotation'
-import { FLIGHTS_LEAD_SEC, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
+import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawForecast, forecastOn, forecastSteps, landingFxEnd, FLIGHTS_SEC, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
 import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
 
-export const EXPORT_HEIGHT = 720
 const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
+const DRAW_STEPS_PER_SEC = 15 // an object being drawn in: steps a second (at most DRAW_STEPS)
+const DRAW_STEPS = 15
+const EMPHASIS_STEPS = 12 // moments of one swell or ring, each its own layer shown at that moment of every one
 
 interface Deps {
   range: (c: Clip, sceneId: string) => { in: number; out: number } | null // a scene's own length defaults apply
@@ -23,34 +25,38 @@ interface Deps {
   sceneAnnotations: (sceneId: string) => Annotation[] // 表示範囲: シーン全体
   videoAnnotations: Annotation[] // 表示範囲: 動画全体
   markerAnnotations: (sceneId: string, group: Group) => Annotation[] // 表示範囲: マーカー全体
-  court?: (c: Clip) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
+  court?: (c: Clip, sceneId: string, group: Group) => { fit: CourtFit; zones: PlayZones | null; flight?: Flight } | null // the clip's fitted court, its play's zones and when its ball flies
   courtStyle?: GridStyle // the grid's look, as in the player
 }
 
-// 720p at the source aspect, at the source frame rate when every match shares one (else 30).
-function exportFormat(clips: Clip[], matches: Record<string, Match>): { width: number; height: number; fpsStr: string } {
+// 720p (1080p when picked and every source is that high, exportHeight) at the source aspect, at the source frame
+// rate when every match shares one (else 30).
+function exportFormat(clips: Clip[], matches: Record<string, Match>, overlay: OverlaySettings): { width: number; height: number; fpsStr: string } {
   const ms = [...new Set(clips.map(c => c.matchId))].map(id => matches[id]).filter(Boolean)
   const first = ms[0]
+  const height = exportHeight(overlay, ms.map(m => m.height))
   const aspect = first?.width && first.height ? first.width / first.height : 16 / 9
-  const width = Math.round((EXPORT_HEIGHT * aspect) / 2) * 2
+  const width = Math.round((height * aspect) / 2) * 2
   const rates = new Set(ms.map(m => m.fpsStr))
-  return { width, height: EXPORT_HEIGHT, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
+  return { width, height, fpsStr: rates.size === 1 && first?.fpsStr ? first.fpsStr : '30' }
 }
 
 // chapters: where YouTube chapters start, as plan indexes (planVideoChapters); kept on the job as item indexes.
 // Cards as pictures, for a PNG or a PDF, at full HD.
 export const CARD_W = 1920, CARD_H = 1080
-export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOpacity: number | undefined, type: 'image/png' | 'image/jpeg'): Promise<Uint8Array[]> {
+export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOpacity: number | undefined, type: 'image/png' | 'image/jpeg',
+  size = { w: CARD_W, h: CARD_H }, leaveOut?: (a: Annotation) => boolean): Promise<Uint8Array[]> {
+  const W = size.w, H = size.h
   const ids = cards.flatMap(c => [...(c.slide?.bg.kind === 'image' ? [c.slide.bg.assetId] : []), ...(c.annotations ?? []).flatMap(a => (a.kind === 'image' ? [a.assetId] : []))])
   const images = await preloadAssets(ids)
   try {
     const out: Uint8Array[] = []
     for (const c of cards) {
-      const canvas = new OffscreenCanvas(CARD_W, CARD_H), ctx = canvas.getContext('2d')!
-      drawCard(ctx, CARD_W, CARD_H, c, overlay.titleCard, overlay.theme, logoImage(c.opp), images.lookup)
-      if (c.slide) drawSlideMarks(ctx, CARD_W, CARD_H, c.slide, heatOpacity)
-      if (c.slide?.flights) drawFlights(ctx, CARD_W, CARD_H, c.slide.flights, 1)
-      for (const a of c.annotations ?? []) drawAnnotation(ctx, a, CARD_W, CARD_H, images.lookup)
+      const canvas = new OffscreenCanvas(W, H), ctx = canvas.getContext('2d')!
+      drawCard(ctx, W, H, c, overlay.titleCard, lookTheme(overlay), logoImage(c.opp), images.lookup)
+      if (c.slide) drawSlideMarks(ctx, W, H, c.slide, heatOpacity)
+      if (c.slide?.flights) drawFlights(ctx, W, H, c.slide.flights, 1)
+      for (const a of c.annotations ?? []) if (!leaveOut?.(a)) drawAnnotation(ctx, a, W, H, images.lookup)
       out.push(new Uint8Array(await (await canvas.convertToBlob({ type, quality: 0.92 })).arrayBuffer()))
     }
     return out
@@ -61,7 +67,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
 
 export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, chapters?: Chapter[], chaptersText = false): Promise<ExportJob> {
   const clips = plan.flatMap(p => (p.kind === 'clip' ? [p.clip] : []))
-  const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches)
+  const { width: W, height: H, fpsStr } = exportFormat(clips, d.matches, overlay)
   const sceneIds = [...new Set(plan.flatMap(p => (p.kind === 'clip' ? [p.sceneId] : [])))]
   const all = [...d.videoAnnotations, ...sceneIds.flatMap(d.sceneAnnotations), ...clips.flatMap(c => c.annotations),
     ...plan.flatMap(p => (p.kind === 'clip' ? d.markerAnnotations(p.sceneId, p.group) : [])),
@@ -86,7 +92,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     firstItem.push(items.length)
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
-        drawCard(ctx, W, H, p.card, overlay.titleCard, overlay.theme, logoImage(p.card.opp), assetImage)
+        drawCard(ctx, W, H, p.card, overlay.titleCard, lookTheme(overlay), logoImage(p.card.opp), assetImage)
         if (p.card.slide) drawSlideMarks(ctx, W, H, p.card.slide, d.courtStyle?.heatOpacity)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
       }), ...(p.card.slide?.flights ? { layers: await flightLayers(p.card.slide.flights, p.durationSec, png) } : {}) })
@@ -122,11 +128,13 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
   const data = d.overlayData(c)
   const o = c.overlayOverride
+  const courtStyle = d.courtStyle && o?.courtMarks?.hidden ? withoutPlayerMarks(d.courtStyle) : d.courtStyle // the clip can leave the player's marks off
   const showSb = !!data && overlay.scoreboard.enabled && !o?.scoreboard?.hidden
   const showCap = !!data && overlay.playerCaption.enabled && !o?.playerCaption?.hidden
+  const lineup = data && overlay.lineup.enabled && !o?.scoreboard?.hidden ? data.scoreboard.lineup ?? null : null
   // The court as the player shows it (grid, zones, the player's marks and charts, as set on the 表示
   // tab), on every clip of a match whose court is fitted.
-  const court = d.courtStyle ? d.court?.(c) ?? null : null
+  const court = courtStyle ? d.court?.(c, sceneId, group) ?? null : null
   // Windows in seconds into the clip as played: slow stretches stretch them, and an object shown at
   // a held moment stays up while it is held (shared/timing.ts).
   const ps = pieces(r.in, r.out, c.timing), played = playedSec(ps)
@@ -136,19 +144,21 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
   }
   const fades = (a: Annotation) => !!(a.fadeIn || a.fadeOut)
   // Objects shown for the whole clip without a fade share one layer; the rest go by window (and fade).
-  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && w.from <= 0.001 && w.to >= played - 0.001 }
+  const whole = (a: Annotation) => { const w = window(a); return !fades(a) && !isAnimated(a) && w.from <= 0.001 && w.to >= played - 0.001 }
 
   // The video's objects at the bottom, then the scene's, the marker group's, the clip's (as in the editor).
   const anns = [...d.videoAnnotations, ...d.sceneAnnotations(sceneId), ...d.markerAnnotations(sceneId, group), ...c.annotations]
   const layers: ExportLayer[] = []
   const always = anns.filter(whole)
-  const flies = !!court?.flight && flightMoves(d.courtStyle!, court.zones)
-  if (court || showSb || showCap || always.length) {
+  const flies = !!court?.flight && flightMoves(courtStyle!, court.zones)
+  const ripples = !!court?.flight && !!rippleImpact(courtStyle!, court.zones)
+  if (court || showSb || showCap || lineup || always.length) {
     layers.push({
       png: await png(ctx => {
         // The court lies on the floor: under the scoreboard, the caption and every object.
-        if (court) drawCourt(ctx, W, H, court.fit, d.courtStyle!, court.zones, flies ? null : 1)
+        if (court) drawCourt(ctx, W, H, court.fit, courtStyle!, court.zones, flies ? null : 1, ripples ? null : undefined)
         if (showSb) drawScoreboard(ctx, W, H, data!.scoreboard, overlay.scoreboard, lookTheme(overlay))
+        if (lineup) drawLineup(ctx, W, H, lineup, overlay.lineup, lookTheme(overlay))
         if (showCap) drawCaption(ctx, W, H, data!.caption, overlay.playerCaption, lookTheme(overlay), packPhotoImage(data!.caption.photo))
         for (const a of always) drawAnnotation(ctx, a, W, H, assetImage)
       }),
@@ -166,8 +176,39 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
       if (to - from < 0.001) continue
       layers.push({ from, to, png: await png(ctx => {
         if (court!.zones?.player?.flights) drawFlights(ctx, W, H, court!.zones.player.flights, i / steps)
-        if (hasFlight(d.courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !d.courtStyle!.noLift)
+        if (hasFlight(courtStyle!, court!.zones)) drawFlight(ctx, W, H, court!.fit, court!.zones!, i / steps, !courtStyle!.noLift, i === steps ? resultTintOf(courtStyle!, court!.zones, 0) : undefined) // the last step is from the landing: in the result's colour
       }) })
+    }
+  }
+  // The forecast, in steps (each its own layer): from the clip's first frame the flight's ghost, the
+  // landing's ring and zone, the count-in on the hit; gone just after the landing.
+  if (court?.flight && forecastOn(courtStyle!, court.zones)) {
+    const { startSec, sec } = court.flight
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of forecastSteps(sec)) {
+      const from = playedOf(startSec + st.from), to = playedOf(startSec + st.to)
+      if (startSec + st.to <= r.in || startSec + st.from >= r.out || to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawForecast(ctx, W, H, court.fit, courtStyle!, court.zones!, { t: st.t, dur: sec })) })
+    }
+  }
+  // After the landing, in steps (each its own layer): the result's badge pops in, hold, and fade.
+  if (court?.flight && afterOn(courtStyle!, court.zones)) {
+    const land = court.flight.startSec + court.flight.sec
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of afterSteps()) {
+      const from = playedOf(land + st.from), to = playedOf(land + st.to)
+      if (land + st.from >= r.out || land + st.to <= r.in || to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawAfter(ctx, W, H, court.fit, courtStyle!, court.zones!, st.at)) })
+    }
+  }
+  // The ripple from the landing, in steps (each its own layer): it spreads, stays, fades, and is gone.
+  if (ripples) {
+    const land = rippleStart(court!.flight!, d.courtStyle!)
+    const playedOf = (t: number) => playedAt(ps, Math.max(r.in, Math.min(r.out, t)), 'start')
+    for (const st of rippleSteps()) {
+      const from = playedOf(land + st.from), to = playedOf(land + st.to)
+      if (st.from >= landingFxEnd(d.courtStyle!.rippleKind ?? 'ripple') || land + st.from >= r.out || to - from < 0.001) continue
+      layers.push({ from, to, png: await png(ctx => drawRipple(ctx, W, H, court!.fit, courtStyle!, court!.zones!, st.at)) })
     }
   }
   // A serve's speed plate, from the reception's touch to the end of the clip.
@@ -176,19 +217,50 @@ async function clipLayers(c: Clip, sceneId: string, group: Group, r: { in: numbe
     const from = playedAt(ps, Math.max(r.in, sp.touchSec), 'start')
     if (played - from > 0.001) layers.push({ from, to: played, png: await png(ctx => drawServeSpeed(ctx, W, H, sp.kmh, overlay.serveSpeed, lookTheme(overlay))) })
   }
+  // Objects with the same window, fades and motion share their layers (and move together).
   const timed = new Map<string, Annotation[]>()
   for (const a of anns) {
     if (whole(a)) continue
     const w = window(a)
     if (w.to <= w.from) continue // window falls outside the trimmed clip
-    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.fadeIn ?? 0}|${a.fadeOut ?? 0}`
+    const k = `${w.from.toFixed(3)}|${w.to.toFixed(3)}|${a.drawIn ? 0 : a.fadeIn ?? 0}|${a.fadeOut ?? 0}|${a.drawIn ?? 0}|${emphasisOf(a) ?? ''}`
     timed.set(k, [...(timed.get(k) ?? []), a])
   }
   for (const [k, list] of timed) {
-    const [from, to, fadeIn, fadeOut] = k.split('|').map(Number)
-    layers.push({ from, to, ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}), png: await png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage))) })
+    const parts = k.split('|'), [from, to, fadeIn, fadeOut, drawIn] = parts.map(Number), emphasis = (parts[5] || undefined) as Emphasis | undefined
+    layers.push(...await movingLayers(list, { from, to, fadeIn, fadeOut, drawIn, emphasis }, W, H, png, assetImage))
   }
   return layers
+}
+
+// The layers of objects shown in one window: drawn in step by step (each step its own layer), then
+// still; blinking (one layer, shown for the first part of every blink); or swelling or sending out
+// rings (one layer per moment of a swell or ring, each shown at that moment of every one).
+// Fading in is left to objects not drawn in; fading out goes on what shows at the end.
+async function movingLayers(list: Annotation[], w: { from: number; to: number; fadeIn: number; fadeOut: number; drawIn: number; emphasis?: Emphasis },
+  W: number, H: number, png: Png, assetImage: ImageLookup): Promise<ExportLayer[]> {
+  const draw = (anim?: Anim) => png(ctx => list.forEach(a => drawAnnotation(ctx, a, W, H, assetImage, anim)))
+  const out: ExportLayer[] = []
+  let start = w.from
+  if (w.drawIn > 0) {
+    const n = Math.max(3, Math.min(DRAW_STEPS, Math.ceil(w.drawIn * DRAW_STEPS_PER_SEC)))
+    for (let i = 0; i < n; i++) {
+      const a = w.from + (w.drawIn * i) / n, b = Math.min(w.to, w.from + (w.drawIn * (i + 1)) / n)
+      if (b - a > 0.001) out.push({ from: a, to: b, png: await draw({ reveal: (i + 1) / n }) })
+    }
+    start = w.from + w.drawIn
+  }
+  if (w.to - start <= 0.001) return out
+  const fades = { ...(w.fadeIn && !w.drawIn ? { fadeIn: w.fadeIn } : {}), ...(w.fadeOut ? { fadeOut: w.fadeOut } : {}) }
+  if (!w.emphasis) return [...out, { from: start, to: w.to, ...fades, png: await draw() }]
+  const period = emphasisSec(w.emphasis)
+  if (w.emphasis === 'blink') return [...out, { from: start, to: w.to, ...fades, every: { period, at: 0, len: period * BLINK_ON }, png: await draw() }]
+  const len = period / EMPHASIS_STEPS
+  for (let i = 0; i < EMPHASIS_STEPS; i++) {
+    const phase = (i + 0.5) / EMPHASIS_STEPS
+    out.push({ from: start, to: w.to, ...fades, every: { period, at: i * len, len }, png: await draw(w.emphasis === 'pulse' ? { pulse: phase } : { ripple: phase }) })
+  }
+  return out
 }
 
 type Png = (draw: (ctx: OffscreenCanvasRenderingContext2D) => void) => Promise<Uint8Array>

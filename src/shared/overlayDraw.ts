@@ -3,7 +3,7 @@
 // the export. Layout is authored at 720p and scaled by H / 720 × the element's own scale.
 import type { ImageLookup } from './annotation'
 import type { Ctx } from './court'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CardKind, type CardLayout, type LookTheme, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
+import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type Anchor, type CaptionData, type CaptionStat, type CardKind, type CardLayout, type LineupData, type LookTheme, type OverlaySettings, type OverlayTheme, type ScoreboardData } from './overlay'
 import type { SlideBg } from './reel'
 
 
@@ -71,7 +71,14 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
   const lineW = d.line ? measure(ctx, d.line, lineFont, 0.2 * 11 * k) : 0
   const plateW = Math.max(nameW, lineW) + 42 * k
   const overlap = numW ? 6 * k : 0
-  const total = numW + plateW - overlap
+  // The player's figures on a plate of their own right after it: each a label over its percentage,
+  // with the count it comes from beside that.
+  const stats = d.stats?.length ? d.stats : null
+  const labFont = font(10 * k), valFont = font(27 * k), cntFont = font(11 * k, 400), statGap = 18 * k, statPad = 14 * k
+  const statW = (st: CaptionStat) => Math.max(measure(ctx, st.label, labFont, 0.15 * 10 * k), measure(ctx, st.value, valFont, 0) + (st.count ? 5 * k + measure(ctx, st.count, cntFont, 0) : 0))
+  const statsW = stats ? stats.reduce((w, st) => w + statW(st), 0) + statGap * (stats.length - 1) + 2 * statPad + L.cut(slant) : 0
+  const join = stats ? 4 * k : 0
+  const total = numW + plateW - overlap + join + statsW
   const { x, y } = place(s.anchor, total, h, W, H)
 
   // Plate first so the number block's slanted edge sits on top of it.
@@ -95,7 +102,65 @@ export function drawCaption(ctx: Ctx, W: number, H: number, d: CaptionData, s: O
   } else if (d.line) {
     text(ctx, d.line, tx, y + h / 2, lineFont, L.line, 0.2 * 11 * k)
   }
+  if (stats) {
+    const sx = px + plateW + join
+    L.shape(ctx, 'plate', sx, y, statsW, h, { tl: slant, br: 14 * k }, { r: true })
+    L.texts(ctx)
+    ctx.textBaseline = 'middle'
+    let bx = sx + L.cut(slant) + statPad
+    for (const st of stats) {
+      // The label high up, so the percentage below it can be large.
+      text(ctx, st.label, bx, y + h * 0.17, labFont, L.line, 0.15 * 10 * k)
+      const vw = measure(ctx, st.value, valFont, 0)
+      text(ctx, st.value, bx, y + h * 0.62, valFont, L.text, 0)
+      if (st.count) text(ctx, st.count, bx + vw + 5 * k, y + h * 0.72, cntFont, L.sub, 0)
+      bx += statW(st) + statGap
+    }
+  }
   if (photo && s.photo) drawCaptionPhoto(ctx, photo, s.anchor, { x, y, w: total, h }, k, theme)
+  ctx.restore()
+}
+
+// Both teams' six on a small court seen from above, the net across the middle, as a broadcast shows a
+// lineup: the team by the camera (d.near; without a grid, the left-hand one, ours) below it, the other above, each team's
+// jerseys where its positions stand (P4 P3 P2 in front, P5 P6 P1 behind). No formation: the positions
+// as the rotation has them. A team's color (the library's) fills its discs; without one ours takes the
+// accent and the other white. A team faces the net: the one below has its left, P4, on the picture's left;
+// the one above has it on the picture's right.
+const LOWER_CELL: Record<number, [number, number]> = { 4: [0, 0], 3: [1, 0], 2: [2, 0], 5: [0, 1], 6: [1, 1], 1: [2, 1] } // [column, row]; row 0 is next to the net
+const UPPER_CELL: Record<number, [number, number]> = { 2: [0, 1], 3: [1, 1], 4: [2, 1], 1: [0, 0], 6: [1, 0], 5: [2, 0] } // row 1 is next to the net
+export function drawLineup(ctx: Ctx, W: number, H: number, d: LineupData, s: OverlaySettings['lineup'], theme: LookTheme): void {
+  const k = (H / 720) * s.scale, L = lookOf(theme, k)
+  const pitchX = 40 * k, pitchY = 34 * k, disc = 15 * k, pad = 12 * k, head = 22 * k, netGap = 12 * k
+  const half = pitchY * 2, w = pad * 2 + pitchX * 3, h = head * 2 + half * 2 + netGap
+  const numFont = font(17 * k), codeFont = font(12 * k, 400)
+  const light = (theme.look ?? 'slant') === 'light'
+  const { x, y } = place(s.anchor, w, h, W, H)
+  ctx.save()
+  L.begin(ctx)
+  L.shape(ctx, 'plate', x, y, w, h, { tl: 12 * k, br: 12 * k }, { l: true, r: true })
+  L.texts(ctx)
+  ctx.textBaseline = 'middle'
+  const gx = x + pad, floor = light ? '#E4E4E4' : mix(theme.base, '#FFFFFF', 0.1)
+  const upTop = y + head, lowTop = upTop + half + netGap
+  fillRect(ctx, floor, gx - 4 * k, upTop, pitchX * 3 + 8 * k, half)
+  fillRect(ctx, floor, gx - 4 * k, lowTop, pitchX * 3 + 8 * k, half)
+  fillRect(ctx, L.sub, x + 6 * k, upTop + half + netGap / 2 - 1 * k, w - 12 * k, 2 * k) // the net
+  const down = d.near === 'right' ? d.right : d.left, up = d.near === 'right' ? d.left : d.right // the camera's side below the net
+  text(ctx, up.code, gx, y + head / 2 + 1 * k, codeFont, L.sub, 0.2 * 12 * k)
+  text(ctx, down.code, gx, lowTop + half + head / 2 - 1 * k, codeFont, L.text, 0.2 * 12 * k)
+  const dot = (cx: number, cy: number, n: number, fill: string) => {
+    ctx.fillStyle = fill
+    ctx.beginPath(); ctx.arc(cx, cy, disc, 0, Math.PI * 2); ctx.fill()
+    ctx.textAlign = 'center'
+    text(ctx, String(n), cx, cy + 1 * k, numFont, onColor(fill), 0)
+    ctx.textAlign = 'left'
+  }
+  // Without team colors ours (the scoreboard's left) takes the accent and the other white, wherever each stands.
+  const leftFill = d.left.color ?? theme.accent, rightFill = d.right.color ?? (light ? '#444444' : '#FFFFFF')
+  const lower = d.near === 'right' ? rightFill : leftFill, upper = d.near === 'right' ? leftFill : rightFill
+  up.jerseys.forEach((n, i) => { const [c, r] = UPPER_CELL[i + 1]; dot(gx + pitchX * c + pitchX / 2, upTop + pitchY * r + pitchY / 2, n, upper) })
+  down.jerseys.forEach((n, i) => { const [c, r] = LOWER_CELL[i + 1]; dot(gx + pitchX * c + pitchX / 2, lowTop + pitchY * r + pitchY / 2, n, lower) })
   ctx.restore()
 }
 
@@ -158,7 +223,7 @@ const titleLines = (name: string, fallback: string): string[] => {
 // s.markerLayout / s.sceneLayout, which the editor changes.
 // The logo can instead have its own place and size (s.logos, per kind of card) or be left out; the
 // returned box then carries the logo's own box too, for the editor.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: OverlayTheme, logo0?: CanvasImageSource | null): TitleBox {
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: LookTheme, logo0?: CanvasImageSource | null): TitleBox {
   const k = H / 720
   const place = logo0 ? s.logos?.[cardKind(d)] : undefined
   const logo = place === undefined ? logo0 ?? null : null // drawn with the title
@@ -202,17 +267,22 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   const { numW, plateW, logoH, total } = layout(q)
   const numFont = font(24 * q), nameFont = font(28 * q), matchFont = font(12 * q, 400)
   const h = (46 + 34 * more) * q, slant = 10 * q
+  // The plates take the telops' design (lookOf): slanted, square, white or none.
+  const D = lookOf(theme, q), cut = D.cut(slant)
   ctx.textBaseline = 'middle'
-  if (match) text(ctx, match, x, top + 8 * q, matchFont, MUTED, 0.4 * 12 * q)
   const y = top + (match ? 22 * q : 0)
   const px = x + numW - 6 * q
-  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 14 * q, y + h], [px, y + h]])
-  fillPoly(ctx, theme.accent, [[x, y], [x + numW, y], [x + numW - slant, y + h], [x, y + h]])
+  D.begin(ctx)
+  D.shape(ctx, 'plate2', px, y, plateW, h, { tl: cut, br: D.cut(14 * q) }, { r: true })
+  D.shape(ctx, 'accent', x, y, numW, h, { br: cut }, { l: true })
+  D.texts(ctx)
+  if (match) text(ctx, match, x, top + 8 * q, matchFont, D.muted, 0.4 * 12 * q)
   if (showNum) {
     const nw = measure(ctx, String(d.marker), numFont, 0)
-    text(ctx, String(d.marker), x + (numW - slant - nw) / 2, y + h / 2, numFont, onColor(theme.accent), 0)
+    text(ctx, String(d.marker), x + (numW - cut - nw) / 2, y + h / 2, numFont, D.onAccent, 0)
   }
-  names.forEach((n, i) => text(ctx, n, px + slant + 14 * q, y + h / 2 + (i - more / 2) * 34 * q, nameFont, TEXT, 0.08 * 28 * q))
+  names.forEach((n, i) => text(ctx, n, px + cut + 14 * q, y + h / 2 + (i - more / 2) * 34 * q, nameFont, D.text, 0.08 * 28 * q))
+  D.begin(ctx) // no shadow on the logo
   const logoBox = logo ? { x: x + total - logoH * lr, y: top, w: logoH * lr, h: logoH } : own()
   if (logo) ctx.drawImage(logo, logoBox!.x, logoBox!.y, logoBox!.w, logoBox!.h) // as tall as the whole title
   ctx.restore()
@@ -225,7 +295,7 @@ export const cardKind = (d: { marker: number | null; video?: boolean }): CardKin
 
 // A card or a slide (a card with `slide`). Returns the title's box, or null for a slide.
 export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof drawTitleCard>[3] & { slide?: { bg: SlideBg } }, s: OverlaySettings['titleCard'],
-  theme: OverlayTheme, logo: CanvasImageSource | null, image: ImageLookup): TitleBox | null {
+  theme: LookTheme, logo: CanvasImageSource | null, image: ImageLookup): TitleBox | null {
   if (!card.slide) return drawTitleCard(ctx, W, H, card, s, theme, logo)
   drawSlide(ctx, W, H, card.slide.bg, cardBackground(s, theme), image)
   return null
@@ -254,7 +324,7 @@ function logoRatio(img: CanvasImageSource): number {
 
 // The scene title (with the logo and the match line above it), its top-left at the layout's point
 // (sceneTopLeft): a longer title grows to the right, and is made smaller to stay inside the frame.
-function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: OverlayTheme, logo: CanvasImageSource | null, L: CardLayout): TitleBox {
+function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: LookTheme, logo: CanvasImageSource | null, L: CardLayout): TitleBox {
   const labels = titleLines(name, 'SCENE')
   const more = labels.length - 1 // each further line makes the plate 44 (× k) taller
   const x = W * L.x, top = H * L.y
@@ -276,17 +346,18 @@ function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string,
   // Heights above the plate's top: the logo, then the match line.
   const above = logo ? (match ? 44 : 20) * k + lh : match ? 32 * k : 0
   const y = top + above
-  if (match) {
-    ctx.textBaseline = 'middle'
-    text(ctx, match, x, y - 26 * k, matchFont, MUTED, 0.4 * 12 * k)
-  }
+  const D = lookOf(theme, k), cut = D.cut(slant) // the telops' design (lookOf)
   const logoBox = logo ? { x, y: y - (match ? 44 : 20) * k - lh, w: lw, h: lh } : null
+  D.begin(ctx)
   if (logoBox) ctx.drawImage(logo!, logoBox.x, logoBox.y, logoBox.w, logoBox.h)
   const px = x + blockW - 6 * k
-  fillPoly(ctx, mix(theme.base, '#FFFFFF', 0.06), [[px + slant, y], [px + plateW, y], [px + plateW - 16 * k, y + h], [px, y + h]])
-  fillPoly(ctx, theme.accent, [[x, y], [x + blockW, y], [x + blockW - slant, y + h], [x, y + h]])
+  D.shape(ctx, 'plate2', px, y, plateW, h, { tl: cut, br: D.cut(16 * k) }, { r: true })
+  D.shape(ctx, 'accent', x, y, blockW, h, { br: cut }, { l: true })
+  D.texts(ctx)
   ctx.textBaseline = 'middle'
-  labels.forEach((l, i) => text(ctx, l, px + slant + 18 * k, y + h / 2 + (i - more / 2) * 44 * k, nameFont, TEXT, 0.08 * 36 * k))
+  if (match) text(ctx, match, x, y - 26 * k, matchFont, D.muted, 0.4 * 12 * k)
+  labels.forEach((l, i) => text(ctx, l, px + cut + 18 * k, y + h / 2 + (i - more / 2) * 44 * k, nameFont, D.text, 0.08 * 36 * k))
+  D.begin(ctx)
   return { x, y: top, w: Math.max(total, mw, lw), h: above + h, ...(logoBox ? { logo: logoBox } : {}) }
 }
 

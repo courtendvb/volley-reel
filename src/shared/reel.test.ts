@@ -3,7 +3,7 @@ import { parseDVW } from './dvw'
 import {
   addClips, copyClipTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
   setServeSpeed, setSkillTime, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
-  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits,
+  chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers,
 } from './reel'
 
 const DVW = `[3TEAMS]
@@ -105,10 +105,19 @@ describe('reordering', () => {
     expect(moveClip(reel, c[2], 1, 1).groups[1]).toEqual([c[0], c[2], c[1]])
   })
 
+  it('gives a scene saved with five markers the sixth, empty and last', () => {
+    const { reel } = reelWith([0])
+    const { 6: _g, ...groups } = reel.groups, { 6: _n, ...markerNames } = reel.markerNames
+    const old = { ...reel, groups, markerNames, groupOrder: [3, 1, 2, 4, 5] } as unknown as Reel
+    const r = withAllMarkers(old)
+    expect([r.groupOrder, r.groups[6], r.markerNames[6], r.groups[1]]).toEqual([[3, 1, 2, 4, 5, 6], [], '', reel.groups[1]])
+    expect(withAllMarkers(reel)).toBe(reel)
+  })
+
   it('reorders marker groups', () => {
     const { reel } = reelWith([0])
-    expect(placeGroup(reel, 1, 4).groupOrder).toEqual([2, 3, 1, 4, 5])
-    expect(placeGroup(reel, 1, null).groupOrder).toEqual([2, 3, 4, 5, 1])
+    expect(placeGroup(reel, 1, 4).groupOrder).toEqual([2, 3, 1, 4, 5, 6])
+    expect(placeGroup(reel, 1, null).groupOrder).toEqual([2, 3, 4, 5, 6, 1])
   })
 
   it('removes a clip from the reel and its group', () => {

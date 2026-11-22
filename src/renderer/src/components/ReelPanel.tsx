@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react'
-import { playLabel } from '../../../shared/labels'
+import { effectName, playLabel, skillName, TEMPOS } from '../../../shared/labels'
 import {
   MARKERS, MARKER_COLORS, chronological, clipEdits, groupRows, markerCardOn, moveClip, placeGroup, putSlides, rangeDefaults, removeClip, removeSlide, renameMarker, setTag, sortByTag, spotAt, TAG_MAX,
   type Clip, type Group, type Marker, type RangeDefaults, type Reel, type Row, type Slide, type SlideGroup, type SlideSpot,
@@ -8,7 +8,7 @@ import type { PlayRef } from '../../../shared/filter'
 import { formatLength, pad2 } from '../format'
 import { InlineTitle } from './InlineTitle'
 import { NameSelect } from './NameSelect'
-import { t } from '../../../shared/i18n'
+import { cap, t } from '../../../shared/i18n'
 import { keyName } from '../../../shared/keys'
 
 export interface ClipInfo {
@@ -28,6 +28,7 @@ interface Props {
   onChange: (r: Reel) => void
   info: (c: Clip) => ClipInfo
   missing: Set<string>
+  offTarget?: (matchId: string) => boolean // a match the project no longer searches (its clips still play)
   activeClipId: string | null
   playingClipId: string | null
   onActivate: (c: Clip, g: Group) => void // g: the group row it was clicked in
@@ -40,6 +41,7 @@ interface Props {
   overlaps: Map<string, string[]>
   usedIn: number // videos that include this scene
   videoSceneIds: string[] | null // the open video's scenes (null: no video): the scene list is split by them
+  videos: { id: string; name: string; sceneIds: string[] }[] // every video: with many scenes, "move / copy to" is sorted by them
   onAddToVideo: (sceneId: string) => void
   markerCardDefault: boolean // the video's "card before each marker" setting, for markers the scene leaves unset
   onEditCard: (m: Marker) => void // the gear: edit how marker title cards look, in the video window
@@ -65,7 +67,7 @@ export function ReelPanel(p: Props) {
   const [slideDrag, setSlideDrag] = useState(false) // a slide is being dragged: the scene's head shows as a place to drop it
   // The right-click menu: slides to put in, and on a clip row that clip's own actions first (pick:
   // the list of scenes to move or copy it to, in place of the menu).
-  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number; clip?: { id: string; g: Group }; pick?: 'move' | 'copy' } | null>(null)
+  const [menu, setMenu] = useState<{ spot: SlideSpot; where: string; x: number; y: number; clip?: { id: string; g: Group }; pick?: 'move' | 'copy'; vid?: string } | null>(null)
   const [folded, setFolded] = useState<Set<string>>(() => new Set()) // "sceneId:group" whose rows are hidden
   useEffect(() => {
     if (!menu) return
@@ -79,7 +81,7 @@ export function ReelPanel(p: Props) {
     return (
       <aside className="reel-panel">
         <div className="reel-head"><button className="primary" onClick={p.onNewReel}>{t('シーンを作成')}</button></div>
-        <p className="muted pad">{t('プレー一覧の 1〜5 ボタンか数字キー 1〜5 で、プレーをシーンに入れられます。')}</p>
+        <p className="muted pad">{t('プレー一覧の 1〜6 ボタンか数字キー 1〜6 で、プレーをシーンに入れられます。')}</p>
       </aside>
     )
   }
@@ -152,6 +154,21 @@ export function ReelPanel(p: Props) {
     const byId = new Map(p.reels.map(r => [r.id, r]))
     return [...inVideo.flatMap(id => byId.get(id) ?? []), ...p.reels.filter(r => r.id !== reel.id && !inVideo.includes(r.id))]
   }
+  // Past this many scenes the list is sorted by video first (a long list does not fit the menu).
+  const SCENE_PICK_FLAT = 8
+  // The scenes other than this one, by video: the open video first, then the rest; scenes in no video last.
+  const sceneGroups = (scenes: Reel[]) => {
+    const ids = new Set(scenes.map(s => s.id)), used = new Set<string>()
+    const open = (v: { sceneIds: string[] }) => (p.videoSceneIds === v.sceneIds ? 0 : 1)
+    const vs = [...p.videos].sort((a, b) => open(a) - open(b))
+    const groups = vs.map(v => {
+      const list = [...new Set(v.sceneIds)].filter(id => ids.has(id))
+      list.forEach(id => used.add(id))
+      return { id: v.id, name: v.name, scenes: list.flatMap(id => scenes.find(s => s.id === id) ?? []) }
+    }).filter(g => g.scenes.length)
+    const rest = scenes.filter(s => !used.has(s.id))
+    return rest.length ? [...groups, { id: '', name: t('どの動画にも入っていない'), scenes: rest }] : groups
+  }
   const BELOW = t('この行の下にスライドを入れる'), AT_TOP = t('マーカーの先頭にスライドを入れる'), AT_HEAD = t('シーンの頭にスライドを入れる')
   const rowsOf = (g: SlideGroup, ids: string[]) => {
     const rows = groupRows(reel, g, ids)
@@ -222,9 +239,12 @@ export function ReelPanel(p: Props) {
         ) : (
           <span className="clip-main">
             {multiMatch && <span className="muted">{inf.matchLabel} </span>}
+            {p.offTarget?.(c.matchId) && <span className="off-target" title={t('対象試合から外した試合のクリップです。再生・書き出しはそのままできます。左のリストには出ません')}>{t('対象外')} </span>}
             <span className="muted">S{r.play.setNum} {pad2(r.play.score.home)}-{pad2(r.play.score.away)} </span>
-            {/* The skill letter and evaluation sign (A#) to keep rows short; the full name on hover. */}
-            <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill} skill-short`} title={playLabel(r.play.skill, r.play.effect)}>{r.play.skill}{r.play.effect}</span>
+            {/* Skill, type and evaluation as scouted (AQ#) to keep rows short; the full names on hover. */}
+            <b>{r.play.jersey}</b> {r.name} <span className={`skill-${r.play.skill} skill-short`}
+              title={r.tempo ? `${skillName(r.play.skill)} · ${TEMPOS[r.tempo] ?? r.tempo} · ${effectName(r.play.skill, r.play.effect)}` : playLabel(r.play.skill, r.play.effect)}>
+              {r.play.skill}{r.tempo ?? ''}{r.play.effect}</span>
             {r.play.skill === 'A' && r.combo && <span className="combo" title={r.comboName ?? undefined}> {r.combo}</span>}
           </span>
         )}
@@ -245,9 +265,9 @@ export function ReelPanel(p: Props) {
   return (
     <aside className="reel-panel">
       <div className="reel-head">
-        <span className="panel-kicker">{t('シーン')}</span>
+        <span className="panel-kicker">{cap(t('シーン'))}</span>
         <NameSelect name={reel.name} label={t('シーンの名前を変更')} onRename={name => change({ ...reel, name })}>
-          <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={t('シーン')}>
+          <select value={reel.id} onChange={e => p.onSelectReel(e.target.value)} aria-label={cap(t('シーン'))}>
             {p.videoSceneIds ? (
               <>
                 <optgroup label={t('この動画のシーン')}>
@@ -358,18 +378,30 @@ export function ReelPanel(p: Props) {
           <div className="menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
           <div className="slide-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
             {menu.clip && menu.pick ? (() => {
-              const scenes = otherScenes(), clipId = menu.clip.id, move = menu.pick === 'move'
+              const all = otherScenes(), clipId = menu.clip.id, move = menu.pick === 'move'
+              const groups = all.length > SCENE_PICK_FLAT ? sceneGroups(all) : null
+              const group = groups && menu.vid !== undefined ? groups.find(g => g.id === menu.vid) : undefined
+              const scenes = group ? group.scenes : all
+              const title = move ? t('別のシーンへ移動') : t('別のシーンへコピー')
               return (
                 <>
-                  <button role="menuitem" className="menu-back" onClick={() => setMenu({ ...menu, pick: undefined })}>‹ {move ? t('別のシーンへ移動') : t('別のシーンへコピー')}</button>
-                  <div className="menu-scenes">
+                  <button role="menuitem" className="menu-back" onClick={() => setMenu(group ? { ...menu, vid: undefined } : { ...menu, pick: undefined })}>‹ {group ? `${title}: ${group.name}` : title}</button>
+                  {groups && !group ? (
+                    <div className="menu-scenes menu-videos">
+                      {groups.map(g => (
+                        <button key={g.id || 'none'} role="menuitem" title={g.name} onClick={() => setMenu({ ...menu, vid: g.id })}>
+                          {g.name} <span className="muted">({g.scenes.length})</span> ›
+                        </button>
+                      ))}
+                    </div>
+                  ) : <div className="menu-scenes">
                     {scenes.map(s => (
                       <button key={s.id} role="menuitem" title={s.name} onClick={() => { setMenu(null); p.onClipToScene(clipId, s.id, move) }}>
                         {s.name}{p.videoSceneIds && !p.videoSceneIds.includes(s.id) && <span className="muted"> {t('（動画の外）')}</span>}
                       </button>
                     ))}
                     {!scenes.length && <span className="muted pad-x">{t('ほかのシーンがありません')}</span>}
-                  </div>
+                  </div>}
                 </>
               )
             })() : <>
@@ -400,7 +432,7 @@ export function ReelPanel(p: Props) {
           </div>
         </>
       )}
-      {!Object.keys(reel.clips).length && <p className="hint pad-x">{t('数字キー 1〜5 で選択中のクリップにマーカーを付ける（複数入れられる。同じ数字で外す、0 ですべて外す）。Shift+1〜5 でメモ（並べ替え用）、「メモ順」でマーカーをメモの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、マーカーの見出しを右クリックで先頭にスライドを入れる。')}</p>}
+      {!Object.keys(reel.clips).length && <p className="hint pad-x">{t('数字キー 1〜6 で選択中のクリップにマーカーを付ける（複数入れられる。同じ数字で外す、0 ですべて外す）。Shift+1〜6 でメモ（並べ替え用）、「メモ順」でマーカーをメモの順に。左の ⠿ をドラッグして並べ替え。名前はクリックで編集、⚙ でタイトルカードの見た目を編集。行を右クリックでその下に、マーカーの見出しを右クリックで先頭にスライドを入れる。')}</p>}
     </aside>
   )
 }
@@ -418,7 +450,7 @@ function TagChip({ tag, onChange }: { tag: string | undefined; onChange: (t: str
   }
   return (
     <button className={`tag-chip${tag ? '' : ' empty'}`} style={tag ? tagColor(tag) : undefined}
-      title={tag ? t('メモ「{0}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません', tag) : t('メモを付ける（並べ替え用のメモ。Shift+1〜5 でも付けられる）')}
+      title={tag ? t('メモ「{0}」（クリックで編集、Shift+数字でも付け外し）。並べ替え用のメモで、動画には出ません', tag) : t('メモを付ける（並べ替え用のメモ。Shift+1〜6 でも付けられる）')}
       onClick={e => { e.stopPropagation(); setEditing(true) }}>{tag || '＋'}</button>
   )
 }

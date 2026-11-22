@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { t } from '../../../shared/i18n'
+import { useAnchoredPop } from './anchoredPop'
 
 // The 20 basic colours of Windows Paint: picking from a few fixed ones makes the same colour easy to find again.
 export const PAINT_COLORS = [
@@ -10,13 +11,14 @@ export const PAINT_COLORS = [
 // A swatch that opens the palette; the colour in use is shown even when it isn't one of them.
 export function PaletteColor({ value, label, onChange }: { value: string; label: string; onChange: (c: string) => void }) {
   const [open, setOpen] = useState(false)
+  const { anchor, style } = useAnchoredPop<HTMLSpanElement>(open, 'below-left', 4)
   return (
-    <span className="palette-color">
+    <span className="palette-color" ref={anchor}>
       <button className="palette-swatch" style={{ background: value }} aria-label={label} title={label} aria-expanded={open} onClick={() => setOpen(o => !o)} />
       {open && (
         <>
           <span className="palette-backdrop" onClick={() => setOpen(false)} />
-          <span className="palette-pop" role="listbox" aria-label={label}>
+          <span className="palette-pop" role="listbox" aria-label={label} style={style}>
             {PAINT_COLORS.map(c => (
               <button key={c} role="option" aria-selected={c.toUpperCase() === value.toUpperCase()} className={c.toUpperCase() === value.toUpperCase() ? 'on' : ''}
                 style={{ background: c }} title={c} aria-label={t('{0} にする', c)} onClick={() => { onChange(c); setOpen(false) }} />

@@ -3,10 +3,12 @@
 // scout fix in the DVW shows up on the next read. Projects pick matches from here by id.
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { strFromU8, unzipSync } from 'fflate'
 import { basename, extname, join } from 'node:path'
 import { parseScout } from '../shared/vsm'
+import { validCode, withCodeEdit, type CodeEdit } from '../shared/codeEdit'
+import { decodeScout } from '../shared/scoutText'
 
 import { rosterOf, type RosterPlayer } from '../shared/packMaker'
 import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
@@ -18,10 +20,11 @@ import { prepare, prepareReason, probe } from './media'
 import { fmt, readJSON, safeId, writeJSON } from './store'
 import { t } from '../shared/i18n'
 import { withServeMark } from '../shared/serveMark'
+import { playerIndex, unifyPlayers } from '../shared/players'
 
-// A scout file: a DataVolley .dvw (Windows-1252 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
+// A scout file: a DataVolley .dvw (Windows-1252 or UTF-8 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
-const readScout = async (path: string): Promise<ParsedDVW> => parseScout(await readFile(path, extname(path).toLowerCase() === '.vsm' ? 'utf8' : 'latin1'))
+const readScout = async (path: string, edits?: CodeEdit[]): Promise<ParsedDVW> => parseScout(decodeScout(await readFile(path)).text, edits)
 const scoutStem = (path: string) => basename(path, extname(path))
 
 const LOGO_EXT = ['png', 'jpg', 'webp', 'gif', 'bmp']
@@ -33,6 +36,7 @@ const cleanCode = (code: string) => {
 
 export class Library {
   private matches = new Map<string, Match>()
+  private scouts = new Map<string, { mtime: number; dvw: ParsedDVW }>() // by DVW path, read again when the file changes
   notices: string[] = []
 
   private constructor(readonly dir: string) {}
@@ -141,6 +145,23 @@ export class Library {
     await mkdir(projectAssets, { recursive: true })
     await copyPictures(item.annotations, join(this.dir, 'palette-assets'), projectAssets)
     return item.annotations
+  }
+
+  // Team colors (the rotation lineup's discs): team-colors.json, #RRGGBB by team code, shared by every project.
+  async teamColors(): Promise<Record<string, string>> {
+    const f = join(this.dir, 'team-colors.json')
+    if (!existsSync(f)) return {}
+    const { data } = await readJSON<Record<string, unknown>>(f)
+    return Object.fromEntries(Object.entries(data).filter(([k, v]) => /^[A-Z0-9]{1,8}$/.test(k) && typeof v === 'string' && /^#[0-9A-F]{6}$/i.test(v)).map(([k, v]) => [k, (v as string).toUpperCase()]))
+  }
+
+  async setTeamColor(code: string, color: string | null): Promise<Record<string, string>> {
+    const c = cleanCode(code), all = await this.teamColors()
+    if (color === null) delete all[c]
+    else if (/^#[0-9A-F]{6}$/i.test(color)) all[c] = color.toUpperCase()
+    else throw new Error(t('色が不正です: {0}', color))
+    await writeJSON(join(this.dir, 'team-colors.json'), all)
+    return all
   }
 
   // Team logos for title cards: logos/<CODE>.<ext>, one per three-letter code, shared by every project.
@@ -344,6 +365,26 @@ export class Library {
     await this.saveMatch(next)
   }
 
+  // How far the DVW's times sit from the video's (DVW time + offset = video time): set when the scout file's
+  // times are off for this video, so every play of the match moves by the same amount.
+  async setOffset(id: string, offsetSec: number): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!Number.isFinite(offsetSec) || Math.abs(offsetSec) > Math.max(m.durationSec, 1)) throw new Error(t('ずれの秒数が不正です'))
+    await this.saveMatch({ ...m, offsetSec: Math.round(offsetSec * 1000) / 1000 })
+  }
+
+  // A correction to one play's code (codeEdit.ts): the line, the file's code there, and the new one (the file's
+  // code again takes the correction off). The scout file itself is never written.
+  async setCodeEdit(id: string, line: number, from: string, to: string): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    if (!Number.isInteger(line) || line < 0 || (to !== from && !validCode(to))) throw new Error(t('コードの形が正しくありません: {0}', to))
+    const edits = withCodeEdit(m.codeEdits, line, from, to)
+    const { codeEdits: _old, ...rest } = m
+    await this.saveMatch(edits.length ? { ...rest, codeEdits: edits } : rest)
+  }
+
   // A serve's hit or touch on a match (serveMark.ts); null clears it.
   async setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> {
     const m = this.matches.get(id)
@@ -351,6 +392,18 @@ export class Library {
     const next = withServeMark(m, fingerprint, patch)
     this.matches.set(id, next) // before the write, so a mark set right after builds on this one
     await this.saveMatch(next)
+  }
+
+  // Takes a match off the library: its file moves to matches/deleted/ (the video and the DVW are never
+  // touched). Projects that list it stop searching it; scenes with its clips keep them, unplayable.
+  async deleteMatch(id: string): Promise<void> {
+    if (!this.matches.has(id)) return
+    const f = join(this.dir, 'matches', `${safeId(id)}.json`)
+    if (existsSync(f)) {
+      await mkdir(join(this.dir, 'matches', 'deleted'), { recursive: true })
+      await rename(f, join(this.dir, 'matches', 'deleted', `${safeId(id)}-${Date.now()}.json`))
+    }
+    this.matches.delete(id)
   }
 
   private async saveMatch(m: Match): Promise<void> {
@@ -376,12 +429,25 @@ export class Library {
     return rosterOf(dvws.filter(d => d !== null))
   }
 
-  // Parsed every time from the DVW; plays are never saved (design §6).
+  // Read from the DVW (plays are never saved, design §6), with each player under one key for the whole
+  // library: the same team and jersey is the same person in every match (players.ts).
   async parse(id: string): Promise<ParsedDVW> {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     if (!existsSync(m.dvwPath)) throw new Error(t('{0}: DVW が見つかりません（{1}）', m.name, m.dvwPath))
-    return readScout(m.dvwPath)
+    const dvw = await this.scout(m.dvwPath, m.codeEdits)
+    const all = await Promise.all(this.list().map(o => o.id === id ? dvw : this.scout(o.dvwPath, o.codeEdits).catch(() => null)))
+    return unifyPlayers(dvw, playerIndex(all.filter(d => d !== null)))
+  }
+
+  private async scout(path: string, edits?: CodeEdit[]): Promise<ParsedDVW> {
+    const mtime = (await stat(path)).mtimeMs
+    const key = edits?.length ? `${path}|${JSON.stringify(edits)}` : path // a correction reads the file again
+    const had = this.scouts.get(key)
+    if (had?.mtime === mtime) return had.dvw
+    const dvw = await readScout(path, edits)
+    this.scouts.set(key, { mtime, dvw })
+    return dvw
   }
 
   // Takes over a match from a pre-v3 project. Returns the library id to use: the same id, or the
@@ -463,10 +529,10 @@ export class Library {
         unreadable.push(p)
       }
     }
-    // The same match as a .dvw and a .vsm (VolleyStation writes both): the .dvw only.
+    // The same match as a .dvw and a .vsm (VolleyStation writes both): the .vsm only.
     const key = (i: DvwInfo) => `${i.date}|${i.home}|${i.away}`
-    const dvwKeys = new Set(infos.filter(i => extname(i.path).toLowerCase() === '.dvw').map(key))
-    for (let k = infos.length - 1; k >= 0; k--) if (extname(infos[k].path).toLowerCase() === '.vsm' && dvwKeys.has(key(infos[k]))) infos.splice(k, 1)
+    const vsmKeys = new Set(infos.filter(i => extname(i.path).toLowerCase() === '.vsm').map(key))
+    for (let k = infos.length - 1; k >= 0; k--) if (extname(infos[k].path).toLowerCase() === '.dvw' && vsmKeys.has(key(infos[k]))) infos.splice(k, 1)
     const inLibrary = new Set(this.list().map(m => norm(m.dvwPath)))
     const pairs = pairFiles(infos, videos).map(p => ({
       dvwPath: p.dvw.path, date: p.dvw.date, home: p.dvw.home, away: p.dvw.away,

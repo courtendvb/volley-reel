@@ -13,6 +13,8 @@ interface Props {
   people: Person[]
   details: ReturnType<typeof detailOptions> // what the detailed search can offer for the plays in scope
   extract: ClipMode // how plays added from here are cut
+  through: boolean // continuous play carries on through overlapping plays (通し)
+  onThrough: (v: boolean) => void
   onExtract: (m: ClipMode) => void
   range: RangeDefaults // the open scene's seconds (the defaults when there is no scene yet)
   onRange: ((d: RangeDefaults) => void) | null // null: no scene to keep them in
@@ -29,7 +31,7 @@ interface Props {
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
 const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
 
-export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
+export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, through, onThrough, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
   const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length + f.startZones.length + f.endZones.length
@@ -66,6 +68,8 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         {extract === 'keyplay'
           ? <span>{t('〜 +')}<SecInput v={d.keyAfter} label={t('キープレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, keyAfter: n })} />{t('秒')}</span>
           : <span>{t('〜 ラリー終わり +')}<SecInput v={d.rallyTail} label={t('最後のプレーの何秒後まで')} disabled={!onRange} onChange={n => onRange?.({ ...d, rallyTail: n })} />{t('秒')}</span>}
+        <label className="check" title={t('リストのプレーをラリーごとに、サーブからラリーの終わりまで 1 回ずつ再生する。ラリーの間はリストの選択はそのままで、画面にはサーブ・レセプション・アタックのテロップだけが順に出る。オフ: リストどおり 1 プレーずつ再生する')}>
+          <input type="checkbox" checked={through} onChange={e => onThrough(e.target.checked)} /> {t('通しで見る')}</label>
       </div>
       <div className="filter-row" title={t('ボールが画面の上へ向かうか下へ向かうか。サーブ・アタックは打った側から、レセプション・ディグ・ブロックは相手側から。セットなどネットを越えないプレーは、手前のコートなら上から下、奥のコートなら下から上。コートのグリッドを合わせた試合だけ分かります')}>
         <label className="field-label">{t('プレーの向き')}</label>

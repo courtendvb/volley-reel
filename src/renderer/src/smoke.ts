@@ -12,12 +12,13 @@ import type { Tool } from './components/AnnotationLayer'
 import { assetStats, forgetLogo } from './assets'
 import { canvasStats } from './canvas'
 import { playback } from './playback'
+import { isMaximized } from './maximize'
 import { refreshPacks } from './packs'
 import { captionPhoto, findPhoto } from '../../shared/pack'
 import { playTimes, serveMarkOf } from '../../shared/serveMark'
 import { DEFAULT_GRID_STYLE, courtQuad, flightTiming, homography, nearSide, playZones, playerMarks, project } from '../../shared/court'
 import { assetImage } from './assets'
-import { t } from '../../shared/i18n'
+import { cap, t } from '../../shared/i18n'
 import type { AppLatest } from './app/appState'
 import { clipPlayedSec } from '../../shared/timing'
 
@@ -41,6 +42,7 @@ export interface SmokeOpts {
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
+  fold?: boolean // the list rows' six markers (only those on, all on the selected row) and the right column folded by click and Ctrl+B
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   serveTouch?: boolean // a serve's hit and its reception's touch marked on the trim bar: the measured speed in the bar and the caption
   slowHold?: boolean // a slow stretch and a hold put from the trim bar's buttons, played in the loop, and exported
@@ -55,6 +57,7 @@ export interface SmokeOpts {
   cardInsert?: string // "<pack.vrpack>|<logo image>": a player's photo and a team's logo put on a marker card from its bar
   setter?: string // 'reception' | 'rotation': a setter's data slide made from the dialog's buttons
   analysis?: boolean // the 分析 button: the point % and error % tables, each table's rows read back
+  matchReport?: boolean // the match report: its numbers clicked, the play list's count checked against each
   clipMenu?: boolean // a clip's right-click menu: copied and moved to another scene, exported alone (with exportTo)
   presetBlock?: boolean // the block preset by middle split by the opposing setter, made with the newest matches first
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
@@ -163,6 +166,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.presets || opts.presetServe || opts.presetBlock) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : 'all')
     if (opts.picker) return smokePicker()
     if (opts.analysis) return smokeAnalysis()
+    if (opts.matchReport) return smokeMatchReport()
     if (opts.setter) return smokeSetter(opts.setter)
     if (opts.captionPhoto) return smokeCaptionPhoto(res, opts.exportTo)
     if (opts.captionNames) return smokeCaptionNames(res)
@@ -172,6 +176,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.slowHold) return smokeSlowHold(res, opts.exportTo)
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
+    if (opts.fold) return smokeFold(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -355,7 +360,7 @@ export function installSmoke(h: SmokeHost): void {
     log.card = { title: scene().markerCardTitles?.[1], background: latest.current.overlay.titleCard.background,
       planName: currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1)?.kind === 'card' ? (currentPlan('video').find(it => it.kind === 'card' && it.card.marker === 1) as { card: { name: string } }).card.name : null }
     // The scene's rows for the screenshot (the head section on top).
-    ;[...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === t('シーン'))?.click(); await sleep(300)
+    ;[...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === cap(t('シーン')))?.click(); await sleep(300)
     return { ...log, videoExport: opts.videoExportTo ?? null, exported }
   }
 
@@ -1210,6 +1215,46 @@ export function installSmoke(h: SmokeHost): void {
     return { maximize: { ...maxed, escKeepsPlaying, leftAfterSec: +((Date.now() - t0) / 1000).toFixed(1), clips: Object.keys(built.clips).length } }
   }
 
+  // The list's markers and the right column folded. A play marked 1 and 6 shows just those two on its
+  // row, the selected row shows all six, the others none; the right column folds from its » with a
+  // real click (the video gets wider), Ctrl+B opens and folds it, and a part's name on the strip opens
+  // the column at that part.
+  const smokeFold = async (res: PlayRef[]) => {
+    let built = addClips(newReel('fold smoke'), [res[0]].map(r => ({ matchId: r.matchId, play: r.play }))).reel
+    const id = built.groups.none[0]
+    built = toggleMarker(toggleMarker(built, id, 1), id, 6)
+    setReels(rs => [...rs, built]); setReelId(built.id)
+    await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'fold reel')
+    jump(res[1])
+    await waitFor(() => document.querySelector('.play-row.selected') || null, 5000, 'selected row')
+    await sleep(300)
+    const visible = (row: Element) => [...row.querySelectorAll<HTMLElement>('.mark')].filter(b => b.offsetParent).map(b => b.textContent)
+    const rows = [...document.querySelectorAll('.play-row')]
+    const marks = {
+      selected: visible(document.querySelector('.play-row.selected')!),
+      others: rows.filter(r => !r.classList.contains('selected')).map(visible).filter(v => v.length),
+    }
+    const w = (sel: string) => Math.round(document.querySelector<HTMLElement>(sel)?.getBoundingClientRect().width ?? -1)
+    const folded = () => document.querySelector('.workspace')?.classList.contains('right-folded') ?? false
+    const before = { video: w('.video-box'), right: w('.right-col') }
+    await api.smokeShot!('fold-open.png')
+    const btn = document.querySelector<HTMLElement>('.right-tabs .right-fold')!.getBoundingClientRect()
+    await api.smokeDrag!([[btn.left + btn.width / 2, btn.top + btn.height / 2]])
+    await waitFor(() => folded() || null, 5000, 'folded by »')
+    await sleep(400)
+    const after = { video: w('.video-box'), right: w('.right-col') }
+    await api.smokeShot!('fold-closed.png')
+    const ctrlB = async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true })); await sleep(200) }
+    await ctrlB(); const openedByKey = !folded()
+    await ctrlB(); const foldedByKey = folded()
+    const tab = [...document.querySelectorAll<HTMLElement>('.right-strip-tab')].find(b => b.textContent === t('書き出し'))!.getBoundingClientRect()
+    await api.smokeDrag!([[tab.left + tab.width / 2, tab.top + tab.height / 2]])
+    await waitFor(() => !folded() || null, 5000, 'opened from the strip')
+    await sleep(200)
+    const openTab = document.querySelector('.right-tabs [aria-selected=true]')?.textContent
+    return { fold: { marks, before, after, openedByKey, foldedByKey, openTab } }
+  }
+
   // Which way plays go on screen: unknown before the court is fitted, then the 向き buttons in the
   // filters split the plays into up and down, and the list's rows show the arrows.
   const smokeDirection = async () => {
@@ -1744,6 +1789,61 @@ export function installSmoke(h: SmokeHost): void {
     }
     return { analysis: out }
   }
+  // The match report: numbers of each kind clicked in its page; each closes the report and leaves
+  // the play list with as many plays as the number said.
+  const smokeMatchReport = async () => {
+    const openReport = async () => {
+      const button = [...document.querySelectorAll<HTMLButtonElement>('header button')].find(b => b.textContent === t('マッチレポート'))
+      if (!button) throw new Error('no マッチレポート button')
+      button.click()
+      return waitFor(() => { const f = document.querySelector<HTMLIFrameElement>('iframe.report-page'); return f?.contentDocument?.querySelector('[data-f]') ? f : null }, 10000, 'report page')
+    }
+    let frame = await openReport()
+    await sleep(300)
+    await api.smokeShot!('report.png')
+    // 全画面 with a real click (full screen needs one): the dialog fills the window, the video is not
+    // taken as maximized, and Esc leaves it with the report still open (report-full.png).
+    const dialog = document.querySelector<HTMLElement>('.report-dialog')!
+    const fullButton = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === t('全画面'))
+    if (!fullButton) throw new Error('no 全画面 button')
+    const fb = fullButton.getBoundingClientRect()
+    await api.smokeDrag!([[fb.left + fb.width / 2, fb.top + fb.height / 2]])
+    await waitFor(() => (document.fullscreenElement === dialog) || null, 5000, 'report full screen')
+    await sleep(500)
+    const fr = dialog.getBoundingClientRect()
+    const fullScreen = { width: Math.round(fr.width), height: Math.round(fr.height), window: [window.innerWidth, window.innerHeight], maximized: isMaximized(), label: dialog.querySelector('button[aria-pressed="true"]')?.textContent }
+    if (fr.width < window.innerWidth - 2 || fr.height < window.innerHeight - 2 || fullScreen.maximized) throw new Error(`report full screen: ${JSON.stringify(fullScreen)}`)
+    await api.smokeShot!('report-full.png')
+    await api.smokeKey!('Escape')
+    await waitFor(() => (!document.fullscreenElement && document.querySelector('.report-dialog')) || null, 5000, 'Esc leaves full screen')
+    await sleep(300)
+    const all = () => [...frame.contentDocument!.querySelectorAll<HTMLElement>('[data-f]')]
+    const cells = all()
+    // One of each kind: a player's attacks, a team total, a set's row, a first attack after reception, a rotation.
+    const kinds: [string, (el: HTMLElement) => boolean][] = [
+      ['player', el => !!el.closest('tr:not(.total):not(.set)') && !!el.closest('table.team') && /^\d+$/.test(el.textContent ?? '') && Number(el.textContent) > 3],
+      ['total', el => !!el.closest('tr.total') && /^\d+$/.test(el.textContent ?? '')],
+      ['set', el => !!el.closest('tr.set') && el.tagName === 'TD' && /^\d+$/.test(el.textContent ?? '')],
+      ['won', el => el.tagName === 'SPAN' && !!el.closest('td.won')],
+      ['kill', el => !!el.closest('td.kill') && /^\d+$/.test(el.textContent ?? '') && Number(el.textContent) > 0],
+      ['rotation', el => !!el.closest('td.rot')],
+    ]
+    const out: Record<string, unknown> = { clickable: cells.length }
+    for (const [kind, test] of kinds) {
+      const i = all().findIndex(test)
+      if (i < 0) { out[kind] = 'none'; continue }
+      const el = all()[i], text = el.textContent ?? '', pick = JSON.parse(el.getAttribute('data-f')!)
+      el.click()
+      await waitFor(() => (document.querySelector('iframe.report-page') ? null : true), 5000, 'report closed')
+      await sleep(400)
+      const shown = latest.current.results.length
+      out[kind] = { text, pick, shown, ok: /^\d+$/.test(text) ? shown === Number(text) : shown > 0 }
+      if (kind === 'player') await api.smokeShot!('report-pick.png')
+      frame = await openReport()
+      await sleep(200)
+    }
+    return { matchReport: out, fullScreen }
+  }
   const smokePicker = async () => {
     const trigger = await waitFor(() => document.querySelector<HTMLButtonElement>(`button.check-picker[aria-label="${t('選手')}"]`), 10000, 'player picker')
     const list = () => document.querySelector<HTMLElement>(`.check-picker-list[aria-label="${t('選手')}"]`)
@@ -1844,12 +1944,22 @@ export function installSmoke(h: SmokeHost): void {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(own, first.value)
       own.dispatchEvent(new Event('change', { bubbles: true }))
       const make = await waitFor(() => { const b = button(dialog, t('作成')); return b && !b.disabled ? b : null }, 15000, 'own team loaded')
+      // A figure added to the default eleven (POSS%, at the bottom), then moved up to the top.
+      const add = [...dialog.querySelectorAll<HTMLButtonElement>('.compare-rows .chip')].find(b => b.textContent?.includes('POSS%') && !b.textContent.includes('/SET'))
+      if (!add) throw new Error('no POSS% to add')
+      add.click(); await sleep(200)
+      const chips = () => [...dialog.querySelectorAll('.compare-picked .compare-chip-label')].map(x => x.textContent)
+      for (let i = 0; i < 11; i++) {
+        const li = [...dialog.querySelectorAll('.compare-picked li')].find(x => x.querySelector('.compare-chip-label')?.textContent === 'POSS%')
+        li?.querySelector<HTMLButtonElement>('.compare-chip-move')?.click(); await sleep(50)
+      }
+      await waitFor(() => (chips()[0] === 'POSS%' ? chips() : null), 3000, 'POSS% moved to the top')
       await sleep(600); await api.smokeShot!('compare-preview.png')
       make.click()
       const slide = await waitFor(() => latest.current.reel?.slides?.find(x => x.board?.config.skill === 'C') ?? null, 10000, 'comparison slide')
       const texts = slide.annotations.flatMap(a => (a.kind === 'text' ? [a.text] : []))
-      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !slide.board?.config.compareProject) throw new Error(`comparison: ${texts.join(' | ')}`)
-      return { project: slide.board.config.compareProject, texts }
+      if (!texts.includes('SO%') || !texts.includes('BLOCK PTS/SET') || !texts.includes('POSS%') || texts.indexOf('POSS%') > texts.indexOf('SO%') || texts.includes('BLOCKED%') || !slide.board?.config.compareProject || slide.board.config.compareRows?.[0] !== 'poss') throw new Error(`comparison: ${texts.join(' | ')}`)
+      return { project: slide.board.config.compareProject, rows: slide.board.config.compareRows, texts }
     }
     if (layout === 'rot') {
       // ローテーション: a slide per rotation, P1 P6 P5 P4 P3 P2, each with its players and tables.
@@ -1868,6 +1978,11 @@ export function installSmoke(h: SmokeHost): void {
       for (const n of ['1', '2', '3']) { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(count, n); count.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700); await api.smokeShot!(`rot-attackers-${n}.png`) }
       await choose('all')
       cone.click(); await sleep(700); await api.smokeShot!('rot-nocones.png'); cone.click(); await sleep(300)
+      // The court flat from above (rot-2d.png), then back to 3D.
+      const look = dialog.querySelector<HTMLSelectElement>(`select[aria-label="${t('コートの見せ方')}"]`)
+      if (!look) throw new Error('no court look on the rotation slide')
+      const lookAs = async (v: string) => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(look, v); look.dispatchEvent(new Event('change', { bubbles: true })); await sleep(700) }
+      await lookAs('2d'); await api.smokeShot!('rot-2d.png'); await lookAs('3d')
       button(dialog, t('作成'))!.click()
       const slides = await waitFor(() => { const l = (latest.current.reel?.slides ?? []).filter(x => x.board?.config.skill === 'R'); return l.length === 6 ? l : null }, 10000, 'six rotation slides')
       await sleep(600)

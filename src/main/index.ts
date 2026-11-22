@@ -5,22 +5,28 @@ import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
 import { Readable } from 'node:stream'
-import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, shell } from 'electron'
+import { pathToFileURL } from 'node:url'
+import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
+import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
+import { FREE_MATCHES, type TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
 import { readManifest, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { strToU8, zipSync } from 'fflate'
 import type { Reel } from '../shared/reel'
 import type { Video } from '../shared/video'
+import type { CompareSession, CompareSource } from '../shared/videoCompare'
+import { runLength, type CompareExportJob, type CompareExportSide, type CompareRunSide } from '../shared/compareExport'
 import type { ExportJob, ImportProgress, Match, ParsedDVW, PickedAsset, ProjectInit, ProjectSettings, ProjectSummary, SlideFile } from '../shared/types'
 import { Exporter } from './export'
 import { RELEASES_PAGE, installUpdate, startUpdates, updateLogPath } from './updater'
 import { Library } from './library'
+import { CompareStore } from './compare'
 import { Project } from './project'
 import { readSettings, recentProjects, rememberProject, saveSettings } from './appSettings'
 import { lastFolder, rememberFolder, type ExportKind } from '../shared/exportFolders'
 import { corruptFirstReel, registerSmokeIpc, runSmoke, type SmokeContext } from './smokeRun'
-import { grabFrame, rawFrame } from './media'
+import { grabFrame, probe, rawFrame } from './media'
 import { setMacMenu } from './macMenu'
 import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
@@ -45,9 +51,46 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 let library: Library | null = null
 let project: Project | null = null
+let lastCompareDir: string | null = null
+let compares!: CompareStore // set when the app is ready
 const exporter = new Exporter()
 let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
+let account: Account // made when the app is ready (it needs the user data folder)
+// Exports, imports and new projects ask first (shared/account.ts: gate); a yes until accounts are on.
+const mayExport = () => {
+  const r = account.refusal('export')
+  if (r === 'sign_in') throw new Error(t('書き出すには SyncScout へのログイン（お試し中か契約中）が必要です。ホーム画面右上のボタンか、書き出し画面の案内からログインしてください'))
+  if (r === 'plan') throw new Error(t('お試し期間か契約が終わっているため、書き出せません。ホーム画面右上のボタンから契約を確認してください'))
+}
+const mayImport = (adding: number) => {
+  const r = account.refusal('import', library?.info().matches.length ?? 0, adding)
+  if (r === 'sign_in') throw new Error(t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は30日間無料）制限なく取り込めます。ホーム画面右上のボタンからログインしてください', FREE_MATCHES))
+  if (r === 'plan') throw new Error(t('お試し期間か契約が終わっているため、試合を追加できません。作ったプロジェクトはこれまでどおり開いて編集できます'))
+}
+const mayCreateProject = () => {
+  if (account.refusal('newProject')) throw new Error(t('お試し期間か契約が終わっているため、新しいプロジェクトは作れません。作ったプロジェクトはこれまでどおり開いて編集できます'))
+}
+// What a failed account call says to the user.
+const accountMessage = (e: unknown): string => {
+  const code = e instanceof AccountFailure ? e.code : 'server'
+  return ({
+    invalid_code: t('コードが違うか、期限が切れています。もう一度送ってください'),
+    invalid_device: t('このパソコンのログインが取り消されました。もう一度ログインしてください'),
+    licence_expired: t('お試し期間か契約が終わっています'),
+    payment_required: t('お支払いが確認できていません。カードの情報を確かめてください'),
+    no_access: t('このチームの契約には Video Editor が含まれていません'),
+    too_many_attempts: t('試行が多すぎます。少し待ってからもう一度試してください'),
+    already_subscribed: t('このチームはすでに有料プランを契約しています。「状態を更新」を押してください'),
+    invalid_credentials: t('チームID か合言葉が違います'),
+    trial_used: t('このアカウントの無料お試しは使用済みです。チームに参加するか、有料プランをお申し込みください'),
+    network: t('サーバーにつながりません。インターネットの接続を確かめてください'),
+    server: t('サーバーでエラーが起きました。少し待ってからもう一度試してください'),
+  } as Record<string, string>)[code]
+}
+const withAccount = async <T>(f: () => Promise<T>): Promise<T> => {
+  try { return await f() } catch (e) { throw new Error(accountMessage(e)) }
+}
 const lib = () => { if (!library) throw new Error(t('先に倉庫を選んでください')); return library }
 const proj = () => { if (!project) throw new Error(t('プロジェクトが開かれていません')); return project }
 const assetsDir = () => join(proj().dir, 'assets')
@@ -66,7 +109,19 @@ const remembered = (kind: ExportKind, dir: string) => {
 app.whenReady().then(async () => {
   // The interface language (設定 → Language); the first start follows Windows' display language.
   // (VR_LANG=en|ja picks one for a development run without touching the saved setting.)
-  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : 'en'))
+  setLang((process.env.VR_LANG as Lang | undefined) ?? readSettings().lang ?? (app.getLocale().startsWith('ja') ? 'ja' : app.getLocale().startsWith('es') ? 'es' : 'en'))
+  account = new Account({
+    dir: app.getPath('userData'),
+    appVersion: app.getVersion(),
+    // Off in self-checks; VR_ACCOUNTS=1 (+ VR_LEASE_KEY) tries it before the release that turns it on.
+    enabled: !process.env.VR_SMOKE && (ENFORCED || process.env.VR_ACCOUNTS === '1'),
+    publicKey: process.env.VR_LEASE_KEY || LEASE_PUBLIC_KEY,
+    ...(safeStorage.isEncryptionAvailable() ? {
+      encrypt: (s: string) => safeStorage.encryptString(s).toString('base64'),
+      decrypt: (s: string) => safeStorage.decryptString(Buffer.from(s, 'base64')),
+    } : {}),
+  })
+  compares = new CompareStore(join(app.getPath('userData'), 'compare'))
   protocol.handle('media', serveMedia)
   if (process.platform === 'darwin') setMacMenu()
   registerIpc()
@@ -112,6 +167,9 @@ app.whenReady().then(async () => {
     await runSmoke(smokeContext, win, process.env.VR_SMOKE)
   }
   startUpdates(win)
+  // A fresh lease once half of it has run; checked at start and every few hours after.
+  void account.refreshIfDue()
+  setInterval(() => void account.refreshIfDue(), 6 * 3600 * 1000).unref()
 })
 
 app.on('window-all-closed', () => app.quit())
@@ -131,6 +189,7 @@ function registerIpc(): void {
 
   ipcMain.handle('library:scan', async () => {
     const l = lib()
+    mayImport(1) // before the folders are picked, when not even one more would go in
     const r = await dialog.showOpenDialog(win!, { title: t('動画と DVW があるフォルダを選択（複数可）'), properties: ['openDirectory', 'multiSelections'] })
     if (r.canceled || !r.filePaths.length) return null
     return l.scan(r.filePaths)
@@ -138,13 +197,27 @@ function registerIpc(): void {
 
   ipcMain.handle('library:importPairs', async (e, pairs: { dvwPath: string; video: string }[]) => {
     const l = lib()
+    mayImport(pairs.length)
     return importPairs(l, pairs, p => e.sender.send('import:progress', p))
   })
+
+  // Video comparison: files with no DVW, and the saved sessions (shared/videoCompare.ts).
+  ipcMain.handle('compare:pickVideo', async e => {
+    const r = await dialog.showOpenDialog(win!, { title: t('比べる動画を選択'), properties: ['openFile'], filters: [{ name: t('動画'), extensions: ['mp4', 'mov', 'm4v', 'mts', 'm2ts', 'mkv', 'avi', 'webm'] }] })
+    if (r.canceled || !r.filePaths[0]) return null
+    return compares.open(r.filePaths[0], p => e.sender.send('import:progress', p))
+  })
+  ipcMain.handle('compare:openVideo', (e, path: string) => compares.open(path, p => e.sender.send('import:progress', p)))
+  ipcMain.handle('compare:parseMatch', (_e, id: string) => lib().parse(id)) // no project is open in a comparison
+  ipcMain.handle('compare:list', () => compares.list())
+  ipcMain.handle('compare:save', (_e, s: CompareSession) => compares.save(s))
+  ipcMain.handle('compare:remove', (_e, id: string) => compares.remove(id))
 
   ipcMain.handle('project:recent', () => recentProjects())
 
   ipcMain.handle('project:create', async (_e, init: ProjectInit) => {
     const l = lib()
+    mayCreateProject()
     const name = init.name.trim() || t('{0} プロジェクト', init.ourTeamCodes[0] ?? '').trim()
     let dir: string
     if (init.chooseFolder) {
@@ -178,6 +251,7 @@ function registerIpc(): void {
         return project.info()
       } catch { /* not a project, or unreadable: look on */ }
     }
+    mayCreateProject() // its project made before opens above; a new one is a new project
     const opp = m.teams.find(x => x.code.toUpperCase() !== code.toUpperCase())?.code ?? ''
     const name = [code, m.date, opp && `vs ${opp}`].filter(Boolean).join(' ')
     const dir = join(root, uniqueName(folderName(name), n => existsSync(join(root, n))))
@@ -233,6 +307,7 @@ function registerIpc(): void {
 
   ipcMain.handle('match:import', async e => {
     const l = lib()
+    mayImport(1)
     const v = await dialog.showOpenDialog(win!, { title: t('試合の動画を選択'), properties: ['openFile'],
       filters: [videoFilter()] })
     if (v.canceled || !v.filePaths[0]) return null
@@ -254,12 +329,43 @@ function registerIpc(): void {
     return { library: l.info(), project: project?.info() ?? null, note }
   })
 
+  // Projects that list a match (for the warning before it is deleted).
+  ipcMain.handle('match:users', async (_e, id: string) => {
+    const out: string[] = []
+    for (const dir of await projectDirs(lib())) {
+      const f = await projectFile(dir)
+      if (f?.matchIds?.includes(id)) out.push(f.name || basename(dir))
+    }
+    return out
+  })
+  ipcMain.handle('match:delete', async (_e, id: string) => {
+    const l = lib()
+    await l.deleteMatch(id)
+    if (project) await project.setMatches(project.info().matchIds.filter(x => x !== id))
+    return { library: l.info(), project: project?.info() ?? null }
+  })
+  // A project's folder goes to the trash (it can be put back from there); the open one can't go.
+  ipcMain.handle('project:delete', async (_e, path: string) => {
+    if (project && project.dir.toLowerCase() === path.toLowerCase()) throw new Error(t('開いているプロジェクトは削除できません。先にホームへ戻ってください'))
+    if (!existsSync(join(path, 'project.json'))) throw new Error(t('プロジェクトが見つかりません（project.json がありません）'))
+    await shell.trashItem(path)
+    return recentProjects()
+  })
+
   ipcMain.handle('match:setCourt', async (_e, id: string, court: CourtFit | null) => {
     const l = lib()
     await l.setCourt(id, court)
     return project?.info() ?? null
   })
 
+  ipcMain.handle('match:setOffset', async (_e, id: string, offsetSec: number) => {
+    await lib().setOffset(id, offsetSec)
+    return project?.info() ?? null
+  })
+  ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, to: string) => {
+    await lib().setCodeEdit(id, line, from, to)
+    return project?.info() ?? null
+  })
   ipcMain.handle('match:setServeMark', (_e, id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }) => lib().setServeMark(id, fingerprint, patch))
 
   ipcMain.handle('project:saveSettings', async (_e, s: ProjectSettings) => {
@@ -269,6 +375,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('export:choosePath', async (_e, name: string) => {
+    mayExport()
     const dir = (await startFolder('video'))!
     const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'reel'
     const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
@@ -280,6 +387,7 @@ function registerIpc(): void {
   // One MP4 per scene: a folder, then a path in it for each file name (names come safe and unique
   // from sceneFileNames). Returns which of them are already there, so the user can say whether to overwrite.
   ipcMain.handle('export:chooseFolder', async (_e, names: string[]) => {
+    mayExport()
     const dir = (await startFolder('video'))!
     const r = await dialog.showOpenDialog(win!, { title: t('シーンごとに書き出すフォルダ'), defaultPath: dir, properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return null
@@ -291,8 +399,35 @@ function registerIpc(): void {
   // Starts in the background and returns at once; progress and the result arrive as export:event.
   ipcMain.handle('export:start', (e, job: ExportJob) => {
     const p = proj()
+    mayExport()
     if (exporter.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
     void exporter.run(job, join(p.dir, 'export-work'), id => p.getMatch(id)?.videoPath, ev => {
+      if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
+    })
+  })
+  // A comparison to MP4: each side's source made playable, then one ffmpeg run in the background (export:event, export:cancel).
+  // Where a comparison's MP4 goes: no project is open, so the save dialog starts where the last one was saved (first: Videos).
+  ipcMain.handle('compare:choosePath', async (_e, name: string) => {
+    mayExport()
+    const safe = name.replace(/[\/:*?"<>|]/g, '_').trim() || 'compare'
+    const dir = lastCompareDir && existsSync(lastCompareDir) ? lastCompareDir : app.getPath('videos')
+    const r = await dialog.showSaveDialog(win!, { title: t('MP4 に書き出す'), defaultPath: join(dir, `${safe}.mp4`), filters: [{ name: 'MP4', extensions: ['mp4'] }] })
+    if (r.canceled || !r.filePath) return null
+    lastCompareDir = dirname(r.filePath)
+    return r.filePath
+  })
+  ipcMain.handle('compare:export', async (e, job: CompareExportJob) => {
+    mayExport()
+    if (exporter.running) throw new Error(t('書き出し中です。終わるか、キャンセルしてからもう一度試してください'))
+    const side = async (s: CompareExportSide): Promise<CompareRunSide> => {
+      const file = await compareFile(s.source, p => e.sender.send('import:progress', p))
+      const info = await probe(file)
+      return { file, width: info.width, height: info.height, durationSec: info.durationSec, startSec: Math.max(0, s.startSec), view: s.view }
+    }
+    const left = await side(job.left), right = await side(job.right)
+    const durationSec = runLength(job.durationSec, left, right)
+    if (durationSec < 0.5) throw new Error(t('再生位置から先の長さが足りません。位置を戻してください'))
+    void exporter.runCompare({ left, right, layout: job.layout, overlayAlpha: Math.min(1, Math.max(0, job.overlayAlpha)), durationSec, outPath: job.outPath }, ev => {
       if (!e.sender.isDestroyed()) e.sender.send('export:event', ev)
     })
   })
@@ -300,11 +435,26 @@ function registerIpc(): void {
   ipcMain.handle('project:notices', () => project?.takeNotices() ?? library?.notices.splice(0) ?? [])
   ipcMain.handle('shell:showInFolder', (_e, p: string) => shell.showItemInFolder(p))
   ipcMain.handle('app:version', () => app.getVersion())
+  ipcMain.handle('account:get', () => ({ enabled: account.enabled, state: account.state() }))
+  ipcMain.handle('account:sendCode', (_e, email: string) => withAccount(() => account.sendCode(email)))
+  ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
+  ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
+  ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
+  ipcMain.handle('account:prices', () => account.prices())
+  ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
+  ipcMain.handle('account:team', (_e, a: TeamAction) => withAccount(() => account.teamAction(a)))
   // The preload reads the language synchronously, so the interface's text is right from its first paint.
   ipcMain.on('app:lang', e => { e.returnValue = getLang() })
   ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })
   // The renderer has saved: no flush on the way out, straight into the installer.
   ipcMain.handle('update:install', () => { updating = installUpdate() })
+  // The manual ships with the app (electron-builder extraResources: site/), so it opens without the internet, in the
+  // computer's browser. Japanese only for now; page: a chapter's file name (05-scene.html), else the index.
+  ipcMain.handle('app:manual', (_e, page?: string) => {
+    const site = app.isPackaged ? join(process.resourcesPath, 'site') : join(app.getAppPath(), 'site')
+    const name = page && /^[0-9a-z-]+\.html$/.test(page) ? page : 'index.html'
+    return shell.openExternal(pathToFileURL(join(site, 'manual', 'ja', name)).href)
+  })
   ipcMain.handle('update:help', (_e, what: 'page' | 'log') => (what === 'page' ? shell.openExternal(RELEASES_PAGE) : shell.showItemInFolder(updateLogPath())))
 
   ipcMain.handle('palette:get', () => library?.palette() ?? { colors: [], items: [] })
@@ -319,6 +469,8 @@ function registerIpc(): void {
   ipcMain.handle('palette:move', (_e, id: string, to: number) => lib().movePaletteItem(id, to))
   ipcMain.handle('palette:lock', (_e, id: string, locked: boolean) => lib().lockPaletteItem(id, locked))
   ipcMain.handle('palette:use', (_e, id: string) => lib().usePaletteItem(id, assetsDir()))
+  ipcMain.handle('teamColor:list', () => library?.teamColors() ?? {})
+  ipcMain.handle('teamColor:set', (_e, code: string, color: string | null) => lib().setTeamColor(code, color))
   ipcMain.handle('logo:list', () => library?.logos() ?? {})
   ipcMain.handle('logo:pick', async (_e, code: string) => {
     const l = lib()
@@ -350,9 +502,10 @@ function registerIpc(): void {
     return lib().packs()
   })
   // A card as a picture, or the cards as a PDF: to a file the user names; the path, or null.
-  ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf', data: Uint8Array) => {
+  ipcMain.handle('card:save', async (_e, name: string, ext: 'png' | 'pdf' | 'pptx', data: Uint8Array) => {
+    mayExport()
     const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`, dir = await startFolder('docs')
-    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
+    const r = await dialog.showSaveDialog(win!, { title: t('スライドを書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: ext === 'pptx' ? 'PowerPoint' : ext.toUpperCase(), extensions: [ext] }] })
     if (r.canceled || !r.filePath) return null
     remembered('docs', dirname(r.filePath))
     await writeFile(r.filePath, data)
@@ -360,6 +513,7 @@ function registerIpc(): void {
   })
   // The match report as an A4 PDF: its page drawn in a hidden window, printed, saved where the user says.
   ipcMain.handle('report:pdf', async (_e, html: string, name: string) => {
+    mayExport()
     const file = `${name.replace(/[\\/:*?"<>|]/g, '_')}.pdf`, dir = await startFolder('docs')
     const r = await dialog.showSaveDialog(win!, { title: t('マッチレポートを PDF に書き出す'), defaultPath: dir ? join(dir, file) : file, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
     if (r.canceled || !r.filePath) return null
@@ -545,9 +699,20 @@ async function saveAsset(data: Uint8Array, ext: string): Promise<string> {
   return id
 }
 
+// The file <video> plays for a side of a comparison (a library match's, or a chosen file made playable).
+async function compareFile(src: CompareSource, progress: (p: ImportProgress) => void): Promise<string> {
+  if (src.kind === 'match') {
+    const f = library?.getMatch(src.matchId)?.videoPath
+    if (!f || !existsSync(f)) throw new Error(t('動画が見つかりません（試合 {0}）', src.matchId))
+    return f
+  }
+  const f = await compares.open(src.path, progress)
+  return compares.fileOf(f.token)!
+}
+
 async function serveMedia(req: Request): Promise<Response> {
   const id = new URL(req.url).hostname
-  const file = library?.getMatch(id)?.videoPath
+  const file = compares?.fileOf(id) ?? library?.getMatch(id)?.videoPath
   if (!file || !existsSync(file)) return new Response('not found', { status: 404 })
   const size = (await stat(file)).size
   const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') ?? '')

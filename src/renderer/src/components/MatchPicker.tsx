@@ -9,12 +9,13 @@ interface Props {
   initial: { name: string; codes: string[]; selected: string[] }
   onDone: (r: { name: string; codes: string[]; matchIds: string[]; chooseFolder?: boolean }) => void
   onClose: () => void
+  sceneClips?: Record<string, number> // the project's scenes' clips of each match (edit)
 }
 
 // Choose a project's matches from the library (v3): pick the target team (one) from the teams in
 // the library and it narrows to that team's matches; tick any number of them. In the project the
 // target team is always "our" team, whichever side it played.
-export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) {
+export function MatchPicker({ mode, matches, initial, onDone, onClose, sceneClips }: Props) {
   const [name, setName] = useState(initial.name)
   const [code, setCode] = useState(() => initial.codes[0]?.toUpperCase() ?? '')
   const codes = code ? [code] : []
@@ -68,6 +69,10 @@ export function MatchPicker({ mode, matches, initial, onDone, onClose }: Props) 
             <label key={m.id} className={`match-row pick${selected.has(m.id) ? ' on' : ''}`} role="listitem">
               <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
               <MatchCells m={m} />
+              {!!sceneClips?.[m.id] && (
+                <span className="scene-use" title={t('このプロジェクトのシーンに、この試合のクリップがあります。外しても、クリップはそのまま再生・書き出しできます（左のリストに出なくなるだけ）')}>
+                  {t('シーンで {0} クリップ', sceneClips[m.id])}</span>
+              )}
             </label>
           ))}
           {!candidates.length && <p className="muted pad">{t('このチームの試合は倉庫にありません')}</p>}

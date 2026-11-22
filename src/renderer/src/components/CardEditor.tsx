@@ -1,8 +1,9 @@
 import { PaletteColor } from './PaletteColor'
+import { Help } from './CourtControls'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { DEFAULT_MARKER_LAYOUT, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
+import { DEFAULT_MARKER_LAYOUT, lookTheme, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
 import { cardBackground, cardKind, drawCard, type Box, type TitleBox } from '../../../shared/overlayDraw'
 import { drawFlights, drawSlideMarks } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
@@ -10,6 +11,8 @@ import type { Card } from '../../../shared/video'
 import { assetImage, logoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { t } from '../../../shared/i18n'
+import type { AlignChoice } from '../../../shared/cardAlign'
+import type { CardKind } from '../../../shared/overlay'
 
 interface Props {
   size: { w: number; h: number }
@@ -41,7 +44,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
     const c = canvas.current
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
-    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, settings.theme, logoImage(card.opp), assetImage)
+    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, lookTheme(settings), logoImage(card.opp), assetImage)
     boxRef.current = b
     if (card.slide) drawSlideMarks(ctx, size.w, size.h, card.slide, heatOpacity)
     if (card.slide?.flights) drawFlights(ctx, size.w, size.h, card.slide.flights, 1)
@@ -119,13 +122,15 @@ export interface CardPhotoChoice { key: string; label: string; own: boolean; pac
 export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string; label: string }[]; onPhoto: (pack: string, photo: string) => void; onLogo: (code: string) => void
   onFrame: () => void } // a photo frame: filled with the card's player with the most clips when it plays
 
-export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden }: {
+export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden, onAlign }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
   tool: 'objects' | 'title' | 'logo'; onTool: (t: 'objects' | 'title' | 'logo') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
   inserts?: CardInserts
   hiddenCount?: number; onShowHidden?: () => void // objects of every card of this kind left off this one
+  onAlign?: (c: AlignChoice & { resetOwn: boolean }) => void // ほかのカードにも揃える
 }) {
+  const [aligning, setAligning] = useState(false)
   const kind = layoutKey(card), def = defaultLayout(card)
   const shared = asTopLeft(card, settings.titleCard[kind] ?? def), own = !!card.layout
   const layout = card.layout ? asTopLeft(card, card.layout) : shared
@@ -139,8 +144,14 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
   }
   return (
     <div className="card-edit-bar">
+      <div className="card-row">
       <b>{what}{t('のタイトルカード')}{card.name ? t('「{0}」', card.name) : ''}</b>
       <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> {t('このカードを出す')}</label>
+      <span className="spacer" />
+      {onAlign && <button onClick={() => setAligning(true)} title={t('このカードのタイトルの位置・ロゴの位置・図形を、ほかの種類のカード（動画・シーン・マーカー）にも同じにする')}>{t('ほかのカードにも揃える…')}</button>}
+      <button className="primary" onClick={onDone}>{t('完了')}</button>
+      </div>
+      <div className="card-row">
       <label className="check card-title-field" title={t('カードに出す文字。改行（Enter）で 2 段になる。空にすると名前を出す')}>{t('文字')}
         <textarea aria-label={t('カードの文字')} rows={Math.max(1, Math.min(3, (title || nameTitle).split('\n').length))} value={title} placeholder={nameTitle || t('（名前）')}
           onChange={e => onTitle(e.target.value)} /></label>
@@ -149,6 +160,8 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
           onChange={c => onChange({ ...settings, titleCard: { ...settings.titleCard, background: c } })} /></label>
       {settings.titleCard.background && <button className="link" title={t('配色（テーマ）から決まる色に戻す')}
         onClick={() => { const { background: _bg, ...rest } = settings.titleCard; onChange({ ...settings, titleCard: rest }) }}>{t('配色に戻す')}</button>}
+      </div>
+      <div className="card-row">
       <div className="segmented" role="radiogroup" aria-label={t('カードの編集')}>
         <button role="radio" aria-checked={tool === 'objects'} className={tool === 'objects' ? 'on' : ''} onClick={() => onTool('objects')}
           title={t('このカードに文字・画像・図形を置く')}>{t('図形・文字')}</button>
@@ -161,7 +174,8 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
       </div>
       {tool === 'objects' && inserts && (
         <>
-          <button onClick={inserts.onFrame} title={t('写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ')}>{t('＋ 写真枠')}</button>
+          <button onClick={inserts.onFrame} title={t('写真枠を置く（ドラッグで位置と大きさ）')}>{t('＋ 写真枠')}</button>
+          <Help text={[t('写真枠を置く。再生と書き出しでは、このマーカー（シーンのカードはシーン、動画のカードは動画）でいちばんクリップの多い選手の写真が入る（パックに写真がある選手）。ドラッグで位置と大きさ')]} />
           {inserts.photos.length > 0 && (
             <select value="" aria-label={t('選手の写真を入れる')} title={t('パックの選手の顔写真を、このカードに画像として入れる（あとで動かせる）')}
               onChange={e => { const c = inserts.photos.find(x => x.key === e.target.value); if (c) inserts.onPhoto(c.pack, c.photo) }}>
@@ -213,8 +227,53 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
         <span className="muted">{t('すべての{0}のカードの図形 {1} 個を、このカードでは出していません', what, hiddenCount)}
           {' '}<button className="link" onClick={onShowHidden}>{t('出す')}</button></span>
       )}
-      <span className="spacer" />
-      <button className="primary" onClick={onDone}>{t('完了')}</button>
+      </div>
+      {aligning && onAlign && (
+        <AlignCardsDialog from={cardKind(card)} objects={card.annotations?.length ?? 0} onClose={() => setAligning(false)}
+          onAlign={c => { onAlign(c); setAligning(false) }} />
+      )}
+    </div>
+  )
+}
+
+const KIND_NAMES = (): Record<CardKind, string> => ({ video: t('動画のカード'), scene: t('シーンのカード'), marker: t('マーカーのカード') })
+
+// What to make the same, and on which other kinds of card. Nothing is ticked by default for the
+// objects (they replace what those cards share), the title and logo places are.
+function AlignCardsDialog({ from, objects, onAlign, onClose }: { from: CardKind; objects: number; onAlign: (c: AlignChoice & { resetOwn: boolean }) => void; onClose: () => void }) {
+  const others = (['video', 'scene', 'marker'] as CardKind[]).filter(k => k !== from)
+  const [to, setTo] = useState<CardKind[]>(others)
+  const [title, setTitle] = useState(true)
+  const [logo, setLogo] = useState(true)
+  const [objs, setObjs] = useState(false)
+  const [resetOwn, setResetOwn] = useState(false)
+  const names = KIND_NAMES()
+  const nothing = !(title || logo || objs || resetOwn) || (!to.length && !resetOwn && !objs)
+  const check = (label: string, v: boolean, set: (v: boolean) => void, title?: string, disabled = false) => (
+    <label className="check" title={title}><input type="checkbox" checked={v} disabled={disabled} onChange={e => set(e.target.checked)} /> {label}</label>
+  )
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal align-cards" role="dialog" aria-label={t('ほかのカードにも揃える')} onClick={e => e.stopPropagation()}>
+        <h2>{t('{0}の設定を、ほかのカードにも揃える', names[from])}</h2>
+        <section>
+          <b>{t('揃えるもの')}</b>
+          {check(t('タイトルの位置と大きさ'), title, setTitle)}
+          {check(t('ロゴの位置'), logo, setLogo)}
+          {check(t('このカードの図形（{0} 個）を、すべてのカードに置く', objects), objs, setObjs,
+            t('このカードの図形・文字・写真枠を、この種類のすべてのカードと、下で選んだ種類のすべてのカードに置きます。それらのカードに共通で置いていた図形は、これに置き換わります'), !objects)}
+        </section>
+        <section>
+          <b>{t('揃える先')}</b>
+          {others.map(k => check(names[k], to.includes(k), v => setTo(s => (v ? [...s, k] : s.filter(x => x !== k)))))}
+          {check(t('「このカードだけ」の位置にしたカードも、共通の位置に戻す'), resetOwn, setResetOwn,
+            t('この種類と、上で選んだ種類のカードで、「このカードだけ」にしてあるタイトルの位置を外します'))}
+        </section>
+        <div className="modal-actions">
+          <button onClick={onClose}>{t('キャンセル')}</button>
+          <button className="primary" disabled={nothing} onClick={() => onAlign({ title, logo, objects: objs, to, resetOwn })}>{t('揃える')}</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -223,7 +282,7 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
 // What can go on a slide from the court: from the play selected in the list.
 // The bar for a data slide: a sheet of data, so only what makes up that sheet.
 export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
-  slide: Slide; onChange: (s: Slide) => void; onBoard: () => void; onSave: (as: 'png' | 'pdf') => void; onDone: () => void
+  slide: Slide; onChange: (s: Slide) => void; onBoard: () => void; onSave: (as: 'png' | 'pdf' | 'pptx') => void; onDone: () => void
 }) {
   const look = slide.charts?.[0]?.chart.look
   return (
@@ -233,6 +292,7 @@ export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
       <span className="spacer" />
       <button onClick={() => onSave('png')} title={t('このスライドを画像に書き出します')}>{t('PNG に書き出す…')}</button>
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
+      <button onClick={() => onSave('pptx')} title={t('このシーンのスライドから選んで、1 つの PowerPoint ファイルにします')}>{t('PowerPoint に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
         {look && <ChartShow value={look} skill={slide.board?.config.skill ?? slide.charts?.[0]?.chart.skill ?? 'A'} onChange={p => onChange(restyleBoard(slide, p))} />}
@@ -249,7 +309,7 @@ export type SlideMark = 'zones' | 'heat' | 'landings' | 'flights' | 'cones' | 'c
 
 export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark, onSave }: {
   slide: Slide; onChange: (s: Slide) => void; onReload: (() => void) | null; onDone: () => void
-  onSave: (as: 'png' | 'pdf') => void
+  onSave: (as: 'png' | 'pdf' | 'pptx') => void
   target: string | null // the play the court marks come from, in words; null: none to use
   onMark: (mark: SlideMark, on: boolean) => void
 }) {
@@ -265,6 +325,7 @@ export function SlideEditBar({ slide, onChange, onReload, onDone, target, onMark
       <span className="spacer" />
       <button onClick={() => onSave('png')} title={t('このカードを画像に書き出します')}>{t('PNG に書き出す…')}</button>
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>
+      <button onClick={() => onSave('pptx')} title={t('このシーンのスライドから選んで、1 つの PowerPoint ファイルにします')}>{t('PowerPoint に書き出す…')}</button>
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       <div className="slide-marks">
         <span className="court-row-label" title={t('左の一覧で選んだプレーから、コートの表示をこのスライドに載せます。載せた内容は固定され、あとでプレーを変えても変わりません')}>{t('コートの表示')}</span>

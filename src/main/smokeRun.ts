@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { BrowserWindow, ClipboardItem, app, clipboard, ipcMain, nativeImage } from 'electron'
 import type { PhotoTarget } from '../shared/pack'
+import { decodeScout } from '../shared/scoutText'
 import type { PickedAsset, ProjectInit, SlideFile } from '../shared/types'
 import { ffmpegBin, ffprobeBin } from './ffmpegPath'
 import type { Library } from './library'
@@ -77,12 +78,13 @@ export function registerSmokeIpc(c: SmokeContext): void {
     // Only ever a copy in the temp folder: a smoke run must not change a real scout file.
     const tmp = resolve(tmpdir()) + sep
     if (!resolve(m.dvwPath).toLowerCase().startsWith(tmp.toLowerCase())) throw new Error(`smoke:editDvw edits DVW copies in ${tmp} only (got ${m.dvwPath})`)
-    const lines = readFileSync(m.dvwPath, 'latin1').split(/\r?\n/)
+    const { text, encoding } = decodeScout(readFileSync(m.dvwPath))
+    const lines = text.split(/\r?\n/)
     const at = lines.findIndex(l => /^[*a]p\d+:\d+/i.test(l))
     lines.splice(at + 1, 0, lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_s, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`))
     const del = lines.findIndex(l => l.startsWith(code + ';') && l.split(';')[12] === String(time))
     lines.splice(del, 1)
-    await writeFile(m.dvwPath, lines.join('\r\n'), 'latin1')
+    await writeFile(m.dvwPath, lines.join('\r\n'), encoding) // back in the copy's own encoding
     return `added a point after line ${at + 1}, deleted line ${del + 1} (${code} @ ${time})`
   })
 }
@@ -140,8 +142,10 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_CARDINSERT=<pack.vrpack>|<logo image>: a player's photo and a team logo put on a marker card from its bar]
 // [VR_SMOKE_PRESETSERVE=1: the serve preset's player order and markers (zone, in order) in the dialog's preview]
 // [VR_SMOKE_ANALYSIS=1: each report of the 分析 window: a screenshot and its tables read back]
+// [VR_SMOKE_MATCHREPORT=1: the match report: click its numbers, the play list shows as many plays]
 // [VR_SMOKE_CLIPMENU=1 [VR_SMOKE_EXPORT=<out.mp4>]: a clip's right-click menu: copied and moved to another scene, exported alone]
 // [VR_SMOKE_PRESETBLOCK=1: the block preset by middle split by the opposing setter, made newest match first]
+// [VR_SMOKE_FOLD=1: the list rows' six markers, the right column folded by its », Ctrl+B and the strip]
 // [VR_SMOKE_SCENETITLE=1: a scene card with a long name; dragging its title saves a top-left]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
@@ -180,6 +184,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       picker: !!process.env.VR_SMOKE_PICKER,
       presetServe: !!process.env.VR_SMOKE_PRESETSERVE,
       analysis: !!process.env.VR_SMOKE_ANALYSIS,
+      matchReport: !!process.env.VR_SMOKE_MATCHREPORT,
       presetBlock: !!process.env.VR_SMOKE_PRESETBLOCK,
       clipMenu: !!process.env.VR_SMOKE_CLIPMENU,
       setter: process.env.VR_SMOKE_SETTER,
@@ -194,6 +199,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       serveTouch: !!process.env.VR_SMOKE_SERVETOUCH,
       direction: !!process.env.VR_SMOKE_DIRECTION,
       maximize: !!process.env.VR_SMOKE_MAXIMIZE,
+      fold: !!process.env.VR_SMOKE_FOLD,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }

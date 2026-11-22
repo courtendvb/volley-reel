@@ -45,9 +45,15 @@ export interface SetCourtStyle { layer: SetCourtLayer }
 export const DEFAULT_SET_COURT: SetCourtStyle = { layer: 'shares' }
 export const cleanSetCourt = (x: unknown): SetCourtStyle => ({ layer: (x as Partial<SetCourtStyle> | null)?.layer === 'spots' ? 'spots' : 'shares' })
 
-// Where an attack came from, as a place to set to; the setter's own is a dump.
-export function setTarget(attack: Pick<Play, 'startZone' | 'playerKey'>, setter: string): SetTarget | null {
+// Where a set went, as a place: the set's own target attacker (the 9th character of its code, as the
+// scout coded it: F the front-row attacker on the left, C the centre, B the one behind the setter on
+// the right, P the pipe), else where the attack after it came from. The setter's own attack is a dump.
+// B is the right side, or the back right when the attack came from there (zone 1 or 9).
+const TARGET_ATTACKER: Record<string, SetTarget> = { F: 'left', C: 'middle', B: 'right', P: 'pipe' }
+export function setTarget(attack: Pick<Play, 'startZone' | 'playerKey'>, setter: string, set?: Pick<Play, 'code' | 'skill'> | null): SetTarget | null {
   if (attack.playerKey === setter) return 'dump'
+  const coded = set?.skill === 'E' ? TARGET_ATTACKER[set.code.charAt(8).toUpperCase()] : undefined
+  if (coded) return coded === 'right' && (attack.startZone === 1 || attack.startZone === 9) ? 'back' : coded
   const z = attack.startZone
   return z === 4 || z === 5 || z === 7 ? 'left' : z === 3 ? 'middle' : z === 2 ? 'right' : z === 1 || z === 9 ? 'back' : z === 8 || z === 6 ? 'pipe' : null
 }
@@ -104,6 +110,20 @@ function setBeforeAt(plays: Play[], i: number): Play | null {
   return null
 }
 export const setBefore = (plays: Play[], attack: Play): Play | null => setBeforeAt(plays, plays.indexOf(attack))
+// The set a reception was played for: the same team's next contact in the rally when it is a set. A
+// reception with no set after it (an error, an overpass, a first-ball attack) takes the setter who set
+// most for that team in that rotation, so the chart still shows what usually comes in that rotation.
+export function setForReception(plays: Play[], rec: Play): Play | null {
+  const i = plays.indexOf(rec)
+  for (let k = i + 1; i >= 0 && k < plays.length; k++) {
+    const q = plays[k]
+    if (q.rallyId !== rec.rallyId || q.setNum !== rec.setNum) break
+    if (q.side === rec.side) { if (q.skill === 'E') return q; break }
+  }
+  const rot = rotationOf(rec), count = new Map<string, Play[]>()
+  for (const p of plays) if (p.skill === 'E' && p.side === rec.side && rot !== null && rotationOf(p) === rot) count.set(p.playerKey, [...(count.get(p.playerKey) ?? []), p])
+  return [...count.values()].sort((a, b) => b.length - a.length)[0]?.[0] ?? null
+}
 // The attack a setter's contact at i led to: after a set, the team's next contact if it is an attack;
 // the setter's own attack not after a set of the team (a dump) is its own. Null otherwise.
 export function attackOfContact(plays: Play[], i: number): Play | null {
@@ -111,11 +131,11 @@ export function attackOfContact(plays: Play[], i: number): Play | null {
   return p.skill === 'E' ? nextAttack(plays, i) : p.skill === 'A' && !setBeforeAt(plays, i) ? p : null
 }
 
-// The chart of the setter of `play` (a set, or an attack: the set before it) in the rotation it was
-// in, from `plays` (every match, each match's plays together and in order).
+// The chart of the setter of `play` (a set; an attack: the set before it; a reception: the set it was
+// played for, setForReception) in the rotation it was in, from `plays` (every match, each match's plays together and in order).
 // filter: other rotations than the play's, only some setter calls, only some of the other team's rotations.
 export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => string = () => '', filter: SetFilter = {}): SetChart | null {
-  const set = play.skill === 'E' ? play : play.skill === 'A' ? setBefore(plays, play) : null
+  const set = play.skill === 'E' ? play : play.skill === 'A' ? setBefore(plays, play) : play.skill === 'R' ? setForReception(plays, play) : null
   if (!set) return null
   const setter = set.playerKey, rotation = rotationOf(set)
   const rots = filter.rot === 'all' ? null : filter.rot?.length ? filter.rot : rotation !== null ? [rotation] : null
@@ -137,7 +157,7 @@ export function setChart(play: Play, plays: Play[], nameOf: (set: Play) => strin
     // A set and the attack after it, or the setter attacking themself (not after a set of their own).
     const attack = attackOfContact(plays, i)
     if (!attack) return
-    const target = setTarget(attack, setter)
+    const target = setTarget(attack, setter, p)
     if (!target) return
     const result = resultOf(attack.effect)
     by[target].n++

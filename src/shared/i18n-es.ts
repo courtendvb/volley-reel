@@ -585,6 +585,8 @@ export const ES: Record<string, string> = {
   "サーブ速度": "Velocidad de saque",
   "アタッカーごとのよく打つコースの扇形": "El recorrido habitual de cada atacante, como un cono",
   "右下の配分の表。数が少ないほど大きく出ます": "Las tablas de distribución abajo a la derecha. Cuantas menos, más grandes",
+  "コートの見せ方。3D は後ろから見た遠近、2D は真上から見た平面": "Cómo se ve la cancha: 3D en perspectiva desde atrás, 2D plana desde arriba",
+  "コートの見せ方": "Cómo se ve la cancha",
   "表": "Tablas",
   "右下の表": "Tablas abajo a la derecha",
   "すべて表示": "Todas",

@@ -22,7 +22,7 @@
 //       person chooses, and the app calls again with the device token and an `action`:
 //         join  { slug, passcode }  the team ID and passcode of a SyncScout team
 //         claim { team_id }         one of `suggested`: a team whose contact or payer email is this address
-//         trial {}                  a team of their own with the 30-day trial, once per account
+//         trial {}                  a team of their own with the 14-day trial, once per account
 //         leave { team_id }
 //     → 4xx { error: AccountError }
 //   POST {SUPABASE_URL}/functions/v1/account-prices  { device_token, device_id, team_id }
@@ -180,7 +180,7 @@ export function refreshDue(p: LeasePayload, now: number): boolean {
 // screens explain it.
 //   signed in, trial or plan running: everything
 //   not signed in (or no team chosen): a "try it" mode — one match in the library, every editing and
-//     analysis feature on it, no exports. Signing in (free for 30 days) lifts the limit.
+//     analysis feature on it, no exports. Signing in (free for 14 days) lifts the limit.
 //   trial or plan over: nothing new — no matches added, no new projects, no exports. What was made
 //     stays: existing projects open and edit as before.
 export const FREE_MATCHES = 1

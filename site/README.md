@@ -69,3 +69,9 @@ The figure in the court section (.auto, one 12 s CSS loop, no script) stacks the
 The site lives at https://editor.courtend.net/, on the same rented server as courtend.net. `.github/workflows/site.yml` uploads it over FTPS whenever `site/` changes on main (or by hand: Actions > Site > Run workflow), with the FTP details in four repository secrets named in that file. It sends everything in `site/` except `README.md`, the `source/` folders and `media/`. The server lets browsers keep CSS and JS for a week, so on the way up every page's links to `site.css`, `site.js` and `manual.css` get `?v=` and the start of that file's hash: a changed file is fetched again at once. Keep those links plain in the repository.
 
 The film (`media/film-en.mp4`, `media/film-ja.mp4`) is not in git, so after making a new one, upload those two files to `media/` on the server by hand. The upload remembers what it sent in `.ftp-deploy-sync-state.json` on the server, so later runs send only changed files and delete only files it sent itself; anything put there by hand is left alone.
+
+## Analytics
+
+Every page loads Google Tag Manager (container `GTM-MV69LPGH`) at the top of `<head>`, with the `<noscript>` iframe at the top of `<body>`; the manual gets it from `manual/source/gen.py`. The container sends page views to GA4 (`G-BQ8DFRDGDK`). A new page needs the same two snippets.
+
+`site.js` also pushes `download_click` to the dataLayer when a download link is clicked, with `os` (windows / mac-arm / mac-intel / list), `section` (hero or download) and `link_url`. It reaches GA4 only once the container has a Custom Event trigger for `download_click` and a GA4 event tag on it.

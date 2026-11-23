@@ -1894,4 +1894,11 @@ export const EN: Record<string, string> = {
   "コピー": "Copy",
   "SyncScout Web を開く": "Open SyncScout Web",
   "管理者ページを開く": "Open the admin page",
+  "明るさ": "Brightness",
+  "コントラスト": "Contrast",
+  "彩度": "Saturation",
+  "映像の補正": "Picture",
+  "映像の補正: 暗い動画を明るくするなど。この試合の動画すべてに効き、書き出しにも入ります": "Picture: brighten a dark video and the like. It applies to this match's whole video, and goes into the export too",
+  "映像の補正（この試合）": "Picture (this match)",
+  "書き出しにも同じ補正が入ります": "The export gets the same correction",
 }

@@ -27,6 +27,7 @@ const api: Api = {
   clearScoutEdits: id => ipcRenderer.invoke('match:clearScoutEdits', id),
   exportScout: (id, format) => ipcRenderer.invoke('match:exportScout', id, format),
   setMatchOffset: (id, offsetSec) => ipcRenderer.invoke('match:setOffset', id, offsetSec),
+  setMatchLook: (id, look) => ipcRenderer.invoke('match:setLook', id, look),
   setServeMark: (id, fingerprint, patch) => ipcRenderer.invoke('match:setServeMark', id, fingerprint, patch),
   saveSettings: s => ipcRenderer.invoke('project:saveSettings', s),
   listReels: () => ipcRenderer.invoke('reel:list'),

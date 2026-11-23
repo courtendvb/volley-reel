@@ -14,6 +14,7 @@ import type { Video } from './video'
 import type { CompareFile, CompareSession } from './videoCompare'
 import type { CompareExportJob } from './compareExport'
 import type { ClipTiming } from './timing'
+import type { VideoLook } from './videoLook'
 
 export type Side = '*' | 'a'
 
@@ -131,6 +132,7 @@ export interface Match {
   serveMarks?: Record<string, ServeMark> // by play fingerprint: serves' hits and touches marked by hand (serveMark.ts)
   codeEdits?: CodeEdit[] // corrections to the scout file's codes, laid over it when read (codeEdit.ts); the file is not written
   codeInserts?: ScoutInsert[] // plays put in by hand (codeEdit.ts)
+  look?: VideoLook // the picture's brightness / contrast / saturation, corrected in the preview and the export (videoLook.ts)
 }
 
 // A serve's hit and its reception's touch, video times marked by hand frame by frame.
@@ -246,6 +248,7 @@ export interface Api {
   clearScoutEdits(id: string): Promise<ProjectInfo | null> // every correction of the match taken off
   exportScout(id: string, format: 'dvw' | 'vsm'): Promise<{ path: string; skipped: number } | null> // the corrected scout file, saved where picked
   setMatchOffset(id: string, offsetSec: number): Promise<ProjectInfo | null> // DVW time + offset = video time, for every play of the match
+  setMatchLook(id: string, look: VideoLook | null): Promise<ProjectInfo | null> // null: the video as it is
   setServeMark(id: string, fingerprint: string, patch: { hit?: number | null; touch?: number | null }): Promise<void> // null clears that time
   saveSettings(s: ProjectSettings): Promise<ProjectInfo>
   listReels(): Promise<Reel[]>
@@ -374,7 +377,7 @@ export interface ExportLayer {
 }
 
 export type ExportItem =
-  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[]; timing?: ClipTiming } // layers' from / to: seconds into the clip as played (with its slows and holds)
+  | { kind: 'clip'; matchId: string; in: number; out: number; layers: ExportLayer[]; timing?: ClipTiming; look?: VideoLook } // layers' from / to: seconds into the clip as played (with its slows and holds); look: the match's picture correction
   | { kind: 'card'; png: Uint8Array; durationSec: number; layers?: ExportLayer[] } // layers' from / to: seconds into the card
 
 export interface ExportJob {

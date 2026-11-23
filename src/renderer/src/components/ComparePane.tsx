@@ -4,9 +4,11 @@ import { MAX_ZOOM, MIN_ZOOM, type CompareSource, type ComparePane as PaneState, 
 import { currentPlay, filterPlayRows, isNear, NO_FILTER, playerChoices, type PlayJumpFilter, type PlayJumpRow } from '../../../shared/comparePlays'
 import { formatTime } from '../format'
 import { cap, t } from '../../../shared/i18n'
+import type { VideoLook } from '../../../shared/videoLook'
+import { LookFilter, lookStyle } from './VideoLook'
 
 // What a side plays: a library match's video or a chosen file, once it is playable.
-export interface PaneMedia { src: string; fps: number; width: number; height: number; label: string }
+export interface PaneMedia { src: string; fps: number; width: number; height: number; label: string; look?: VideoLook } // look: a match's picture correction
 
 // Whom a gesture moves: this side, or (the overlay: one stage, two layers) the sides whose switch is on.
 export type GestureTarget = 'self' | 'switched'
@@ -118,9 +120,12 @@ export function ComparePane(p: PaneProps) {
         }}
         onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
         {m ? (
+          <>
+          <LookFilter id={`look-cmp-${p.side}`} look={m.look} />
           <video ref={setVideo} src={m.src} muted playsInline preload="auto"
-            style={{ transform: `translate(${view.x * 100}%, ${view.y * 100}%) scale(${view.zoom})`, ...(p.layer === 'over' ? { opacity: p.alpha } : {}) }}
+            style={{ transform: `translate(${view.x * 100}%, ${view.y * 100}%) scale(${view.zoom})`, ...(p.layer === 'over' ? { opacity: p.alpha } : {}), ...lookStyle(`look-cmp-${p.side}`, m.look) }}
             onLoadedMetadata={e => p.onReady(e.currentTarget)} />
+          </>
         ) : (
           <div className="cmp-empty muted">{p.loading ? t('再生できる形にしています…') : t('動画を選んでください')}</div>
         )}

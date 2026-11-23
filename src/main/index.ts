@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { folderName, uniqueName } from '../shared/folderName'
+import { cleanLook, type VideoLook } from '../shared/videoLook'
 import { Readable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
@@ -369,6 +370,10 @@ function registerIpc(): void {
     await lib().setOffset(id, offsetSec)
     return project?.info() ?? null
   })
+  ipcMain.handle('match:setLook', async (_e, id: string, look: VideoLook | null) => {
+    await lib().setLook(id, look)
+    return project?.info() ?? null
+  })
   ipcMain.handle('match:setCodeEdit', async (_e, id: string, line: number, from: string, patch: { to?: string; start?: string | null; end?: string | null }) => {
     await lib().setCodeEdit(id, line, from, patch)
     return project?.info() ?? null
@@ -452,7 +457,8 @@ function registerIpc(): void {
     const side = async (s: CompareExportSide): Promise<CompareRunSide> => {
       const file = await compareFile(s.source, p => e.sender.send('import:progress', p))
       const info = await probe(file)
-      return { file, width: info.width, height: info.height, durationSec: info.durationSec, startSec: Math.max(0, s.startSec), view: s.view }
+      const look = s.source.kind === 'match' ? cleanLook(library?.getMatch(s.source.matchId)?.look) : null // as the comparison's preview shows it
+      return { file, width: info.width, height: info.height, durationSec: info.durationSec, startSec: Math.max(0, s.startSec), view: s.view, ...(look ? { look } : {}) }
     }
     const left = await side(job.left), right = await side(job.right)
     const durationSec = runLength(job.durationSec, left, right)

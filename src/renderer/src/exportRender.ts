@@ -7,6 +7,7 @@ import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } fro
 import type { Clip, Group } from '../../shared/reel'
 import type { Chapter, PlanItem } from '../../shared/video'
 import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/types'
+import { cleanLook } from '../../shared/videoLook'
 import type { ImageLookup } from '../../shared/annotation'
 import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawForecast, forecastOn, forecastSteps, landingFxEnd, FLIGHTS_SEC, clipCourtStyle, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
@@ -99,7 +100,9 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     }
     const c = p.clip, r = d.range(c, p.sceneId)
     if (!r) continue
-    items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, p.group, r, overlay, d, W, H, png, assetImage), ...(c.timing ? { timing: c.timing } : {}) })
+    const look = cleanLook(d.matches[c.matchId]?.look) // the match's picture correction, as the preview shows it
+    items.push({ kind: 'clip', matchId: c.matchId, in: r.in, out: r.out, layers: await clipLayers(c, p.sceneId, p.group, r, overlay, d, W, H, png, assetImage),
+      ...(c.timing ? { timing: c.timing } : {}), ...(look ? { look } : {}) })
   }
   // Chapters left with nothing in them (every clip skipped) are dropped.
   const marks = (chapters ?? []).map(c => ({ item: firstItem[c.at] ?? items.length, title: c.title }))

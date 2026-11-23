@@ -2,6 +2,7 @@
 // one 1920×1080 picture, each as its zoom and position show it in the preview, from where each side
 // was left, for a length. Pure: it only builds the ffmpeg arguments.
 import { clampView, type CompareLayout, type CompareSource, type PaneView } from './videoCompare'
+import { lookFilter, type VideoLook } from './videoLook'
 
 export const OUT_W = 1920
 export const OUT_H = 1080
@@ -12,7 +13,7 @@ export interface CompareExportSide { source: CompareSource; view: PaneView; star
 export interface CompareExportJob { left: CompareExportSide; right: CompareExportSide; layout: CompareLayout; overlayAlpha: number; durationSec: number; outPath: string }
 
 // What the main process runs: sources resolved to playable files, with their size and length.
-export interface CompareRunSide { file: string; width: number; height: number; durationSec: number; startSec: number; view: PaneView }
+export interface CompareRunSide { file: string; width: number; height: number; durationSec: number; startSec: number; view: PaneView; look?: VideoLook } // look: a match's picture correction
 export interface CompareRun { left: CompareRunSide; right: CompareRunSide; layout: CompareLayout; overlayAlpha: number; durationSec: number; outPath: string }
 
 // Each side's share of the picture.
@@ -33,7 +34,7 @@ const even = (n: number) => Math.max(2, Math.round(n / 2) * 2)
 // shows is cropped from the source and put on a black cell, so nothing is scaled bigger than it ends up.
 // alpha: the side is a see-through layer to lay over another (the overlay layout): its bars and the
 // parts out of view are clear, and what shows is `alpha` opaque.
-export function paneFilter(srcW: number, srcH: number, cellW: number, cellH: number, view: PaneView, alpha?: number): string {
+export function paneFilter(srcW: number, srcH: number, cellW: number, cellH: number, view: PaneView, alpha?: number, look?: VideoLook): string {
   const v = clampView(view), z = v.zoom
   const fit = Math.min(cellW / srcW, cellH / srcH)
   const pw = srcW * fit, ph = srcH * fit, px = (cellW - pw) / 2, py = (cellH - ph) / 2 // the fitted picture in the cell
@@ -47,14 +48,14 @@ export function paneFilter(srcW: number, srcH: number, cellW: number, cellH: num
   const cx = Math.min(Math.max(0, Math.round((ix0 - px) / fit)), srcW - cw), cy = Math.min(Math.max(0, Math.round((iy0 - py) / fit)), srcH - ch)
   const ox = Math.min(Math.max(0, Math.round((ix0 - vx) * z / 2) * 2), cellW - 2), oy = Math.min(Math.max(0, Math.round((iy0 - vy) * z / 2) * 2), cellH - 2)
   const ow = Math.min(even((ix1 - ix0) * z), cellW - ox), oh = Math.min(even((iy1 - iy0) * z), cellH - oy)
-  return `crop=${cw}:${ch}:${cx}:${cy},scale=${ow}:${oh}:flags=lanczos,${layer ? 'format=rgba,' : ''}pad=${cellW}:${cellH}:${ox}:${oy}:${layer ? 'black@0' : 'black'},${tail}`
+  return `crop=${cw}:${ch}:${cx}:${cy},scale=${ow}:${oh}:flags=lanczos${lookFilter(look)},${layer ? 'format=rgba,' : ''}pad=${cellW}:${cellH}:${ox}:${oy}:${layer ? 'black@0' : 'black'},${tail}`
 }
 
 export function compareArgs(run: CompareRun): string[] {
   const { w, h } = cellSize(run.layout)
   const sec = run.durationSec.toFixed(3)
   const input = (s: CompareRunSide) => ['-ss', s.startSec.toFixed(3), '-t', sec, '-i', s.file]
-  const f = (s: CompareRunSide, alpha?: number) => paneFilter(s.width, s.height, w, h, s.view, alpha)
+  const f = (s: CompareRunSide, alpha?: number) => paneFilter(s.width, s.height, w, h, s.view, alpha, s.look)
   const join = run.layout === 'overlay' ? 'overlay=format=auto,format=yuv420p' : `${run.layout === 'side' ? 'hstack' : 'vstack'}=inputs=2`
   const fc = `[0:v]${f(run.left)}[l];[1:v]${f(run.right, run.layout === 'overlay' ? run.overlayAlpha : undefined)}[r];[l][r]${join}[v]`
   return [...input(run.left), ...input(run.right), '-filter_complex', fc, '-map', '[v]',

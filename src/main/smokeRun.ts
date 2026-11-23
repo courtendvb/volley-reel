@@ -144,6 +144,7 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_ANALYSIS=1: each report of the 分析 window: a screenshot and its tables read back]
 // [VR_SMOKE_MATCHREPORT=1: the match report: click its numbers, the play list shows as many plays]
 // [VR_SMOKE_CLIPMENU=1 [VR_SMOKE_EXPORT=<out.mp4>]: a clip's right-click menu: copied and moved to another scene, exported alone]
+// [VR_SMOKE_LOOK=1 [VR_SMOKE_EXPORT=<out.mp4>]: the ☀ picture correction set with its sliders, saved, a clip exported with and without it]
 // [VR_SMOKE_PRESETBLOCK=1: the block preset by middle split by the opposing setter, made newest match first]
 // [VR_SMOKE_FOLD=1: the list rows' six markers, the right column folded by its », Ctrl+B and the strip]
 // [VR_SMOKE_SCENETITLE=1: a scene card with a long name; dragging its title saves a top-left]
@@ -187,6 +188,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       matchReport: !!process.env.VR_SMOKE_MATCHREPORT,
       presetBlock: !!process.env.VR_SMOKE_PRESETBLOCK,
       clipMenu: !!process.env.VR_SMOKE_CLIPMENU,
+      look: !!process.env.VR_SMOKE_LOOK,
       setter: process.env.VR_SMOKE_SETTER,
       cardInsert: process.env.VR_SMOKE_CARDINSERT,
       sceneTitle: !!process.env.VR_SMOKE_SCENETITLE,

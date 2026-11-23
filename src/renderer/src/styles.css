@@ -862,6 +862,23 @@ textarea.ann-text-input { resize: none; line-height: 1.2; overflow: hidden; min-
 .workspace.focus-edit > .sidebar, .workspace.focus-edit > .right-col { display: none; }
 .focus-edit-btn { font-size: 15px; }
 .focus-edit-btn.on { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
+/* The match's picture correction (VideoLook.tsx): the SVG filter's holder takes no room; ☀ by the video, its sliders above it. */
+.look-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.look-wrap { position: relative; }
+.look-btn { font-size: 15px; }
+.look-btn.on { color: var(--primary); border-color: var(--primary); background: var(--primary-light); }
+.look-pop {
+  position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 20; display: flex; flex-direction: column; gap: var(--space-3);
+  width: 300px; padding: var(--space-4) var(--space-5); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18); color: var(--text);
+}
+.look-head { font-weight: 700; font-size: var(--fs-label); }
+.look-row { display: flex; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
+.look-label { flex: none; width: 84px; color: var(--sub); }
+.look-row input[type=range] { flex: 1; min-width: 0; accent-color: var(--primary); }
+.look-val { flex: none; width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+.look-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.look-hint { font-size: var(--fs-caption); color: var(--faint); }
 
 /* The set filter's dialog: a label column and rows of chips that wrap, never squeezed. */
 .modal.set-filter-dialog { width: min(780px, 94vw); overflow-y: auto; }

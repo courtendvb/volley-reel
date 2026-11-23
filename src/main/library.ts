@@ -23,6 +23,7 @@ import { fmt, readJSON, safeId, writeJSON } from './store'
 import { t } from '../shared/i18n'
 import { withServeMark } from '../shared/serveMark'
 import { playerIndex, unifyPlayers } from '../shared/players'
+import { cleanLook, type VideoLook } from '../shared/videoLook'
 
 // A scout file: a DataVolley .dvw (Windows-1252 or UTF-8 text) or a VolleyStation .vsm (JSON, UTF-8), read alike.
 export const SCOUT_EXTENSIONS = ['dvw', 'vsm']
@@ -374,6 +375,15 @@ export class Library {
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     if (!Number.isFinite(offsetSec) || Math.abs(offsetSec) > Math.max(m.durationSec, 1)) throw new Error(t('ずれの秒数が不正です'))
     await this.saveMatch({ ...m, offsetSec: Math.round(offsetSec * 1000) / 1000 })
+  }
+
+  // The picture's correction (videoLook.ts), for the preview and the export; null or all zeros: none.
+  async setLook(id: string, look: VideoLook | null): Promise<void> {
+    const m = this.matches.get(id)
+    if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    const { look: _old, ...rest } = m
+    const clean = cleanLook(look)
+    await this.saveMatch(clean ? { ...rest, look: clean } : rest)
   }
 
   // A correction to one play's code (codeEdit.ts): the line, the file's code there, and the new one (the file's

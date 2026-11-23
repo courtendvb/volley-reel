@@ -59,3 +59,9 @@ The figure in the court section (.auto, one 12 s CSS loop, no script) stacks the
 ## Alongside DataVolley and VolleyStation
 
 `alongside.html` (English) and `alongside-ja.html` (Japanese) put the app next to the scouting software: a play list against a video, what it took from each program, the five spots where making the video tends to take time in them (worded as our own experience over several seasons, never as "it can't", and noting that versions differ), and a table of the two jobs. Both landing pages link to it under the SyncScout series table. The text first appeared on a guide page that was never merged; when the app's controls change (the number of markers, the 1-6 buttons, the export formats), check these pages too.
+
+## Publishing
+
+The site lives at https://editor.courtend.net/, on the same rented server as courtend.net. `.github/workflows/site.yml` uploads it over FTPS whenever `site/` changes on main (or by hand: Actions > Site > Run workflow), with the FTP details in four repository secrets named in that file. It sends everything in `site/` except `README.md`, the `source/` folders and `media/`.
+
+The film (`media/film-en.mp4`, `media/film-ja.mp4`) is not in git, so after making a new one, upload those two files to `media/` on the server by hand. The upload remembers what it sent in `.ftp-deploy-sync-state.json` on the server, so later runs send only changed files and delete only files it sent itself; anything put there by hand is left alone.

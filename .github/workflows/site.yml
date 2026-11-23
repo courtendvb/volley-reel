@@ -1,0 +1,39 @@
+# Upload the product site (site/) to editor.courtend.net whenever it changes on main, or by hand
+# from the Actions tab. Only the public files go: README.md and the source/ folders stay behind.
+# The film (site/media/*.mp4) isn't in git, so it is never touched here: it stays on the server
+# as uploaded by hand.
+#
+# Needs four repository secrets (Settings > Secrets and variables > Actions):
+#   SITE_FTP_SERVER    the FTP host name from the server panel
+#   SITE_FTP_USER      an FTP account limited to the subdomain's folder, if the panel allows it
+#   SITE_FTP_PASSWORD  its password
+#   SITE_FTP_DIR       the folder that serves editor.courtend.net, ending in a slash
+name: Site
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/site.yml']
+  workflow_dispatch:
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gather the public files
+        run: |
+          rsync -a site/ public/ \
+            --exclude README.md --exclude 'source/' --exclude 'media/'
+          find public -type f | wc -l
+      - uses: SamKirkland/FTP-Deploy-Action@110f9186c050f71550953127052e77650219c287 # v4.4.0
+        with:
+          server: ${{ secrets.SITE_FTP_SERVER }}
+          username: ${{ secrets.SITE_FTP_USER }}
+          password: ${{ secrets.SITE_FTP_PASSWORD }}
+          server-dir: ${{ secrets.SITE_FTP_DIR }}
+          local-dir: ./public/
+          protocol: ftps
+          exclude: |
+            media/**

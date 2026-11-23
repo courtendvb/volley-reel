@@ -17,29 +17,31 @@ export const SET_FREEZE_AFTER_SEC = 1.2 // with no serve before it, the stop is 
 // after: the distribution goes with the stop and leaves the court to the attack that follows.
 export const FREEZE_SNAP_SEC = 0.1
 export const FORECAST_AHEAD_SEC = 1 // with the forecast on, a serve's or attack's marks open this long before its contact (the count-in needs 0.7 s, the ghost line the rest)
-export const FREEZE_RECEPTIONS = ['#', '+', '!']
+export const FREEZE_RECEPTIONS = ['#', '+', '!'] // the receptions whose set gets the stop, unless told otherwise
+export const FREEZE_RECEPTION_CHOICES = ['#', '+', '!', '-', '/'] // those that can be picked (an error has no set after it)
 
 export interface CourtWindow extends FollowWindow { shares?: boolean } // shares: draw the set distribution of the rotation
 export interface FollowPlay { id: number; time: number; skill: string; phase?: 'r' | 't' | null; recEffect?: string }
 export interface Freeze { at: number; sec: number; playId: number }
 
-// A set made from a #, + or ! reception (the reception's evaluation is on the set itself, dvw.ts).
-export const isFreezeSet = (p: FollowPlay): boolean => p.skill === 'E' && p.phase === 'r' && FREEZE_RECEPTIONS.includes(p.recEffect ?? '')
+// A set made from one of the receptions picked (#, + or ! unless told otherwise; the reception's
+// evaluation is on the set itself, dvw.ts).
+export const isFreezeSet = (p: FollowPlay, recs: readonly string[] = FREEZE_RECEPTIONS): boolean => p.skill === 'E' && p.phase === 'r' && recs.includes(p.recEffect ?? '')
 
 // Where the picture stops, for each such set: a fixed time after the rally's serve (the last serve
 // logged before the set); a set with no serve before it falls back to a little after its own second.
-export function setFreezes(plays: FollowPlay[], offsetSec: number, stopSec = SET_FREEZE_SEC): Freeze[] {
+export function setFreezes(plays: FollowPlay[], offsetSec: number, stopSec = SET_FREEZE_SEC, recs: readonly string[] = FREEZE_RECEPTIONS): Freeze[] {
   if (!(stopSec > 0)) return []
   const sorted = [...plays].sort((a, b) => a.time - b.time || a.id - b.id)
-  return sorted.filter(isFreezeSet).map(p => {
+  return sorted.filter(p => isFreezeSet(p, recs)).map(p => {
     const sv = [...sorted].reverse().find(q => q.skill === 'S' && (q.time < p.time || (q.time === p.time && q.id < p.id)))
     const at = sv ? sv.time + offsetSec + SET_FREEZE_AFTER_SERVE_SEC : p.time + offsetSec + SET_FREEZE_AFTER_SEC
     return { at, sec: stopSec, playId: p.id }
   })
 }
 
-export function courtWindows(plays: FollowPlay[], offsetSec: number, holdSec: number, stopSec = SET_FREEZE_SEC, aheadSec = 0): CourtWindow[] {
-  const freezeAt = new Map(setFreezes(plays, offsetSec, stopSec).map(f => [f.playId, f.at]))
+export function courtWindows(plays: FollowPlay[], offsetSec: number, holdSec: number, stopSec = SET_FREEZE_SEC, aheadSec = 0, recs: readonly string[] = FREEZE_RECEPTIONS): CourtWindow[] {
+  const freezeAt = new Map(setFreezes(plays, offsetSec, stopSec, recs).map(f => [f.playId, f.at]))
   const items = [...plays].filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A' || freezeAt.has(p.id))
     .sort((a, b) => a.time - b.time || a.id - b.id)
     .map(p => ({ p, raw: freezeAt.has(p.id) ? freezeAt.get(p.id)! - FREEZE_SNAP_SEC : p.time + offsetSec - (p.skill === 'S' || p.skill === 'A' ? Math.max(FOLLOW_LEAD_SEC, aheadSec) : FOLLOW_LEAD_SEC), start: 0, minEnd: 0 }))

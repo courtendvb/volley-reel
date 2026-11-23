@@ -14,7 +14,7 @@ import { FilterPanel } from './components/FilterPanel'
 import { PlayList, type PlayKey } from './components/PlayList'
 import { ReelPanel, type ClipInfo } from './components/ReelPanel'
 import { SettingsDialog } from './components/SettingsDialog'
-import { setStopSec } from './keys'
+import { setStopRecs, setStopSec } from './keys'
 import { TrimBar } from './components/TrimBar'
 import { RIGHT_TABS, RightStrip, RightTabs, type RightTab } from './components/RightTabs'
 import { AnnotationLayer, type AnnStyle, type Tool } from './components/AnnotationLayer'
@@ -754,9 +754,9 @@ export function App() {
       ? followWindows(d.plays.filter(p => p.skill === 'S' || p.skill === 'R' || p.skill === 'A'), match.offsetSec, defaults.keyAfter)
       : pick && selectedPlay ? [{ from: pick.in, to: pick.out, playId: selectedPlay.id }] : []
     // The court's marks have windows of their own (a serve stays longer, a good reception's set gets a stop).
-    const stop = setStopSec()
-    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter, stop, gridStyle.forecast === false ? 0 : FORECAST_AHEAD_SEC) : windows
-    const holds = listThrough ? setFreezes(d.plays, match.offsetSec, stop).map(f => ({ at: f.at, sec: f.sec })) : []
+    const stop = setStopSec(), recs = setStopRecs()
+    const court: CourtWindow[] = listThrough ? courtWindows(d.plays, match.offsetSec, defaults.keyAfter, stop, gridStyle.forecast === false ? 0 : FORECAST_AHEAD_SEC, recs) : windows
+    const holds = listThrough ? setFreezes(d.plays, match.offsetSec, stop, recs).map(f => ({ at: f.at, sec: f.sec })) : []
     const cache = new Map<number, { scoreboard: ScoreboardData; caption: CaptionData }>()
     return {
       key: match.id, windows, court, holds,

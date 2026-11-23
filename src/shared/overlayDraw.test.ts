@@ -18,40 +18,21 @@ function fakeCtx() {
   })
   return { ctx: ctx as unknown as CanvasRenderingContext2D, images }
 }
-const logo = { width: 200, height: 100 } as unknown as CanvasImageSource
 const card = { marker: 1, name: 'SERVE', match: null }
 
-describe('the logo on a title card', () => {
-  it('goes beside the title by default, inside its box', () => {
-    const { ctx, images } = fakeCtx()
-    const b = drawTitleCard(ctx, 1280, 720, card, DEFAULT_OVERLAY.titleCard, DEFAULT_OVERLAY.theme, logo)
-    expect(images).toHaveLength(1)
-    expect(b.logo).toBeDefined()
-    expect(b.logo!.x + b.logo!.w).toBeCloseTo(b.x + b.w)
-  })
-  it('has its own place and size when set for the kind of card, apart from the title', () => {
-    const { ctx, images } = fakeCtx()
-    const s = { ...DEFAULT_OVERLAY.titleCard, logos: { marker: { x: 0.8, y: 0.2, h: 0.25 } } }
-    const b = drawTitleCard(ctx, 1280, 720, card, s, DEFAULT_OVERLAY.theme, logo)
-    expect(images).toEqual([[1024 - 180, 144 - 90, 360, 180]]) // 25% of 720 tall, 2:1, centred on (80%, 20%)
-    expect(b.logo).toEqual({ x: 844, y: 54, w: 360, h: 180 })
-    expect(b.x + b.w).toBeLessThan(844) // the title no longer makes room for it
-    // other kinds of card keep it with the title
-    const scene = fakeCtx()
-    drawTitleCard(scene.ctx, 1280, 720, { ...card, marker: null }, s, DEFAULT_OVERLAY.theme, logo)
-    expect(scene.images[0][3]).toBeCloseTo(120 * 720 / 720)
-  })
-  it('can be left out', () => {
-    const { ctx, images } = fakeCtx()
-    const b = drawTitleCard(ctx, 1280, 720, card, { ...DEFAULT_OVERLAY.titleCard, logos: { marker: 'hidden' } }, DEFAULT_OVERLAY.theme, logo)
-    expect(images).toHaveLength(0)
-    expect(b.logo).toBeUndefined()
+describe('a title card without a logo of its own', () => {
+  it('draws no picture: a logo goes on as an object', () => {
+    for (const d of [card, { ...card, marker: null }, { ...card, marker: null, video: true }]) {
+      const { ctx, images } = fakeCtx()
+      drawTitleCard(ctx, 1280, 720, d, DEFAULT_OVERLAY.titleCard, DEFAULT_OVERLAY.theme)
+      expect(images).toHaveLength(0)
+    }
   })
 })
 
 describe('scene title place', () => {
   const draw = (name: string, layout?: { x: number; y: number; scale: number; origin?: 'tl' }) =>
-    drawTitleCard(fakeCtx().ctx, 1280, 720, { marker: null, name, match: 'VS OKB', ...(layout ? { layout } : {}) }, DEFAULT_OVERLAY.titleCard, DEFAULT_OVERLAY.theme, null)
+    drawTitleCard(fakeCtx().ctx, 1280, 720, { marker: null, name, match: 'VS OKB', ...(layout ? { layout } : {}) }, DEFAULT_OVERLAY.titleCard, DEFAULT_OVERLAY.theme)
   it('keeps its top-left whatever the title, a long one growing right and shrunk inside the frame', () => {
     const short = draw('Serve'), long = draw('A very long scene name that would not fit across the frame at all')
     expect([short.x, short.y]).toEqual([128, 288])
@@ -91,7 +72,7 @@ function paintCtx() {
 }
 const lookCard = (look: TelopLook, c: Parameters<typeof drawTitleCard>[3] = card) => {
   const r = paintCtx()
-  drawTitleCard(r.ctx, 1280, 720, c, DEFAULT_OVERLAY.titleCard, lookTheme(overlaySettings({ look })), null)
+  drawTitleCard(r.ctx, 1280, 720, c, DEFAULT_OVERLAY.titleCard, lookTheme(overlaySettings({ look })))
   return r
 }
 

@@ -3,7 +3,7 @@ import { followAt, lookTheme, type CaptionData, type ClipOverlayOverride, type F
 import { drawCaption, drawCard, drawLineup, drawScoreboard, drawServeSpeed } from '../../../shared/overlayDraw'
 import { drawAnnotation } from '../../../shared/annotation'
 import { drawFlights, drawSlideMarks, flightsProgress } from '../../../shared/court'
-import { assetImage, logoImage, packPhotoImage, subscribeAssets } from '../assets'
+import { assetImage, packPhotoImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback, type PlaybackState } from '../playback'
 
@@ -75,7 +75,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
     if (st.card) {
-      drawCard(ctx, size.w, size.h, st.card, settings.titleCard, lookTheme(settings), logoImage(st.card.opp), assetImage)
+      drawCard(ctx, size.w, size.h, st.card, settings.titleCard, lookTheme(settings), assetImage)
       if (st.card.slide) drawSlideMarks(ctx, size.w, size.h, st.card.slide, heatOpacity)
       for (const a of st.card.annotations ?? []) drawAnnotation(ctx, a, size.w, size.h, assetImage)
       if (flights) drawFlights(ctx, size.w, size.h, flights, progress)

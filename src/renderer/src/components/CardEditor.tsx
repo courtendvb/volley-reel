@@ -3,12 +3,12 @@ import { Help } from './CourtControls'
 import { restyleBoard } from '../../../shared/board'
 import { ChartShow } from './BoardDialog'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { DEFAULT_MARKER_LAYOUT, lookTheme, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type LogoPlace, type OverlaySettings } from '../../../shared/overlay'
-import { cardBackground, cardKind, drawCard, type Box, type TitleBox } from '../../../shared/overlayDraw'
+import { DEFAULT_MARKER_LAYOUT, lookTheme, DEFAULT_SCENE_LAYOUT, DEFAULT_VIDEO_LAYOUT, sceneTopLeft, type CardLayout, type OverlaySettings } from '../../../shared/overlay'
+import { cardBackground, cardKind, drawCard, type Box } from '../../../shared/overlayDraw'
 import { drawFlights, drawSlideMarks } from '../../../shared/court'
 import type { Slide } from '../../../shared/reel'
 import type { Card } from '../../../shared/video'
-import { assetImage, logoImage, subscribeAssets } from '../assets'
+import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { t } from '../../../shared/i18n'
 import type { AlignChoice } from '../../../shared/cardAlign'
@@ -22,18 +22,17 @@ interface Props {
   onChange: (s: OverlaySettings) => void
   onOwn: (l: CardLayout | undefined) => void // this card's own title place and size; undefined: back with its kind
   active: boolean // the title can be grabbed (else the objects on the card are being edited)
-  target?: 'title' | 'logo' // what is grabbed: the title, or the logo on its own
 }
 
-type Drag = { mode: 'move' | 'scale'; from: [number, number]; start: CardLayout; box: Box; logo?: { x: number; y: number; h: number } }
+type Drag = { mode: 'move' | 'scale'; from: [number, number]; start: CardLayout; box: Box }
 
 const HANDLE = 9 // px, the resize corner
 
 // The title card drawn over the video window, with its title in a frame: drag it to move, drag the
 // corner to resize (a slide is only drawn: it has no title). Changes the video's layout for that kind of card (all scene cards, or all marker cards), or the card's own when it has one.
-export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn, active, target = 'title' }: Props) {
+export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn, active }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const boxRef = useRef<TitleBox | null>(null)
+  const boxRef = useRef<Box | null>(null)
   const drag = useRef<Drag | null>(null)
   const [tick, setTick] = useState(0)
   useEffect(() => subscribeAssets(() => setTick(n => n + 1)), [])
@@ -44,11 +43,11 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
     const c = canvas.current
     if (!c) return
     const ctx = prepareCanvas(c, size.w, size.h)
-    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, lookTheme(settings), logoImage(card.opp), assetImage)
+    const b = drawCard(ctx, size.w, size.h, card, settings.titleCard, lookTheme(settings), assetImage)
     boxRef.current = b
     if (card.slide) drawSlideMarks(ctx, size.w, size.h, card.slide, heatOpacity)
     if (card.slide?.flights) drawFlights(ctx, size.w, size.h, card.slide.flights, 1)
-    const g = target === 'logo' ? b?.logo : b
+    const g = b
     if (!active || !g) return // a slide has no title to move
     ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#FACC15'
     ctx.strokeRect(g.x - 6, g.y - 6, g.w + 12, g.h + 12)
@@ -56,7 +55,7 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
     ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#FACC15'
     ctx.fillRect(g.x + g.w + 6 - HANDLE / 2, g.y + g.h + 6 - HANDLE / 2, HANDLE, HANDLE)
     ctx.strokeRect(g.x + g.w + 6 - HANDLE / 2, g.y + g.h + 6 - HANDLE / 2, HANDLE, HANDLE)
-  }, [heatOpacity, size.w, size.h, card, settings, tick, active, target])
+  }, [heatOpacity, size.w, size.h, card, settings, tick, active])
 
   const at = (e: PointerEvent): [number, number] => {
     const r = canvas.current!.getBoundingClientRect()
@@ -64,32 +63,20 @@ export function CardEditor({ heatOpacity, size, card, settings, onChange, onOwn,
   }
   const set = (l: CardLayout) => (card.layout ? onOwn(l) : onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } }))
 
-  // The logo's own place for this kind of card; the first drag takes it from beside the title.
-  const setLogo = (l: LogoPlace | undefined) => {
-    const k = cardKind(card), { [k]: _old, ...rest } = settings.titleCard.logos ?? {}
-    onChange({ ...settings, titleCard: { ...settings.titleCard, logos: l === undefined ? rest : { ...rest, [k]: l } } })
-  }
   const onDown = (e: PointerEvent) => {
-    const b = target === 'logo' ? boxRef.current?.logo : boxRef.current
+    const b = boxRef.current
     if (!b) return
     const [x, y] = at(e)
     const corner = Math.abs(x - (b.x + b.w + 6)) <= HANDLE && Math.abs(y - (b.y + b.h + 6)) <= HANDLE
     const inside = x >= b.x - 6 && x <= b.x + b.w + 6 && y >= b.y - 6 && y <= b.y + b.h + 6
     if (!corner && !inside) return
     try { canvas.current!.setPointerCapture(e.pointerId) } catch { /* synthetic events have no active pointer */ }
-    drag.current = { mode: corner ? 'scale' : 'move', from: [x, y], start: layout, box: b,
-      ...(target === 'logo' ? { logo: { x: (b.x + b.w / 2) / size.w, y: (b.y + b.h / 2) / size.h, h: b.h / size.h } } : {}) }
+    drag.current = { mode: corner ? 'scale' : 'move', from: [x, y], start: layout, box: b }
   }
   const onMove = (e: PointerEvent) => {
     const d = drag.current
     if (!d) return
     const [x, y] = at(e)
-    if (d.logo) {
-      const L = d.logo
-      if (d.mode === 'move') setLogo({ ...L, x: clamp(L.x + (x - d.from[0]) / size.w, 0, 1), y: clamp(L.y + (y - d.from[1]) / size.h, 0, 1) })
-      else if (d.box.w > 0) setLogo({ ...L, h: clamp(L.h * ((x - (d.box.x + d.box.w / 2)) / (d.box.w / 2)), 0.03, 0.9) }) // grows from its centre
-      return
-    }
     if (d.mode === 'move') {
       set({ ...d.start, x: clamp(d.start.x + (x - d.from[0]) / size.w, 0, 1), y: clamp(d.start.y + (y - d.from[1]) / size.h, 0, 1) })
       return
@@ -124,7 +111,7 @@ export interface CardInserts { photos: CardPhotoChoice[]; logos: { code: string;
 
 export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onTool, shown, onShown, title, nameTitle, onTitle, inserts, hiddenCount = 0, onShowHidden, onAlign }: {
   card: Card; settings: OverlaySettings; onChange: (s: OverlaySettings) => void; onOwn: (l: CardLayout | undefined) => void; onDone: () => void
-  tool: 'objects' | 'title' | 'logo'; onTool: (t: 'objects' | 'title' | 'logo') => void; shown: boolean; onShown: (on: boolean) => void
+  tool: 'objects' | 'title'; onTool: (t: 'objects' | 'title') => void; shown: boolean; onShown: (on: boolean) => void
   title: string; nameTitle: string; onTitle: (t: string) => void // title '' = the name (nameTitle)
   inserts?: CardInserts
   hiddenCount?: number; onShowHidden?: () => void // objects of every card of this kind left off this one
@@ -136,19 +123,13 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
   const layout = card.layout ? asTopLeft(card, card.layout) : shared
   const set = (l: CardLayout) => (own ? onOwn(l) : onChange({ ...settings, titleCard: { ...settings.titleCard, [kind]: l } }))
   const what = cardKindName(card)
-  // The opponent's logo apart from the title: for every card of this kind, like the title's place.
-  const ck = cardKind(card), logoAt = settings.titleCard.logos?.[ck]
-  const setLogo = (l: LogoPlace | undefined) => {
-    const { [ck]: _old, ...rest } = settings.titleCard.logos ?? {}
-    onChange({ ...settings, titleCard: { ...settings.titleCard, logos: l === undefined ? rest : { ...rest, [ck]: l } } })
-  }
   return (
     <div className="card-edit-bar">
       <div className="card-row">
       <b>{what}{t('のタイトルカード')}{card.name ? t('「{0}」', card.name) : ''}</b>
       <label className="check"><input type="checkbox" checked={shown} onChange={e => onShown(e.target.checked)} /> {t('このカードを出す')}</label>
       <span className="spacer" />
-      {onAlign && <button onClick={() => setAligning(true)} title={t('このカードのタイトルの位置・ロゴの位置・図形を、ほかの種類のカード（動画・シーン・マーカー）にも同じにする')}>{t('ほかのカードにも揃える…')}</button>}
+      {onAlign && <button onClick={() => setAligning(true)} title={t('このカードのタイトルの位置・図形を、ほかの種類のカード（動画・シーン・マーカー）にも同じにする')}>{t('ほかのカードにも揃える…')}</button>}
       <button className="primary" onClick={onDone}>{t('完了')}</button>
       </div>
       <div className="card-row">
@@ -167,10 +148,6 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
           title={t('このカードに文字・画像・図形を置く')}>{t('図形・文字')}</button>
         <button role="radio" aria-checked={tool === 'title'} className={tool === 'title' ? 'on' : ''} onClick={() => onTool('title')}
           title={t('タイトルの位置と大きさ（この動画のすべての{0}のカード。「このカードだけ」にもできる）', what)}>{t('タイトルの位置')}</button>
-        {card.opp && (
-          <button role="radio" aria-checked={tool === 'logo'} className={tool === 'logo' ? 'on' : ''} onClick={() => onTool('logo')}
-            title={t('相手チームのロゴの位置と大きさを、タイトルとは別に決める（この動画のすべての{0}のカード）', what)}>{t('ロゴ')}</button>
-        )}
       </div>
       {tool === 'objects' && inserts && (
         <>
@@ -193,21 +170,6 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
               <option value="">{t('＋ ロゴ')}</option>
               {inserts.logos.map(x => <option key={x.code} value={x.code}>{x.label}</option>)}
             </select>
-          )}
-        </>
-      )}
-      {tool === 'logo' && (
-        <>
-          <label className="check"><input type="checkbox" checked={logoAt !== 'hidden'} onChange={e => setLogo(e.target.checked ? undefined : 'hidden')} /> {t('ロゴを出す')}</label>
-          {logoAt !== 'hidden' && <span className="muted">{logoAt ? t('ドラッグで移動、右下の角で大きさ（すべての{0}のカード）', what) : t('いまはタイトルの横（上）。ドラッグするとタイトルから離れて動かせます')}</span>}
-          {logoAt && logoAt !== 'hidden' && (
-            <>
-              <label className="check">{t('大きさ')}
-                <input type="range" aria-label={t('ロゴの大きさ')} min={3} max={90} step={1} value={Math.round(logoAt.h * 100)}
-                  onChange={e => setLogo({ ...logoAt, h: +e.target.value / 100 })} />
-                <span>{Math.round(logoAt.h * 100)}%</span></label>
-              <button onClick={() => setLogo(undefined)} title={t('ロゴをタイトルの横（上）に戻し、タイトルと一緒に動かす')}>{t('タイトルに付ける')}</button>
-            </>
           )}
         </>
       )}
@@ -239,16 +201,15 @@ export function CardEditBar({ card, settings, onChange, onOwn, onDone, tool, onT
 const KIND_NAMES = (): Record<CardKind, string> => ({ video: t('動画のカード'), scene: t('シーンのカード'), marker: t('マーカーのカード') })
 
 // What to make the same, and on which other kinds of card. Nothing is ticked by default for the
-// objects (they replace what those cards share), the title and logo places are.
+// objects (they replace what those cards share), the title's place is.
 function AlignCardsDialog({ from, objects, onAlign, onClose }: { from: CardKind; objects: number; onAlign: (c: AlignChoice & { resetOwn: boolean }) => void; onClose: () => void }) {
   const others = (['video', 'scene', 'marker'] as CardKind[]).filter(k => k !== from)
   const [to, setTo] = useState<CardKind[]>(others)
   const [title, setTitle] = useState(true)
-  const [logo, setLogo] = useState(true)
   const [objs, setObjs] = useState(false)
   const [resetOwn, setResetOwn] = useState(false)
   const names = KIND_NAMES()
-  const nothing = !(title || logo || objs || resetOwn) || (!to.length && !resetOwn && !objs)
+  const nothing = !(title || objs || resetOwn) || (!to.length && !resetOwn && !objs)
   const check = (label: string, v: boolean, set: (v: boolean) => void, title?: string, disabled = false) => (
     <label className="check" title={title}><input type="checkbox" checked={v} disabled={disabled} onChange={e => set(e.target.checked)} /> {label}</label>
   )
@@ -259,7 +220,6 @@ function AlignCardsDialog({ from, objects, onAlign, onClose }: { from: CardKind;
         <section>
           <b>{t('揃えるもの')}</b>
           {check(t('タイトルの位置と大きさ'), title, setTitle)}
-          {check(t('ロゴの位置'), logo, setLogo)}
           {check(t('このカードの図形（{0} 個）を、すべてのカードに置く', objects), objs, setObjs,
             t('このカードの図形・文字・写真枠を、この種類のすべてのカードと、下で選んだ種類のすべてのカードに置きます。それらのカードに共通で置いていた図形は、これに置き換わります'), !objects)}
         </section>
@@ -271,7 +231,7 @@ function AlignCardsDialog({ from, objects, onAlign, onClose }: { from: CardKind;
         </section>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={nothing} onClick={() => onAlign({ title, logo, objects: objs, to, resetOwn })}>{t('揃える')}</button>
+          <button className="primary" disabled={nothing} onClick={() => onAlign({ title, objects: objs, to, resetOwn })}>{t('揃える')}</button>
         </div>
       </div>
     </div>

@@ -38,7 +38,7 @@ export function useCardEdit({ latest, settings, video, reels, matches, overlay, 
   const [cardEdit, setCardEdit] = useState<CardEdit | null>(null)
   // The edit mode: the side columns put away, the stage (a slide, a card or a clip) and its editing as large as can be.
   const [focusEdit, setFocusEdit] = useState(false)
-  const [cardTool, setCardTool] = useState<'objects' | 'title' | 'logo'>('objects') // what the pointer edits on the card
+  const [cardTool, setCardTool] = useState<'objects' | 'title'>('objects') // what the pointer edits on the card
   const [cardToolsOpen, setCardToolsOpen] = useState(false) // the object tools under a card or slide: folded until wanted
   useEffect(() => { if (cardEdit && selectedAnn) setCardToolsOpen(true) }, [cardEdit, selectedAnn]) // an object picked on it opens them
   const cardEditCard = useMemo((): Card | null => {
@@ -173,7 +173,7 @@ export function useCardEdit({ latest, settings, video, reels, matches, overlay, 
   }, [cardEdit, reels])
   const editingSource = editingSlide?.bg.kind === 'image' ? editingSlide.bg.source : undefined
 
-  // ほかのカードにも揃える: the open card's title place, logo place and objects made the same on the
+  // ほかのカードにも揃える: the open card's title place and objects made the same on the
   // other kinds of card chosen (shared/cardAlign.ts). With objects, the card's own move onto every card
   // of its kind. resetOwn: cards of those kinds (and this one's) placed 「このカードだけ」 go back to
   // their kind's place, which, with the title, is this card's too.
@@ -184,7 +184,7 @@ export function useCardEdit({ latest, settings, video, reels, matches, overlay, 
     const def = kind === 'video' ? DEFAULT_VIDEO_LAYOUT : kind === 'scene' ? DEFAULT_SCENE_LAYOUT : DEFAULT_MARKER_LAYOUT
     const raw = card.layout ?? ov.titleCard[layoutKeyOf(kind)] ?? def
     const layout = kind === 'marker' ? raw : sceneTopLeft(raw)
-    let tc = alignTitleCards(ov.titleCard, { kind, layout, logo: ov.titleCard.logos?.[kind], objects: card.annotations ?? [] }, c)
+    let tc = alignTitleCards(ov.titleCard, { kind, layout, objects: card.annotations ?? [] }, c)
     if (c.title && c.resetOwn && card.layout) tc = { ...tc, [layoutKeyOf(kind)]: layout }
     const kinds = new Set<CardKind>([kind, ...c.to])
     const clearOwn = c.objects // the card's own objects now sit on every card of its kind

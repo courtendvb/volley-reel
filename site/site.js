@@ -27,16 +27,14 @@
   v.controls = true
 })()
 
-// The sample film: chapter buttons and the "play from here" buttons seek the one player.
+// The sample film: the chapter buttons seek the player.
 ;(() => {
   const v = document.getElementById('film')
   if (!v) return
   const chapters = [...document.querySelectorAll('.chapters button')]
-  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   document.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => {
     v.currentTime = Number(b.dataset.t)
     v.play().catch(() => {})
-    if (b.classList.contains('seek')) v.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' })
   }))
   const mark = () => {
     let now = -1

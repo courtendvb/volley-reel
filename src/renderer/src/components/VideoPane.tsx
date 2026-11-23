@@ -4,11 +4,14 @@ import { playback, type PlaybackState } from '../playback'
 import { formatTime } from '../format'
 import { toggleMaximized, useMaximized } from '../maximize'
 import { t } from '../../../shared/i18n'
+import type { VideoLook } from '../../../shared/videoLook'
+import { LookButton, LookFilter, lookStyle } from './VideoLook'
 
 // The video sits in a box with its exact aspect ratio, so an overlay (annotations) laid over the
 // box lines up with the picture — normalized 0..1 coordinates map straight onto it.
 // editMode: the edit mode's pencil, left of the maximize button: the stage alone, the side columns put away.
-export function VideoPane({ match, overlay, editMode }: { match: Match; overlay?: (size: { w: number; h: number }) => ReactNode; editMode?: { on: boolean; onToggle: () => void } }) {
+// onLook: the ☀ button for the match's picture correction (match.look), drawn on the video here.
+export function VideoPane({ match, overlay, editMode, onLook }: { match: Match; overlay?: (size: { w: number; h: number }) => ReactNode; editMode?: { on: boolean; onToggle: () => void }; onLook?: (look: VideoLook | null) => void }) {
   const ref = useRef<HTMLVideoElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
@@ -35,22 +38,24 @@ export function VideoPane({ match, overlay, editMode }: { match: Match; overlay?
   // The frame is no taller than the picture at its width (it may be less, when the window is short):
   // height it would have spent on black bars goes to the work area under the tabs instead.
   const ratio = match.width && match.height ? match.width / match.height : 16 / 9
+  const lookId = `look-${match.id.replace(/[^\w-]/g, '_')}` // url(#…) takes a plain name
   return (
     <div className="video-pane">
       <div className="video-frame" ref={frame} style={{ aspectRatio: ratio }}>
         <div className="video-box" style={{ width: box.w, height: box.h }}>
-          <video ref={ref} src={`media://${match.id}/video.mp4`} muted playsInline preload="auto" />
+          <LookFilter id={lookId} look={match.look} />
+          <video ref={ref} src={`media://${match.id}/video.mp4`} muted playsInline preload="auto" style={lookStyle(lookId, match.look)} />
           {overlay && box.w > 0 && overlay(box)}
         </div>
       </div>
-      <Transport editMode={editMode} />
+      <Transport editMode={editMode} look={onLook ? { value: match.look, onChange: onLook } : undefined} />
     </div>
   )
 }
 
 // Play / step buttons, the seek bar and the time. The only part that changes every frame, so it
 // subscribes on its own: the video box and the layers over it don't re-render as the video plays.
-function Transport({ editMode }: { editMode?: { on: boolean; onToggle: () => void } }) {
+function Transport({ editMode, look }: { editMode?: { on: boolean; onToggle: () => void }; look?: { value: VideoLook | undefined; onChange: (look: VideoLook | null) => void } }) {
   const [s, setS] = useState<PlaybackState>(playback.current)
   useEffect(() => playback.subscribe(setS), [])
   const max = useMaximized()
@@ -66,6 +71,7 @@ function Transport({ editMode }: { editMode?: { on: boolean; onToggle: () => voi
         />
         <span className="time">{formatTime(s.time, true)} / {formatTime(s.duration)}</span>
         {max && s.seq && <button onClick={() => playback.stopSequence()} title={t('通し再生を止める')}>■</button>}
+        {look && <LookButton look={look.value} onLook={look.onChange} />}
         {editMode && <button className={`focus-edit-btn${editMode.on ? ' on' : ''}`} aria-pressed={editMode.on} onClick={editMode.onToggle}
           title={editMode.on ? t('編集モードを終えて、左右の欄を戻す') : t('編集モード: 左右の欄をしまって、動画（スライド）と編集の欄だけを大きく出す')}>✎</button>}
         <button className="maximize" aria-pressed={max} onClick={() => void toggleMaximized()} title={max ? t('元の大きさに戻す (M / Esc)') : t('動画を最大化 (M)')}>{max ? '🗗' : '⛶'}</button>

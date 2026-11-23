@@ -10,6 +10,7 @@ import type { ExportEvent, ExportItem, ExportJob, ExportLayer } from '../shared/
 import { chapterMetadata, chapterText } from '../shared/video'
 import { compareArgs, type CompareRun } from '../shared/compareExport'
 import { clipPlayedSec } from '../shared/timing'
+import { lookFilter } from '../shared/videoLook'
 import { ffmpegBin } from './ffmpegPath'
 import { probe } from './media'
 import { fps, retime } from './retime'
@@ -172,7 +173,8 @@ async function cardArgs(it: Extract<ExportItem, { kind: 'card' }>, png: string, 
 // first, and the layers' from/to are times in the played clip.
 async function clipArgs(it: Extract<ExportItem, { kind: 'clip' }>, video: string, job: ExportJob, dir: string, i: number, enc: string[]): Promise<string[]> {
   const args = ['-ss', it.in.toFixed(3), '-t', (it.out - it.in).toFixed(3), '-i', video]
-  let fc = `[0:v]scale=${job.width}:${job.height}:flags=lanczos,fps=${job.fpsStr},format=yuv420p,setsar=1[v0]`
+  // The match's picture correction (videoLook.ts) goes on the scaled picture, under every overlay.
+  let fc = `[0:v]scale=${job.width}:${job.height}:flags=lanczos,fps=${job.fpsStr}${lookFilter(it.look)},format=yuv420p,setsar=1[v0]`
   let last = 'v0'
   const rt = retime(it, job.fpsStr)
   if (rt) { fc += `;[v0]${rt}[vt]`; last = 'vt' }

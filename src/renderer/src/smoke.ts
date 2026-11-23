@@ -59,6 +59,7 @@ export interface SmokeOpts {
   analysis?: boolean // the 分析 button: the point % and error % tables, each table's rows read back
   matchReport?: boolean // the match report: its numbers clicked, the play list's count checked against each
   clipMenu?: boolean // a clip's right-click menu: copied and moved to another scene, exported alone (with exportTo)
+  look?: boolean // the ☀ picture correction: sliders, the <video>'s filter, saved with the match, exported (with exportTo)
   presetBlock?: boolean // the block preset by middle split by the opposing setter, made with the newest matches first
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
@@ -163,6 +164,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.court) return smokeCourt(res, opts.exportTo)
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.clipMenu) return smokeClipMenu(opts.exportTo)
+    if (opts.look) return smokeLook(res, opts.exportTo)
     if (opts.presets || opts.presetServe || opts.presetBlock) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : 'all')
     if (opts.picker) return smokePicker()
     if (opts.analysis) return smokeAnalysis()
@@ -2084,6 +2086,49 @@ export function installSmoke(h: SmokeHost): void {
       exported = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind), message: latest.current.exportState?.message }
     }
     return { clipMenu: { closes, labels, copied: { fresh, markers: copyMarkers, annotations: copy.annotations.length, trimmed: copy.inSec !== null || copy.outSec !== null }, moved: true, notice, undone, exported } }
+  }
+
+  // The ☀ button by the video: brightness and saturation set with its sliders, the <video> drawn through the
+  // SVG filter, the look saved with the match a moment later, a clip exported with it and without it.
+  const smokeLook = async (res: PlayRef[], exportTo?: string) => {
+    const ref = res.find(x => x.play.time > 10 && x.play.time < 880) // inside a short test video too
+    if (!ref) throw new Error('no play in the first 880 s')
+    const r = { ...addClips(newReel('look smoke'), [{ matchId: ref.matchId, play: ref.play }]).reel, scope: 'all' as const }
+    smokeUse(r)
+    await waitFor(() => (latest.current.reel?.id === r.id && latest.current.video?.sceneIds.includes(r.id) ? true : null), 20000, 'look reel')
+    const btn = await waitFor(() => document.querySelector<HTMLButtonElement>('.look-btn'), 10000, 'look button')
+    btn.click()
+    const ranges = await waitFor(() => { const l = [...document.querySelectorAll<HTMLInputElement>('.look-pop input[type=range]')]; return l.length === 3 ? l : null }, 3000, 'look sliders')
+    const slide = (el: HTMLInputElement, v: number) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, String(v))
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    for (const v of [10, 30, 60]) { slide(ranges[0], v); await sleep(30) } // a drag: several changes in a row
+    slide(ranges[2], 25)
+    await sleep(300)
+    const video = document.querySelector<HTMLVideoElement>('.video-box video')!
+    const filter = getComputedStyle(video).filter
+    const svg = document.querySelector('.video-box .look-defs filter')
+    const prims = svg ? [...svg.children].map(c => c.tagName + (c.firstElementChild?.getAttribute('exponent') ? `(${c.firstElementChild.getAttribute('exponent')})` : '')) : []
+    await api.smokeShot!('look.png')
+    await sleep(600) // saved when the slider rests
+    const saved = (await api.getProject())?.matches.find(m => m.id === ref.matchId)?.look ?? null
+    let exported: unknown = null
+    if (exportTo) {
+      const run = async (out: string) => {
+        const plan = currentPlan('scene')
+        const job = await startExport(out, { plan, name: 'look smoke' })
+        if (!job) throw new Error(`export did not start: ${latest.current.exportState?.message ?? ''} plan=${plan.map(p => p.kind).join(',')} video=${latest.current.video?.id ?? 'none'}`)
+        await waitFor(() => (['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') ? true : null), 180000, 'look export done')
+        return { state: latest.current.exportState?.status, message: latest.current.exportState?.message, look: job.items.map(i => (i.kind === 'clip' ? i.look ?? null : 'card')) }
+      }
+      const withLook = await run(exportTo)
+      document.querySelector<HTMLButtonElement>('.look-pop .look-foot button')!.click() // 元に戻す
+      await sleep(100)
+      const plain = await run(exportTo.replace(/\.mp4$/i, '-plain.mp4'))
+      exported = { withLook, plain }
+    }
+    return { look: { filter, prims, saved, exported } }
   }
 
   const smokePresets = async (only: 'all' | 'serve' | 'block') => {

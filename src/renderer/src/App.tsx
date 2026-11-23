@@ -78,6 +78,7 @@ import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
 import { ServeMarkBar } from './components/ServeMarkBar'
 import { OffsetBar } from './components/OffsetBar'
+import { cleanLook, type VideoLook } from '../../shared/videoLook'
 import { CodeEditDialog } from './components/CodeEditDialog'
 import { ScoutEditsDialog } from './components/ScoutEditsDialog'
 import { QuickCodeDialog } from './components/QuickCodeDialog'
@@ -336,6 +337,17 @@ export function App() {
   const setOffset = (id: string, offsetSec: number) => {
     setProject(p => p && { ...p, matches: p.matches.map(m => (m.id !== id ? m : { ...m, offsetSec })) })
     void api.setMatchOffset(id, offsetSec).then(p => p && setProject(p)).catch(err => setError(String(err)))
+  }
+  // The picture's correction: shown at once as the slider moves, saved when it rests (a slider sends many changes).
+  const lookSave = useRef<{ id: string; timer: number } | null>(null)
+  const setLook = (id: string, look: VideoLook | null) => {
+    const clean = cleanLook(look)
+    setProject(p => p && { ...p, matches: p.matches.map(m => { if (m.id !== id) return m; const { look: _old, ...rest } = m; return clean ? { ...rest, look: clean } : rest }) })
+    if (lookSave.current) window.clearTimeout(lookSave.current.timer)
+    lookSave.current = { id, timer: window.setTimeout(() => {
+      lookSave.current = null
+      void api.setMatchLook(id, clean).catch(err => setError(String(err))) // the screen already has it: a reply could undo a newer move
+    }, 400) }
   }
   const chartColors = { lines: project?.settings.lineColors, points: project?.settings.pointColors, pointScale: project?.settings.pointScale }
   setChartColors(chartColors) // before anything below draws a chart
@@ -998,7 +1010,7 @@ export function App() {
                 clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} float={{ onDock: () => setFocusEdit(false) }} />
             )}
             {match && (
-              <VideoPane key={match.id} match={match} editMode={{ on: focusEdit, onToggle: () => setFocusEdit(f => !f) }} overlay={size => {
+              <VideoPane key={match.id} match={match} onLook={look => setLook(match.id, look)} editMode={{ on: focusEdit, onToggle: () => setFocusEdit(f => !f) }} overlay={size => {
                 const here = active && activeInfo?.range && active.matchId === match.id ? { key: active.matchId, ...activeInfo.range } : null
                 if (cardEditCard) {
                   return (

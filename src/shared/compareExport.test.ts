@@ -67,3 +67,18 @@ describe('length and arguments', () => {
     expect(compareArgs({ ...run, layout: 'stack' })[a.indexOf('-filter_complex') + 1]).toMatch(/vstack/)
   })
 });
+
+describe('picture correction', () => {
+  it("puts a match's look on the scaled picture, before the bars and the see-through layer", () => {
+    const f = paneFilter(1920, 1080, 960, 1080, { zoom: 1, x: 0, y: 0 }, undefined, { brightness: 40 })
+    expect(f).toMatch(/^crop=1920:1080:0:0,scale=960:540:flags=lanczos,format=gbrp,lutrgb=.*,pad=960:1080/)
+    const layer = paneFilter(1920, 1080, 1920, 1080, { zoom: 1, x: 0, y: 0 }, 0.5, { saturation: -100 })
+    expect(layer.indexOf('colorchannelmixer=rr')).toBeLessThan(layer.indexOf('format=rgba'))
+  })
+  it('leaves the chain as it was without one', () => {
+    const run: CompareRun = { left: side({ look: { brightness: 30 } }), right: side(), layout: 'side', overlayAlpha: 0.5, durationSec: 5, outPath: 'o.mp4' }
+    const fc = compareArgs(run)[compareArgs(run).indexOf('-filter_complex') + 1]
+    expect(fc.split(';')[0]).toContain('lutrgb')
+    expect(fc.split(';')[1]).not.toContain('lutrgb')
+  })
+})

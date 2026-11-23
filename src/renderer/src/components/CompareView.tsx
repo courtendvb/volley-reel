@@ -56,7 +56,7 @@ export function CompareView({ initial, library, onExit, onError }: Props) {
   const mediaOf = (src: CompareSource | null): PaneMedia | null => {
     if (src?.kind === 'match') {
       const m = matches.find(x => x.id === src.matchId)
-      return m ? { src: `media://${m.id}/video.mp4`, fps: m.fps, width: m.width, height: m.height, label: m.name } : null
+      return m ? { src: `media://${m.id}/video.mp4`, fps: m.fps, width: m.width, height: m.height, label: m.name, ...(m.look ? { look: m.look } : {}) } : null
     }
     const f = src?.kind === 'file' ? files[src.path] : null
     return f ? { src: `media://${f.token}/video.mp4`, fps: f.fps, width: f.width, height: f.height, label: f.name } : null

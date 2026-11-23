@@ -78,10 +78,12 @@ function teamTable(t: TeamReport, several: boolean, i: 0 | 1, links?: ReportLink
   return `<table class="team">${head}${rows}${total}${setHead}${t.sets.map(setRow).join('')}</table>`
 }
 
-// The first attacks of a kind (f): the errors, the blocked, the kills and all of them.
-const attackRow = (a: AttackLine, mk: Mk, f: Partial<PlayFilter>) => {
+// The first attacks of a kind (f): the errors, the blocked, the kills and all of them. mirror: in the
+// other order (all of them first), for the right-hand team, so both teams read outward from the middle.
+const attackRow = (a: AttackLine, mk: Mk, f: Partial<PlayFilter>, mirror = false) => {
   const at = (v: number, effects?: string[]) => (v ? mk({ skills: ['A'], ...f, ...(effects ? { effects } : {}) }) : '')
-  return `<td${at(a.err, ['='])}>${a.err}</td><td${at(a.blo, ['/'])}>${a.blo}</td><td${at(a.pts, ['#'])}>${pct(a.pts, a.tot) || '–'}</td><td${at(a.tot)}>${a.tot}</td>`
+  const cells = [`<td${at(a.err, ['='])}>${a.err}</td>`, `<td${at(a.blo, ['/'])}>${a.blo}</td>`, `<td${at(a.pts, ['#'])}>${pct(a.pts, a.tot) || '–'}</td>`, `<td${at(a.tot)}>${a.tot}</td>`]
+  return (mirror ? cells.reverse() : cells).join('')
 }
 const KILL: Record<'pos' | 'neg' | 'dig', Partial<PlayFilter>> = { pos: { phase: 'reception', recEffects: ['#', '+'] }, neg: { phase: 'reception', recEffects: ['-', '!'] }, dig: { phase: 'transition' } }
 
@@ -94,8 +96,8 @@ function summary(r: MatchReport, links?: ReportLinks): string {
     + `<td class="eff"><div>Reception <b${t.so.receptions ? mkOf(i)({ skills: ['R'] }) : ''}>${t.so.receptions}</b></div><div>Points SO <b>${t.so.points}</b></div><div class="muted">Each ${per(t.so.receptions, t.so.points)} receptions<br>1 point</div>`
     + `<div class="gap">Serve <b${t.bp.serves ? mkOf(i)({ skills: ['S'] }) : ''}>${t.bp.serves}</b></div><div>Points BP <b>${t.bp.points}</b></div><div class="muted">Each ${per(t.bp.serves, t.bp.points)} serves<br>1 break point</div></td>`
   const block = (title: string, k: 'pos' | 'neg' | 'dig') => `<tr><th colspan="9" class="kt">${title}</th></tr>`
-    + `<tr class="kh"><td>Errors</td><td>Blo</td><td>Pts%</td><td>Tot</td><td></td><td>Errors</td><td>Blo</td><td>Pts%</td><td>Tot</td></tr>`
-    + `<tr class="kv">${attackRow(h.kill[k], mkOf(0), KILL[k])}<td></td>${attackRow(v.kill[k], mkOf(1), KILL[k])}</tr>`
+    + `<tr class="kh"><td>Errors</td><td>Blo</td><td>Pts%</td><td>Tot</td><td></td><td>Tot</td><td>Pts%</td><td>Blo</td><td>Errors</td></tr>`
+    + `<tr class="kv">${attackRow(h.kill[k], mkOf(0), KILL[k])}<td></td>${attackRow(v.kill[k], mkOf(1), KILL[k], true)}</tr>`
   return `<table class="summary"><tr><th colspan="2">${esc(h.name)}</th><th>Kill on reception</th><th colspan="2">${esc(v.name)}</th><td rowspan="2" class="legend">`
     + `<div><b>BP</b> Break point</div><div><b>Err</b> Errors</div><div><b>Pos%</b> Positive +#</div><div><b>W-L</b> Won-Lost</div><div><b>Pts</b> Points</div><div><b>Blo</b> Blocked</div><div><b>Exc</b> Excellent</div><div><b>Poss</b> Possibility</div><div><b>Ovr</b> Overpass</div><div><b>BP%</b> Serve → point</div>${r.matches ? '<div><b>Rallies%</b> On court (L: sets)</div>' : ''}`
     + `<div class="gap"><span class="sets"><b class="sub"></b></span> Substitute</div><div><span class="sets"><b>n</b></span> Starting zone</div></td></tr>`

@@ -78,6 +78,12 @@ describe('the match report', () => {
     expect(html).toContain('25-20')
     expect(pct(1, 3)).toBe('33%'); expect(per(83, 67)).toBe('1.24'); expect(per(5, 0)).toBe('–')
   })
+  it('mirrors the right-hand team in Kill on reception, so both read outward from the middle', () => {
+    const html = reportHtml(r)
+    const cells = (row: string) => [...row.matchAll(/<td[^>]*>([^<]*)<\/td>/g)].map(m => m[1])
+    expect(cells(/<tr class="kh">(.*?)<\/tr>/.exec(html)![1])).toEqual(['Errors', 'Blo', 'Pts%', 'Tot', '', 'Tot', 'Pts%', 'Blo', 'Errors'])
+    expect(cells(/<tr class="kv">(.*?)<\/tr>/.exec(html)![1])).toEqual(['0', '0', '–', '0', '', '1', '100%', '0', '0'])
+  })
   it('counts the rallies each player was on court for, from the lineups at the serve', () => {
     const lined = DVW.replace(/^([*a]\d\dS[^;]*;;;;;;;;1;1;\d;1;\d+;;)$/gm, '$1;1;7;3;4;5;6;9;8;7;6;5;4') // #2 (a libero) is not in the lineup
     const rep = matchReport(parseDVW(lined))

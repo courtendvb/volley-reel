@@ -1,4 +1,4 @@
-# Type check, unit tests and a production build on every push and pull request. Windows, like the
+# Type check, unit tests and a production build of both editions on every push and pull request. Windows, like the
 # app's users; Electron's own binary isn't needed for any of these, so it isn't downloaded.
 name: CI
 on:
@@ -20,3 +20,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The sold edition: nothing of the internal one in it (src/internal/README.md)
+      - run: node scripts/edition-guard.mjs
+      - run: npx electron-vite build
+        env:
+          VR_EDITION: internal
+      - run: node scripts/edition-guard.mjs --internal

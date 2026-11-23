@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { attackLayoutOf, attackSlide, codeColumn, conditionColumn, defaultCodeGroups, hotSpot, inCondition, setterRowOf, shortCodeName } from './attackBoard'
-import { boardPlayers, boardSlide } from './board'
-import { DEFAULT_CHART } from './chart'
-import { attackerSetChart } from './setChart'
-import type { ParsedDVW, Play } from './types'
+import { boardPlayers, boardSlide } from '../shared/board'
+import { DEFAULT_CHART } from '../shared/chart'
+import { attackerSetChart } from '../shared/setChart'
+import type { ParsedDVW, Play } from '../shared/types'
 
 const play = (over: object) => ({ side: 'a', jersey: 92, playerKey: 'K', skill: 'A', effect: '+', rallyId: 0, setNum: 1, score: { home: 0, away: 0 }, startZone: 2, endZone: 5, startSub: null, endSub: null,
   code: 'a92AH-X5~~~H', phase: 'r', recEffect: '#', homeRot: 1, awayRot: 1, startClick: { u: 0.85, v: 0.42 }, endClick: { u: 0.1, v: 0.85 }, ...over }) as unknown as Play

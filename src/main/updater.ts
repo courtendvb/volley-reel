@@ -51,6 +51,16 @@ function log(level: string, msg: unknown): void {
 export function startUpdates(win: BrowserWindow): void {
   const test = !!process.env.VR_UPDATE_TEST
   if ((!app.isPackaged && !test) || process.env.VR_SMOKE) return
+  // The internal edition looks in its own private repository (electron-builder.internal.yml: publish), with
+  // a token that may only read it (built in: electron.vite.config.ts), and never in the sold one's
+  // public releases. Its versions are 1.2.0-internal.<date and time> (scripts/release.mjs --internal): only
+  // releases marked latest count, not GitHub's pre-releases. A Mac doesn't update it yet: macUpdate.ts
+  // downloads from the public releases' addresses.
+  if (__INTERNAL__) {
+    if (mac || !__UPDATE_TOKEN__) { log('info', mac ? 'internal edition: no updates on a Mac yet' : 'internal edition: built without an update token'); return }
+    autoUpdater.setFeedURL({ provider: 'github', owner: 'courtendvb', repo: 'syncscout-internal-releases', private: true, token: __UPDATE_TOKEN__ })
+    autoUpdater.allowPrerelease = false
+  }
   if (test) autoUpdater.forceDevUpdateConfig = true
   autoUpdater.logger = { info: m => log('info', m), warn: m => log('warn', m), error: m => log('error', m), debug: () => {} }
   autoUpdater.autoDownload = !mac // a Mac downloads its own way (macUpdate.ts)

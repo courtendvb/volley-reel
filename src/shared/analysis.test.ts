@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { efficiency, errorTries, errors, percent, pointErrorReport, points, pointTries, recAttackReport, rotationReport, runReport, sideOutReport } from './analysis'
+import { efficiency, percent, recAttackReport, rotationReport, runReport, sideOutReport } from './analysis'
+import { errorTries, errors, pointErrorReport, points, pointTries } from '../internal/pointError'
 
 // Five rallies: a home serve received and killed by the away team; an away serve error; a home ace;
 // a reception error (=) by the away team; an away attack error; an away attack blocked by the home team.

@@ -39,6 +39,8 @@
 //       counts at the next refresh, which reads the subscription from Stripe.
 // This file holds the parts both sides agree on and the checks that need no network or key.
 
+import { INTERNAL_APP } from './edition'
+
 export const EDITOR_APP = 'editor'
 
 export interface LeaseTeam { id: number; name: string }
@@ -95,7 +97,9 @@ export type AccountError =
   | 'trial_used' // trial: this account had its free trial already
 
 // What the app shows and allows.
-type Signed = { email: string; team: LeaseTeam; teams: LeaseTeam[]; suggested: LeaseTeam[] }
+// internal: the lease lets this account use the internal edition's features (shared/edition.ts INTERNAL_APP);
+// always false in the sold edition.
+type Signed = { email: string; team: LeaseTeam; teams: LeaseTeam[]; suggested: LeaseTeam[]; internal: boolean }
 export type AccountState =
   | { kind: 'signed_out' }
   | { kind: 'needs_team'; email: string; suggested: LeaseTeam[] } // signed in, no team yet: join one or start the trial
@@ -154,9 +158,11 @@ export const CLOCK_SLACK_SEC = 24 * 3600
 
 // The state a verified lease gives, at `now` (seconds). `seen` = the latest time this computer has seen
 // (main/account.ts keeps it); `serverError` = what the server said on the last refresh, when it refused.
-export function leaseState(p: LeasePayload, teams: LeaseTeam[], now: number, seen: number, serverError?: AccountError, suggested: LeaseTeam[] = []): AccountState {
+// internalEmails: the addresses the internal edition opens its features for (main/index.ts); they open
+// for a lease that carries INTERNAL_APP too.
+export function leaseState(p: LeasePayload, teams: LeaseTeam[], now: number, seen: number, serverError?: AccountError, suggested: LeaseTeam[] = [], internalEmails: readonly string[] = []): AccountState {
   const at = Math.max(now, seen - CLOCK_SLACK_SEC)
-  const base = { email: p.email, team: p.team, teams: teams.length ? teams : [p.team], suggested }
+  const base = { email: p.email, team: p.team, teams: teams.length ? teams : [p.team], suggested, internal: __INTERNAL__ && (p.apps.includes(INTERNAL_APP) || internalEmails.includes(p.email.trim().toLowerCase())) }
   const refused = serverError ?? p.denied
   if (refused === 'licence_expired' || refused === 'payment_required') return { kind: 'expired', ...base, reason: refused }
   if (!p.apps.includes(EDITOR_APP) || refused === 'no_access') return { kind: 'no_access', ...base }

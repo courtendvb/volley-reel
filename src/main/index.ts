@@ -8,6 +8,7 @@ import { cleanLook, type VideoLook } from '../shared/videoLook'
 import { Readable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
+import { APP_NAME } from '../shared/edition'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
 import { FREE_MATCHES, WEB_ADMIN_URL, WEB_URL, type TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
@@ -50,7 +51,10 @@ protocol.registerSchemesAsPrivileged([
 app.commandLine.appendSwitch('disable-background-media-suspend')
 // The name in package.json stays volley-reel (electron-builder.yml says why), and on Windows nothing
 // shows it. A Mac's default menu does ("Quit ..."): fix the settings folder first, as it follows the name.
-if (process.platform === 'darwin') { app.setPath('userData', app.getPath('userData')); app.setName('SyncScout Video Editor') }
+// The internal edition (src/internal/README.md) keeps its own settings folder, so it installs beside the sold
+// one without the two sharing settings or sign-in (the library can still be the same folder).
+if (__INTERNAL__) app.setPath('userData', join(app.getPath('appData'), 'volley-reel-internal'))
+if (process.platform === 'darwin') { app.setPath('userData', app.getPath('userData')); app.setName(APP_NAME) }
 // A self-check keeps its own window state (panel tabs, the court's look), apart from everyday use.
 if (process.env.VR_SMOKE) app.setPath('userData', join(tmpdir(), 'volley-reel-smoke'))
 // The memory smoke check forces a GC before each heap sample.
@@ -124,6 +128,8 @@ app.whenReady().then(async () => {
     // Off in self-checks; VR_ACCOUNTS=1 (+ VR_LEASE_KEY) tries it before the release that turns it on.
     enabled: !process.env.VR_SMOKE && (ENFORCED || process.env.VR_ACCOUNTS === '1'),
     publicKey: process.env.VR_LEASE_KEY || LEASE_PUBLIC_KEY,
+    // The internal edition: the addresses its features open for (electron.vite.config.ts); none in the sold one.
+    ...(__INTERNAL__ ? { internalEmails: __INTERNAL_EMAILS__ } : {}),
     ...(safeStorage.isEncryptionAvailable() ? {
       encrypt: (s: string) => safeStorage.encryptString(s).toString('base64'),
       decrypt: (s: string) => safeStorage.decryptString(Buffer.from(s, 'base64')),
@@ -146,7 +152,7 @@ app.whenReady().then(async () => {
   else if (last && library && process.env.VR_SMOKE) { await mkdir(last, { recursive: true }); project = await Project.create(last, library, { name: 'smoke', ourTeamCodes: ['HTH', 'HTA'], matchIds: [] }) }
 
   win = new BrowserWindow({
-    width: 1500, height: 900, backgroundColor: '#F1F5F9', title: 'SyncScout Video Editor',
+    width: 1500, height: 900, backgroundColor: '#F1F5F9', title: APP_NAME,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   })
   // A file dropped on the window would open in place of the app: nothing may lead it away.

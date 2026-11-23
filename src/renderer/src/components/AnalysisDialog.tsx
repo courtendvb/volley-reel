@@ -1,18 +1,22 @@
 import { useMemo, useState } from 'react'
-import { ANALYSIS_REPORTS, efficiency, errors, errorTries, GRADES, percent, pointErrorReport, points, pointTries, recAttackReport, RUN_MIN, RUN_TOP, rotationReport, runReport, sideOutReport, type AnalysisReportId, type AttackCount, type Grade, type PointErrorRow, type PointErrorSide, type RecGradeLine, type RotationCounts, type RunCounts, type RunRow, type SideOutRow } from '../../../shared/analysis'
+import { ANALYSIS_REPORTS, efficiency, GRADES, percent, recAttackReport, RUN_MIN, RUN_TOP, rotationReport, runReport, sideOutReport, type AnalysisReportId, type AttackCount, type Grade, type RecGradeLine, type RotationCounts, type RunCounts, type RunRow, type SideOutRow } from '../../../shared/analysis'
 import type { ReportMatch } from '../../../shared/report'
 import type { Match, ParsedDVW } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
+import { PointError } from '../../../internal/PointErrorReport'
+import { useInternal } from '../account'
 
 // 分析: reports on what the target team (設定の対象チーム) is really like over the project's
 // matches. A tab per report (ANALYSIS_REPORTS); the numbers come from shared/analysis.ts.
-const TITLES: Record<AnalysisReportId, string> = { pointError: '得点率・ミス率', sideOut: 'サイドアウト・ブレイク', recAttack: 'レセプションと攻撃', rotation: 'ローテーション', runs: '連続得点・連続失点' }
+const TITLES = { ...(__INTERNAL__ ? { pointError: '得点率・ミス率' } : {}), sideOut: 'サイドアウト・ブレイク', recAttack: 'レセプションと攻撃', rotation: 'ローテーション', runs: '連続得点・連続失点' } as Record<AnalysisReportId, string>
 
 export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
   matches: Match[]; dvws: Record<string, ParsedDVW>; onClose: () => void
   ourCodes: string[] // the target team's codes
 }) {
-  const [report, setReport] = useState<AnalysisReportId>('pointError')
+  const internal = useInternal() // 得点率・ミス率: the internal edition's, for an account allowed it
+  const reports = ANALYSIS_REPORTS.filter(id => id !== 'pointError' || internal)
+  const [report, setReport] = useState<AnalysisReportId>(reports[0])
   // The target team's side in each match it played, the opponent's name for the row.
   const ours = useMemo(() => {
     const codes = ourCodes.map(c => c.toUpperCase())
@@ -28,7 +32,7 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
         <div className="report-bar">
           <h2>{t('分析')}</h2>
           <div className="analysis-tabs" role="tablist">
-            {ANALYSIS_REPORTS.map(id => <button key={id} role="tab" aria-selected={id === report} className={id === report ? 'active' : ''} onClick={() => setReport(id)}>{t(TITLES[id])}</button>)}
+            {reports.map(id => <button key={id} role="tab" aria-selected={id === report} className={id === report ? 'active' : ''} onClick={() => setReport(id)}>{t(TITLES[id])}</button>)}
           </div>
           <span className="spacer" />
           <button onClick={onClose}>{t('閉じる')}</button>
@@ -36,7 +40,7 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
         <div className="analysis-body">
           {!team ? <p className="muted">{t('設定で対象チームを決めると分析できます')}</p>
             : !ours.length ? <p className="muted">{t('{0} の試合の DVW がありません', team)}</p>
-            : report === 'pointError' ? <PointError list={ours} team={team} />
+            : __INTERNAL__ && internal && report === 'pointError' ? <PointError list={ours} team={team} />
             : report === 'sideOut' ? <SideOut list={ours} team={team} />
             : report === 'recAttack' ? <RecAttack list={ours} team={team} />
             : report === 'rotation' ? <Rotations list={ours} team={team} />
@@ -44,74 +48,6 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
         </div>
       </div>
     </div>
-  )
-}
-
-function PointError({ list, team }: { list: ReportMatch[]; team: string }) {
-  const r = useMemo(() => pointErrorReport(list), [list])
-  const them = t('相手')
-  return (
-    <>
-      <ErrorTable title={t('ミス率 — {0}', team)} side={r.team} team={team} them={them} />
-      <PointTable title={t('得点率 — {0}', team)} side={r.team} team={team} them={them} />
-      <ErrorTable title={t('ミス率 — 相手チーム')} side={r.opponents} team={team} them={them} opp />
-      <PointTable title={t('得点率 — 相手チーム')} side={r.opponents} team={team} them={them} opp />
-      <p className="hint">{t('= をミス、# を得点として DVW から数えます。A Err は = だけ（ブロックされたアタック / は入りません）。Block はブロックのタッチ数（DVW の B の総数）です。右端の 2 列は各試合で取ったラリーの数（相手のミスによる得点も含む）')}</p>
-    </>
-  )
-}
-
-// opp: the opponents' table; its last two columns stay the team's points, then the opponents'.
-type TableProps = { title: string; side: PointErrorSide; team: string; them: string; opp?: boolean }
-const scored = (r: PointErrorRow, opp?: boolean) => (opp ? [r.lost, r.won] : [r.won, r.lost])
-
-function ErrorTable({ title, side, team, them, opp }: TableProps) {
-  const row = (r: PointErrorRow, total = false) => {
-    const [a, b] = scored(r, opp)
-    return (
-      <tr key={r.label} className={total ? 'total' : ''}>
-        <th title={r.label}>{r.label}</th>
-        <td>{r.serve}</td><td>{r.serveErr}</td><td className="pct">{percent(r.serveErr, r.serve)}</td>
-        <td>{r.rec}</td><td>{r.recErr}</td><td className="pct">{percent(r.recErr, r.rec)}</td>
-        <td>{r.attack}</td><td>{r.attackErr}</td><td className="pct">{percent(r.attackErr, r.attack)}</td>
-        <td className="sum">{errorTries(r)}</td><td className="sum">{errors(r)}</td>
-        <td className="key">{percent(errors(r), errorTries(r), 1)}</td>
-        <td className="side">{a}</td><td className="side">{b}</td>
-      </tr>
-    )
-  }
-  return (
-    <table className="analysis-table">
-      <caption>{title}</caption>
-      <thead><tr><th />{['Serve', 'S Err', 'S Err%', 'Rec', 'R Err', 'R Err%', 'Attack', 'A Err', 'A Err%'].map(h => <th key={h}>{h}</th>)}
-        <th className="sum">S+R+A</th><th className="sum">Error</th><th className="key">Error%</th><th className="side">{team}</th><th className="side">{them}</th></tr></thead>
-      <tbody>{side.rows.map(r => row(r))}{row(side.total, true)}</tbody>
-    </table>
-  )
-}
-
-function PointTable({ title, side, team, them, opp }: TableProps) {
-  const row = (r: PointErrorRow, total = false) => {
-    const [a, b] = scored(r, opp)
-    return (
-      <tr key={r.label} className={total ? 'total' : ''}>
-        <th title={r.label}>{r.label}</th>
-        <td>{r.serve}</td><td>{r.serveWin}</td><td className="pct">{percent(r.serveWin, r.serve)}</td>
-        <td>{r.block}</td><td>{r.blockWin}</td><td className="pct">{percent(r.blockWin, r.block)}</td>
-        <td>{r.attack}</td><td>{r.attackWin}</td><td className="pct">{percent(r.attackWin, r.attack)}</td>
-        <td className="sum">{pointTries(r)}</td><td className="sum">{points(r)}</td>
-        <td className="key">{percent(points(r), pointTries(r), 1)}</td>
-        <td className="side">{a}</td><td className="side">{b}</td>
-      </tr>
-    )
-  }
-  return (
-    <table className="analysis-table">
-      <caption>{title}</caption>
-      <thead><tr><th /><th>Serve</th><th>S#</th><th>S#%</th><th title={t('ブロックのタッチ数（DVW の B の総数）')}>Block</th><th>B#</th><th>B#%</th><th>Attack</th><th>A#</th><th>A#%</th>
-        <th className="sum">S+B+A</th><th className="sum">Point</th><th className="key">Point%</th><th className="side">{team}</th><th className="side">{them}</th></tr></thead>
-      <tbody>{side.rows.map(r => row(r))}{row(side.total, true)}</tbody>
-    </table>
   )
 }
 

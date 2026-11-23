@@ -3,11 +3,11 @@ import { gate, priceText, type AccountState, type PlanPrice } from './account'
 import { setLang, t, type Lang } from './i18n'
 
 const team = { id: 1, name: 'T' }
-const ok: AccountState = { kind: 'ok', email: 'a', team, teams: [team], suggested: [], status: 'trialing', until: null, daysLeft: 3 }
+const ok: AccountState = { kind: 'ok', email: 'a', team, teams: [team], suggested: [], internal: false, status: 'trialing', until: null, daysLeft: 3 }
 const out: AccountState = { kind: 'signed_out' }
 const pick: AccountState = { kind: 'needs_team', email: 'a', suggested: [] }
-const over: AccountState = { kind: 'expired', email: 'a', team, teams: [team], suggested: [], reason: 'licence_expired' }
-const noApp: AccountState = { kind: 'no_access', email: 'a', team, teams: [team], suggested: [] }
+const over: AccountState = { kind: 'expired', email: 'a', team, teams: [team], suggested: [], internal: false, reason: 'licence_expired' }
+const noApp: AccountState = { kind: 'no_access', email: 'a', team, teams: [team], suggested: [], internal: false }
 
 describe('gate', () => {
   it('allows everything while accounts are off, and with a trial or plan', () => {

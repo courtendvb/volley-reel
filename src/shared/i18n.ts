@@ -4,8 +4,14 @@
 // yet shows in English.
 // The renderer and the main process each set the language once at start (src/renderer/src/lang.ts,
 // src/main/index.ts); changing it in 設定 restarts the window.
-import { EN } from './i18n-en'
-import { ES } from './i18n-es'
+import { EN as SHARED_EN } from './i18n-en'
+import { ES as SHARED_ES } from './i18n-es'
+import { INTERNAL_EN } from '../internal/i18n-en'
+import { INTERNAL_ES } from '../internal/i18n-es'
+
+// The internal edition's strings (src/internal/i18n-*.ts) only in its build: the sold one doesn't carry them.
+const EN = __INTERNAL__ ? { ...SHARED_EN, ...INTERNAL_EN } : SHARED_EN
+const ES = __INTERNAL__ ? { ...SHARED_ES, ...INTERNAL_ES } : SHARED_ES
 
 export type Lang = 'ja' | 'en' | 'es'
 export const LANGS: { id: Lang; name: string }[] = [{ id: 'ja', name: '日本語' }, { id: 'en', name: 'English' }, { id: 'es', name: 'Español' }]

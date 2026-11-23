@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { receiveStats, receivers, serveTargetSlide, teamReceptions } from './serveTargetBoard'
-import type { ParsedDVW, Play } from './types'
+import type { ParsedDVW, Play } from '../shared/types'
 
 // A rally: the other team's serve (Q jump / M float), the home team's reception by `by` into `zone`
 // with `effect`, then (unless a pass error) its attack from `from` (# a kill); won by `won`.

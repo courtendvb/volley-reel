@@ -1900,7 +1900,7 @@ export function installSmoke(h: SmokeHost): void {
       if (!look?.starts || look.lines || !look.heat) throw new Error(`serve look: ${JSON.stringify(look)}`)
       return { startsDefault, look: { points: look.points, lines: look.lines, heat: look.heat, starts: look.starts }, charts: slide.charts!.length, starts: slide.charts!.map(c => c.chart.dots.filter(d => d.start).length) }
     }
-    if (layout.startsWith('target')) {
+    if (__INTERNAL__ && layout.startsWith('target')) { // the internal edition's slide
       // サーブの狙い: the team's receivers with their photos (from a pack read in first), and the zones.
       const [, pack, logoFile] = layout.split('|')
       if (pack) { await api.smokeImportPack!(pack); await refreshPacks() }
@@ -1918,7 +1918,7 @@ export function installSmoke(h: SmokeHost): void {
       if (logoFile && !logoAbove) throw new Error('no logo above the team column')
       return { team: slide.board!.config.team, heading: texts[0], receivers: names, pictures: images.length, logoAbove }
     }
-    if (layout === 'attack') {
+    if (__INTERNAL__ && layout === 'attack') { // the internal edition's slide
       // アタックディレクション: the first attacker, all three columns; the preview shot, then the slide
       // made and read back: a direction chart (with name and numbers) and a set chart a column.
       button(dialog, t('アタックディレクション'))!.click(); await sleep(400)

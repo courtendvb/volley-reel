@@ -4,9 +4,10 @@
 // and how often the team got an attack in after it; rates well off the team's own are marked. (The
 // side-out is read too, but not shown.)
 // Pure: no files, no DOM.
-import type { Annotation } from './annotation'
-import { serveZoneMarker } from './presets'
-import type { ParsedDVW, Play, Player, PlayerRole } from './types'
+import type { Annotation } from '../shared/annotation'
+import { logoKey } from '../shared/logo'
+import { serveZoneMarker } from '../shared/presets'
+import type { ParsedDVW, Play, Player, PlayerRole } from '../shared/types'
 
 export type ServeKind = 'jump' | 'float'
 export const SERVE_KINDS: ServeKind[] = ['jump', 'float']
@@ -134,7 +135,6 @@ export interface ServeTargetData {
   players: Record<string, Player> // by key: the receivers' names and positions
   photos: Record<string, { assetId: string; width: number; height: number }> // by key; the team's logo under logoKey(team)
 }
-export const logoKey = (team: string) => `logo:${team.toUpperCase()}`
 
 export function serveTargetSlide(v: ServeTargetData, ink = INK): Annotation[] {
   const out: Annotation[] = [], all = v.receptions, team = receiveStats(all)

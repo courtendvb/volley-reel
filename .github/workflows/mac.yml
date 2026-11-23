@@ -11,6 +11,8 @@ on:
       - scripts/fetch-ffmpeg-mac.mjs
       - src/main/ffmpegPath.ts
       - src/main/macMenu.ts
+      - src/main/macUpdate.ts
+      - src/main/updater.ts
 jobs:
   build:
     runs-on: macos-latest
@@ -36,6 +38,24 @@ jobs:
           codesign --verify --deep --strict "$app"
           "$app/Contents/Resources/ffmpeg/ffprobe" -version
           "$app/Contents/Resources/ffmpeg/ffmpeg" -hide_banner -f lavfi -i testsrc=d=1 -c:v libx264 -pix_fmt yuv420p "$RUNNER_TEMP/check.mp4"
+      - name: Check the update zips unpack to a valid app (as macUpdate.ts unpacks them)
+        run: |
+          for z in release/*-mac.zip; do
+            d="$RUNNER_TEMP/unzip-$(basename "$z" .zip)"
+            ditto -x -k "$z" "$d"
+            codesign --verify --deep --strict "$d/SyncScout Video Editor.app"
+            echo "ok $z"
+          done
+      - name: Check the product site's Terminal install line (site/index.html; keep the two the same)
+        shell: zsh {0}
+        run: |
+          cd /tmp && a=$(uname -m | sed s/x86_64/x64/) && u=$(curl -fsSL https://api.github.com/repos/courtendvb/syncscout-video-editor-releases/releases/latest | grep -o "https://[^\"]*-$a-mac.zip") && curl -fL "$u" -o ssve.zip && rm -rf ssve && ditto -x -k ssve.zip ssve && rm -rf "/Applications/SyncScout Video Editor.app" && mv "ssve/SyncScout Video Editor.app" /Applications/ && open "/Applications/SyncScout Video Editor.app"
+          app="/Applications/SyncScout Video Editor.app"
+          codesign --verify --deep --strict "$app"
+          ! xattr -p com.apple.quarantine "$app" 2>/dev/null
+          sleep 10
+          pgrep -f "SyncScout Video Editor.app/Contents/MacOS" >/dev/null || { echo "the app did not start"; exit 1; }
+          pkill -f "SyncScout Video Editor.app/Contents/MacOS" || true
       - uses: actions/upload-artifact@v4
         with:
           name: syncscout-video-editor-mac

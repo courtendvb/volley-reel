@@ -153,6 +153,7 @@ export const ES: Record<string, string> = {
   "リールのファイル {0} が読めませんでした（ファイルはそのまま残しています）": "No se pudo leer el archivo de reel {0} (el archivo quedó como estaba)",
   "ダウンロードした更新が見つかりません": "No se encontró la actualización descargada",
   "インストーラーを起動できませんでした（セキュリティソフトなどに止められた可能性があります）": "No se pudo iniciar el instalador (puede que un software de seguridad lo haya detenido)",
+  "更新を入れられませんでした（アプリのフォルダを変更できない可能性があります）": "No se pudo instalar la actualización (puede que no se pueda cambiar la carpeta de la app)",
   "{0}を保存できませんでした: {1}": "No se pudo guardar {0}: {1}",
   "シーン": "Escena",
   "書き出し中です。書き出しを中止して再起動しますか？": "Hay una exportación en curso. ¿Detenerla y reiniciar?",

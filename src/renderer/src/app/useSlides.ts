@@ -4,7 +4,7 @@
 // PowerPoint file of the ones picked.
 import { useMemo, useState, type RefObject } from 'react'
 import { boardSlide, keptByHand, type BoardPhoto } from '../../../shared/board'
-import { logoKey } from '../../../shared/serveTargetBoard'
+import { logoKey } from '../../../shared/logo'
 import { markStyle, type GridStyle } from '../../../shared/court'
 import type { OverlaySettings } from '../../../shared/overlay'
 import { findPhoto, type PackInfo } from '../../../shared/pack'

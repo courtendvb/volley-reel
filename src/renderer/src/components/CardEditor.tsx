@@ -242,13 +242,14 @@ function AlignCardsDialog({ from, objects, onAlign, onClose }: { from: CardKind;
 // What can go on a slide from the court: from the play selected in the list.
 // The bar for a data slide: a sheet of data, so only what makes up that sheet.
 export function BoardEditBar({ slide, onChange, onBoard, onSave, onDone }: {
-  slide: Slide; onChange: (s: Slide) => void; onBoard: () => void; onSave: (as: 'png' | 'pdf' | 'pptx') => void; onDone: () => void
+  slide: Slide; onChange: (s: Slide) => void; onBoard?: () => void; // missing: a slide this edition can't make again (board.ts canMake)
+  onSave: (as: 'png' | 'pdf' | 'pptx') => void; onDone: () => void
 }) {
   const look = slide.charts?.[0]?.chart.look
   return (
     <div className="card-edit-bar">
       <b>{t('データスライド')}</b>
-      <button onClick={onBoard} title={t('選手・アタックコード・人数などを変えて作り直します。手で足した図形とノートは残ります')}>{t('構成を変える…')}</button>
+      {onBoard && <button onClick={onBoard} title={t('選手・アタックコード・人数などを変えて作り直します。手で足した図形とノートは残ります')}>{t('構成を変える…')}</button>}
       <span className="spacer" />
       <button onClick={() => onSave('png')} title={t('このスライドを画像に書き出します')}>{t('PNG に書き出す…')}</button>
       <button onClick={() => onSave('pdf')} title={t('このシーンのカードとスライドを、順に 1 つの PDF にします')}>{t('PDF に書き出す…')}</button>

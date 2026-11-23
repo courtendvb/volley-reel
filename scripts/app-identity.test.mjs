@@ -25,3 +25,19 @@ describe('what installed copies depend on', () => {
     expect(pkg.productName).toBeUndefined()
   })
 })
+
+// The internal edition (src/internal/README.md) installs beside the sold app, never over it, and is never
+// published where the sold app's copies (or anyone) could download it.
+describe('the internal edition\'s installer', () => {
+  const internal = readFileSync('electron-builder.internal.yml', 'utf8').replace(/\r\n/g, '\n')
+  it('builds on the sold app\'s settings with its own identity', () => {
+    expect(internal).toMatch(/^extends: electron-builder\.yml$/m)
+    expect(internal).toMatch(/^appId: com\.courtendvb\.volleyreel\.internal$/m)
+    expect(internal).not.toMatch(/^ {2}executableName: volley-reel$/m)
+    expect(internal).not.toMatch(/^ {2}shortcutName: SyncScout Video Editor$/m)
+  })
+  it('publishes nowhere, and builds into a folder of its own', () => {
+    expect(internal).toMatch(/^publish: null$/m)
+    expect(internal).toMatch(/^ {2}output: release-internal$/m)
+  })
+})

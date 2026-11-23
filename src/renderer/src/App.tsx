@@ -54,6 +54,8 @@ import { AnalysisDialog } from './components/AnalysisDialog'
 import { DEFAULT_CHART, chartName, setChartColors } from '../../shared/chart'
 import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
+import { canMake } from '../../shared/board'
+import { APP_NAME } from '../../shared/edition'
 import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
@@ -904,7 +906,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <strong className="brand">SyncScout Video Editor</strong>
+        <strong className="brand">{APP_NAME}</strong>
         {appVersion && <span className="app-version" title={t('このアプリのバージョン')}>v{appVersion}</span>}
         {project && <button onClick={() => void goHome()} title={t('倉庫とプロジェクトの一覧に戻る')}>{t('ホーム')}</button>}
         {project && <strong className="project-name" title={project.path}>{project.name}</strong>}
@@ -914,7 +916,8 @@ export function App() {
         {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
-        {project && <button onClick={() => setAnalysisOpen(true)} title={t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る')}>{t('分析')}</button>}
+        {project && <button onClick={() => setAnalysisOpen(true)} title={(__INTERNAL__ ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
+          ?? t('対象チームの全試合のサイドアウト・ブレイク、ローテーション別の数字などを表で見る')}>{t('分析')}</button>}
         {!project && !cmp.open && <CompareMenu compares={cmp.compares} onOpenMenu={() => void cmp.refresh()} onNew={cmp.newCompare} onOpen={cmp.openCompare} onDelete={s => void cmp.deleteCompare(s)} />}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
         {project && <button onClick={() => setSettingsOpen(true)}>{t('設定')}</button>}
@@ -1067,7 +1070,7 @@ export function App() {
             {cardEditCard && editingSlide?.board && (
               <BoardEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
-                onBoard={() => setBoardEdit(editingSlide)} onSave={as => void saveCards(as, editingSlide)} />
+                {...(canMake(editingSlide.board.config.skill) ? { onBoard: () => setBoardEdit(editingSlide) } : {})} onSave={as => void saveCards(as, editingSlide)} />
             )}
             {cardEditCard && editingSlide && !editingSlide.board && (
               <SlideEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
@@ -1302,7 +1305,7 @@ export function App() {
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}
           initial={picker === 'create'
-            ? { name: '', codes: ['HTH'].filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
+            ? { name: '', codes: (__INTERNAL__ ? ['HTH'] : []).filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {reportOpen && project && (

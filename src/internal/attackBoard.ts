@@ -6,16 +6,16 @@
 // their direction chart with its numbers (hard / soft / tip, K E B Att, K% ERR%, Pos Neg), where most
 // landed ringed in red. Everything but the charts is objects the slide editor moves and restyles, so
 // arrows and notes are drawn on by hand. Pure: no files, no DOM.
-import type { Annotation } from './annotation'
-import { chartCourt, chartWidth, type ChartStyle } from './chart'
-import { attackCones, coneSpan, directionChart, type PlacedSetChart } from './court'
-import { homography, project, type CourtFit } from './courtGeometry'
-import { discOutline } from './disc'
-import { mix } from './overlayDraw'
-import { NUMBER_FONT, attackLine, type TeamPt } from './rotationBoard'
-import { attackerSetChart, setChartWidth } from './setChart'
-import type { PlacedChart } from './board'
-import type { Play, Player } from './types'
+import type { Annotation } from '../shared/annotation'
+import { chartCourt, chartWidth, type ChartStyle } from '../shared/chart'
+import { attackCones, coneSpan, directionChart, type PlacedSetChart } from '../shared/court'
+import { homography, project, type CourtFit } from '../shared/courtGeometry'
+import { discOutline } from '../shared/disc'
+import { mix } from '../shared/overlayDraw'
+import { NUMBER_FONT, attackLine, type TeamPt } from '../shared/rotationBoard'
+import { attackerSetChart, setChartWidth } from '../shared/setChart'
+import type { PlacedChart } from '../shared/board'
+import type { Play, Player } from '../shared/types'
 
 // What a column keeps: the attacks after a good pass (# +), after a poor one (! -: the "M.PASS"),
 // or in transition (after a dig or a free ball).

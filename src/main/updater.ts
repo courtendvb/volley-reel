@@ -51,6 +51,9 @@ function log(level: string, msg: unknown): void {
 export function startUpdates(win: BrowserWindow): void {
   const test = !!process.env.VR_UPDATE_TEST
   if ((!app.isPackaged && !test) || process.env.VR_SMOKE) return
+  // The internal edition has nowhere to look yet (electron-builder.internal.yml: publish), and must never
+  // look in the sold one's public releases.
+  if (__INTERNAL__) return
   if (test) autoUpdater.forceDevUpdateConfig = true
   autoUpdater.logger = { info: m => log('info', m), warn: m => log('warn', m), error: m => log('error', m), debug: () => {} }
   autoUpdater.autoDownload = !mac // a Mac downloads its own way (macUpdate.ts)

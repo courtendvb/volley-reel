@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PaletteColor } from './PaletteColor'
-import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type AttackBoard, type AttackSplit, type BoardConfig, type BoardPlayer, type BoardSkill, type SetLayout, type SetView } from '../../../shared/board'
+import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type AttackBoard, type BoardConfig, type BoardPlayer, type BoardSkill, type SetLayout, type SetView } from '../../../shared/board'
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
-import { ATTACK_CONDITIONS, attackLayoutOf, defaultCodeGroups, type AttackCondition, type AttackLayout, type SetterRow } from '../../../shared/attackBoard'
+import { AttackOptions, ServeTargetHint } from '../../../internal/BoardDialogParts'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import { ATTACKER_CARDS, COURT_LOOKS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type CourtLook, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
@@ -27,15 +27,12 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; court: CourtLook; attackers: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook; attack: AttackBoard } // marker 'head': the scene's head, in no marker // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; court: CourtLook; attackers: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook; attack?: AttackBoard } // marker 'head': the scene's head, in no marker // marker 'head': the scene's head, in no marker
 
 // The choices of tables on a rotation slide.
 const TABLE_NAMES: Record<RotationTables, string> = {
   all: t('すべて表示'), hash: t('# のみ'), hashPlus: t('# と + のみ'), passes: t('パスのみ'), calls: t('セッターコールのみ'), attackers: t('アタッカー（サイドアウトの打数上位）'), none: t('表示しない'),
 }
-
-// A column's name in the dialog, read when shown (the language may change).
-const conditionLabel = (c: AttackCondition) => (c === 'good' ? t('良いパス（# +）') : c === 'poor' ? t('M.PASS（! -）') : t('トランジション'))
 
 interface Slot { key: string; code: string; attention?: boolean }
 
@@ -143,17 +140,11 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const names = useMemo(() => Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>, [dvws])
   const [count0, setCount] = useState(initial?.columns.length ?? 3)
   const oneSetter = skill === 'E' || skill === 'R' // a set or rotation slide is one setter's
-  const single = oneSetter || skill === 'D' // and an attacker's slide one attacker's
+  const isT = __INTERNAL__ && skill === 'T', isD = __INTERNAL__ && skill === 'D' // the internal edition's slides
+  const single = oneSetter || isD // and an attacker's slide one attacker's
   const count = single ? 1 : count0
-  // An attacker's slide: its columns, the setter's row the attacks are kept to, our blockers and diggers.
-  const [conditions, setConditions] = useState<AttackCondition[]>(initial?.attack?.conditions ?? ['good', 'poor'])
-  const [setterRow, setSetterRow] = useState<SetterRow | ''>(initial?.attack?.setterRow ?? '')
-  const [defense, setDefense] = useState(initial?.attack?.defense ?? true)
-  // How the columns are split (null: by the pass, or by attack codes for a middle) and, by codes, each
-  // column's codes (null: the quicks by the setter, then the rest); how our defence stands ('': from the attacker).
-  const [attackSplit, setAttackSplit] = useState<AttackSplit | null>(initial?.attack?.split ?? null)
-  const [codeGroups, setCodeGroups] = useState<string[][] | null>(initial?.attack?.codeGroups ?? null)
-  const [attackLayout, setAttackLayout] = useState<AttackLayout | ''>(initial?.attack?.layout ?? '')
+  // An attacker's slide (internal edition only): what AttackOptions sets out; null while it would be empty.
+  const [attack, setAttack] = useState<AttackBoard | null>(initial?.attack ?? { conditions: ['good', 'poor'], defense: true })
   // A rotation slide per rotation picked (all six by default; a slide made again: its own).
   const [rotations, setRotations] = useState<number[]>(initial?.rotation ? [initial.rotation] : ROTATIONS)
   // The team's colour on a rotation slide: chosen here, else the main colour of its logo in the library.
@@ -208,18 +199,10 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const setSlot = (i: number, s: Slot) => setSlots(shown.map((x, k) => (k === i ? s : x)))
   // A serve target: the team's receivers, all of them (the slide keeps those who received enough).
   // A table of figures: all the team's players (the slide keeps those with the most plays).
-  const columns = skill === 'C' ? [] : skill === 'T' || skill === 'P' ? inTeam : shown.flatMap(s => {
+  const columns = skill === 'C' ? [] : isT || skill === 'P' ? inTeam : shown.flatMap(s => {
     const p = inTeam.find(x => x.key === s.key), c = p ? boardColumn(p, s.code || null, names) : null
     return c ? [s.attention ? { ...c, attention: true } : c] : []
   })
-  // An attacker's slide: the player's codes, and what the columns are as chosen or by default.
-  const attacker = skill === 'D' ? columns[0] : undefined
-  const theirCodes = attacker ? attackCodes([attacker]).map(c => c.code) : []
-  const middle = !!attacker && (attackLayout || attackLayoutOf(attacker.player, attacker.plays)) === 'middle'
-  const splitBy: AttackSplit = attackSplit ?? (middle ? 'codes' : 'pass')
-  const groups = (codeGroups ?? defaultCodeGroups(theirCodes, names)).map(g => g.filter(c => theirCodes.includes(c)))
-  const attack: AttackBoard = { conditions, ...(setterRow ? { setterRow } : {}), defense, split: splitBy, ...(splitBy === 'codes' ? { codeGroups: groups } : {}), ...(attackLayout ? { layout: attackLayout } : {}) }
-  const pickCode = (i: number, code: string, on: boolean) => setCodeGroups([0, 1].map(k => (k === i ? (on ? [...(groups[k] ?? []), code] : (groups[k] ?? []).filter(c => c !== code)) : (groups[k] ?? []).filter(c => !(on && c === code)))))
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal board-dialog" role="dialog" aria-label={t('データスライド')} onClick={e => e.stopPropagation()}>
@@ -227,7 +210,12 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <div className="filter-row">
           <span className="field-label">{cap(t('プレー'))}</span>
           <div className="segmented" role="radiogroup">
-            {([['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')], ['T', t('サーブの狙い')], ['C', t('チーム比較')], ['P', t('個人スタッツ')], ['D', t('アタックディレクション')]] as [BoardSkill, string][]).map(([k, label]) => (
+            {([
+              ['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')],
+              ...(__INTERNAL__ ? [['T', t('サーブの狙い')]] : []),
+              ['C', t('チーム比較')], ['P', t('個人スタッツ')],
+              ...(__INTERNAL__ ? [['D', t('アタックディレクション')]] : []),
+            ] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}
           </div>
@@ -325,19 +313,19 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           </div>
         )}
         {skill === 'P' && <p className="hint" title={STAT_COLUMNS[stat].map(c => `${c.group ? `${c.group} ` : ''}${c.label}: ${t(c.title)}`).join('\n')}>{t('このチームの選手の基本の数字を、本数の多い順に表にします。それぞれの全試合の合計です。ここに重ねると各項目の計算式が出ます')}</p>}
-        {skill === 'T' && <p className="hint">{t('このチームのレセプションを、受けた選手（写真付き）とサーブの種類（ジャンプ・フローター）ごと、サーブが入ったゾーンごとに並べます。チーム全体より 10 ポイント以上良い数字を青、悪い数字を赤で示します')}</p>}
-        {skill !== 'T' && skill !== 'C' && skill !== 'P' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
+        {isT && <ServeTargetHint />}
+        {!isT && skill !== 'C' && skill !== 'P' && <div className="board-slots" title={t('場所ごとに選手を選びます。左から順にカードに並びます')}>
           {shown.map((s, i) => {
             const p = inTeam.find(x => x.key === s.key)
-            const codes = (skill === 'A' || skill === 'D') && p ? attackCodes([p]) : []
+            const codes = (skill === 'A' || isD) && p ? attackCodes([p]) : []
             return (
               <div key={i} className="board-slot">
-                <span className="board-slot-no">{skill === 'D' ? t('アタッカー') : oneSetter ? t('セッター') : t('{0} 番目', i + 1)}</span>
-                <select value={s.key} aria-label={t('{0} 番目', i + 1)} onChange={e => { setSlot(i, { key: e.target.value, code: '' }); setCodeGroups(null) }}>
+                <span className="board-slot-no">{isD ? t('アタッカー') : oneSetter ? t('セッター') : t('{0} 番目', i + 1)}</span>
+                <select value={s.key} aria-label={t('{0} 番目', i + 1)} onChange={e => setSlot(i, { key: e.target.value, code: '' })}>
                   <option value="">{t('（なし）')}</option>
                   {inTeam.map(x => <option key={x.key} value={x.key}>{`#${x.player.jersey} ${x.player.lastName}`}</option>)}
                 </select>
-                {(skill === 'A' || skill === 'D') && (
+                {(skill === 'A' || isD) && (
                   <select value={s.code} aria-label={t('アタックコード')} disabled={!p} onChange={e => setSlot(i, { ...s, code: e.target.value })}>
                     <option value="">{t('全アタック')}</option>
                     {codes.map(c => <option key={c.code} value={c.code}>{`${c.code} (${c.count})${names[c.code] ? ` ${names[c.code]}` : ''}`}</option>)}
@@ -349,53 +337,15 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
             )
           })}
         </div>}
-        {skill === 'D' && (
-          <div className="filter-row">
-            <span className="field-label">{t('配置')}</span>
-            <div className="segmented" role="radiogroup" aria-label={t('守備の配置')} title={t('サイド：2 枚ブロックとディガー 3 人（ゾーン 4 からは左右反転）。ミドル：3 枚ブロックとディガー 3 人。自動はポジション（なければ打った位置）で決めます')}>
-              {([['', t('自動')], ['side', t('サイド')], ['middle', t('ミドル')]] as [AttackLayout | '', string][]).map(([k, label]) => (
-                <button key={k} role="radio" aria-checked={attackLayout === k} className={attackLayout === k ? 'on' : ''} onClick={() => setAttackLayout(k)}>{label}</button>
-              ))}
-            </div>
-            <span className="field-label">{t('列の分け方')}</span>
-            <div className="segmented" role="radiogroup" aria-label={t('列の分け方')}>
-              <button role="radio" aria-checked={splitBy === 'pass'} className={splitBy === 'pass' ? 'on' : ''} onClick={() => setAttackSplit('pass')} title={t('パスの質（とトランジション）で列を分け、各列の上にトスの位置を出します')}>{t('パスの質')}</button>
-              <button role="radio" aria-checked={splitBy === 'codes'} className={splitBy === 'codes' ? 'on' : ''} onClick={() => setAttackSplit('codes')} title={t('アタックコードで列を分けます（ミドルの A・C クイックと、それ以外など）')}>{t('アタックコード')}</button>
-            </div>
-          </div>
-        )}
-        {skill === 'D' && splitBy === 'codes' && [0, 1].map(i => (
-          <div key={i} className="filter-row">
-            <span className="field-label">{t('{0} 列目', i + 1)}</span>
-            {theirCodes.map(c => (
-              <label key={c} className="check"><input type="checkbox" checked={(groups[i] ?? []).includes(c)} onChange={e => pickCode(i, c, e.target.checked)} /> {`${c}${names[c] ? ` ${names[c]}` : ''}`}</label>
-            ))}
-          </div>
-        ))}
-        {skill === 'D' && (
-          <div className="filter-row" title={t('右に条件ごとの列を並べます。各列は、その条件でこの選手に上がったトスの位置と、打ち先のチャート（打ち方の割合、K・E・B・Att、K%・ERR%・Pos・Neg）です')}>
-            {splitBy === 'pass' && <span className="field-label">{t('列')}</span>}
-            {splitBy === 'pass' && ATTACK_CONDITIONS.map(c => (
-              <label key={c} className="check"><input type="checkbox" checked={conditions.includes(c)}
-                onChange={e => setConditions(ATTACK_CONDITIONS.filter(x => (x === c ? e.target.checked : conditions.includes(x))))} /> {conditionLabel(c)}</label>
-            ))}
-            <label className="field-label" htmlFor="board-setter-row">{t('セッター')}</label>
-            <select id="board-setter-row" value={setterRow} onChange={e => setSetterRow(e.target.value as SetterRow | '')}>
-              <option value="">{t('前衛・後衛とも')}</option>
-              <option value="front">{t('前衛（Setter Front）')}</option>
-              <option value="back">{t('後衛（Setter Back）')}</option>
-            </select>
-            <label className="check" title={t('味方のブロッカー（黄、サイドには 2 人、ミドルには 3 人）とディガー 3 人（緑）のコマを置きます。ドラッグで動かせます')}><input type="checkbox" checked={defense} onChange={e => setDefense(e.target.checked)} /> {t('守備のコマ')}</label>
-          </div>
-        )}
+        {isD && <AttackOptions attacker={columns[0]} names={names} {...(attack ?? initial?.attack ? { initial: (attack ?? initial?.attack)! } : {})} onChange={setAttack} />}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos && skill !== 'P'}
-          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, court, attackers, attack, split, notes: notes && !single, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
-        {!single && skill !== 'T' && skill !== 'C' && skill !== 'P' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
+          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, court, attackers, ...(isD && attack ? { attack } : {}), split, notes: notes && !single, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+        {!single && !isT && skill !== 'C' && skill !== 'P' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           {skill !== 'P' && <label className="check" title={skill === 'C' ? t('倉庫にあるチームのロゴを入れます') : t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {skill === 'C' ? t('ロゴ') : t('写真')}</label>}
-          {!single && skill !== 'T' && skill !== 'C' && skill !== 'P' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
-          {notes && !single && skill !== 'T' && skill !== 'C' && skill !== 'P' && <>
+          {!single && !isT && skill !== 'C' && skill !== 'P' && <label className="check" title={t('スライド下部に選手ごとのメモ欄を入れます')}><input type="checkbox" checked={notes} onChange={e => setNotes(e.target.checked)} /> {t('ノート欄')}</label>}
+          {notes && !single && !isT && skill !== 'C' && skill !== 'P' && <>
             <label className="check" title={t('ノート欄の高さ。文字の大きさも一緒に変わります')}>{t('高さ')}
               <input type="number" min={NOTE_SIZE.min * 100} max={NOTE_SIZE.max * 100} step={NOTE_SIZE.step * 100} value={Math.round(noteSize * 100)} style={{ width: 60 }} aria-label={t('ノート欄の高さ（%）')}
                 onChange={e => { const n = +e.target.value / 100; if (n >= NOTE_SIZE.min && n <= NOTE_SIZE.max) setNoteSize(n) }} />%</label>
@@ -424,7 +374,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length) || (skill === 'D' && (splitBy === 'pass' ? !conditions.length : !groups.some(g => g.length)))} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, stat, statTop, statLook, attack })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length) || (isD && !attack)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, stat, statTop, statLook, ...(isD && attack ? { attack } : {}) })}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

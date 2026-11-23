@@ -27,8 +27,11 @@ let token
 try { token = gh('auth', 'token') } catch { /* below */ }
 if (!token) { console.error('GitHub CLI にログインしてください（gh auth login）'); process.exit(1) }
 
+// Always the sold edition: the releases are public (src/internal/README.md).
+const env = { ...process.env, GH_TOKEN: token }
+delete env.VR_EDITION
 const run = (cmd, args) => {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: true, env: { ...process.env, GH_TOKEN: token } })
+  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: true, env })
   if (r.status !== 0) process.exit(r.status ?? 1)
 }
 const existing = (() => { try { return JSON.parse(gh('release', 'view', tag, '--repo', REPO, '--json', 'isDraft')) } catch { return null } })()
@@ -37,6 +40,7 @@ if (existing && !existing.isDraft) { console.error(`${tag} はもう公開され
 console.log(`SyncScout Video Editor ${version} を書き出して公開します`)
 if (!existing) gh('release', 'create', tag, '--repo', REPO, '--draft', '--title', version, '--notes', `SyncScout Video Editor ${version}`)
 run('npx', ['electron-vite', 'build'])
+run('node', ['scripts/edition-guard.mjs']) // nothing of the internal edition in it
 run('npx', ['electron-builder', '--win', '--x64', '--publish', 'always'])
 
 const files = JSON.parse(gh('release', 'view', tag, '--repo', REPO, '--json', 'assets')).assets.map(a => a.name)

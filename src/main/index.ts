@@ -477,7 +477,7 @@ function registerIpc(): void {
   ipcMain.on('app:lang', e => { e.returnValue = getLang() })
   ipcMain.handle('app:setLang', (_e, l: Lang) => { setLang(l); saveSettings({ lang: getLang() }) })
   // The renderer has saved: no flush on the way out, straight into the installer.
-  ipcMain.handle('update:install', () => { updating = installUpdate() })
+  ipcMain.handle('update:install', async () => { updating = await installUpdate() })
   // The manual ships with the app (electron-builder extraResources: site/), so it opens without the internet, in the
   // computer's browser. Japanese only for now; page: a chapter's file name (05-scene.html), else the index.
   ipcMain.handle('app:manual', (_e, page?: string) => {

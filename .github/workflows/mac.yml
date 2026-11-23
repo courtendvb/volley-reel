@@ -11,6 +11,8 @@ on:
       - scripts/fetch-ffmpeg-mac.mjs
       - src/main/ffmpegPath.ts
       - src/main/macMenu.ts
+      - src/main/macUpdate.ts
+      - src/main/updater.ts
 jobs:
   build:
     runs-on: macos-latest
@@ -36,6 +38,14 @@ jobs:
           codesign --verify --deep --strict "$app"
           "$app/Contents/Resources/ffmpeg/ffprobe" -version
           "$app/Contents/Resources/ffmpeg/ffmpeg" -hide_banner -f lavfi -i testsrc=d=1 -c:v libx264 -pix_fmt yuv420p "$RUNNER_TEMP/check.mp4"
+      - name: Check the update zips unpack to a valid app (as macUpdate.ts unpacks them)
+        run: |
+          for z in release/*-mac.zip; do
+            d="$RUNNER_TEMP/unzip-$(basename "$z" .zip)"
+            ditto -x -k "$z" "$d"
+            codesign --verify --deep --strict "$d/SyncScout Video Editor.app"
+            echo "ok $z"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: syncscout-video-editor-mac

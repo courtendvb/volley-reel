@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>機能一覧 — SyncScout Video Editor</title>
-<meta name="description" content="SyncScout Video Editor の機能一覧。サンプル映像の見どころ、ビフォー・アフター、プリセット、データスライド、そのほかの機能、SyncScout との違い。">
+<meta name="description" content="SyncScout Video Editor の機能一覧。ビフォー・アフター、プリセット、データスライド、そのほかの機能、SyncScout との違い。">
 <link rel="alternate" hreflang="en" href="features.html">
 <link rel="alternate" hreflang="ja" href="features-ja.html">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +18,6 @@
     <div class="bar">
       <a class="brand" href="ja.html">SyncScout <small>Video Editor</small></a>
       <nav class="nav" aria-label="このページの内容">
-        <a href="#sample">映像の中身</a>
         <a href="#difference">ビフォー・アフター</a>
         <a href="#presets">プリセット</a>
         <a href="#slides">スライド</a>
@@ -30,125 +29,12 @@
     <div class="pitch">
       <div class="telop"><i></i><span><b>機能一覧</b></span></div>
       <h1>できることを、<span class="mark">ひととおり。</span></h1>
-      <p class="lead">製品ページでは伝えきれない機能をまとめました。サンプル映像の見どころから、プリセット、データスライド、細かな機能まで。</p>
+      <p class="lead">製品ページでは伝えきれない機能をまとめました。ビフォー・アフターから、プリセット、データスライド、細かな機能まで。</p>
     </div>
   </div>
 </header>
 
 <main>
-  <section class="axis alt" id="sample">
-    <div class="wrap">
-      <div class="head">
-        <div class="title">
-          <div class="telop"><i></i><span><b>映像の中身</b></span></div>
-          <h2>実際の試合映像と、シーズン分の数字。</h2>
-        </div>
-        <p>下の映像は 1 回の書き出しです。前半は Croatia 対 Denmark（2022 年 5 月 28 日）で、パートごとに選んだ表示を載せました。サーブはヒートマップとゾーンの塗り、ブロックはコートに合わせた四角形、アタックはコーン、セットはセット配分。後半は、架空のチーム Riverside Herons の 10 試合分のサンプルデータを、データスライドにしたものです。画面に何が出ていて、何が出しているのかを並べました。</p>
-      </div>
-      <figure class="shot">
-        <video class="hero-video" id="film" controls muted playsinline preload="metadata" poster="img/ja/film-poster.jpg" width="1280" height="720" aria-label="アプリで作って書き出した 72 秒のサンプル映像。前半は Croatia 対 Denmark の実際の試合映像で、サーブエース、ブロック、アタック、セット。後半は 10 試合分のサンプルデータからのデータスライド。音声はありません。">
-          <source src="media/film-ja.mp4" type="video/mp4">
-        </video>
-        <ol class="chapters" aria-label="映像の見どころへ移動">
-          <li><button type="button" data-t="2"><i>0:02</i>サーブ</button></li>
-          <li><button type="button" data-t="11"><i>0:11</i>ブロック</button></li>
-          <li><button type="button" data-t="22"><i>0:22</i>アタック</button></li>
-          <li><button type="button" data-t="31"><i>0:31</i>セット</button></li>
-          <li><button type="button" data-t="40"><i>0:40</i>10 試合のデータ</button></li>
-          <li><button type="button" data-t="67"><i>1:07</i>チーム比較</button></li>
-        </ol>
-        <figcaption class="legend">
-          <span><i class="dot data"></i>スカウトファイルから自動</span>
-          <span><i class="dot you"></i>手で足したもの（見出しと円）</span>
-          <span>アプリで書き出した 72 秒のサンプル。音声なし。</span>
-        </figcaption>
-      </figure>
-      <div class="moments">
-        <article class="moment">
-          <img src="img/ja/film-serve.jpg" width="960" height="540" alt="11 番のサーブエース。打点から落下点までの軌道、落ちた場所の波紋、サーブの落下点のヒートマップ、落ちたゾーンの青い塗り。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="2"><i>0:02</i>ここから再生</button>
-            <h3>エースを、落ちた場所に描く</h3>
-            <p>サーブの打点から落下点までの軌道、落ちる 1.5 秒前から出る波紋、その選手のほかのサーブの熱、そして落ちたゾーンを好きな色で塗って。</p>
-            <ul class="tags"><li>打点と落下点</li><li>着弾の波紋</li><li>ヒートマップ</li><li>ゾーンの塗り</li><li>テロップ</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-block.jpg" width="960" height="540" alt="「ラインを抑える」の見出し、ブロックを囲む赤い円、サイドラインに沿ってコートに置いた青い四角形。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="11"><i>0:11</i>ここから再生</button>
-            <h3>ライン際を、映像で示す</h3>
-            <p>ライン際にコートの遠近に沿った四角形を置き、見出しと、ブロックの瞬間だけ出る円を数クリックで足しました。マーカーごとに専用のタイトルカードも入ります。</p>
-            <ul class="tags"><li>コートに合わせた四角形</li><li>見出し</li><li>表示時間つきの円</li><li>タイトルカード</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-attack.jpg" width="960" height="540" alt="11 番のアタック。軌道、64・9・0・27・0 パーセントを示す 5 つのコーン、隅のディレクションチャート、落ちた場所の波紋。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="22"><i>0:22</i>ここから再生</button>
-            <h3>アタックの行き先</h3>
-            <p>打った先の割合を 5 つのコーンで（ここでは 64・9・0・27・0 パーセント）。隅にはディレクションチャート、落ちた場所には波紋を。</p>
-            <ul class="tags"><li>コーン</li><li>ディレクションチャート</li><li>着弾の波紋</li><li>軌道</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-set.jpg" width="960" height="540" alt="6 番のセット。ゾーン 1・3・4 へのセット配分をコートに塗って表示。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="31"><i>0:31</i>ここから再生</button>
-            <h3>セッターはどこへ上げたか</h3>
-            <p>セッターのセット配分をコートに塗り、各ゾーンへ上げた割合を出します。別のプレーで番号キーを押せば、同じ見た目のままフィルムに加えられます。</p>
-            <ul class="tags"><li>セット配分</li><li>打点</li><li>テロップ</li><li>マーカー</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-data-serve.jpg" width="960" height="540" alt="3 人のサーブのカード。10 試合のサーブ 150・111・106 本を、打った位置から落ちた位置まで線で描き、ブレイク率とミス率を添えたもの。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="42"><i>0:42</i>ここから再生</button>
-            <h3>10 試合を、1 枚に</h3>
-            <p>3 人の 10 試合分のサーブを、打った位置から落ちた位置まで描き、ブレイク率とミス率を添えました。ここから先は架空のデータです。</p>
-            <ul class="tags"><li>サーブのカード</li><li>10 試合</li><li>率</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-data-rotation.jpg" width="960" height="540" alt="P5 のローテーションのスライド。遠近のコートにフォーメーション、主なアタッカーのコーン、攻撃場所ごとの割合、パスとセッターコールごとの表。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="47"><i>0:47</i>ここから再生</button>
-            <h3>ローテーションを、1 枚に</h3>
-            <p>レセプションのフォーメーション、攻撃の行き先、P5 でのセッターの選択を、シーズン全体から。</p>
-            <ul class="tags"><li>データスライド</li><li>ローテーション</li><li>セッターの表</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-data-targets.jpg" width="960" height="540" alt="サーブの狙いのスライド。受けた選手と狙ったゾーンごと、ジャンプとフローター別に、良いパスと 1 本目の決定率。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="57"><i>0:57</i>ここから再生</button>
-            <h3>どのサーブがパスを崩すか</h3>
-            <p>受けた選手とゾーンごと、ジャンプとフローター別に、良いパス率と 1 本目の決定率。どのサーブが相手のサイドアウトを下げるかが分かります。</p>
-            <ul class="tags"><li>サーブの狙い</li><li>ジャンプとフローター</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-data-stats.jpg" width="960" height="540" alt="チームの選手ごとの、直近 10 試合のアタックの表。本数、決定、決定率、効果率。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="62"><i>1:02</i>ここから再生</button>
-            <h3>チームを、1 枚の表に</h3>
-            <p>チームの選手ごとの、直近 10 試合のアタック（サーブ、レセプションも）を、表のスライドで。</p>
-            <ul class="tags"><li>選手別の表</li><li>表</li></ul>
-          </div>
-        </article>
-        <article class="moment">
-          <img src="img/ja/film-compare.jpg" width="960" height="540" alt="RSH（10 試合・35 セット）と HCF（4 試合・12 セット）のスキル比較のスライド。良い方の数字が赤。" loading="lazy">
-          <div class="moment-body">
-            <button type="button" class="seek" data-t="67"><i>1:07</i>ここから再生</button>
-            <h3>自チームと、相手と</h3>
-            <p>2 チームの全試合分のスキル比較。良い方の数字が赤です。2 つのプロジェクトから作ります。</p>
-            <ul class="tags"><li>データスライド</li><li>チーム比較</li></ul>
-          </div>
-        </article>
-      </div>
-    </div>
-  </section>
-
   <section class="axis" id="difference">
     <div class="wrap">
       <div class="head">

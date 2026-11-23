@@ -302,13 +302,13 @@ a.brand { color: inherit; text-decoration: none; }
 .vs h3 { font-size: 20px; font-weight: 700; }
 .vs p { color: var(--on-slate-sub); font-size: 16px; line-height: 1.55; }
 .note.on-dark { color: var(--on-slate-sub); }
-.best, .gripes { margin-top: 36px; }
-.best h3, .gripes h3 { font-size: 22px; font-weight: 700; color: var(--on-slate); }
-.best ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 14px 0 0; padding: 0; list-style: none; }
-.best li { display: grid; gap: 6px; align-content: start; padding: 18px 20px; border-top: 3px solid var(--accent); border-radius: 4px; background: var(--slate-2); min-width: 0; }
+.took, .gripes { margin-top: 36px; }
+.took h3, .gripes h3 { font-size: 22px; font-weight: 700; color: var(--on-slate); }
+.took ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 14px 0 0; padding: 0; list-style: none; }
+.took li { display: grid; gap: 6px; align-content: start; padding: 18px 20px; border-top: 3px solid var(--accent); border-radius: 4px; background: var(--slate-2); min-width: 0; }
 .src { justify-self: start; padding: 2px 8px; border-radius: 3px; background: var(--slate-line); color: var(--on-slate-sub); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
-.best b, .gripes b { color: var(--on-slate); font-size: 17px; font-weight: 700; line-height: 1.35; }
-.best p, .gripes p { color: var(--on-slate-sub); font-size: 15.5px; line-height: 1.55; }
+.took b, .gripes b { color: var(--on-slate); font-size: 17px; font-weight: 700; line-height: 1.35; }
+.took p, .gripes p { color: var(--on-slate-sub); font-size: 15.5px; line-height: 1.55; }
 .gripes-lead { margin-top: 10px; max-width: 52em; }
 .gripes ol { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
 .gripes li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--slate-line); border-radius: 6px; overflow: hidden; }
@@ -318,7 +318,7 @@ a.brand { color: inherit; text-decoration: none; }
 .series-more { margin-top: 28px; }
 .series-more a { color: var(--on-slate); font-weight: 600; text-underline-offset: 4px; }
 @media (max-width: 860px) {
-  .vs, .best ul, .gripes li { grid-template-columns: minmax(0, 1fr); }
+  .vs, .took ul, .gripes li { grid-template-columns: minmax(0, 1fr); }
   .gripes li > .here { border-left: 0; border-top: 3px solid var(--red); }
 }
 

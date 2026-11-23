@@ -55,3 +55,7 @@ The Pricing section (`#pricing`) is plain text, not read from Stripe: US dollars
 ## The how-it-works animation
 
 The figure in the court section (.auto, one 12 s CSS loop, no script) stacks the plain frame (img/before.jpg), an SVG of the grid and four corner dots, a scan band, and the finished frame (img/after.jpg, img/ja/after.jpg). The SVG's corners are the fitted court of the film's match (court.corners in its library JSON, as fractions of the 1280 x 720 picture); the grid lines are that quadrilateral cut in thirds with a perspective transform, so they sit on the court lines. With reduced motion it rests on the finished picture. If the film's block clip (and so fter.jpg) changes, the plain frame, the SVG and the finished frame still need to be the same moment of the same match.
+
+## Alongside DataVolley and VolleyStation
+
+`alongside.html` (English) and `alongside-ja.html` (Japanese) put the app next to the scouting software: a play list against a video, what it took from each program, the five spots where making the video tends to take time in them (worded as our own experience over several seasons, never as "it can't", and noting that versions differ), and a table of the two jobs. Both landing pages link to it under the SyncScout series table. The text first appeared on a guide page that was never merged; when the app's controls change (the number of markers, the 1-6 buttons, the export formats), check these pages too.

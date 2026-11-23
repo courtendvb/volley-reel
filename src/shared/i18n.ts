@@ -9,9 +9,9 @@ import { ES as SHARED_ES } from './i18n-es'
 import { INTERNAL_EN } from '../internal/i18n-en'
 import { INTERNAL_ES } from '../internal/i18n-es'
 
-// The internal edition's strings (src/internal/i18n-*.ts) only in its build: the sold one doesn't carry them.
-const EN = __INTERNAL__ ? { ...SHARED_EN, ...INTERNAL_EN } : SHARED_EN
-const ES = __INTERNAL__ ? { ...SHARED_ES, ...INTERNAL_ES } : SHARED_ES
+// The team's own features' strings (src/internal/i18n-*.ts) are kept with their code.
+const EN = { ...SHARED_EN, ...INTERNAL_EN }
+const ES = { ...SHARED_ES, ...INTERNAL_ES }
 
 export type Lang = 'ja' | 'en' | 'es'
 export const LANGS: { id: Lang; name: string }[] = [{ id: 'ja', name: '日本語' }, { id: 'en', name: 'English' }, { id: 'es', name: 'Español' }]

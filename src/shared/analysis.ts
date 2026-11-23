@@ -3,9 +3,9 @@
 import type { ReportMatch } from './report'
 import type { ParsedDVW, Play, Side } from './types'
 
-// pointError (得点率・ミス率) is the internal edition's only (internal/pointError.ts).
+// pointError (得点率・ミス率): the team's own report (internal/pointError.ts), for the accounts allowed it.
 export type AnalysisReportId = 'pointError' | 'sideOut' | 'recAttack' | 'rotation' | 'runs'
-export const ANALYSIS_REPORTS: AnalysisReportId[] = [...(__INTERNAL__ ? ['pointError' as const] : []), 'sideOut', 'recAttack', 'rotation', 'runs']
+export const ANALYSIS_REPORTS: AnalysisReportId[] = ['pointError', 'sideOut', 'recAttack', 'rotation', 'runs']
 
 // n of `of` as a percent: whole (12%) or to one place (8.9); '' when there is nothing to share.
 export const percent = (n: number, of: number, places = 0) => (of ? `${((n / of) * 100).toFixed(places)}${places ? '' : '%'}` : '')

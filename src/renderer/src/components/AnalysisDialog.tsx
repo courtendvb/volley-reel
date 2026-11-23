@@ -8,13 +8,13 @@ import { useInternal } from '../account'
 
 // 分析: reports on what the target team (設定の対象チーム) is really like over the project's
 // matches. A tab per report (ANALYSIS_REPORTS); the numbers come from shared/analysis.ts.
-const TITLES = { ...(__INTERNAL__ ? { pointError: '得点率・ミス率' } : {}), sideOut: 'サイドアウト・ブレイク', recAttack: 'レセプションと攻撃', rotation: 'ローテーション', runs: '連続得点・連続失点' } as Record<AnalysisReportId, string>
+const TITLES = { pointError: '得点率・ミス率', sideOut: 'サイドアウト・ブレイク', recAttack: 'レセプションと攻撃', rotation: 'ローテーション', runs: '連続得点・連続失点' } satisfies Record<AnalysisReportId, string>
 
 export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
   matches: Match[]; dvws: Record<string, ParsedDVW>; onClose: () => void
   ourCodes: string[] // the target team's codes
 }) {
-  const internal = useInternal() // 得点率・ミス率: the internal edition's, for an account allowed it
+  const internal = useInternal() // 得点率・ミス率: the team's own, for an account allowed it
   const reports = ANALYSIS_REPORTS.filter(id => id !== 'pointError' || internal)
   const [report, setReport] = useState<AnalysisReportId>(reports[0])
   // The target team's side in each match it played, the opponent's name for the row.
@@ -40,7 +40,7 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
         <div className="analysis-body">
           {!team ? <p className="muted">{t('設定で対象チームを決めると分析できます')}</p>
             : !ours.length ? <p className="muted">{t('{0} の試合の DVW がありません', team)}</p>
-            : __INTERNAL__ && internal && report === 'pointError' ? <PointError list={ours} team={team} />
+            : internal && report === 'pointError' ? <PointError list={ours} team={team} />
             : report === 'sideOut' ? <SideOut list={ours} team={team} />
             : report === 'recAttack' ? <RecAttack list={ours} team={team} />
             : report === 'rotation' ? <Rotations list={ours} team={team} />

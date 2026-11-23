@@ -1,5 +1,5 @@
-// English for the internal edition's interface (src/internal/README.md): the strings only its code shows.
-// The rest are in shared/i18n-en.ts; i18n.ts adds these in the internal edition only.
+// English for the team's own features (src/internal/README.md): the strings only their code shows.
+// The rest are in shared/i18n-en.ts; shared/i18n.ts adds these.
 export const INTERNAL_EN: Record<string, string> = {
   "M.PASS（! -）": "M.PASS (! -)",
   "対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る": "The target team's point and error rates and more, a row per match",

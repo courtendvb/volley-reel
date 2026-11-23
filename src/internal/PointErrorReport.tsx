@@ -4,7 +4,7 @@ import type { ReportMatch } from '../shared/report'
 import { t } from '../shared/i18n'
 import { errorTries, errors, pointErrorReport, pointTries, points, type PointErrorRow, type PointErrorSide } from './pointError'
 
-// The 分析 window's 得点率・ミス率 tab (internal edition only): the team's and the opponents' error and
+// The 分析 window's 得点率・ミス率 tab (the team's own, for the accounts allowed it): the team's and the opponents' error and
 // point rates, a row per match.
 export function PointError({ list, team }: { list: ReportMatch[]; team: string }) {
   const r = useMemo(() => pointErrorReport(list), [list])

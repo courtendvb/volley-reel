@@ -6,18 +6,14 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "dev:internal": "node scripts/internal.mjs dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "dist": "electron-vite build && node scripts/edition-guard.mjs && electron-builder --win --x64 --publish never",
-    "dist:mac": "electron-vite build && node scripts/edition-guard.mjs && electron-builder --mac --publish never",
-    "dist:internal": "node scripts/internal.mjs dist",
-    "dist:internal:mac": "node scripts/internal.mjs dist:mac",
+    "dist": "electron-vite build && electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
     "ffmpeg:mac": "node scripts/fetch-ffmpeg-mac.mjs",
-    "release": "node scripts/release.mjs",
-    "release:internal": "node scripts/release.mjs --internal"
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

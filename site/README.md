@@ -62,6 +62,6 @@ The figure in the court section (.auto, one 12 s CSS loop, no script) stacks the
 
 ## Publishing
 
-The site lives at https://editor.courtend.net/, on the same rented server as courtend.net. `.github/workflows/site.yml` uploads it over FTPS whenever `site/` changes on main (or by hand: Actions > Site > Run workflow), with the FTP details in four repository secrets named in that file. It sends everything in `site/` except `README.md`, the `source/` folders and `media/`.
+The site lives at https://editor.courtend.net/, on the same rented server as courtend.net. `.github/workflows/site.yml` uploads it over FTPS whenever `site/` changes on main (or by hand: Actions > Site > Run workflow), with the FTP details in four repository secrets named in that file. It sends everything in `site/` except `README.md`, the `source/` folders and `media/`. The server lets browsers keep CSS and JS for a week, so on the way up every page's links to `site.css`, `site.js` and `manual.css` get `?v=` and the start of that file's hash: a changed file is fetched again at once. Keep those links plain in the repository.
 
 The film (`media/film-en.mp4`, `media/film-ja.mp4`) is not in git, so after making a new one, upload those two files to `media/` on the server by hand. The upload remembers what it sent in `.ftp-deploy-sync-state.json` on the server, so later runs send only changed files and delete only files it sent itself; anything put there by hand is left alone.

@@ -218,30 +218,19 @@ const titleLines = (name: string, fallback: string): string[] => {
 // Full-frame card at the head of a marker group: small match line over "[n] MARKER NAME".
 // marker null = a scene card: the scene name, a little larger, behind a narrow accent block.
 // A name with line breaks is drawn as several lines on a taller plate.
-// logo: the opponent's logo, drawn beside the marker title or above the scene title.
 // Returns the title's box in pixels (for the card editor to grab). Position and size come from
 // s.markerLayout / s.sceneLayout, which the editor changes.
-// The logo can instead have its own place and size (s.logos, per kind of card) or be left out; the
-// returned box then carries the logo's own box too, for the editor.
-export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: LookTheme, logo0?: CanvasImageSource | null): TitleBox {
+// No logo of its own: a team's logo goes on a card as an object (an image), like any picture.
+export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: number | null; name: string; match: string | null; video?: boolean; layout?: CardLayout }, s: OverlaySettings['titleCard'], theme: LookTheme): Box {
   const k = H / 720
-  const place = logo0 ? s.logos?.[cardKind(d)] : undefined
-  const logo = place === undefined ? logo0 ?? null : null // drawn with the title
   ctx.save()
   fillRect(ctx, cardBackground(s, theme), 0, 0, W, H)
-  const own = (): Box | undefined => {
-    if (!logo0 || !place || place === 'hidden') return undefined
-    const h = place.h * H, w = h * logoRatio(logo0), b = { x: place.x * W - w / 2, y: place.y * H - h / 2, w, h }
-    ctx.drawImage(logo0, b.x, b.y, b.w, b.h)
-    return b
-  }
   if (d.marker === null) {
     // The video's opening card is drawn like a scene card, larger by default, with its own layout.
     const L = sceneTopLeft(d.layout ?? (d.video ? s.videoLayout ?? DEFAULT_VIDEO_LAYOUT : s.sceneLayout ?? DEFAULT_SCENE_LAYOUT))
-    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, logo, L)
-    const ownBox = own()
+    const box = drawSceneCard(ctx, W, H, k, d.name, s.showMatch ? d.match : null, theme, L)
     ctx.restore()
-    return ownBox ? { ...box, logo: ownBox } : box
+    return box
   }
   // Marker cards: 3× the base size times the layout's scale, the title's top-left at the layout's
   // point (10% / 30% by default); shrunk to stay inside the frame when the name is long.
@@ -250,21 +239,19 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
   const more = names.length - 1 // each further line makes the plate 34 (× q) taller
   const match = s.showMatch && d.match ? d.match : null
   const x = W * L.x, top = H * L.y
-  const lr = logo ? logoRatio(logo) : 0 // width / height
   // Without the number (showMarkerNumber off) its block is a slim accent stripe, as on scene cards.
   const showNum = s.showMarkerNumber !== false
   const layout = (q: number) => {
     const numW = showNum ? measure(ctx, String(d.marker), font(24 * q), 0) + 32 * q : 16 * q
     const plateW = Math.max(...names.map(n => measure(ctx, n, font(28 * q), 0.08 * 28 * q))) + 46 * q
-    const logoH = (match ? 22 * q : 0) + (46 + 34 * more) * q
+    const fullH = (match ? 22 * q : 0) + (46 + 34 * more) * q
     const matchW = match ? measure(ctx, match, font(12 * q, 400), 0.4 * 12 * q) : 0
-    const total = Math.max(numW + plateW - 6 * q, matchW) // the logo goes after the plate or the match line, whichever is wider
-    return { numW, plateW, logoH, total: total + (logo ? 28 * q + logoH * lr : 0) }
+    return { numW, plateW, fullH, total: Math.max(numW + plateW - 6 * q, matchW) }
   }
   let q = k * 3 * L.scale
   const first = layout(q)
   if (x + first.total > W * 0.98) q *= Math.max(0.2, (W * 0.98 - x) / first.total)
-  const { numW, plateW, logoH, total } = layout(q)
+  const { numW, plateW, fullH, total } = layout(q)
   const numFont = font(24 * q), nameFont = font(28 * q), matchFont = font(12 * q, 400)
   const h = (46 + 34 * more) * q, slant = 10 * q
   // The plates take the telops' design (lookOf): slanted, square, white or none.
@@ -282,21 +269,17 @@ export function drawTitleCard(ctx: Ctx, W: number, H: number, d: { marker: numbe
     text(ctx, String(d.marker), x + (numW - cut - nw) / 2, y + h / 2, numFont, D.onAccent, 0)
   }
   names.forEach((n, i) => text(ctx, n, px + cut + 14 * q, y + h / 2 + (i - more / 2) * 34 * q, nameFont, D.text, 0.08 * 28 * q))
-  D.begin(ctx) // no shadow on the logo
-  const logoBox = logo ? { x: x + total - logoH * lr, y: top, w: logoH * lr, h: logoH } : own()
-  if (logo) ctx.drawImage(logo, logoBox!.x, logoBox!.y, logoBox!.w, logoBox!.h) // as tall as the whole title
   ctx.restore()
-  return { x, y: top, w: total, h: logoH, ...(logoBox ? { logo: logoBox } : {}) }
+  return { x, y: top, w: total, h: fullH }
 }
 
 export interface Box { x: number; y: number; w: number; h: number }
-export type TitleBox = Box & { logo?: Box } // the logo's box, beside the title or on its own
 export const cardKind = (d: { marker: number | null; video?: boolean }): CardKind => (d.video ? 'video' : d.marker === null ? 'scene' : 'marker')
 
 // A card or a slide (a card with `slide`). Returns the title's box, or null for a slide.
 export function drawCard(ctx: Ctx, W: number, H: number, card: Parameters<typeof drawTitleCard>[3] & { slide?: { bg: SlideBg } }, s: OverlaySettings['titleCard'],
-  theme: LookTheme, logo: CanvasImageSource | null, image: ImageLookup): TitleBox | null {
-  if (!card.slide) return drawTitleCard(ctx, W, H, card, s, theme, logo)
+  theme: LookTheme, image: ImageLookup): Box | null {
+  if (!card.slide) return drawTitleCard(ctx, W, H, card, s, theme)
   drawSlide(ctx, W, H, card.slide.bg, cardBackground(s, theme), image)
   return null
 }
@@ -317,14 +300,9 @@ function drawSlide(ctx: Ctx, W: number, H: number, bg: SlideBg, cardBg: string, 
   ctx.restore()
 }
 
-function logoRatio(img: CanvasImageSource): number {
-  const w = (img as { width: number }).width, h = (img as { height: number }).height
-  return w > 0 && h > 0 ? w / h : 1
-}
-
-// The scene title (with the logo and the match line above it), its top-left at the layout's point
+// The scene title (with the match line above it), its top-left at the layout's point
 // (sceneTopLeft): a longer title grows to the right, and is made smaller to stay inside the frame.
-function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: LookTheme, logo: CanvasImageSource | null, L: CardLayout): TitleBox {
+function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string, match: string | null, theme: LookTheme, L: CardLayout): Box {
   const labels = titleLines(name, 'SCENE')
   const more = labels.length - 1 // each further line makes the plate 44 (× k) taller
   const x = W * L.x, top = H * L.y
@@ -332,24 +310,19 @@ function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string,
     const plateW = Math.max(...labels.map(l => measure(ctx, l, font(36 * k), 0.08 * 36 * k))) + 56 * k
     const total = 22 * k + plateW - 6 * k
     const mw = match ? measure(ctx, match, font(12 * k, 400), 0.4 * 12 * k) : 0
-    // Logo: at most 120 px tall at 720p and half the width.
-    let lh = logo ? 120 * k : 0, lw = logo ? lh * logoRatio(logo) : 0
-    if (logo && lw > W * 0.5) { lw = W * 0.5; lh = lw / logoRatio(logo) }
-    return { plateW, total, mw, lh, lw, w: Math.max(total, mw, lw) }
+    return { plateW, total, mw, w: Math.max(total, mw) }
   }
   let k = k0 * L.scale
   const first = sizes(k)
   if (x + first.w > W * 0.98) k *= Math.max(0.2, (W * 0.98 - x) / first.w)
-  const { plateW, total, mw, lh, lw } = sizes(k)
+  const { plateW, total, mw } = sizes(k)
   const nameFont = font(36 * k), matchFont = font(12 * k, 400)
   const blockW = 22 * k, h = (58 + 44 * more) * k, slant = 12 * k
-  // Heights above the plate's top: the logo, then the match line.
-  const above = logo ? (match ? 44 : 20) * k + lh : match ? 32 * k : 0
+  // Height above the plate's top: the match line.
+  const above = match ? 32 * k : 0
   const y = top + above
   const D = lookOf(theme, k), cut = D.cut(slant) // the telops' design (lookOf)
-  const logoBox = logo ? { x, y: y - (match ? 44 : 20) * k - lh, w: lw, h: lh } : null
   D.begin(ctx)
-  if (logoBox) ctx.drawImage(logo!, logoBox.x, logoBox.y, logoBox.w, logoBox.h)
   const px = x + blockW - 6 * k
   D.shape(ctx, 'plate2', px, y, plateW, h, { tl: cut, br: D.cut(16 * k) }, { r: true })
   D.shape(ctx, 'accent', x, y, blockW, h, { br: cut }, { l: true })
@@ -358,7 +331,7 @@ function drawSceneCard(ctx: Ctx, W: number, H: number, k0: number, name: string,
   if (match) text(ctx, match, x, y - 26 * k, matchFont, D.muted, 0.4 * 12 * k)
   labels.forEach((l, i) => text(ctx, l, px + cut + 18 * k, y + h / 2 + (i - more / 2) * 44 * k, nameFont, D.text, 0.08 * 36 * k))
   D.begin(ctx)
-  return { x, y: top, w: Math.max(total, mw, lw), h: above + h, ...(logoBox ? { logo: logoBox } : {}) }
+  return { x, y: top, w: Math.max(total, mw), h: above + h }
 }
 
 // ---- design patterns of the scoreboard, the caption and the serve speed plate -----------------------

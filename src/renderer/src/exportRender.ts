@@ -10,7 +10,7 @@ import type { ExportItem, ExportJob, ExportLayer, Match } from '../../shared/typ
 import type { ImageLookup } from '../../shared/annotation'
 import { FLIGHTS_LEAD_SEC, afterOn, afterSteps, drawAfter, resultTintOf, drawForecast, forecastOn, forecastSteps, landingFxEnd, FLIGHTS_SEC, clipCourtStyle, drawCourt, drawFlight, drawFlights, withoutPlayerMarks, drawRipple, rippleImpact, rippleStart, rippleSteps, drawSlideMarks, flightMoves, hasFlight, type CourtFit, type Flight, type GridStyle, type PlayZones, type SlideFlights } from '../../shared/court'
 import { pieces, playedAt, playedSec } from '../../shared/timing'
-import { logoImage, packPhotoImage, preloadAssets, preloadLogos, preloadPackPhotos } from './assets'
+import { packPhotoImage, preloadAssets, preloadPackPhotos } from './assets'
 
 const FLIGHT_LAYERS = 12 // at most, for one ball's flight
 const SLIDE_FLIGHT_LAYERS = 18 // for a slide's flights, all at once
@@ -53,7 +53,7 @@ export async function cardImages(cards: Card[], overlay: OverlaySettings, heatOp
     const out: Uint8Array[] = []
     for (const c of cards) {
       const canvas = new OffscreenCanvas(W, H), ctx = canvas.getContext('2d')!
-      drawCard(ctx, W, H, c, overlay.titleCard, lookTheme(overlay), logoImage(c.opp), images.lookup)
+      drawCard(ctx, W, H, c, overlay.titleCard, lookTheme(overlay), images.lookup)
       if (c.slide) drawSlideMarks(ctx, W, H, c.slide, heatOpacity)
       if (c.slide?.flights) drawFlights(ctx, W, H, c.slide.flights, 1)
       for (const a of c.annotations ?? []) if (!leaveOut?.(a)) drawAnnotation(ctx, a, W, H, images.lookup)
@@ -84,7 +84,6 @@ export async function buildExportJob(plan: PlanItem[], overlay: OverlaySettings,
 async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, outPath: string, W: number, H: number, fpsStr: string, assetImage: ImageLookup, chapters?: Chapter[]): Promise<ExportJob> {
   // One canvas for every layer of the job (each layer is drawn, encoded to PNG, then cleared).
   const png = pngOn(new OffscreenCanvas(W, H))
-  await preloadLogos(plan.map(p => (p.kind === 'card' ? p.card.opp : null)))
   if (overlay.playerCaption.photo) await preloadPackPhotos(plan.map(p => (p.kind === 'clip' ? d.overlayData(p.clip)?.caption.photo : null)))
   const items: ExportItem[] = []
   const firstItem: number[] = [] // per plan index: the job item it starts at (a skipped clip starts at the next)
@@ -92,7 +91,7 @@ async function buildItems(plan: PlanItem[], overlay: OverlaySettings, d: Deps, o
     firstItem.push(items.length)
     if (p.kind === 'card') {
       items.push({ kind: 'card', durationSec: p.durationSec, png: await png(ctx => {
-        drawCard(ctx, W, H, p.card, overlay.titleCard, lookTheme(overlay), logoImage(p.card.opp), assetImage)
+        drawCard(ctx, W, H, p.card, overlay.titleCard, lookTheme(overlay), assetImage)
         if (p.card.slide) drawSlideMarks(ctx, W, H, p.card.slide, d.courtStyle?.heatOpacity)
         for (const a of p.card.annotations ?? []) drawAnnotation(ctx, a, W, H, assetImage)
       }), ...(p.card.slide?.flights ? { layers: await flightLayers(p.card.slide.flights, p.durationSec, png) } : {}) })

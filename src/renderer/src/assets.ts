@@ -118,10 +118,6 @@ export function logoImage(code: string | null | undefined): ImageBitmap | null {
   return logoReady.get(code) ?? null
 }
 
-export async function preloadLogos(codes: (string | null | undefined)[]): Promise<void> {
-  await Promise.all([...new Set(codes.filter((c): c is string => !!c))].map(loadLogo))
-}
-
 // A team's colour from its logo in the library (its most common strong colour), or null.
 export async function logoColor(code: string): Promise<string | null> {
   const bmp = await loadLogo(code)

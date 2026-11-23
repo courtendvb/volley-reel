@@ -1003,7 +1003,7 @@ export function App() {
                 if (cardEditCard) {
                   return (
                     <>
-                      <CardEditor key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title' || cardTool === 'logo'} target={cardTool === 'logo' ? 'logo' : 'title'} />
+                      <CardEditor key={lineKey} heatOpacity={gridStyle.heatOpacity} size={size} card={cardEditCard} settings={overlay} onChange={setOverlay} onOwn={setCardLayout} active={cardTool === 'title'} />
                       <AnnotationLayer onMade={() => setAnnTool('select')}
                         size={size} annotations={cardEditCard.annotations ?? []} clip={{ key: 'card', in: 0, out: 1e9 }} always images={cardImages}
                         editable={cardTool === 'objects'} tool={annTool} style={annStyle}

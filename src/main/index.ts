@@ -128,6 +128,8 @@ app.whenReady().then(async () => {
     // Off in self-checks; VR_ACCOUNTS=1 (+ VR_LEASE_KEY) tries it before the release that turns it on.
     enabled: !process.env.VR_SMOKE && (ENFORCED || process.env.VR_ACCOUNTS === '1'),
     publicKey: process.env.VR_LEASE_KEY || LEASE_PUBLIC_KEY,
+    // The internal edition: the addresses its features open for (electron.vite.config.ts); none in the sold one.
+    ...(__INTERNAL__ ? { internalEmails: __INTERNAL_EMAILS__ } : {}),
     ...(safeStorage.isEncryptionAvailable() ? {
       encrypt: (s: string) => safeStorage.encryptString(s).toString('base64'),
       decrypt: (s: string) => safeStorage.decryptString(Buffer.from(s, 'base64')),

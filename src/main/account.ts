@@ -49,6 +49,7 @@ export interface AccountDeps {
   decrypt?: (s: string) => string
   fetch?: typeof fetch
   now?: () => number // milliseconds
+  internalEmails?: readonly string[] // the internal edition: whom its features open for (lower case)
 }
 
 export class AccountFailure extends Error {
@@ -100,7 +101,7 @@ export class Account {
         ? { kind: 'needs_team', email: this.saved.needsTeam, suggested: this.saved.suggested ?? [] }
         : { kind: 'signed_out' }
     }
-    return leaseState(p, this.saved.teams ?? [], this.now(), this.saved.seen ?? 0, this.saved.serverError, this.saved.suggested ?? [])
+    return leaseState(p, this.saved.teams ?? [], this.now(), this.saved.seen ?? 0, this.saved.serverError, this.saved.suggested ?? [], this.deps.internalEmails)
   }
 
   // Why an export, an import or a new project isn't allowed now, or null (shared/account.ts: gate).

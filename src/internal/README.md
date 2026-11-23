@@ -8,9 +8,12 @@
 Electron のアプリは中の JS（`app.asar`）を誰でも取り出して読める。そのため、身内版の機能は画面で隠すのではなく、
 **販売版のビルドにコードも文言も入れない**ようにしている。
 
-身内版でも、機能が開くのは**許可されたアカウントだけ**。サーバーが署名するリース（`shared/account.ts`）の `apps` に
-`'editor-internal'`（`shared/edition.ts` の `INTERNAL_APP`）が入っているときに限る。入っていなければ、販売版と同じ見た目で
-動き、身内版の機能があることも表示しない。どのチームに入れるかはサーバー（syncscout の `account-lease`）が決める。
+身内版でも、機能が開くのは**許可されたアカウントだけ**。サーバーが署名するリース（`shared/account.ts`）の
+ログインのメールアドレスが、身内版に入れた一覧（環境変数 `VR_INTERNAL_EMAILS`）にあるときに限る。
+アドレスはメールのコードで確かめてあり、リースは署名付きなので、書き換えても通らない。
+（リースの `apps` に `'editor-internal'`（`shared/edition.ts` の `INTERNAL_APP`）があるときも開く。サーバー側で
+許可したくなったとき用で、今はサーバーは入れていない。）
+一覧になければ販売版と同じ見た目で動き、身内版の機能があることも表示しない。
 
 ## 身内版だけのもの
 
@@ -74,13 +77,19 @@ npm run release:internal    # Windows のインストーラーを作り、非公
   販売版を `1.1.0` にすると、そのあとの身内版は `1.1.0-internal.…` になり、続けて更新される
 - インストールした身内版は、起動時に `courtendvb/syncscout-internal-releases`（非公開）の最新リリースを見て、
   あれば販売版と同じように更新する（`main/updater.ts`）。販売版の公開リポジトリは見ない
+- 機能を使える人のメールアドレスは、ビルドする PC の環境変数 `VR_INTERNAL_EMAILS`（カンマ区切り）。
+  リポジトリには入れない。人を足す・外すときは、これを直して `npm run release:internal`（更新が届けば外した人には開かなくなる）
+  ```
+  setx VR_INTERNAL_EMAILS "a@example.com,b@example.com"
+  ```
 - 非公開リポジトリを読むトークンはアプリに入る。ビルドする PC の環境変数 `VR_INTERNAL_UPDATE_TOKEN` から
   （`electron.vite.config.ts`）。リポジトリには入れない。権限は **そのリポジトリの Contents: Read-only だけ**の fine-grained token にする。
   インストーラーから取り出せるので、漏れたら取り消して作り直し、身内版を出し直す（古い版はそのトークンで更新を探せなくなる）
 - アップロードは GitHub CLI のログイン（`gh auth token`）で行う。販売版の `npm run release` と同じ
-- `VR_INTERNAL_UPDATE_TOKEN` なしで作った身内版（`npm run dist:internal` など）は更新を探さない
+- `VR_INTERNAL_UPDATE_TOKEN` なしで作った身内版（`npm run dist:internal` など）は更新を探さない。`VR_INTERNAL_EMAILS` なしだと
+  誰にも機能が開かない（どちらも `dist:internal` は注意を出し、`release:internal` は止まる）
 - Mac の身内版は、まだ更新しない（Mac の更新は `macUpdate.ts` が公開リポジトリの URL から取るため）
-- 販売版のビルドには、トークン・更新先・`editor-internal` も入らない（`edition-guard.mjs` が確かめる）
+- 販売版のビルドには、トークン・メールアドレス・更新先・`editor-internal` も入らない（`edition-guard.mjs` が確かめる）
 
 ## 新しく身内版の機能を足すとき
 

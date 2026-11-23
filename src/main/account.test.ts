@@ -32,11 +32,12 @@ function server(routes: Record<string, (body: Record<string, unknown>) => [numbe
   return { f, calls }
 }
 
-function account(opts: { now?: number; fetch?: typeof fetch; dir?: string; enabled?: boolean } = {}) {
+function account(opts: { now?: number; fetch?: typeof fetch; dir?: string; enabled?: boolean; internalEmails?: string[] } = {}) {
   let now = (opts.now ?? T0) * 1000
   const a = new Account({
     dir: opts.dir ?? mkdtempSync(join(tmpdir(), 'acct-')), appVersion: '0.3.0', enabled: opts.enabled ?? true, publicKey: pub,
     encrypt: s => `enc:${s}`, decrypt: s => s.replace(/^enc:/, ''), fetch: opts.fetch, now: () => now,
+    ...(opts.internalEmails ? { internalEmails: opts.internalEmails } : {}),
   })
   return { a, at: (sec: number) => { now = sec * 1000 } }
 }
@@ -214,6 +215,12 @@ describe('Account', () => {
     expect(await account({ fetch: signedIn().f }).a.signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: false })
     const allowed = account({ fetch: signedIn({}, { apps: ['editor', 'editor-internal'] }).f }).a
     expect(await allowed.signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: true })
+  })
+
+  it('opens them for the addresses the internal edition was built with', async () => {
+    const make = (emails: string[]) => account({ fetch: signedIn().f, internalEmails: emails }).a
+    expect(await make(['a@example.com']).signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: true })
+    expect(await make(['b@example.com']).signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: false })
   })
 
   it('says no for an app the plan does not cover', async () => {

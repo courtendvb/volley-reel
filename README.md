@@ -243,7 +243,7 @@ npm run dist
 - 身内版: `npm run dev:internal`（開発）、`npm run dist:internal`（Windows のインストーラー → `release-internal/`）、`npm run dist:internal:mac`（Mac で）。
   名前は「SyncScout Video Editor Internal」。販売版とは別のアプリとして並べて入れられ、設定（倉庫の場所・ログイン）も別に持つ（倉庫のフォルダは同じものを選べる）
 - 身内版の公開: `npm run release:internal`。非公開の `syncscout-internal-releases` に出し、インストールした身内版はそこから自動で更新する（`VR_INTERNAL_UPDATE_TOKEN` が要る）
-- 身内版でも、機能が開くのはリースの `apps` に `editor-internal` があるアカウントだけ（サーバーが決める）
+- 身内版でも、機能が開くのは環境変数 `VR_INTERNAL_EMAILS` に入れたメールアドレスでログインした人だけ。ほかの人には販売版と同じに見える
 - 身内版だけの機能: データスライドの「サーブの狙い」「アタックディレクション」、分析の「得点率・ミス率」
 
 ## Mac 版

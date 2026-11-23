@@ -12,6 +12,9 @@ const run = (cmd, args) => {
 }
 const builder = target => ['electron-builder', ...target, '--config', 'electron-builder.internal.yml', '--publish', 'never']
 const what = process.argv[2]
+// Built without them, the app works, but opens its features for nobody, or never updates.
+if (what !== 'dev' && !(process.env.VR_INTERNAL_EMAILS ?? '').trim()) console.warn('注意: VR_INTERNAL_EMAILS がないので、この身内版では誰にも身内版の機能が開きません')
+if (what !== 'dev' && !process.env.VR_INTERNAL_UPDATE_TOKEN) console.warn('注意: VR_INTERNAL_UPDATE_TOKEN がないので、この身内版は更新を探しません')
 if (what === 'dev') run('npx', ['electron-vite', 'dev'])
 else if (what === 'dist' || what === 'dist:mac') {
   run('npx', ['electron-vite', 'build'])

@@ -158,9 +158,11 @@ export const CLOCK_SLACK_SEC = 24 * 3600
 
 // The state a verified lease gives, at `now` (seconds). `seen` = the latest time this computer has seen
 // (main/account.ts keeps it); `serverError` = what the server said on the last refresh, when it refused.
-export function leaseState(p: LeasePayload, teams: LeaseTeam[], now: number, seen: number, serverError?: AccountError, suggested: LeaseTeam[] = []): AccountState {
+// internalEmails: the addresses the internal edition opens its features for (main/index.ts); they open
+// for a lease that carries INTERNAL_APP too.
+export function leaseState(p: LeasePayload, teams: LeaseTeam[], now: number, seen: number, serverError?: AccountError, suggested: LeaseTeam[] = [], internalEmails: readonly string[] = []): AccountState {
   const at = Math.max(now, seen - CLOCK_SLACK_SEC)
-  const base = { email: p.email, team: p.team, teams: teams.length ? teams : [p.team], suggested, internal: __INTERNAL__ && p.apps.includes(INTERNAL_APP) }
+  const base = { email: p.email, team: p.team, teams: teams.length ? teams : [p.team], suggested, internal: __INTERNAL__ && (p.apps.includes(INTERNAL_APP) || internalEmails.includes(p.email.trim().toLowerCase())) }
   const refused = serverError ?? p.denied
   if (refused === 'licence_expired' || refused === 'payment_required') return { kind: 'expired', ...base, reason: refused }
   if (!p.apps.includes(EDITOR_APP) || refused === 'no_access') return { kind: 'no_access', ...base }

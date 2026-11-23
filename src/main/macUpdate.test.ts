@@ -88,7 +88,9 @@ describe.runIf(process.platform === 'darwin')('mac update on macOS', () => {
     const staged = await unpackApp(zip, join(root, 'staged'))
     const stand = spawn('/bin/sleep', ['1'])
     startSwap({ pid: stand.pid!, newApp: staged, target: installed, start: false, scriptDir: root, logFile: join(root, 'swap.log') })
-    for (let i = 0; i < 100 && !readFileSync(join(installed, 'Contents', 'MacOS', 'Test'), 'utf8').includes('2'); i++) await new Promise(r => setTimeout(r, 100))
+    // The script's last line says it is done (the old app removed, nothing left to do).
+    const log = join(root, 'swap.log')
+    for (let i = 0; i < 150 && !(existsSync(log) && readFileSync(log, 'utf8').includes('updated')); i++) await new Promise(r => setTimeout(r, 100))
     expect(readFileSync(join(installed, 'Contents', 'MacOS', 'Test'), 'utf8')).toContain('echo 2')
     expect(existsSync(`${installed}.previous`)).toBe(false)
     expect(readFileSync(join(root, 'swap.log'), 'utf8')).toMatch(/updated/)

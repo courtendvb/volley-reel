@@ -27,6 +27,18 @@ jobs:
           rsync -a site/ public/ \
             --exclude README.md --exclude 'source/' --exclude 'media/'
           find public -type f | wc -l
+      # The server lets browsers keep CSS and JS for a week, so each page asks for them with
+      # ?v=<start of the file's hash>: a changed file gets a new address and is fetched again.
+      - name: Tag CSS and JS with their content
+        run: |
+          cd public
+          for f in site.css site.js manual/manual.css; do
+            v=$(sha256sum "$f" | cut -c1-10)
+            name=$(basename "$f")
+            find . -name '*.html' -exec sed -i -E "s#((href|src)=\"[./]*$name)\"#\1?v=$v\"#g" {} +
+            echo "$f -> $v"
+          done
+          grep -rhoE '(href|src)="[^"]*\.(css|js)[^"]*"' --include=*.html . | sort | uniq -c
       - uses: SamKirkland/FTP-Deploy-Action@110f9186c050f71550953127052e77650219c287 # v4.4.0
         with:
           server: ${{ secrets.SITE_FTP_SERVER }}

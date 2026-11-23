@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import type { PlayDir } from '../../../shared/court'
 import { MARKERS, MARKER_COLORS, type ClipMode } from '../../../shared/reel'
-import { HOW_OPTIONS, PRESET_KINDS, cleanDialogState, lineupsMissing, buildPreset, presetLabels, presetName, presetRefs, usesRoles, type PresetHow, type PresetKind, type PresetLookups, type PresetSource, type SceneSpec, type VideoPreset } from '../../../shared/presets'
+import { HOW_OPTIONS, PRESET_KINDS, REC_MARKS, cleanDialogState, lineupsMissing, buildPreset, presetLabels, presetName, presetRefs, usesRoles, type PresetHow, type PresetKind, type PresetLookups, type PresetSource, type SceneSpec, type VideoPreset } from '../../../shared/presets'
 import { ROLES, roleName } from '../../../shared/roles'
+import { EFFECTS } from '../../../shared/labels'
 import { personOf, playerLabel } from '../../../shared/rotationSplit'
 import type { PlayerRole } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -28,11 +29,7 @@ const STORE_KEY = 'vr.presetDialog'
 const DEFAULT_MODE: Record<PresetKind, ClipMode> = { sideout: 'toEnd', serve: 'keyplay', block: 'keyplay', attack: 'keyplay' }
 
 const HINTS = (): Record<string, string> => ({
-  'sideout:none': t('ローテーションごとのシーンに、レセプションから相手コートへ返すまでのアタックを入れます（回る順 1→6→5→4→3→2）。'),
-  'sideout:reception': t('ローテーションごとのシーンで、マーカー 1 に良いレセプション（# +）から、マーカー 2 に悪いレセプション（- ! /）からの攻撃を入れます。'),
-  'sideout:player': t('ローテーションごとのシーンで、打った本数の多い選手から順にマーカー 1〜6 を付けます。7 人目からはマーカーなしで最後に入ります。'),
-  'sideout:zone': t('ローテーションごとのシーンで、打ったゾーンを本数の多い順にマーカー 1〜6 にします。ゾーンが分からないものはマーカーなしで最後に入ります。'),
-  'sideout:result': t('ローテーションごとのシーンで、マーカー 1 に決定、2 にラリーを取ったもの（サイドアウト成功）、3 にラリーを落としたもの（サイドアウト失敗）を入れます。'),
+  'sideout': t('1 つのシーンに、レセプションから相手コートへ返すまでのアタックを入れ、ローテーションをマーカーにします（マーカー 1〜6 がローテ 1〜6、回る順 1→6→5→4→3→2 に再生）。'),
   'serve:rotation': t('サーブした選手ごとのシーンを、いちばん多くサーブしたローテーションの回る順（1→6→5→4→3→2）に並べます。'),
   'serve:count': t('サーブした選手ごとのシーンを、本数の多い順に並べます。'),
   'serve:jersey': t('サーブした選手ごとのシーンを、背番号順に並べます。'),
@@ -43,7 +40,7 @@ const HINTS = (): Record<string, string> => ({
   'block:middle:setter': t('ミドルブロッカーごとに、そのミドルが前衛にいたときの相手のアタックをシーンに入れ、本数の多い順に並べます。'),
   'blockMarks:setter': t('相手セッター位置別では、良いレセプション（# + !）からの相手のアタックだけを入れ、マーカー 1 に相手セッター後衛（S1・S6・S5）、2 に相手セッター前衛（S4・S3・S2）のときのものを入れます。'),
   'order:new': t('各シーンの中は、新しい試合のプレーから並べます（試合の中はプレーの順）。'),
-  'block:rotation': t('ローテーションごとのシーンで、ブロックした選手に本数の多い順でマーカー 1〜6 を付けます。'),
+  'block:rotation': t('1 つのシーンにブロックを入れ、ローテーションをマーカーにします（マーカー 1〜6 がローテ 1〜6、回る順 1→6→5→4→3→2 に再生）。'),
   'attack:count': t('アタックした選手ごとのシーンを、本数の多い順に並べます。'),
   'attack:combo': t('アタックした選手ごとのシーンを本数の多い順に並べ、中はアタックコード（X5 など）を本数の多い順にマーカー 1〜6 にします。7 つ目からとコードのないものはマーカーなしで最後に入ります。'),
   'attack:position': t('アウトサイドヒッター・オポジット・ミドルブロッカー・セッター・その他のシーンに分け、中は選手別のマーカーにします。'),
@@ -101,7 +98,20 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
         <section>
           {seg(t('ビデオ'), kind, setKind, PRESET_KINDS.map(k => [k, presetName(k)]))}
           {seg(t('チーム'), source, setSource, [['our', team], ['opp', t('相手')], ['results', t('今の検索結果から')]])}
-          {seg(kind === 'sideout' ? t('中の分け方') : kind === 'serve' ? t('選手の並べ方') : t('作り方'), how[kind] as string, v => setHow({ ...how, [kind]: v }), HOW_OPTIONS()[kind] as [string, string][])}
+          {kind === 'sideout' ? (
+            <div className="filter-row" title={t('チェックした評価のレセプションからのアタックだけを入れます')}>
+              <span className="field-label">{t('レセプションの質')}</span>
+              <div className="preset-checks" role="group" aria-label={t('レセプションの質')}>
+                {REC_MARKS.map(m => (
+                  <label key={m}>
+                    <input type="checkbox" checked={how.sideoutRec.includes(m)}
+                      onChange={e => setHow({ ...how, sideoutRec: e.target.checked ? REC_MARKS.filter(x => x === m || how.sideoutRec.includes(x)) : how.sideoutRec.filter(x => x !== m) })} />
+                    {m} {EFFECTS.R[m]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : seg(kind === 'serve' ? t('選手の並べ方') : t('作り方'), how[kind] as string, v => setHow({ ...how, [kind]: v }), HOW_OPTIONS()[kind] as [string, string][])}
           {kind === 'serve' && seg(t('マーカーの分け方'), how.serveMarks, v => setHow({ ...how, serveMarks: v }), HOW_OPTIONS().serveMarks)}
           {kind === 'block' && how.block === 'middle' && seg(t('マーカーの分け方'), how.blockMarks, v => setHow({ ...how, blockMarks: v }), HOW_OPTIONS().blockMarks)}
           {seg(t('試合の並び'), how.order, v => setHow({ ...how, order: v }), HOW_OPTIONS().order)}
@@ -109,11 +119,12 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
           {seg(t('切り出し'), modes[kind], m => setModes({ ...modes, [kind]: m }), [['keyplay', t('プレー前後')], ['toEnd', t('ラリー終わりまで')]])}
         </section>
         <p className="hint">
-          {HINTS()[`${kind}:${how[kind]}${kind === 'block' && how.block === 'middle' && how.blockMarks === 'setter' ? ':setter' : ''}`]}
+          {HINTS()[kind === 'sideout' ? 'sideout' : `${kind}:${how[kind]}${kind === 'block' && how.block === 'middle' && how.blockMarks === 'setter' ? ':setter' : ''}`]}
           {source === 'results' ? t('今の検索結果のうち、このビデオに入るプレーだけを使います。') : t('「検索する試合」で選んでいる試合から集めます。')}
           {dir !== 'all' && t('向きは、サーブ・アタックは打った側から、ブロックは相手側から見ます。')}
           {unknownDir > 0 && t('コートのグリッドを合わせていない試合のプレー {0} 件は、向きが分からないため除いています', unknownDir)}
         </p>
+        {kind === 'sideout' && !how.sideoutRec.length && <p className="hint warning">{t('レセプションの評価を 1 つ以上チェックしてください。')}</p>}
         {kind === 'serve' && <p className="hint">{HINTS()[`serveMarks:${how.serveMarks}`]}</p>}
         {kind === 'block' && how.block === 'middle' && how.blockMarks === 'setter' && <p className="hint">{HINTS()['blockMarks:setter']}</p>}
         {how.order === 'new' && <p className="hint">{HINTS()['order:new']}</p>}

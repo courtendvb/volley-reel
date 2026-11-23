@@ -102,11 +102,30 @@ describe('presets', () => {
     expect(byTime[1].items.map(i => i.ref.play.id)).toEqual([serves[0].play.id, serves[1].play.id])
   })
 
-  it('makes block scenes per rotation, in the order a team rotates', () => {
+  it('makes one block scene with a marker per rotation, in the order a team rotates', () => {
     const blocks = [ref({ skill: 'B', jersey: 3, rot: 2 }), ref({ skill: 'B', jersey: 5, rot: 6 }), ref({ skill: 'B', jersey: 3, rot: 6 })]
     const s = buildPreset('block', { ...DEFAULT_HOW, block: 'rotation' }, blocks, look).scenes
-    expect(titles(s)).toEqual(['ローテ 6', 'ローテ 2'])
-    expect(s[0].names).toEqual({ 1: '#5 N5', 2: '#3 N3' })
+    expect(titles(s)).toEqual(['ローテーション別'])
+    expect(s[0].names).toEqual({ 2: 'ローテ 2', 6: 'ローテ 6' })
+    expect(s[0].counts).toEqual({ 2: 1, 6: 2 })
+    const [r] = presetReels(s, '', 'keyplay')
+    expect(r.groupOrder).toEqual([1, 6, 5, 4, 3, 2])
+    expect([r.groups[6].length, r.groups[2].length]).toEqual([2, 1])
+  })
+
+  it('makes side-out from the receptions checked, one scene with a marker per rotation', () => {
+    const atk = (rot: number, recEffect: string) => ref({ skill: 'A', jersey: rot, rot, phase: 'r', recEffect })
+    const all = [atk(1, '#'), atk(6, '-'), atk(1, '+'), atk(5, '/')]
+    expect(presetRefs('sideout', DEFAULT_HOW, 'our', all, []).length).toBe(4)
+    const good = { ...DEFAULT_HOW, sideoutRec: ['#', '+'] as ('#' | '+')[] }
+    const refs = presetRefs('sideout', good, 'our', all, [])
+    expect(refs.map(r => r.play.recEffect)).toEqual(['#', '+'])
+    expect(buildPreset('sideout', good, refs, look).scenes.map(x => x.counts)).toEqual([{ 1: 2 }])
+    expect(presetRefs('sideout', { ...DEFAULT_HOW, sideoutRec: [] }, 'our', all, [])).toEqual([])
+    expect(buildPreset('sideout', DEFAULT_HOW, [], look).scenes).toEqual([])
+    expect(presetLabels({ kind: 'sideout', how: good, source: 'our', dir: 'all', mode: 'toEnd' }, 'HTH').name).toBe('HTH サイドアウト ローテーション別 レセプション # +')
+    expect(cleanPreset({ kind: 'sideout', how: { sideout: 'player' } })?.how.sideoutRec).toEqual(DEFAULT_HOW.sideoutRec) // made before: every reception
+    expect(cleanPreset({ kind: 'sideout', how: { sideoutRec: ['+', 'x', '#'] } })?.how.sideoutRec).toEqual(['#', '+'])
   })
 
   it('makes attack scenes per attacker or per position', () => {

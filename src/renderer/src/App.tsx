@@ -56,6 +56,7 @@ import { setterCall } from '../../shared/setChart'
 import { BoardDialog } from './components/BoardDialog'
 import { canMake } from '../../shared/board'
 import { APP_NAME } from '../../shared/edition'
+import { useInternal } from './account'
 import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
@@ -101,6 +102,7 @@ const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the 
 
 const NOTICE_SEC = 10
 export function App() {
+  const internal = useInternal() // the internal edition's features, for an account allowed them (src/internal/README.md)
   const [project, setProject] = useState<ProjectInfo | null>(null)
   // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
@@ -916,7 +918,7 @@ export function App() {
         {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
-        {project && <button onClick={() => setAnalysisOpen(true)} title={(__INTERNAL__ ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
+        {project && <button onClick={() => setAnalysisOpen(true)} title={(__INTERNAL__ && internal ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
           ?? t('対象チームの全試合のサイドアウト・ブレイク、ローテーション別の数字などを表で見る')}>{t('分析')}</button>}
         {!project && !cmp.open && <CompareMenu compares={cmp.compares} onOpenMenu={() => void cmp.refresh()} onNew={cmp.newCompare} onOpen={cmp.openCompare} onDelete={s => void cmp.deleteCompare(s)} />}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
@@ -1070,7 +1072,7 @@ export function App() {
             {cardEditCard && editingSlide?.board && (
               <BoardEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
                 onChange={s => cardEdit?.sceneId && updateScene(cardEdit.sceneId, r => setSlide(r, s))}
-                {...(canMake(editingSlide.board.config.skill) ? { onBoard: () => setBoardEdit(editingSlide) } : {})} onSave={as => void saveCards(as, editingSlide)} />
+                {...(canMake(editingSlide.board.config.skill, internal) ? { onBoard: () => setBoardEdit(editingSlide) } : {})} onSave={as => void saveCards(as, editingSlide)} />
             )}
             {cardEditCard && editingSlide && !editingSlide.board && (
               <SlideEditBar slide={editingSlide} onDone={() => { setCardEdit(null); setSelectedAnn(null) }}
@@ -1305,7 +1307,7 @@ export function App() {
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}
           initial={picker === 'create'
-            ? { name: '', codes: (__INTERNAL__ ? ['HTH'] : []).filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
+            ? { name: '', codes: (__INTERNAL__ && internal ? ['HTH'] : []).filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {reportOpen && project && (

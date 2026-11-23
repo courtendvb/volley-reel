@@ -30,6 +30,12 @@ export function markers() {
     }
   }
   for (const s of internalOnly(src)) add(s, 'an internal string')
+  // Where the internal edition's updates are, and what a lease opens its features with.
+  add('syncscout-internal-releases', 'src/main/updater.ts')
+  add('editor-internal', 'shared/edition.ts INTERNAL_APP')
+  // The token its updates are read with, when this computer has it: never in the sold app.
+  const token = process.env.VR_INTERNAL_UPDATE_TOKEN
+  if (token) found.set(token, 'VR_INTERNAL_UPDATE_TOKEN')
   // Text in the internal code's quotes that the rest of the code doesn't have anywhere.
   const shared = code(src, p => p.includes(`${join(src, 'internal')}`)).map(p => readFileSync(p, 'utf8')).join('\n')
   for (const p of code(join(src, 'internal'), p => /i18n-..\.ts$/.test(p))) {
@@ -55,7 +61,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (!internal) {
     if (hits.length) {
       console.error('販売版のビルドに身内用の中身が入っています（src/internal/README.md）:')
-      for (const h of hits.slice(0, 30)) console.error(`  ${h.p}: "${h.s.slice(0, 60)}"（${h.from}）`)
+      const shown = h => (h.from === 'VR_INTERNAL_UPDATE_TOKEN' ? '（トークン）' : h.s.slice(0, 60)) // never print the token
+      for (const h of hits.slice(0, 30)) console.error(`  ${h.p}: "${shown(h)}"（${h.from}）`)
       if (hits.length > 30) console.error(`  ほか ${hits.length - 30} 件`)
       process.exit(1)
     }
@@ -66,7 +73,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     // Not every marker need show (a string can be built up in code), but most must: else the check looks for nothing.
     if (seen.size < look.length * 0.6) {
       console.error(`身内版のビルドに目印が ${seen.size} / ${look.length} 個しかありません。身内版のビルドですか（VR_EDITION=internal）`)
-      for (const [s, from] of missing.slice(0, 20)) console.error(`  "${s.slice(0, 60)}"（${from}）`)
+      for (const [s, from] of missing.slice(0, 20)) console.error(`  "${from === 'VR_INTERNAL_UPDATE_TOKEN' ? '（トークン）' : s.slice(0, 60)}"（${from}）`)
       process.exit(1)
     }
     console.log(`身内版: 目印 ${seen.size} / ${look.length} 個あり`)

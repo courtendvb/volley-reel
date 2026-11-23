@@ -208,6 +208,14 @@ describe('Account', () => {
     await expect(a.teamAction({ action: 'trial' })).rejects.toMatchObject({ code: 'trial_used' })
   })
 
+  // The internal edition's features (shared/edition.ts INTERNAL_APP): only where the server put them in the
+  // lease's apps. The tests run the internal edition's code (vitest.config.ts); the sold one says false always.
+  it('opens the internal edition\'s features only for a lease that carries them', async () => {
+    expect(await account({ fetch: signedIn().f }).a.signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: false })
+    const allowed = account({ fetch: signedIn({}, { apps: ['editor', 'editor-internal'] }).f }).a
+    expect(await allowed.signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: true })
+  })
+
   it('says no for an app the plan does not cover', async () => {
     const { a } = account({ fetch: signedIn({}, { apps: ['viewer'] }).f })
     expect(await a.signIn('a@example.com', '123456')).toMatchObject({ kind: 'no_access' })

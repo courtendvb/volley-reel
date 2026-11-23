@@ -4,6 +4,7 @@ import type { ReportMatch } from '../../../shared/report'
 import type { Match, ParsedDVW } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 import { PointError } from '../../../internal/PointErrorReport'
+import { useInternal } from '../account'
 
 // 分析: reports on what the target team (設定の対象チーム) is really like over the project's
 // matches. A tab per report (ANALYSIS_REPORTS); the numbers come from shared/analysis.ts.
@@ -13,7 +14,9 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
   matches: Match[]; dvws: Record<string, ParsedDVW>; onClose: () => void
   ourCodes: string[] // the target team's codes
 }) {
-  const [report, setReport] = useState<AnalysisReportId>(ANALYSIS_REPORTS[0])
+  const internal = useInternal() // 得点率・ミス率: the internal edition's, for an account allowed it
+  const reports = ANALYSIS_REPORTS.filter(id => id !== 'pointError' || internal)
+  const [report, setReport] = useState<AnalysisReportId>(reports[0])
   // The target team's side in each match it played, the opponent's name for the row.
   const ours = useMemo(() => {
     const codes = ourCodes.map(c => c.toUpperCase())
@@ -29,7 +32,7 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
         <div className="report-bar">
           <h2>{t('分析')}</h2>
           <div className="analysis-tabs" role="tablist">
-            {ANALYSIS_REPORTS.map(id => <button key={id} role="tab" aria-selected={id === report} className={id === report ? 'active' : ''} onClick={() => setReport(id)}>{t(TITLES[id])}</button>)}
+            {reports.map(id => <button key={id} role="tab" aria-selected={id === report} className={id === report ? 'active' : ''} onClick={() => setReport(id)}>{t(TITLES[id])}</button>)}
           </div>
           <span className="spacer" />
           <button onClick={onClose}>{t('閉じる')}</button>
@@ -37,7 +40,7 @@ export function AnalysisDialog({ matches, dvws, ourCodes, onClose }: {
         <div className="analysis-body">
           {!team ? <p className="muted">{t('設定で対象チームを決めると分析できます')}</p>
             : !ours.length ? <p className="muted">{t('{0} の試合の DVW がありません', team)}</p>
-            : __INTERNAL__ && report === 'pointError' ? <PointError list={ours} team={team} />
+            : __INTERNAL__ && internal && report === 'pointError' ? <PointError list={ours} team={team} />
             : report === 'sideOut' ? <SideOut list={ours} team={team} />
             : report === 'recAttack' ? <RecAttack list={ours} team={team} />
             : report === 'rotation' ? <Rotations list={ours} team={team} />

@@ -6,9 +6,13 @@ import react from '@vitejs/plugin-react'
 // code behind `if (__INTERNAL__)` is not there at all (scripts/edition-guard.mjs checks).
 const INTERNAL = process.env.VR_EDITION === 'internal'
 const define = { __INTERNAL__: JSON.stringify(INTERNAL) }
+// The internal edition's updates come from a private repository (src/main/updater.ts): a token that may
+// only read it, from the environment of the computer that builds, never from the repository. The sold
+// edition gets none.
+const UPDATE_TOKEN = INTERNAL ? process.env.VR_INTERNAL_UPDATE_TOKEN ?? '' : ''
 
 export default defineConfig({
-  main: { plugins: [externalizeDepsPlugin()], define },
+  main: { plugins: [externalizeDepsPlugin()], define: { ...define, __UPDATE_TOKEN__: JSON.stringify(UPDATE_TOKEN) } },
   preload: { plugins: [externalizeDepsPlugin()], define },
   renderer: { plugins: [react()], define },
 })

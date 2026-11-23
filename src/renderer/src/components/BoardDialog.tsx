@@ -7,6 +7,7 @@ import { AttackOptions, ServeTargetHint } from '../../../internal/BoardDialogPar
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
 import { ATTACKER_CARDS, COURT_LOOKS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type CourtLook, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
+import { useInternal } from '../account'
 import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
 import { compareRows as rowsOf, compareSide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
 import { MOST_ROWS, STAT_COLUMNS, STAT_KINDS, STAT_LOOK, STAT_ROWS, STAT_STRIPE, type StatKind, type StatLook } from '../../../shared/statsBoard'
@@ -140,7 +141,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const names = useMemo(() => Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>, [dvws])
   const [count0, setCount] = useState(initial?.columns.length ?? 3)
   const oneSetter = skill === 'E' || skill === 'R' // a set or rotation slide is one setter's
-  const isT = __INTERNAL__ && skill === 'T', isD = __INTERNAL__ && skill === 'D' // the internal edition's slides
+  const internal = useInternal() // the internal edition's slides, for an account allowed them
+  const isT = __INTERNAL__ && internal && skill === 'T', isD = __INTERNAL__ && internal && skill === 'D'
   const single = oneSetter || isD // and an attacker's slide one attacker's
   const count = single ? 1 : count0
   // An attacker's slide (internal edition only): what AttackOptions sets out; null while it would be empty.
@@ -212,9 +214,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           <div className="segmented" role="radiogroup">
             {([
               ['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')],
-              ...(__INTERNAL__ ? [['T', t('サーブの狙い')]] : []),
+              ...(__INTERNAL__ && internal ? [['T', t('サーブの狙い')]] : []),
               ['C', t('チーム比較')], ['P', t('個人スタッツ')],
-              ...(__INTERNAL__ ? [['D', t('アタックディレクション')]] : []),
+              ...(__INTERNAL__ && internal ? [['D', t('アタックディレクション')]] : []),
             ] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}

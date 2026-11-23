@@ -27,7 +27,8 @@ export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C' | 'P' | 'D'
 // The slides only the internal edition makes. The sold one leaves them out of the dialog and keeps the
 // ones a project already has as they are (no 構成を変える).
 export const INTERNAL_SKILLS: readonly BoardSkill[] = ['T', 'D']
-export const canMake = (skill: BoardSkill) => __INTERNAL__ || !INTERNAL_SKILLS.includes(skill)
+// internal: the account may use them (renderer/account.ts useInternal); missing: only the edition counts.
+export const canMake = (skill: BoardSkill, internal = true) => (__INTERNAL__ && internal) || !INTERNAL_SKILLS.includes(skill)
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {

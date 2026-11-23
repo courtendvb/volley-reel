@@ -2,12 +2,16 @@
 # electron-builder.yml with another identity, so it installs beside the sold app instead of over it.
 # The player photo packs in vendor/packs go in as they do there.
 #
-# Never published: no `publish`, and the app doesn't look for updates (src/main/updater.ts). The sold
-# app's releases are a public repository, and this one holds what the team keeps to itself; hand the
-# installer round by hand until it has a place of its own that asks who is downloading.
+# Published to a private repository of its own (npm run release:internal), never to the sold app's public
+# one. Installed copies read it with a token that may only read that repository (src/main/updater.ts).
+# Who may use the features is the lease's to say (shared/edition.ts INTERNAL_APP), not the installer's.
 extends: electron-builder.yml
 appId: com.courtendvb.volleyreel.internal
 productName: SyncScout Video Editor Internal
+# The name inside the app: its own folders for settings and for downloaded updates (volley-reel-updater is
+# the sold app's), so the two never share them on one computer.
+extraMetadata:
+  name: volley-reel-internal
 directories:
   output: release-internal
 win:
@@ -19,4 +23,9 @@ mac:
   artifactName: syncscout-internal-${version}-${arch}-mac.${ext}
 dmg:
   artifactName: syncscout-internal-${version}-${arch}.${ext}
-publish: null
+publish:
+  provider: github
+  owner: courtendvb
+  repo: syncscout-internal-releases
+  private: true
+  releaseType: release

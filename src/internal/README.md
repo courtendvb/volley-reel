@@ -8,6 +8,10 @@
 Electron のアプリは中の JS（`app.asar`）を誰でも取り出して読める。そのため、身内版の機能は画面で隠すのではなく、
 **販売版のビルドにコードも文言も入れない**ようにしている。
 
+身内版でも、機能が開くのは**許可されたアカウントだけ**。サーバーが署名するリース（`shared/account.ts`）の `apps` に
+`'editor-internal'`（`shared/edition.ts` の `INTERNAL_APP`）が入っているときに限る。入っていなければ、販売版と同じ見た目で
+動き、身内版の機能があることも表示しない。どのチームに入れるかはサーバー（syncscout の `account-lease`）が決める。
+
 ## 身内版だけのもの
 
 | 機能 | コード |
@@ -17,6 +21,8 @@ Electron のアプリは中の JS（`app.asar`）を誰でも取り出して読�
 | 分析「得点率・ミス率」 | `pointError.ts`、`PointErrorReport.tsx` |
 | 新しいプロジェクトで対象チームに `HTH` が最初から入る | `App.tsx` |
 
+どれも、身内版のビルドで、かつ許可されたアカウントのときだけ（画面側は `renderer/src/account.ts` の `useInternal()`）。
+
 ## 仕組み
 
 - ビルドのときの定数 `__INTERNAL__`（`electron.vite.config.ts`）。`VR_EDITION=internal` のとき true、それ以外は false。
@@ -24,8 +30,9 @@ Electron のアプリは中の JS（`app.asar`）を誰でも取り出して読�
 - 本体のコードから身内版のものを使うところは、必ず `__INTERNAL__` をそのまま書いて囲む。
   販売版のビルドでは `false` に置き換わり、囲んだ部分と、そこからしか使われないモジュールがまるごと消える
   ```ts
-  if (__INTERNAL__ && skill === 'D') { … }            // ブロックごと
-  ...(__INTERNAL__ ? [['T', t('サーブの狙い')]] : [])  // 式の中
+  const internal = useInternal()                                  // 許可されたアカウントか
+  if (__INTERNAL__ && internal && skill === 'D') { … }            // ブロックごと
+  ...(__INTERNAL__ && internal ? [['T', t('サーブの狙い')]] : [])  // 式の中
   ```
   `const x = __INTERNAL__` のように変数に入れてから使うと、消えないことがある（下の検査で分かる）
 - 文言（`t('…')` の日本語）: 身内版だけで出るものは `src/internal/i18n-en.ts`・`i18n-es.ts` に入れる。
@@ -54,9 +61,26 @@ npm run dist:internal:mac   # Mac で
 - インストーラーの設定は `electron-builder.internal.yml`（`electron-builder.yml` を引き継ぎ、appId・名前・出力先を変える）。
   販売版とは別のアプリとして並べて入る。設定フォルダも別（`volley-reel-internal`）なので、ログインと倉庫の場所はそれぞれ持つ
 - 選手写真のパック（`vendor/packs`）は販売版と同じく入る
-- **自動更新はない**（`publish: null`、`main/updater.ts`）。インストーラーは手で渡す。
-  配る場所を作るなら、URL を知っていれば誰でも取れる場所は避けること（中身は販売版から隠しているもの）
+- 中のパッケージ名は `volley-reel-internal`（`extraMetadata`）。設定と、更新のダウンロード先のフォルダも販売版と別になる
 - ログインは販売版と同じ仕組み。チームの契約を `free` にしておけば課金なしで使える
+
+## 身内版の更新
+
+```bash
+npm run release:internal    # Windows のインストーラーを作り、非公開の syncscout-internal-releases に公開する
+```
+
+- 版は `package.json` の版のあとに日時が付く（`1.0.2-internal.202611231530`）。`package.json` は変えずに、何度でも出せる。
+  販売版を `1.1.0` にすると、そのあとの身内版は `1.1.0-internal.…` になり、続けて更新される
+- インストールした身内版は、起動時に `courtendvb/syncscout-internal-releases`（非公開）の最新リリースを見て、
+  あれば販売版と同じように更新する（`main/updater.ts`）。販売版の公開リポジトリは見ない
+- 非公開リポジトリを読むトークンはアプリに入る。ビルドする PC の環境変数 `VR_INTERNAL_UPDATE_TOKEN` から
+  （`electron.vite.config.ts`）。リポジトリには入れない。権限は **そのリポジトリの Contents: Read-only だけ**の fine-grained token にする。
+  インストーラーから取り出せるので、漏れたら取り消して作り直し、身内版を出し直す（古い版はそのトークンで更新を探せなくなる）
+- アップロードは GitHub CLI のログイン（`gh auth token`）で行う。販売版の `npm run release` と同じ
+- `VR_INTERNAL_UPDATE_TOKEN` なしで作った身内版（`npm run dist:internal` など）は更新を探さない
+- Mac の身内版は、まだ更新しない（Mac の更新は `macUpdate.ts` が公開リポジトリの URL から取るため）
+- 販売版のビルドには、トークン・更新先・`editor-internal` も入らない（`edition-guard.mjs` が確かめる）
 
 ## 新しく身内版の機能を足すとき
 

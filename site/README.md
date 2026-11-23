@@ -58,7 +58,7 @@ The figure in the court section (.auto, one 12 s CSS loop, no script) stacks the
 
 ## Features page
 
-`features.html` (English) and `features-ja.html` (Japanese) hold what the landing page left out when it was cut down to seven sections (commit 498269a): the sample film moment by moment, with its own player and "play from here" buttons; before and after, with the "data adds" and "you add" cards; presets; data slides; the rest of the features; and SyncScout next to Video Editor. The sections are as they were on the landing page, and their styles are back at the end of `site.css`. The landing page links to it (and to the comparison page) from the nav, under the reports, and in the footer.
+`features.html` (English) and `features-ja.html` (Japanese) hold what the landing page left out when it was cut down to seven sections (commit 498269a): before and after, with the "data adds" and "you add" cards; presets; data slides; the rest of the features; and SyncScout next to Video Editor. The sections are as they were on the landing page, and their styles are back at the end of `site.css`. The landing page links to it (and to the comparison page) from the nav, under the reports, and in the footer.
 
 ## Alongside DataVolley and VolleyStation
 

@@ -1,6 +1,6 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState, PlanPrices, TeamAction } from './account'
+import type { AccountState, PlanPrices, TeamAction, WebAccess } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit, StrikeHeights } from './court'
 import type { CodeEdit, ScoutInsert } from './codeEdit'
@@ -271,6 +271,8 @@ export interface Api {
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
   accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
+  accountWeb(): Promise<WebAccess> // the team ID (and, for an admin, the passcodes) for SyncScout Web
+  accountOpenWeb(page: 'view' | 'admin'): Promise<void> // SyncScout Web in the browser
   accountSignOut(): Promise<AccountState>
   accountTeam(a: TeamAction): Promise<AccountState> // join a team, take a suggested one, start the trial, or leave
   lang: Lang // the interface language, read once when the window loads

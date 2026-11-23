@@ -28,6 +28,11 @@
 //   POST {SUPABASE_URL}/functions/v1/account-prices  { device_token, device_id, team_id }
 //     → PlanPrices: what the plan buttons say, read from Stripe's prices; the annual free days are the
 //       ones account-checkout will give this team (only a team that never paid gets them)
+//   POST {SUPABASE_URL}/functions/v1/account-team  { device_token, device_id, team_id }
+//     → WebAccess: how to get into SyncScout Web (WEB_URL) with the team. A trial started in the app gets
+//       its team ID and both passcodes made up by the server, so the person never saw them: they are
+//       mailed once when the trial starts, and an admin of the team can read them here at any time
+//       (the latest, after a change on the web). A member gets the team ID alone. Not kept on disk.
 //   POST {SUPABASE_URL}/functions/v1/account-checkout  { device_token, device_id, team_id, plan }
 //     → { url }: a Stripe Checkout page for the team, opened in the browser. For a team whose renewal
 //       didn't go through, the page of its unpaid invoice instead ({ url, kind: 'invoice' }); paying it
@@ -68,6 +73,15 @@ export type LeaseResponse = {
 }
 
 export type TeamAction = { action: 'join'; slug: string; passcode: string } | { action: 'claim'; team_id: number } | { action: 'trial' } | { action: 'leave'; team_id: number }
+
+// SyncScout Web: the matches for players and staff (team ID + passcode), and the admin page (team ID +
+// admin passcode), where the team ID and both passcodes can be changed.
+export const WEB_URL = 'https://app.syncscout.courtend.net'
+export const WEB_ADMIN_URL = `${WEB_URL}/team-admin.html`
+
+export type WebAccess =
+  | { slug: string; role: 'admin'; passcode: string; admin_passcode: string }
+  | { slug: string; role: 'member' } // the passcodes are the admin's to hand out
 
 export type AccountError =
   | 'invalid_code' // the mailed code is wrong or expired

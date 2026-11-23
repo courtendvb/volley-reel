@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { hostname } from 'node:os'
 import {
   EDITOR_APP, gate, leaseState, refreshDue, splitLease, type Gate, type GateRefusal,
-  type AccountError, type AccountState, type LeasePayload, type PlanPrices, type LeaseResponse, type LeaseTeam, type TeamAction,
+  type AccountError, type AccountState, type LeasePayload, type PlanPrices, type LeaseResponse, type LeaseTeam, type TeamAction, type WebAccess,
 } from '../shared/account'
 
 export const SUPABASE_URL = 'https://ciokifeakrkigonhwbyf.supabase.co'
@@ -225,6 +225,19 @@ export class Account {
       const r = await this.call<PlanPrices>('/functions/v1/account-prices', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id, app: EDITOR_APP })
       return r && (r.monthly || r.annual) ? { monthly: r.monthly ?? null, annual: r.annual ?? null, annual_trial_days: Number(r.annual_trial_days) || 0 } : null
     } catch { return null }
+  }
+
+  // The team ID and, for an admin, both passcodes of this computer's team, to get into SyncScout Web.
+  // Asked when the person opens it, never kept: a passcode changed on the web shows here at once.
+  async webAccess(): Promise<WebAccess> {
+    const token = this.deviceToken(), p = this.lease()
+    if (!token || !p) throw new AccountFailure('invalid_device')
+    const r = await this.call<Partial<WebAccess> & { passcode?: unknown; admin_passcode?: unknown }>('/functions/v1/account-team', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id })
+    if (typeof r.slug !== 'string' || !r.slug) throw new AccountFailure('server', 'no team id')
+    if (r.role === 'admin' && typeof r.passcode === 'string' && typeof r.admin_passcode === 'string') {
+      return { slug: r.slug, role: 'admin', passcode: r.passcode, admin_passcode: r.admin_passcode }
+    }
+    return { slug: r.slug, role: 'member' }
   }
 
   // Signs this computer out. The device id stays: it is this computer, not the account.

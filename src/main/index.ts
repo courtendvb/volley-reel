@@ -8,7 +8,7 @@ import { Readable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
-import { FREE_MATCHES, type TeamAction } from '../shared/account'
+import { FREE_MATCHES, WEB_ADMIN_URL, WEB_URL, type TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
 import type { ScoutInsert } from '../shared/codeEdit'
@@ -465,6 +465,8 @@ function registerIpc(): void {
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
   ipcMain.handle('account:prices', () => account.prices())
+  ipcMain.handle('account:web', () => withAccount(() => account.webAccess()))
+  ipcMain.handle('account:openWeb', (_e, page: 'view' | 'admin') => shell.openExternal(page === 'admin' ? WEB_ADMIN_URL : `${WEB_URL}/`))
   ipcMain.handle('account:signOut', () => { account.forget(); return account.state() })
   ipcMain.handle('account:team', (_e, a: TeamAction) => withAccount(() => account.teamAction(a)))
   // The preload reads the language synchronously, so the interface's text is right from its first paint.

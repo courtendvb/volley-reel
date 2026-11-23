@@ -161,6 +161,22 @@ describe('Account', () => {
     expect(await b.prices()).toBeNull()
   })
 
+  it('asks for the SyncScout Web details of its team: the passcodes for an admin, the team ID alone for a member', async () => {
+    await expect(account().a.webAccess()).rejects.toMatchObject({ code: 'invalid_device' }) // signed out
+    let role = 'admin'
+    const s = signedIn({ '/functions/v1/account-team': () => [200, role === 'admin'
+      ? { slug: 'u-0123456789', role, passcode: 'abc-def-ghk', admin_passcode: 'mnpqrs' }
+      : { slug: 'u-0123456789', role, passcode: 'should-not-pass' }] })
+    const { a } = account({ fetch: s.f })
+    await a.signIn('a@example.com', '123456')
+    expect(await a.webAccess()).toEqual({ slug: 'u-0123456789', role: 'admin', passcode: 'abc-def-ghk', admin_passcode: 'mnpqrs' })
+    expect(s.calls.at(-1)).toMatchObject({ path: '/functions/v1/account-team', body: { device_token: 'dev-1', team_id: 7 } })
+    role = 'member'
+    expect(await a.webAccess()).toEqual({ slug: 'u-0123456789', role: 'member' })
+    // never kept on disk
+    expect(readFileSync(join((a as unknown as { deps: { dir: string } }).deps.dir, 'account.json'), 'utf8')).not.toContain('mnpqrs')
+  })
+
   it('lets an account in no team pick one: a suggested team, a team ID and passcode, or the trial', async () => {
     const member = new Set<number>()
     const lease = (b: Record<string, unknown>, id: number) => [200, { lease: makeLease({ device: String(b.device_id), team: { id, name: `T${id}` } }), device_token: 'dev-1', teams: [...member].map(i => ({ id: i, name: `T${i}` })), suggested: member.has(30) ? [] : [{ id: 30, name: 'Old' }] }] as [number, unknown]

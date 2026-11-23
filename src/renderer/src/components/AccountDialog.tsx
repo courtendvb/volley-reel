@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FREE_MATCHES, gate, priceText, type AccountState, type Gate, type LeaseTeam, type PlanPrices } from '../../../shared/account'
+import { FREE_MATCHES, gate, priceText, type AccountState, type Gate, type LeaseTeam, type PlanPrices, type WebAccess } from '../../../shared/account'
 import { getLang, t } from '../../../shared/i18n'
 import { errorText } from '../format'
 import { setAccountState, useAccount } from '../account'
@@ -175,7 +175,7 @@ function ChooseTeam({ email, suggested, busy, run }: { email: string; suggested:
       </section>
       <section className="account-choice">
         <h3>{t('初めて使う')}</h3>
-        <p className="muted">{t('あなたのチームを作り、30日間の無料お試しを始めます。カードの登録はいりません。')}</p>
+        <p className="muted">{t('あなたのチームを作り、30日間の無料お試しを始めます。カードの登録はいりません。')} {t('SyncScout Web で使うチームID とパスコードは {0} にも届きます。', email)}</p>
         <div><button className="primary" onClick={() => void run(() => window.api.accountTeam({ action: 'trial' }))} disabled={busy}>{t('無料お試しを始める')}</button></div>
       </section>
     </div>
@@ -262,6 +262,7 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
         </button>}
         <button onClick={() => void run(() => window.api.accountRefresh(state.team.id))} disabled={busy}>{t('状態を更新')}</button>
       </div>
+      <WebInfo teamId={state.team.id} />
       <button type="button" className="link account-teams-toggle" onClick={() => setTeamsOpen(!teamsOpen)} aria-expanded={teamsOpen}>
         {teamsOpen ? t('チームの参加・退出を閉じる') : t('ほかのチームに参加する・このチームから抜ける')}
       </button>
@@ -276,5 +277,58 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
         </>
       )}
     </div>
+  )
+}
+
+// The team ID and passcodes for SyncScout Web (the matches for players and staff, and the admin page).
+// A trial started here has them made up by the server, so this is where the person finds them, besides
+// the mail sent when the trial started. Asked from the server each time it is opened, never kept here;
+// only an admin of the team gets the passcodes.
+function WebInfo({ teamId }: { teamId: number }) {
+  const [open, setOpen] = useState(false)
+  const [info, setInfo] = useState<WebAccess | null>(null)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    setInfo(null); setError(''); setCopied(false)
+    if (!open) return
+    let live = true
+    window.api.accountWeb().then(r => { if (live) setInfo(r) }, e => { if (live) setError(errorText(e)) })
+    return () => { live = false }
+  }, [open, teamId])
+  const copy = (a: Extract<WebAccess, { role: 'admin' }>) => {
+    void navigator.clipboard.writeText(t('チームID: {0}\nパスコード: {1}\n管理者パスコード: {2}', a.slug, a.passcode, a.admin_passcode)).then(() => setCopied(true), () => {})
+  }
+  return (
+    <>
+      <button type="button" className="link account-teams-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? t('SyncScout Web に入るときの情報を閉じる') : t('SyncScout Web に入るときの情報')}
+      </button>
+      {open && (
+        <section className="account-choice">
+          {error ? <p className="error" role="alert">{error}</p>
+            : !info ? <p className="muted">{t('読み込み中…')}</p>
+            : (
+              <>
+                <dl className="account-facts">
+                  <dt>{t('チームID')}</dt><dd className="account-code">{info.slug}</dd>
+                  {info.role === 'admin' && <>
+                    <dt>{t('パスコード（選手・スタッフの閲覧用）')}</dt><dd className="account-code">{info.passcode}</dd>
+                    <dt>{t('管理者パスコード')}</dt><dd className="account-code">{info.admin_passcode}</dd>
+                  </>}
+                </dl>
+                <p className="muted">{info.role === 'admin'
+                  ? t('管理者パスコードは選手に教えないでください。ほかの人がこのアプリでチームに参加するときの合言葉も、このパスコードです。チームID とパスコードは管理者ページで変えられます。')
+                  : t('パスコードはチームの管理者に聞いてください。')}</p>
+                <div className="row">
+                  {info.role === 'admin' && <button onClick={() => copy(info)}>{copied ? t('コピーしました') : t('コピー')}</button>}
+                  <button onClick={() => void window.api.accountOpenWeb('view')}>{t('SyncScout Web を開く')}</button>
+                  {info.role === 'admin' && <button onClick={() => void window.api.accountOpenWeb('admin')}>{t('管理者ページを開く')}</button>}
+                </div>
+              </>
+            )}
+        </section>
+      )}
+    </>
   )
 }

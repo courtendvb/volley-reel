@@ -342,3 +342,65 @@ a.brand { color: inherit; text-decoration: none; }
 @media (max-width: 560px) {
   .nav a:not(.keep) { display: none; }
 }
+
+/* features.html: the sections the landing page no longer carries (film moments, before and after,
+   presets, slides, more features, SyncScout). Rules as they were on the landing page. */
+.source { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 48px; margin-top: 36px; }
+.source > div { display: grid; gap: 10px; align-content: start; padding-top: 14px; border-top: 2px solid var(--ink); min-width: 0; }
+.source h3 { font-size: 20px; font-weight: 700; }
+.source dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 20px; font-size: 16px; line-height: 1.5; }
+.source dt { font-weight: 600; }
+.source dd { color: var(--sub); }
+.wide { margin-top: 28px; }
+.points { display: grid; gap: 14px; }
+.points li { display: grid; gap: 2px; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.points b { font-size: 17px; font-weight: 700; }
+.points span { color: var(--sub); font-size: 16px; line-height: 1.5; }
+.more { padding-block: 56px; }
+.more h2 { font-size: clamp(24px, 3vw, 32px); margin-bottom: 18px; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; align-items: start; }
+.pair figure { gap: 10px; }
+.pair img { box-shadow: 0 10px 30px var(--shadow); border: 1px solid var(--line); }
+.tag { justify-self: start; padding: 4px 12px; border-radius: 4px; background: var(--line); color: var(--ink); font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+.tag.on { background: var(--red); color: var(--on-red); }
+.moments { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 20px; }
+.moment { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.moment img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; box-shadow: 0 10px 30px var(--shadow); background: var(--slate); }
+.moment-body { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+.moment h3 { font-size: 21px; font-weight: 700; line-height: 1.25; }
+.moment p { color: var(--sub); font-size: 16px; line-height: 1.5; }
+.seek { display: inline-flex; align-items: center; gap: 10px; padding: 4px 12px 4px 0; border: 0; border-radius: 4px; background: var(--slate-2); color: var(--on-slate); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; overflow: hidden; }
+.seek i { align-self: stretch; display: grid; place-items: center; padding: 0 10px; background: var(--red); color: var(--on-red); font: italic 700 14px/1 var(--head); letter-spacing: .06em; }
+.seek:hover { transform: translateY(-1px); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tags li { padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--sub); font-size: 13.5px; line-height: 1.5; }
+.feats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; list-style: none; }
+.feats li { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.feats img { width: 100%; height: auto; aspect-ratio: 16 / 10; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px var(--shadow); }
+.feats b { font-size: 17px; font-weight: 700; }
+.feats span { color: var(--sub); font-size: 16px; line-height: 1.5; }
+.source .feats { margin-top: 6px; }
+.more-feats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px 20px; }
+.more-note { margin-top: 28px; color: var(--sub); font-size: 16px; }
+@media (max-width: 1040px) {
+  .more-feats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 960px) {
+  .moments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .source, .pair { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .moments { grid-template-columns: minmax(0, 1fr); }
+  .source dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .source dd { margin-bottom: 8px; }
+}
+@media (max-width: 480px) {
+  .feats, .more-feats { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .seek:hover { transform: none; } }
+/* Links to the other pages: under the reports, and a row in the footer. */
+.see-all { margin-top: 28px; font-weight: 600; }
+.see-all a, footer .pages a { color: inherit; text-underline-offset: 4px; }
+footer .pages { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 18px; font-weight: 600; }

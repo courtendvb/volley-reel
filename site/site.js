@@ -128,3 +128,14 @@
     })
   })
 })()
+
+// Analytics: tell Google Tag Manager which build a download button led to (event download_click,
+// with os = windows / mac-arm / mac-intel / list, and where on the page it was).
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a[data-dl-main], a[data-dl]')
+  if (!a) return
+  const href = a.getAttribute('href') || ''
+  const os = /setup-.*\.exe$/i.test(href) ? 'windows' : /arm64\.dmg$/i.test(href) ? 'mac-arm' : /x64\.dmg$/i.test(href) ? 'mac-intel' : 'list'
+  const section = (a.closest('section, header') || {}).id || (a.closest('header') ? 'hero' : '')
+  ;(window.dataLayer = window.dataLayer || []).push({ event: 'download_click', os, section, link_url: href })
+})

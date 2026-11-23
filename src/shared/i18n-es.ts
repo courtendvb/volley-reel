@@ -1755,6 +1755,7 @@ export const ES: Record<string, string> = {
   "グリッドを出す": "Mostrar cuadrícula",
   "手前のチーム（第1セット）": "Equipo cercano (set 1)",
   "コートの準備": "Preparación de la cancha",
+  "四隅、手前のチーム、グリッドの出し方。試合ごとに一度合わせれば、ふだんは開かなくてよい": "Las esquinas, el equipo cercano y cómo se muestra la cuadrícula. Una vez ajustado para un partido, casi no hace falta abrirlo",
   "選んだ1本": "Jugada seleccionada",
   "トスの対象": "Sets incluidos",
   "チームのロゴ・色": "Logos y colores de equipos",

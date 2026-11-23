@@ -73,7 +73,7 @@ const mayExport = () => {
 }
 const mayImport = (adding: number) => {
   const r = account.refusal('import', library?.info().matches.length ?? 0, adding)
-  if (r === 'sign_in') throw new Error(t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は30日間無料）制限なく取り込めます。ホーム画面右上のボタンからログインしてください', FREE_MATCHES))
+  if (r === 'sign_in') throw new Error(t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は14日間無料）制限なく取り込めます。ホーム画面右上のボタンからログインしてください', FREE_MATCHES))
   if (r === 'plan') throw new Error(t('お試し期間か契約が終わっているため、試合を追加できません。作ったプロジェクトはこれまでどおり開いて編集できます'))
 }
 const mayCreateProject = () => {

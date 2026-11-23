@@ -39,8 +39,8 @@ export function AccountNote({ what, matches = 0 }: { what: Gate; matches?: numbe
       : what === 'import' ? t('お試し期間か契約が終わっているため、試合を追加できません。作ったプロジェクトはこれまでどおり開いて編集できます。')
       : t('お試し期間か契約が終わっているため、新しいプロジェクトは作れません。作ったプロジェクトはこれまでどおり開いて編集できます。')
     : s.kind === 'needs_team' ? (what === 'export' ? t('書き出すには、使うチームを選んでください。') : t('2試合目からは、使うチームを選ぶと取り込めます。'))
-    : what === 'export' ? t('書き出すには SyncScout へのログインが必要です。初めての方は30日間無料で使えます。')
-    : t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は30日間無料）制限なく取り込めます。', FREE_MATCHES)
+    : what === 'export' ? t('書き出すには SyncScout へのログインが必要です。初めての方は14日間無料で使えます。')
+    : t('ログインしていない間は、倉庫に入れられる試合は {0} 試合までです。ログインすると（初めての方は14日間無料）制限なく取り込めます。', FREE_MATCHES)
   const button = refused === 'plan' ? t('契約を確認') : s.kind === 'needs_team' ? t('チームを選ぶ') : t('ログイン')
   return (
     <div className="export-account-note" role="note">
@@ -175,7 +175,7 @@ function ChooseTeam({ email, suggested, busy, run }: { email: string; suggested:
       </section>
       <section className="account-choice">
         <h3>{t('初めて使う')}</h3>
-        <p className="muted">{t('あなたのチームを作り、30日間の無料お試しを始めます。カードの登録はいりません。')} {t('SyncScout Web で使うチームID とパスコードは {0} にも届きます。', email)}</p>
+        <p className="muted">{t('あなたのチームを作り、14日間の無料お試しを始めます。カードの登録はいりません。')} {t('SyncScout Web で使うチームID とパスコードは {0} にも届きます。', email)}</p>
         <div><button className="primary" onClick={() => void run(() => window.api.accountTeam({ action: 'trial' }))} disabled={busy}>{t('無料お試しを始める')}</button></div>
       </section>
     </div>

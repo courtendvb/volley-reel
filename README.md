@@ -231,20 +231,16 @@ npm run dist
 - 先に `vendor/ffmpeg/bin` に ffmpeg.exe と ffprobe.exe を置いておく（「準備」参照）。インストーラーには `resources/ffmpeg` として入る（ffmpeg は GPL のビルド）
 - アイコンは `build/icon.png`。ffmpeg の LICENSE（GPL v3）と README は `resources/ffmpeg` に同梱する。GPL のため、配布するときは ffmpeg のソースの入手先（ビルド元の配布ページ）も案内すること
 - `npm run dist` は手元に作るだけ（公開しない）
-- `npm run dist` / `dist:mac` / `release` は販売版。ビルドのあとに `scripts/edition-guard.mjs` が、身内版の中身が入っていないかを確かめる（入っていたら止まる）
 - コード署名はしていないので、初回は Windows SmartScreen の「Windows によって PC が保護されました」が出る。「詳細情報」→「実行」で進める
 - 設定（倉庫の場所・最近のプロジェクト）は開発版と同じ場所に保存されるので、インストール版でも同じ倉庫・プロジェクトを開ける
 
-## 身内版と販売版
+## チーム専用の機能
 
-同じコードから 2 つのアプリを作る。仕組みと決まりは [src/internal/README.md](src/internal/README.md)。
+データスライドの「サーブの狙い」「アタックディレクション」と、分析の「得点率・ミス率」は、許可したアカウントだけに出る。
+ほかの人には、機能があることも表示しない。仕組みと決まりは [src/internal/README.md](src/internal/README.md)。
 
-- 販売版: 今までどおり（`npm run dev` / `dist` / `release`）。チーム独自の分析は入らない
-- 身内版: `npm run dev:internal`（開発）、`npm run dist:internal`（Windows のインストーラー → `release-internal/`）、`npm run dist:internal:mac`（Mac で）。
-  名前は「SyncScout Video Editor Internal」。販売版とは別のアプリとして並べて入れられ、設定（倉庫の場所・ログイン）も別に持つ（倉庫のフォルダは同じものを選べる）
-- 身内版の公開: `npm run release:internal`。非公開の `syncscout-internal-releases` に出し、インストールした身内版はそこから自動で更新する（`VR_INTERNAL_UPDATE_TOKEN` が要る）
-- 身内版でも、機能が開くのは環境変数 `VR_INTERNAL_EMAILS` に入れたメールアドレスでログインした人だけ。ほかの人には販売版と同じに見える
-- 身内版だけの機能: データスライドの「サーブの狙い」「アタックディレクション」、分析の「得点率・ミス率」
+- 許可する人は、ビルドする PC の環境変数 `VR_INTERNAL_EMAILS`（カンマ区切りのメールアドレス）。`npm run release` はこれがないと止まる
+- 人を足す・外すときは、これを直して `npm run release`（新しい版が届けば変わる）
 
 ## Mac 版
 

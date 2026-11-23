@@ -37,7 +37,7 @@ function account(opts: { now?: number; fetch?: typeof fetch; dir?: string; enabl
   const a = new Account({
     dir: opts.dir ?? mkdtempSync(join(tmpdir(), 'acct-')), appVersion: '0.3.0', enabled: opts.enabled ?? true, publicKey: pub,
     encrypt: s => `enc:${s}`, decrypt: s => s.replace(/^enc:/, ''), fetch: opts.fetch, now: () => now,
-    ...(opts.internalEmails ? { internalEmails: opts.internalEmails } : {}),
+    ...(opts.internalEmails ? { internalEmail: (e: string) => opts.internalEmails!.includes(e) } : {}),
   })
   return { a, at: (sec: number) => { now = sec * 1000 } }
 }
@@ -209,15 +209,15 @@ describe('Account', () => {
     await expect(a.teamAction({ action: 'trial' })).rejects.toMatchObject({ code: 'trial_used' })
   })
 
-  // The internal edition's features (shared/edition.ts INTERNAL_APP): only where the server put them in the
-  // lease's apps. The tests run the internal edition's code (vitest.config.ts); the sold one says false always.
-  it('opens the internal edition\'s features only for a lease that carries them', async () => {
+  // The team's own features (src/internal/README.md): for a lease whose apps carry them (shared/edition.ts
+  // INTERNAL_APP), or an address the app was built with.
+  it('opens the team\'s own features only for a lease that carries them', async () => {
     expect(await account({ fetch: signedIn().f }).a.signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: false })
     const allowed = account({ fetch: signedIn({}, { apps: ['editor', 'editor-internal'] }).f }).a
     expect(await allowed.signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: true })
   })
 
-  it('opens them for the addresses the internal edition was built with', async () => {
+  it('opens them for the addresses the app was built with', async () => {
     const make = (emails: string[]) => account({ fetch: signedIn().f, internalEmails: emails }).a
     expect(await make(['a@example.com']).signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: true })
     expect(await make(['b@example.com']).signIn('a@example.com', '123456')).toMatchObject({ kind: 'ok', internal: false })

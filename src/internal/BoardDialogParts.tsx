@@ -4,7 +4,7 @@ import { ATTACK_CONDITIONS, attackLayoutOf, defaultCodeGroups, type AttackCondit
 import { attackCodes } from '../shared/board'
 import { t } from '../shared/i18n'
 
-// The データスライド dialog's parts for the internal edition's slides (board.ts INTERNAL_SKILLS).
+// The データスライド dialog's parts for the team's own slides (board.ts INTERNAL_SKILLS).
 
 // サーブの狙い: what the slide shows.
 export function ServeTargetHint() {

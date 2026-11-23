@@ -9,7 +9,7 @@ import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
 import { ROTATIONS, ROTATION_CHART, attackerCards, rotationAttackers, rotationFormation, rotationLineup, rotationSideOut, rotationSlide, type FormationSpot, type RotationAttacker, type CourtLook, type RotationTables, type SideOutRate } from './rotationBoard'
 import { setBefore, setChart, type SetChart } from './setChart'
-// The internal edition's slides (T, D): only there, behind __INTERNAL__ (src/internal/README.md).
+// The team's own slides (T, D): for the accounts allowed them (src/internal/README.md).
 import { SETTER_ROW_NAMES, attackLayoutOf, attackSlide, codeColumn, conditionColumn, setterRowOf, type AttackCondition, type AttackLayout, type SetterRow } from '../internal/attackBoard'
 import { serveTargetSlide, teamReceptions, type Received } from '../internal/serveTargetBoard'
 import { logoKey } from './logo'
@@ -19,16 +19,16 @@ import { STAT_SKILL, statRows, statsSlide, type StatKind, type StatLook } from '
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 
 // E: a setter's sets, shown by where the attack after each came from; R: a rotation of the team, from its setter's sets;
-// D: one attacker's slide to set the defence against (internal/attackBoard.ts; internal edition only);
-// T: a team's receptions against the serves (internal/serveTargetBoard.ts; internal edition only), its receivers as the columns;
+// D: one attacker's slide to set the defence against (internal/attackBoard.ts; the team's own);
+// T: a team's receptions against the serves (internal/serveTargetBoard.ts; the team's own), its receivers as the columns;
 // C: the team's skills against our own team's, from another project (compare.ts), no columns;
 // P: a table of the team's players' serves, attacks or receptions (statsBoard.ts), its players as the columns
 export type BoardSkill = 'S' | 'A' | 'E' | 'R' | 'T' | 'C' | 'P' | 'D'
-// The slides only the internal edition makes. The sold one leaves them out of the dialog and keeps the
-// ones a project already has as they are (no 構成を変える).
+// The team's own slides: only the accounts allowed them make them. Others keep the ones a project
+// already has as they are (no 構成を変える).
 export const INTERNAL_SKILLS: readonly BoardSkill[] = ['T', 'D']
-// internal: the account may use them (renderer/account.ts useInternal); missing: only the edition counts.
-export const canMake = (skill: BoardSkill, internal = true) => (__INTERNAL__ && internal) || !INTERNAL_SKILLS.includes(skill)
+// internal: the account may use them (renderer/account.ts useInternal).
+export const canMake = (skill: BoardSkill, internal: boolean) => internal || !INTERNAL_SKILLS.includes(skill)
 export interface PlacedChart { chart: DirectionChart; x: number; y: number; h: number } // the picture as 0..1
 
 export interface BoardPlayer {
@@ -69,7 +69,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
       const had = out.get(key) ?? { key, team: t.code.toUpperCase(), teamName: t.name, player, plays: [], won: 0 }
       had.plays.push(p)
       if (skill === 'E') (had.follow ??= []).push(attackAfter(d.plays, i))
-      if (__INTERNAL__ && skill0 === 'D') (had.setOf ??= new Map()).set(p, setBefore(d.plays, p))
+      if (skill0 === 'D') (had.setOf ??= new Map()).set(p, setBefore(d.plays, p))
       if (p.rallyId !== null && d.rallies[p.rallyId]?.wonBy === p.side) { had.won++; if (skill0 === 'P') (had.wins ??= new Set()).add(p) }
       out.set(key, had)
     }
@@ -87,7 +87,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
       }
     }
   }
-  if (__INTERNAL__ && skill0 === 'D') {
+  if (skill0 === 'D') {
     const codeNames = Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>
     for (const p of out.values()) p.callNames = codeNames // the attack codes' names
   }
@@ -95,7 +95,7 @@ export function boardPlayers(dvws: ParsedDVW[], skill0: BoardSkill, keep?: (p: P
     const matches = (team: string) => dvws.filter(d => d.teams.some(x => x.code.toUpperCase() === team)).length
     for (const p of out.values()) p.matches = matches(p.team)
   }
-  if (__INTERNAL__ && skill0 === 'T') {
+  if (skill0 === 'T') {
     const byTeam = new Map<string, Received[]>()
     for (const p of out.values()) {
       if (!byTeam.has(p.team)) byTeam.set(p.team, teamReceptions(dvws, p.team, keep))
@@ -379,7 +379,7 @@ function setterSlide(p: BoardPlayer, layout: SetLayout, opts: BoardOptions, phot
 
 // One slide's columns, side by side; for a setter with a layout, their slide of six courts.
 export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: BoardOptions, photos: Record<string, BoardPhoto>): { annotations: Annotation[]; charts: PlacedChart[]; noteIds: string[]; setCharts?: PlacedSetChart[] } {
-  if (__INTERNAL__ && skill === 'D') {
+  if (skill === 'D') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF', a = opts.attack ?? { conditions: ['good', 'poor'], defense: true }
     if (!p) return { annotations: [], charts: [], noteIds: [] }
     const attacks = a.setterRow ? p.plays.filter(x => setterRowOf(x) === a.setterRow) : p.plays
@@ -391,7 +391,6 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
         sets: a.split !== 'codes', layout: a.layout ?? attackLayoutOf(p.player, attacks), defense: a.defense, style: { ...(opts.style ?? DEFAULT_CHART), ...opts.display }, ink })
     return { annotations: made.annotations, charts: made.charts, noteIds: [], setCharts: made.setCharts }
   }
-  if (!canMake(skill)) return { annotations: [], charts: [], noteIds: [] }
   if (skill === 'C') {
     const ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
     return { annotations: opts.compare ? compareSlide(opts.compare.left, opts.compare.right, photos, ink, opts.compareRows) : [], charts: [], noteIds: [] }
@@ -401,7 +400,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const rows = statRows(kind, columns.map(c => ({ player: c.player, plays: c.plays, wins: c.wins ?? new Set() })), opts.statTop)
     return { annotations: statsSlide(kind, columns[0]?.team ?? '', columns[0]?.matches ?? 0, rows, ink, opts.statLook), charts: [], noteIds: [] }
   }
-  if (__INTERNAL__ && skill === 'T') {
+  if (skill === 'T') {
     const p = columns[0], ink = isLight(opts.background) ? '#0F172A' : '#FFFFFF'
     return { annotations: p ? serveTargetSlide({ team: p.team, teamName: p.teamName, receptions: p.receptions ?? [], players: Object.fromEntries(columns.map(c => [c.key, c.player])), photos }, ink) : [], charts: [], noteIds: [] }
   }

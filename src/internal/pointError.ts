@@ -1,4 +1,4 @@
-// 得点率・ミス率, a report of the 分析 window (internal edition only: shared/analysis.ts ANALYSIS_REPORTS).
+// 得点率・ミス率, a report of the 分析 window (the team's own, for the accounts allowed it: shared/analysis.ts ANALYSIS_REPORTS).
 // Pure: PointErrorReport.tsx draws it.
 import { matchReport, type ReportMatch } from '../shared/report'
 

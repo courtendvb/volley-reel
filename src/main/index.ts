@@ -1,5 +1,5 @@
 import { createReadStream, existsSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -51,9 +51,6 @@ protocol.registerSchemesAsPrivileged([
 app.commandLine.appendSwitch('disable-background-media-suspend')
 // The name in package.json stays volley-reel (electron-builder.yml says why), and on Windows nothing
 // shows it. A Mac's default menu does ("Quit ..."): fix the settings folder first, as it follows the name.
-// The internal edition (src/internal/README.md) keeps its own settings folder, so it installs beside the sold
-// one without the two sharing settings or sign-in (the library can still be the same folder).
-if (__INTERNAL__) app.setPath('userData', join(app.getPath('appData'), 'volley-reel-internal'))
 if (process.platform === 'darwin') { app.setPath('userData', app.getPath('userData')); app.setName(APP_NAME) }
 // A self-check keeps its own window state (panel tabs, the court's look), apart from everyday use.
 if (process.env.VR_SMOKE) app.setPath('userData', join(tmpdir(), 'volley-reel-smoke'))
@@ -128,8 +125,8 @@ app.whenReady().then(async () => {
     // Off in self-checks; VR_ACCOUNTS=1 (+ VR_LEASE_KEY) tries it before the release that turns it on.
     enabled: !process.env.VR_SMOKE && (ENFORCED || process.env.VR_ACCOUNTS === '1'),
     publicKey: process.env.VR_LEASE_KEY || LEASE_PUBLIC_KEY,
-    // The internal edition: the addresses its features open for (electron.vite.config.ts); none in the sold one.
-    ...(__INTERNAL__ ? { internalEmails: __INTERNAL_EMAILS__ } : {}),
+    // The addresses the team's own features open for, as hashes (electron.vite.config.ts).
+    internalEmail: email => __INTERNAL_EMAIL_HASHES__.includes(createHash('sha256').update(email).digest('hex')),
     ...(safeStorage.isEncryptionAvailable() ? {
       encrypt: (s: string) => safeStorage.encryptString(s).toString('base64'),
       decrypt: (s: string) => safeStorage.decryptString(Buffer.from(s, 'base64')),

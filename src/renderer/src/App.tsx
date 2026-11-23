@@ -102,7 +102,7 @@ const LIST_RALLY_LINGER_SEC = 2 // 通し in the list: how much longer than the 
 
 const NOTICE_SEC = 10
 export function App() {
-  const internal = useInternal() // the internal edition's features, for an account allowed them (src/internal/README.md)
+  const internal = useInternal() // the team's own features, for an account allowed them (src/internal/README.md)
   const [project, setProject] = useState<ProjectInfo | null>(null)
   // Every loaded match: the project's targets and the ones its scenes still use (sceneMatches).
   const [dvws, setDvws] = useState<Record<string, ParsedDVW>>({})
@@ -918,7 +918,7 @@ export function App() {
         {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
-        {project && <button onClick={() => setAnalysisOpen(true)} title={(__INTERNAL__ && internal ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
+        {project && <button onClick={() => setAnalysisOpen(true)} title={(internal ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
           ?? t('対象チームの全試合のサイドアウト・ブレイク、ローテーション別の数字などを表で見る')}>{t('分析')}</button>}
         {!project && !cmp.open && <CompareMenu compares={cmp.compares} onOpenMenu={() => void cmp.refresh()} onNew={cmp.newCompare} onOpen={cmp.openCompare} onDelete={s => void cmp.deleteCompare(s)} />}
         <button onClick={() => setShortcutsOpen(true)} title={t('ショートカット一覧 (?)')}>{t('ショートカット')}</button>
@@ -1307,7 +1307,7 @@ export function App() {
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}
           initial={picker === 'create'
-            ? { name: '', codes: (__INTERNAL__ && internal ? ['HTH'] : []).filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
+            ? { name: '', codes: (internal ? ['HTH'] : []).filter(c => library.matches.some(m => m.teams.some(t => t.code.toUpperCase() === c))), selected: [] }
             : { name: project?.name ?? '', codes: project?.settings.ourTeamCodes ?? [], selected: project?.matchIds ?? [] }} />
       )}
       {reportOpen && project && (

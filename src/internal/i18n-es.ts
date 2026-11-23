@@ -1,5 +1,5 @@
-// Spanish for the internal edition's interface (src/internal/README.md): the strings only its code shows.
-// The rest are in shared/i18n-es.ts; i18n.ts adds these in the internal edition only.
+// Spanish for the team's own features (src/internal/README.md): the strings only their code shows.
+// The rest are in shared/i18n-es.ts; shared/i18n.ts adds these.
 export const INTERNAL_ES: Record<string, string> = {
   "M.PASS（! -）": "M.PASS (! -)",
   "対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る": "Los porcentajes de puntos y errores del equipo analizado y más, una fila por partido",

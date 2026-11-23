@@ -33,11 +33,10 @@ export function useAccount(): AccountInfo | null {
   return now
 }
 
-// Whether the internal edition's features are open here (src/internal/README.md): in its build, for an
-// account whose lease carries them. Without accounts (a self-check) they are open. In the sold build
-// this is false and the code it guards is left out; write `__INTERNAL__ && internal && …` where it is used.
+// Whether the team's own features are open here (src/internal/README.md): for an account allowed them
+// (shared/account.ts leaseState). Without accounts (a self-check) they are open.
 export function useInternal(): boolean {
   const a = useAccount()
-  if (!__INTERNAL__ || !a) return false
+  if (!a) return false
   return !a.enabled || ('internal' in a.state && a.state.internal)
 }

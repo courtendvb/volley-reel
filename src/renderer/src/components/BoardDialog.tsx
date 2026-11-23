@@ -141,11 +141,11 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const names = useMemo(() => Object.assign({}, ...dvws.map(d => d.codeNames)) as Record<string, string>, [dvws])
   const [count0, setCount] = useState(initial?.columns.length ?? 3)
   const oneSetter = skill === 'E' || skill === 'R' // a set or rotation slide is one setter's
-  const internal = useInternal() // the internal edition's slides, for an account allowed them
-  const isT = __INTERNAL__ && internal && skill === 'T', isD = __INTERNAL__ && internal && skill === 'D'
+  const internal = useInternal() // the team's own slides, for an account allowed them
+  const isT = internal && skill === 'T', isD = internal && skill === 'D'
   const single = oneSetter || isD // and an attacker's slide one attacker's
   const count = single ? 1 : count0
-  // An attacker's slide (internal edition only): what AttackOptions sets out; null while it would be empty.
+  // An attacker's slide (the team's own): what AttackOptions sets out; null while it would be empty.
   const [attack, setAttack] = useState<AttackBoard | null>(initial?.attack ?? { conditions: ['good', 'poor'], defense: true })
   // A rotation slide per rotation picked (all six by default; a slide made again: its own).
   const [rotations, setRotations] = useState<number[]>(initial?.rotation ? [initial.rotation] : ROTATIONS)
@@ -214,9 +214,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           <div className="segmented" role="radiogroup">
             {([
               ['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')], ['R', t('ローテーション')],
-              ...(__INTERNAL__ && internal ? [['T', t('サーブの狙い')]] : []),
+              ...(internal ? [['T', t('サーブの狙い')]] : []),
               ['C', t('チーム比較')], ['P', t('個人スタッツ')],
-              ...(__INTERNAL__ && internal ? [['D', t('アタックディレクション')]] : []),
+              ...(internal ? [['D', t('アタックディレクション')]] : []),
             ] as [BoardSkill, string][]).map(([k, label]) => (
               <button key={k} role="radio" aria-checked={skill === k} className={skill === k ? 'on' : ''} onClick={() => setSkill(k)}>{label}</button>
             ))}

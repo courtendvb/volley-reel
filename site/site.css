@@ -329,6 +329,10 @@ a.brand { color: inherit; text-decoration: none; }
 .slides { margin-top: 40px; }
 .flow-more { margin-top: 28px; }
 .flow-more a { color: var(--on-slate); font-weight: 600; text-underline-offset: 4px; }
+.limits { display: grid; gap: 6px; margin-top: 20px; font-size: 15.5px; line-height: 1.55; }
+.limits div { display: flex; flex-wrap: wrap; column-gap: .8em; }
+.limits dt { font-weight: 700; }
+.limits dd { margin: 0; color: var(--sub); }
 .fine { margin-top: 20px; color: var(--sub); font-size: 15px; }
 .fine summary { cursor: pointer; font-weight: 600; }
 .fine p { margin-top: 8px; line-height: 1.6; }

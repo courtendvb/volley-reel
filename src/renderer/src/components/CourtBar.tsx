@@ -78,6 +78,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
   const [gear, setGear] = useState(false)
   const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
   const [finding, setFinding] = useState(false)
+  const [prepOpen, setPrepOpen] = useState(false) // コートの準備 folded unless opened (or while fitting)
   const autoButton = (after?: () => void) => (
     <button disabled={finding} title={t('動画の中のコートの線を探して、四隅の候補を置きます。少し時間がかかります。最後は線に合っているか確かめてください')}
       onClick={() => { if (match.court && !confirm(t('今の四隅を置き換えますか？'))) return; after?.(); setFinding(true); void onAuto().finally(() => setFinding(false)) }}>{finding ? t('探しています…') : t('自動で合わせる')}</button>
@@ -108,44 +109,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
   )
   return (
     <div className="court-bar">
-      {/* 1. Set up once per match: the corners, whether the grid shows, which team is near. */}
-      <section className="court-group">
-        <h3 className="court-group-head">{t('コートの準備')}</h3>
-        <div className="ann-row">
-          <button className={fitting ? 'primary' : ''} onClick={() => onFitting(!fitting)}
-            title={t('四隅の丸をドラッグして、コートのエンドラインとサイドラインの交点に合わせます')}>{fitting ? t('完了') : t('四隅を合わせる')}</button>
-          {fitting && <button onClick={() => onFit({ ...fit, corners: DEFAULT_CORNERS })} title={t('四隅を画面の中の初めの位置に戻します')}>{t('四隅をリセット')}</button>}
-          <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッドを出す')}</label>
-          {s.grid && (
-            <select aria-label={t('グリッドを出す範囲')} title={t('グリッドを出す範囲。上半分は奥側（画面の上）、下半分は手前側（画面の下）だけ（書き出しも同じ）')} value={s.gridSide ?? ''}
-              onChange={e => { const { gridSide: _g, ...rest } = s; onStyle(e.target.value ? { ...rest, gridSide: e.target.value as 'top' | 'bottom' } : rest) }}>
-              <option value="">{t('コート全体')}</option><option value="top">{t('上半分')}</option><option value="bottom">{t('下半分')}</option>
-            </select>
-          )}
-          <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前のチーム（第1セット）')}
-          <select className="near-team" value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
-            <option value="*">{home.name || home.code}</option>
-            <option value="a">{away.name || away.code}</option>
-          </select></label>
-          <span className="spacer" />
-          <span className="ov-gear-wrap" ref={gearPop.anchor}>
-            <button className="ov-gear" aria-label={t('グリッドの見た目')} aria-expanded={gear} onClick={() => setGear(g => !g)}>⚙</button>
-            {gear && (
-              <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('グリッドの見た目')}>
-                <label className="check">{t('色')} <PaletteColor value={s.color} label={t('グリッドの色')} onChange={c => onStyle({ ...s, color: c })} /></label>
-                <label className="check">{t('濃さ')}
-                  <input type="range" min={0.1} max={1} step={0.05} value={s.opacity} onChange={e => onStyle({ ...s, opacity: +e.target.value })} /> {Math.round(s.opacity * 100)}%</label>
-                <label className="check">{t('線の太さ')}
-                  <input type="number" min={1} max={8} step={1} value={s.lineWidth} onChange={e => { const n = +e.target.value; if (n >= 1 && n <= 8) onStyle({ ...s, lineWidth: n }) }} /> px</label>
-                {autoButton(() => setGear(false))}
-                <button onClick={() => { setGear(false); onFitting(false); onFit(null) }}>{t('この試合のグリッドを消す')}</button>
-              </div>
-            )}
-          </span>
-        </div>
-      </section>
-
-      {/* 2. What the one selected play shows. */}
+      {/* 1. What the one selected play shows. */}
       <section className="court-group">
         <h3 className="court-group-head" title={t('一覧やシーンで選んだプレー 1 本の表示')}>{t('選んだ1本')}</h3>
         {pin && (
@@ -197,7 +161,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         </div>
       </section>
 
-      {/* 3. The selected play's player, over all their matches: per kind of play, and from which plays. A pinned clip of
+      {/* 2. The selected play's player, over all their matches: per kind of play, and from which plays. A pinned clip of
           another kind of play (a block, a dig...) has no marks of its own to set. */}
       {!(pinned && !selected) && <section className="court-group">
         <div className="ann-row mark-tabs-row">
@@ -293,6 +257,44 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
           </div>
         )}
       </section>}
+
+      {/* Last, folded: set up once per match (the corners, which team is near) and whether the grid shows.
+          Open while the corners are being fitted, so 完了 is in reach. */}
+      <details className="court-group court-prepare" open={prepOpen || fitting} onToggle={e => setPrepOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary className="court-group-head" title={t('四隅、手前のチーム、グリッドの出し方。試合ごとに一度合わせれば、ふだんは開かなくてよい')}>{t('コートの準備')}</summary>
+        <div className="ann-row">
+          <button className={fitting ? 'primary' : ''} onClick={() => onFitting(!fitting)}
+            title={t('四隅の丸をドラッグして、コートのエンドラインとサイドラインの交点に合わせます')}>{fitting ? t('完了') : t('四隅を合わせる')}</button>
+          {fitting && <button onClick={() => onFit({ ...fit, corners: DEFAULT_CORNERS })} title={t('四隅を画面の中の初めの位置に戻します')}>{t('四隅をリセット')}</button>}
+          <label className="check"><input type="checkbox" checked={s.grid} onChange={e => onStyle({ ...s, grid: e.target.checked })} /> {t('グリッドを出す')}</label>
+          {s.grid && (
+            <select aria-label={t('グリッドを出す範囲')} title={t('グリッドを出す範囲。上半分は奥側（画面の上）、下半分は手前側（画面の下）だけ（書き出しも同じ）')} value={s.gridSide ?? ''}
+              onChange={e => { const { gridSide: _g, ...rest } = s; onStyle(e.target.value ? { ...rest, gridSide: e.target.value as 'top' | 'bottom' } : rest) }}>
+              <option value="">{t('コート全体')}</option><option value="top">{t('上半分')}</option><option value="bottom">{t('下半分')}</option>
+            </select>
+          )}
+          <label className="check" title={t('第1セットで手前（カメラ側）にいるチーム。セットごとに入れ替わり、第5セットは8点で入れ替わります')}>{t('手前のチーム（第1セット）')}
+          <select className="near-team" value={fit.nearSet1} aria-label={t('手前（第1セット）')} onChange={e => onFit({ ...fit, nearSet1: e.target.value as CourtFit['nearSet1'] })}>
+            <option value="*">{home.name || home.code}</option>
+            <option value="a">{away.name || away.code}</option>
+          </select></label>
+          <span className="spacer" />
+          <span className="ov-gear-wrap" ref={gearPop.anchor}>
+            <button className="ov-gear" aria-label={t('グリッドの見た目')} aria-expanded={gear} onClick={() => setGear(g => !g)}>⚙</button>
+            {gear && (
+              <div className="ov-gear-pop" style={gearPop.style} role="dialog" aria-label={t('グリッドの見た目')}>
+                <label className="check">{t('色')} <PaletteColor value={s.color} label={t('グリッドの色')} onChange={c => onStyle({ ...s, color: c })} /></label>
+                <label className="check">{t('濃さ')}
+                  <input type="range" min={0.1} max={1} step={0.05} value={s.opacity} onChange={e => onStyle({ ...s, opacity: +e.target.value })} /> {Math.round(s.opacity * 100)}%</label>
+                <label className="check">{t('線の太さ')}
+                  <input type="number" min={1} max={8} step={1} value={s.lineWidth} onChange={e => { const n = +e.target.value; if (n >= 1 && n <= 8) onStyle({ ...s, lineWidth: n }) }} /> px</label>
+                {autoButton(() => setGear(false))}
+                <button onClick={() => { setGear(false); onFitting(false); onFit(null) }}>{t('この試合のグリッドを消す')}</button>
+              </div>
+            )}
+          </span>
+        </div>
+      </details>
     </div>
   )
 }

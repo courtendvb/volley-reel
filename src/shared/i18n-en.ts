@@ -1780,6 +1780,7 @@ export const EN: Record<string, string> = {
   "グリッドを出す": "Show grid",
   "手前のチーム（第1セット）": "Near team (set 1)",
   "コートの準備": "Court setup",
+  "四隅、手前のチーム、グリッドの出し方。試合ごとに一度合わせれば、ふだんは開かなくてよい": "The corners, the near team and how the grid shows. Once set for a match, you rarely need to open this",
   "選んだ1本": "Selected play",
   "トスの対象": "Sets included",
   "チームのロゴ・色": "Team logos and colors",

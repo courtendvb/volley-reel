@@ -397,6 +397,8 @@ button.link { border: 0; background: none; color: var(--primary); padding: var(-
 .court-group { display: flex; flex-direction: column; gap: var(--space-2); }
 .court-group + .court-group { border-top: 1px solid var(--border); padding-top: var(--space-4); }
 .court-group-head { margin: 0; font-size: var(--fs-label); font-weight: 700; color: var(--text); }
+.court-prepare > summary { cursor: pointer; }
+.court-prepare:not([open]) { gap: 0; }
 /* One thing that can be shown: its checkbox in a fixed column, its own settings beside it. */
 .court-layer-row { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: var(--space-4); min-height: 30px; padding: 0 var(--space-2); border-radius: var(--radius-md); }
 .court-layer-row.on { background: color-mix(in srgb, var(--primary-light) 45%, transparent); }

@@ -4,8 +4,8 @@
 import { EMPTY_FILTER, applyFilter, type PlayFilter, type PlayRef } from './filter'
 import type { PlayDir } from './court'
 import {
-  ROTATION_ORDER, byCount, marked, personOf, playerLabel, playerMarkers, rankedMarkers, rotationOf, sideOutFilter, splitByRotation,
-  type Marked, type RotationSplitBy, type WonBy,
+  ROTATION_ORDER, byCount, byRotation, marked, personOf, playerLabel, playerMarkers, rankedMarkers, rotationOf, sideOutFilter,
+  type Marked, type WonBy,
 } from './rotationSplit'
 import { MARKERS, addClips, newReel, type ClipMode, type Marker, type Reel } from './reel'
 import { displayName } from './dvw'
@@ -15,7 +15,8 @@ import { t } from './i18n'
 
 export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
 // How each preset lays the scenes out:
-//  sideout  a scene per rotation, split inside as RotationSplitBy says
+//  sideout  one scene with the side-out attacks after the receptions picked (sideoutRec), a marker
+//           per rotation (marker n: rotation n), played in the order a team rotates
 //  serve    a scene per server: 'rotation' in the order of the rotation each serves in most, 'count'
 //           the most serves first, 'jersey' by jersey number; marked as serveMarks says
 //  block    'middle' a scene per middle blocker with every attack of the other team while that
@@ -23,12 +24,12 @@ export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
 //           attacking team's good reception, 2 after its poor one, 3 in transition (blockMarks
 //           'phase'), or only the attacks after its good reception (# + !), marked 1 with its setter
 //           in the back row (S1 S6 S5) and 2 in the front row (S4 S3 S2) (blockMarks 'setter');
-//           'rotation' a scene per rotation with the blocks, a marker per blocker
+//           'rotation' one scene with the blocks, a marker per rotation as side-out has
 //  attack   'count' a scene per attacker, the most attacks first; 'position' a scene per
 //           position (outside, opposite, middle, setter, the rest) with a marker per player;
 //           'combo' a scene per attacker (the most first) with a marker per attack code
 export interface PresetHow {
-  sideout: RotationSplitBy
+  sideoutRec: RecMark[] // the receptions side-out attacks come after; all of them: every side-out attack
   serve: 'rotation' | 'count' | 'jersey'
   serveMarks: ServeMarks // inside each server's scene
   block: 'middle' | 'rotation'
@@ -36,12 +37,16 @@ export interface PresetHow {
   attack: 'count' | 'position' | 'combo'
   order: 'old' | 'new' // every preset: the plays of the oldest matches first, or of the newest
 }
-export const DEFAULT_HOW: PresetHow = { sideout: 'none', serve: 'rotation', serveMarks: 'reception', block: 'middle', blockMarks: 'phase', attack: 'count', order: 'old' }
+// A reception's evaluation, as a side-out video picks them (an error (=) has no attack after it).
+export type RecMark = '#' | '+' | '!' | '-' | '/'
+export const REC_MARKS: RecMark[] = ['#', '+', '!', '-', '/']
+export const DEFAULT_HOW: PresetHow = { sideoutRec: [...REC_MARKS], serve: 'rotation', serveMarks: 'reception', block: 'middle', blockMarks: 'phase', attack: 'count', order: 'old' }
 // A server's serves in markers: 'reception' by the reception they drew (serveMarker), 'zone' by where
 // they landed (serveZoneMarker), 'time' all in one marker as they came.
 export type ServeMarks = 'reception' | 'zone' | 'time'
 
-export interface SceneSpec extends Marked { title: string }
+// order: the markers in the order they play (else 1 to 6).
+export interface SceneSpec extends Marked { title: string; order?: Marker[] }
 
 // A middle blocker facing an attack: the player key and how scenes name them.
 export interface Facing { key: string; label: string }
@@ -109,7 +114,10 @@ const otherTeam = { our: 'opp', opp: 'our', all: 'all' } as const
 
 // A block video by middle gathers the other team's attacks; the rest gather their own skill.
 export function presetFilter(kind: PresetKind, how: PresetHow, team: 'all' | 'our' | 'opp'): PlayFilter {
-  if (kind === 'sideout') return sideOutFilter(team)
+  if (kind === 'sideout') {
+    const all = REC_MARKS.every(m => how.sideoutRec.includes(m))
+    return { ...sideOutFilter(team), recEffects: all ? [] : how.sideoutRec }
+  }
   if (kind === 'block' && how.block === 'middle') return { ...EMPTY_FILTER, team: otherTeam[team], skills: ['A'] }
   return { ...EMPTY_FILTER, team, skills: [SKILL[kind]] }
 }
@@ -132,6 +140,7 @@ function mainRotation(refs: PlayRef[]): number {
 // from the search's results ('results').
 // `dir`: only plays going that way on screen (filter.ts), which needs the match's court fitted.
 export function presetRefs(kind: PresetKind, how: PresetHow, source: 'our' | 'opp' | 'results', scope: PlayRef[], results: PlayRef[], dir: 'all' | PlayDir = 'all'): PlayRef[] {
+  if (kind === 'sideout' && !how.sideoutRec.length) return [] // no reception picked
   const f = { ...presetFilter(kind, how, source === 'results' ? 'all' : source), dir }
   return applyFilter(source === 'results' ? results : scope, f)
 }
@@ -142,9 +151,8 @@ const comboLabel = (r: PlayRef): string => (r.comboName ? `${r.combo} ${r.comboN
 export function buildPreset(kind: PresetKind, how: PresetHow, plays: PlayRef[], look: PresetLookups): { scenes: SceneSpec[]; skipped: number } {
   const refs = orderByMatch(plays, how.order, look.matchIndex)
   if (kind === 'sideout' || (kind === 'block' && how.block === 'rotation')) {
-    const by = kind === 'sideout' ? how.sideout : 'player'
-    const { groups, skipped } = splitByRotation(refs, by, look.wonBy)
-    return { scenes: groups.map(({ rot, ...g }) => ({ title: t('ローテ {0}', rot), ...g })), skipped }
+    const { skipped, ...g } = byRotation(refs)
+    return { scenes: g.items.length ? [{ title: t('ローテーション別'), ...g }] : [], skipped }
   }
   if (kind === 'block') {
     // An attack goes in the scene of each middle facing it (usually one).
@@ -181,8 +189,9 @@ export function buildPreset(kind: PresetKind, how: PresetHow, plays: PlayRef[], 
 export type PresetSource = 'our' | 'opp' | 'results'
 export const PRESET_KINDS: PresetKind[] = ['sideout', 'serve', 'block', 'attack']
 
-export const HOW_OPTIONS = (): { [K in keyof PresetHow]: [PresetHow[K], string][] } => ({
-  sideout: [['none', t('分けない')], ['reception', t('レセプションの質')], ['player', t('選手別')], ['zone', t('ゾーン別')], ['result', t('結果別')]],
+// The choices each one-of setting has (side-out's receptions are picked as a set instead).
+type OneOf = Exclude<keyof PresetHow, 'sideoutRec'>
+export const HOW_OPTIONS = (): { [K in OneOf]: [PresetHow[K], string][] } => ({
   serve: [['rotation', t('ローテ順')], ['count', t('打数順')], ['jersey', t('背番号順')]],
   serveMarks: [['reception', t('レセプション評価別')], ['zone', t('ゾーン別')], ['time', t('時系列')]],
   block: [['middle', t('ミドル別')], ['rotation', t('ローテ別')]],
@@ -190,6 +199,9 @@ export const HOW_OPTIONS = (): { [K in keyof PresetHow]: [PresetHow[K], string][
   attack: [['count', t('打数順')], ['position', t('ポジション別')], ['combo', t('アタックコード別')]],
   order: [['old', t('古い試合から')], ['new', t('新しい試合から')]],
 })
+
+// The receptions picked, as the video's name says them ("レセプション # +").
+const recLabel = (marks: RecMark[]): string => `${t('レセプション')} ${REC_MARKS.filter(m => marks.includes(m)).join(' ')}`
 
 // What a video was made from, kept on the video (Video.preset) so it can be made again, for
 // example after matches are added.
@@ -205,11 +217,13 @@ export interface VideoPreset {
 // scenes from others' ("HTH ブロック #15 …"); `team` is the project's target team code.
 export function presetLabels(p: VideoPreset, team: string): { name: string; prefix: string } {
   const who = p.source === 'our' ? team || t('対象チーム') : p.source === 'opp' ? t('相手') : null
-  const how = (HOW_OPTIONS()[p.kind] as [string, string][]).find(([v]) => v === p.how[p.kind])?.[1] ?? ''
+  const k = p.kind
+  const how = k === 'sideout' ? t('ローテーション別') : (HOW_OPTIONS()[k] as [string, string][]).find(([v]) => v === p.how[k])?.[1] ?? ''
   const dir = p.dir === 'up' ? '↑' : p.dir === 'down' ? '↓' : ''
   const marks = p.kind === 'serve' ? HOW_OPTIONS().serveMarks.find(([v]) => v === p.how.serveMarks)?.[1] ?? ''
-    : p.kind === 'block' && p.how.block === 'middle' && p.how.blockMarks === 'setter' ? HOW_OPTIONS().blockMarks.find(([v]) => v === 'setter')?.[1] ?? '' : ''
-  const name = [who, presetName(p.kind), p.kind === 'sideout' ? t('ローテーション別') : how, marks, dir].filter(Boolean).join(' ')
+    : p.kind === 'block' && p.how.block === 'middle' && p.how.blockMarks === 'setter' ? HOW_OPTIONS().blockMarks.find(([v]) => v === 'setter')?.[1] ?? ''
+      : p.kind === 'sideout' && p.how.sideoutRec.length < REC_MARKS.length ? recLabel(p.how.sideoutRec) : ''
+  const name = [who, presetName(p.kind), how, marks, dir].filter(Boolean).join(' ')
   return { name, prefix: [who, presetName(p.kind)].filter(Boolean).join(' ') }
 }
 
@@ -224,10 +238,13 @@ export function cleanPreset(v: unknown): VideoPreset | null {
   if (!PRESET_KINDS.includes(o.kind as PresetKind)) return null
   const how = { ...DEFAULT_HOW }
   const opts = HOW_OPTIONS()
-  for (const k of [...PRESET_KINDS, 'serveMarks', 'blockMarks', 'order'] as (keyof PresetHow)[]) {
-    const x = (o.how as Record<string, unknown> | undefined)?.[k]
+  const saved = o.how as Record<string, unknown> | undefined
+  for (const k of ['serve', 'block', 'attack', 'serveMarks', 'blockMarks', 'order'] as OneOf[]) {
+    const x = saved?.[k]
     if ((opts[k] as [string, string][]).some(([val]) => val === x)) (how as Record<string, unknown>)[k] = x
   }
+  // Made before receptions were picked (split inside by other ways then): every reception.
+  if (Array.isArray(saved?.sideoutRec)) how.sideoutRec = REC_MARKS.filter(m => (saved.sideoutRec as unknown[]).includes(m))
   return {
     kind: o.kind as PresetKind, how,
     source: o.source === 'opp' || o.source === 'results' ? o.source : 'our',
@@ -260,8 +277,8 @@ export function presetLookups(dvws: Record<string, ParsedDVW>, roles: Record<str
 // the title card keeps the short title.
 export const presetReels = (specs: SceneSpec[], prefix: string, mode: ClipMode): Reel[] => specs.map(g => {
   let r: Reel = { ...newReel(prefix ? `${prefix} ${g.title}` : g.title), scope: 'all', sceneCard: true, ...(prefix ? { cardTitle: g.title } : {}) }
-  r = { ...r, markerNames: { ...r.markerNames, ...g.names } }
-  for (const m of [...MARKERS, null]) {
+  r = { ...r, markerNames: { ...r.markerNames, ...g.names }, ...(g.order ? { groupOrder: [...g.order] } : {}) }
+  for (const m of [...(g.order ?? MARKERS), null]) {
     const items = g.items.filter(i => i.marker === m).map(i => ({ matchId: i.ref.matchId, play: i.ref.play }))
     if (items.length) r = addClips(r, items, m ?? 'none', mode).reel
   }

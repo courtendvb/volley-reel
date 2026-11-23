@@ -90,10 +90,14 @@
     }).catch(() => {})
   }
 
-  fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
+  // Patch releases carry only the Windows build; the Mac build comes with minor versions and up. So
+  // each file is taken from the newest release that has it, not from the latest release alone.
+  fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } })
     .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-    .then(rel => {
-      const pick = re => (rel.assets || []).find(a => re.test(a.name))
+    .then(list => {
+      const rels = (Array.isArray(list) ? list : []).filter(r => !r.draft && !r.prerelease)
+      const rel = rels[0] || {}
+      const pick = re => { for (const r of rels) { const a = (r.assets || []).find(x => re.test(x.name)); if (a) return a } }
       const found = { win: pick(/setup-.*\.exe$/), arm: pick(/arm64\.dmg$/), x64: pick(/x64\.dmg$/) }
       Object.keys(found).forEach(k => {
         const a = found[k]

@@ -214,8 +214,8 @@
         <p class="dl-note" data-dl-note></p>
         <ul class="dl-all">
           <li><a data-dl="win" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Windows<small>インストーラー</small></a></li>
-          <li><a data-dl="arm" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Mac（Apple シリコン）<small>M1 以降</small></a></li>
-          <li><a data-dl="x64" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Mac（Intel）<small>ディスクイメージ</small></a></li>
+          <li><a data-dl="arm" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases">Mac（Apple シリコン）<small>M1 以降</small></a></li>
+          <li><a data-dl="x64" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases">Mac（Intel）<small>ディスクイメージ</small></a></li>
         </ul>
         <div class="dl-help">
           <p>お使いの Mac が分からないときは、アップルメニューの「このMacについて」を開いてください。「チップ」が Apple M… なら Apple シリコン、「プロセッサ」が Intel なら Intel です。</p>
@@ -226,7 +226,7 @@
           <details>
             <summary>Mac: ターミナルから入れる（確認の画面なし）</summary>
             <p>アプリには Apple の署名がありません。ブラウザでダウンロードしたものを開くと、初回は macOS に止められます。そのときは「システム設定」→「プライバシーとセキュリティ」→「このまま開く」で開きます。この手間を省くには、ターミナル（「アプリケーション」→「ユーティリティ」）を開き、次の 1 行を貼り付けて Return を押してください。同じリリースからお使いの Mac 用の最新版をダウンロードし、「アプリケーション」に入れて開きます。</p>
-            <div class="cmd"><code data-copy-src>cd /tmp &amp;&amp; a=$(uname -m | sed s/x86_64/x64/) &amp;&amp; u=$(curl -fsSL https://api.github.com/repos/courtendvb/syncscout-video-editor-releases/releases/latest | grep -o "https://[^\"]*-$a-mac.zip") &amp;&amp; curl -fL "$u" -o ssve.zip &amp;&amp; rm -rf ssve &amp;&amp; ditto -x -k ssve.zip ssve &amp;&amp; rm -rf "/Applications/SyncScout Video Editor.app" &amp;&amp; mv "ssve/SyncScout Video Editor.app" /Applications/ &amp;&amp; open "/Applications/SyncScout Video Editor.app"</code><button type="button" class="copy" data-copy data-copied="コピーしました">コピー</button></div>
+            <div class="cmd"><code data-copy-src>cd /tmp &amp;&amp; a=$(uname -m | sed s/x86_64/x64/) &amp;&amp; u=$(curl -fsSL "https://api.github.com/repos/courtendvb/syncscout-video-editor-releases/releases?per_page=30" | grep -o "https://[^\"]*-$a-mac.zip" | head -n 1) &amp;&amp; curl -fL "$u" -o ssve.zip &amp;&amp; rm -rf ssve &amp;&amp; ditto -x -k ssve.zip ssve &amp;&amp; rm -rf "/Applications/SyncScout Video Editor.app" &amp;&amp; mv "ssve/SyncScout Video Editor.app" /Applications/ &amp;&amp; open "/Applications/SyncScout Video Editor.app"</code><button type="button" class="copy" data-copy data-copied="コピーしました">コピー</button></div>
           </details>
           <p>新しい版はアプリの中でダウンロードされ、再起動すると入ります。Windows も Mac も同じです（Mac はアプリを「アプリケーション」に入れているとき）。</p>
         </div>

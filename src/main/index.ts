@@ -31,6 +31,12 @@ import { grabFrame, probe, rawFrame } from './media'
 import { setMacMenu } from './macMenu'
 import { DETECT_H, DETECT_W, detectCourt } from '../shared/courtDetect'
 import { getLang, setLang, t, type Lang } from '../shared/i18n'
+import { stripDevEnv } from './devEnv'
+
+// An installed copy ignores the development-only variables (devEnv.ts): no self-check mode, no
+// accounts switched off, no other lease key, no other page in the window. Nothing reads them before
+// this line (the imports above only define things).
+if (app.isPackaged) stripDevEnv(process.env)
 
 // media://<matchId>/ streams that match's video with Range support, so <video> can seek.
 protocol.registerSchemesAsPrivileged([

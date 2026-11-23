@@ -384,7 +384,17 @@ a.brand { color: inherit; text-decoration: none; }
 @media (max-width: 480px) {
   .feats, .more-feats { grid-template-columns: minmax(0, 1fr); }
 }
-/* Links to the other pages: under the reports, and a row in the footer. */
-.see-all { margin-top: 28px; font-weight: 600; }
-.see-all a, footer .pages a { color: inherit; text-underline-offset: 4px; }
+/* Links to the other pages: a band of two big cards before pricing, and a row in the footer. */
+footer .pages a { color: inherit; text-underline-offset: 4px; }
+.explore { background: var(--slate); color: var(--on-slate); padding-block: 64px; }
+.explore h2 { margin-top: 14px; }
+.explore-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 28px; }
+.explore-card { display: grid; gap: 8px; align-content: start; padding: 0 0 22px; border: 1px solid var(--slate-line); border-radius: 8px; background: var(--slate-2); color: var(--on-slate); text-decoration: none; overflow: hidden; min-width: 0; transition: transform .15s ease, border-color .15s ease; }
+.explore-card:hover { transform: translateY(-3px); border-color: var(--red); }
+.explore-card img { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; margin-bottom: 8px; }
+.explore-card b { padding-inline: 22px; font-size: 21px; font-weight: 700; line-height: 1.3; }
+.explore-card span { padding-inline: 22px; color: var(--on-slate-sub); font-size: 16px; line-height: 1.55; }
+.explore-card em { justify-self: start; margin: 8px 22px 0; padding: 9px 18px; border-radius: 6px; background: var(--red); color: var(--on-red); font-style: normal; font-weight: 700; }
+@media (max-width: 860px) { .explore-cards { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .explore-card { transition: none; } .explore-card:hover { transform: none; } }
 footer .pages { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 18px; font-weight: 600; }

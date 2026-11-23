@@ -111,3 +111,18 @@
     })
     .catch(() => { /* the links already open the releases page */ })
 })()
+
+// Copy buttons next to a command (the Mac Terminal install line).
+;(() => {
+  document.querySelectorAll('[data-copy]').forEach(b => {
+    const src = b.parentElement && b.parentElement.querySelector('[data-copy-src]')
+    if (!src || !navigator.clipboard) { b.hidden = true; return }
+    const label = b.textContent
+    b.addEventListener('click', () => {
+      navigator.clipboard.writeText(src.textContent).then(() => {
+        b.textContent = b.dataset.copied || 'Copied'
+        setTimeout(() => { b.textContent = label }, 2000)
+      }).catch(() => {})
+    })
+  })
+})()

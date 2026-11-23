@@ -461,7 +461,19 @@
           <li><a data-dl="arm" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Mac, Apple silicon<small>M1 or later</small></a></li>
           <li><a data-dl="x64" href="https://github.com/courtendvb/syncscout-video-editor-releases/releases/latest">Mac, Intel<small>Disk image</small></a></li>
         </ul>
-        <p class="dl-help">Not sure which Mac you have? In the Apple menu, choose About This Mac: a chip named Apple M… is Apple silicon, a processor named Intel is Intel. The app is not signed by Apple yet, so the first time, open it from System Settings, Privacy &amp; Security, Open Anyway. On Mac, new versions are installed by hand from this page.</p>
+        <div class="dl-help">
+          <p>Not sure which Mac you have? In the Apple menu, choose About This Mac: a chip named Apple M… is Apple silicon, a processor named Intel is Intel.</p>
+          <details>
+            <summary>Windows: if “Windows protected your PC” appears</summary>
+            <p>The app is not signed with a paid certificate, so the first time Windows may stop the installer. Click <b>More info</b>, then <b>Run anyway</b>. This is only once: later versions update inside the app.</p>
+          </details>
+          <details>
+            <summary>Mac: install from Terminal, with no security prompt</summary>
+            <p>The app is not signed by Apple. Opened from a download in the browser, macOS stops it the first time: then go to System Settings, Privacy &amp; Security, and click <b>Open Anyway</b>. To skip that, open Terminal (in Applications, Utilities), paste this line and press Return. It downloads the latest version for your Mac from the same release, puts it in Applications and opens it.</p>
+            <div class="cmd"><code data-copy-src>cd /tmp &amp;&amp; a=$(uname -m | sed s/x86_64/x64/) &amp;&amp; u=$(curl -fsSL https://api.github.com/repos/courtendvb/syncscout-video-editor-releases/releases/latest | grep -o "https://[^\"]*-$a-mac.zip") &amp;&amp; curl -fL "$u" -o ssve.zip &amp;&amp; rm -rf ssve &amp;&amp; ditto -x -k ssve.zip ssve &amp;&amp; rm -rf "/Applications/SyncScout Video Editor.app" &amp;&amp; mv "ssve/SyncScout Video Editor.app" /Applications/ &amp;&amp; open "/Applications/SyncScout Video Editor.app"</code><button type="button" class="copy" data-copy>Copy</button></div>
+          </details>
+          <p>New versions download inside the app and install on restart, on Windows and on Mac (with the app in Applications).</p>
+        </div>
       </div>
     </div>
   </section>

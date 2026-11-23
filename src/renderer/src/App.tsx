@@ -170,9 +170,17 @@ export function App() {
   const cmp = useCompare(setError)
   useEffect(() => { if (library) void api.listTeamColors().then(setTeamColors).catch(() => undefined) }, [!!library])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  // The court grid's look is this computer's, for every match; the corners belong to each match.
-  const [gridStyle, setGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
-  useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(gridStyle)) } catch { /* not kept */ } }, [gridStyle])
+  // The 表示 tab (the grid's look, zones, the player's marks) belongs to the open video (Video.court); the
+  // corners belong to each match. With no video open, or a video not yet set, it is this computer's.
+  const [localGridStyle, setLocalGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
+  useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(localGridStyle)) } catch { /* not kept */ } }, [localGridStyle])
+  const videoCourt = video?.court
+  const gridStyle = useMemo(() => (videoCourt ? cleanGridStyle(videoCourt) : localGridStyle), [videoCourt, localGridStyle])
+  const setGridStyle = useCallback((next: GridStyle) => {
+    const v = latest.current.video
+    if (v) updateVideo({ ...v, court: next, updatedAt: new Date().toISOString() })
+    else setLocalGridStyle(next)
+  }, [updateVideo])
   const [courtFitting, setCourtFitting] = useState(false)
   // The right column's tab, kept on this computer.
   const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })

@@ -65,6 +65,8 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
   // scene, one marker group) when a plan and a file name are given.
   const startExport = useCallback(async (outPathArg?: string, part?: { plan: PlanItem[]; name: string }) => {
     const { video: v, reels: rs, overlay: ov, matches: ms, infoFor: inf, orderOf: of, settings: st } = latest.current
+    // The 表示 tab as it is now: it belongs to the open video, so another video opened while the job is built must not change it.
+    const gs = gridStyleRef.current
     const whole = !part && v ? planVideoChapters(v, Object.fromEntries(rs.map(s => [s.id, s])), of, ov, ms, st?.ourTeamCodes ?? []) : null
     const plan = fillPlanFrames(part?.plan ?? whole?.plan ?? [], framePhoto)
     if (!v || !plan.some(p => p.kind === 'clip' || p.card.slide)) return null
@@ -82,11 +84,11 @@ export function useExport(now: Now, latest: RefObject<AppLatest>, currentPlan: (
             const fit = ms[c.matchId]?.court, plays = latest.current.dvwsRef?.[c.matchId]?.plays, play = plays?.[c.playId]
             const dvws = latest.current.dvwsRef ?? {}, counted = latest.current.targetDvws ?? dvws // figures over the target matches only
             // The clip's own look when it pins one, and without the player's marks when it leaves them off.
-            const pinned = play ? clipCourtStyle(gridStyleRef.current, play.skill, c.overlayOverride?.court) : gridStyleRef.current
+            const pinned = play ? clipCourtStyle(gs, play.skill, c.overlayOverride?.court) : gs
             const clipStyle = c.overlayOverride?.courtMarks?.hidden ? withoutPlayerMarks(pinned) : pinned
             return fit && play ? { fit, zones: playMarks(play, fit, plays![c.playId + 1], clipStyle, () => Object.values(counted).flatMap(x => x.plays), { filtered: () => latest.current.results.map(r => r.play), name: chartName(dvws[c.matchId], play), setterName: set => chartName(dvws[c.matchId], set), ranges: clipRangeSource(byId[sceneId], group, c.matchId, dvws) }), flight: flightTiming(play, ms[c.matchId].offsetSec, playTimes(serveMarkOf(ms[c.matchId], play), c)) } : null
           },
-          courtStyle: gridStyleRef.current }, outPath,
+          courtStyle: gs }, outPath,
         // Chapters always go into the MP4 (the whole video's scenes and markers, or a scene's markers);
         // YouTube's list beside it only for the whole video, when it is on.
         whole?.chapters ?? planChapters(plan, byId), !!whole && ov.chapters.enabled)

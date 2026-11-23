@@ -4,6 +4,7 @@
 import { ourSide } from './filter'
 import type { Annotation } from './annotation'
 import type { SlideFlights, SlideMarks } from './court'
+import type { GridStyle } from './courtStyle'
 import type { CardKind, CardLayout, OverlayPatch, OverlaySettings } from './overlay'
 import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel, type Slide, type SlideBg, type SlideGroup } from './reel'
 import type { Match } from './types'
@@ -21,6 +22,9 @@ export interface Video {
   cardTitle?: string // the opening card's text when it differs from the name (line breaks: one line each)
   cardLayout?: CardLayout // the opening card's own title place and size
   captionNames?: Record<string, string> // a player's name on the caption in every clip of the video, by player key (Play.playerKey)
+  // The 表示 tab (zones, landing effect, the player's marks, the grid's look) for this video; read through
+  // cleanGridStyle. None: the video has not been set and follows the tab as it is with no video open.
+  court?: GridStyle
   preset?: VideoPreset // made from a preset (shared/presets.ts): kept so it can be made again
   updatedAt: string
 }

@@ -32,6 +32,13 @@ describe('setFreezes', () => {
     for (const e of ['#', '+', '!']) expect(setFreezes([serve(1, 100), rec(2, 101), set(3, 103, e)], 0).map(f => f.playId)).toEqual([3])
     for (const e of ['-', '/', '=']) expect(setFreezes([serve(1, 100), rec(2, 101), set(3, 103, e)], 0)).toEqual([])
   })
+  it('stops after the receptions picked, and nowhere when none is', () => {
+    const plays = (e: string) => [serve(1, 100), rec(2, 101), set(3, 103, e)]
+    expect(setFreezes(plays('-'), 0, 2, ['#', '-']).map(f => f.playId)).toEqual([3])
+    expect(setFreezes(plays('+'), 0, 2, ['#', '-'])).toEqual([])
+    expect(setFreezes(plays('#'), 0, 2, [])).toEqual([])
+    expect(courtWindows(plays('-'), 0, 4, 2, 0, ['-']).some(w => w.shares)).toBe(true)
+  })
   it('stops as long as asked, and not at all for 0', () => {
     const plays = [serve(1, 100), rec(2, 101), set(3, 103, '#'), atk(4, 104)]
     expect(setFreezes(plays, 0, 3.5)[0].sec).toBe(3.5)

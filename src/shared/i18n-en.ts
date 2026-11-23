@@ -539,7 +539,7 @@ export const EN: Record<string, string> = {
   "キー操作": "Keys",
   "セット配分を出す": "Show the set distribution",
   "静止時間": "Stop for",
-  "ラリーを通しで見るとき、Aパス（# + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。": "When a rally plays through, the video stops on a set made from a good pass (# + !) and the court shows that rotation's set distribution. It goes when the video plays again. Used for every project on this computer (saved at once).",
+  "ラリーを通しで見るとき、選んだ評価のレセプション（はじめは # + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。": "When a rally plays through, the video stops on a set made from a reception of the grades picked (# + ! to begin with) and the court shows that rotation's set distribution. It goes when the video plays again. Used for every project on this computer (saved at once).",
   "マーカー {0} だけ": "Marker {0} only",
   "動画の構成": "Video",
   "右の欄": "Right column",

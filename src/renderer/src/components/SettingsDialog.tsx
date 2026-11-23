@@ -12,7 +12,8 @@ import { TeamLogos } from './TeamLogos'
 import { LANGS, getLang, t, type Lang } from '../../../shared/i18n'
 import { IS_MAC, keyName } from '../../../shared/keys'
 import { FONTS } from '../fonts'
-import { SET_STOP_MAX_SEC, arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec, setSetStopSec, setStopSec } from '../keys'
+import { SET_STOP_MAX_SEC, arrowSec, ctrlArrowSec, setArrowSec, setCtrlArrowSec, setSetStopRecs, setSetStopSec, setStopRecs, setStopSec } from '../keys'
+import { FREEZE_RECEPTION_CHOICES } from '../../../shared/courtFollow'
 
 const api = window.api
 
@@ -48,6 +49,8 @@ export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSa
   // 通し's stop on a set: kept at once, like the keys. The length is remembered while the stop is off.
   const [stopOn, setStopOn] = useState(() => setStopSec() > 0)
   const [stopLen, setStopLen] = useState(() => setStopSec() || 2)
+  const [stopRecs, setStopRecsNow] = useState(setStopRecs)
+  const toggleRec = (e: string) => { const n = FREEZE_RECEPTION_CHOICES.filter(x => (x === e) !== stopRecs.includes(x)); setStopRecsNow(n); setSetStopRecs(n) }
   const [lines, setLines] = useState<ChartLineColors>(settings.lineColors ?? {})
   const [points, setPoints] = useState<ChartLineColors>(settings.pointColors ?? {})
   const [pointScale, setPointScale] = useState(settings.pointScale ?? 1)
@@ -209,7 +212,15 @@ export function SettingsDialog({ settings, teams, teamColors, onTeamColors, onSa
               onChange={e => { const n = +e.target.value; setStopLen(n); if (n >= 0.5 && n <= SET_STOP_MAX_SEC) setSetStopSec(n) }} />
             <span>{t('秒')}</span>
           </div>
-          <p className="hint">{t('ラリーを通しで見るとき、Aパス（# + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。')}</p>
+          <div className="filter-row">
+            <span className="field-label">{t('レセプション評価')}</span>
+            <div className="chips">
+              {FREEZE_RECEPTION_CHOICES.map(e => (
+                <button key={e} className={`chip${stopRecs.includes(e) ? ' on' : ''}`} aria-pressed={stopRecs.includes(e)} disabled={!stopOn} onClick={() => toggleRec(e)}>{e}</button>
+              ))}
+            </div>
+          </div>
+          <p className="hint">{t('ラリーを通しで見るとき、選んだ評価のレセプション（はじめは # + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。')}</p>
         </section>
 
         <section {...page('look')}>

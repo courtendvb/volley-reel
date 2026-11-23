@@ -536,7 +536,7 @@ export const ES: Record<string, string> = {
   "キー操作": "Teclas",
   "セット配分を出す": "Mostrar la distribución del armado",
   "静止時間": "Pausa de",
-  "ラリーを通しで見るとき、Aパス（# + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。": "Cuando un rally se reproduce de corrido, el video se detiene en un armado hecho desde un buen pase (# + !) y la cancha muestra la distribución del armado de esa rotación. Se quita cuando el video vuelve a reproducirse. Se usa en todos los proyectos de esta computadora (se guarda al instante).",
+  "ラリーを通しで見るとき、選んだ評価のレセプション（はじめは # + !）からのセットで映像を止め、そのローテーションのセット配分をコートに出します。再生が始まると消えます。このパソコンのすべてのプロジェクトに使います（すぐ保存されます）。": "Cuando un rally se reproduce de corrido, el video se detiene en un armado hecho desde una recepción de las evaluaciones elegidas (# + ! al principio) y la cancha muestra la distribución del armado de esa rotación. Se quita cuando el video vuelve a reproducirse. Se usa en todos los proyectos de esta computadora (se guarda al instante).",
   "マーカー {0} だけ": "Solo marcador {0}",
   "動画の構成": "Video",
   "右の欄": "Columna derecha",

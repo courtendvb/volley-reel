@@ -78,6 +78,14 @@ export function rotationSideOut(dvws: ParsedDVW[], team: string, keep?: (p: Play
   return out
 }
 
+// The team's own call groups (src/internal/README.md): CALL A is the sets on the KA and KC calls, CALL B
+// those on KB and KQ, after a # + ! reception (the side-out, as the slide's heading says).
+export const CALL_GROUPS: { title: string; calls: string[]; fill: string }[] = [
+  { title: 'CALL A', calls: ['KA', 'KC'], fill: '#4F6BD0' },
+  { title: 'CALL B', calls: ['KB', 'KQ'], fill: '#E3121B' },
+]
+export const callGroupSets = (sets: SetterSet[], calls: string[]) => sets.filter(s => afterRec(s, '#+!') && s.set.skill === 'E' && calls.includes(setterCall(s.set)))
+
 // The setter calls used most after a # or + reception, with their sets.
 export function topCalls(sets: SetterSet[], most = 2): { call: string; sets: SetterSet[] }[] {
   const good = sets.filter(s => afterRec(s, '#+') && s.set.skill === 'E' && setterCall(s.set))
@@ -112,6 +120,29 @@ function table(title: string, head: { fill: string; text: string }, sp: SetSplit
     cell(c, 4, pct(sp.by[k].n, sp.total), { bold: big, color: big ? '#DC2626' : '#0F172A' })
   })
   return { out, h: rh * 5 }
+}
+
+// A call group's table at the bottom left: its title on its colour, then N · Pipe and Z2/1 · Quick · Z4,
+// each a label over its share, the places' in their colours. One group.
+const GROUP_W = 0.17, GROUP_HEAD = 0.045, GROUP_ROW = 0.04, GROUP_H = GROUP_HEAD + 4 * GROUP_ROW
+function callGroupTable(title: string, fill: string, sp: SetSplit, x: number, y: number): Annotation[] {
+  const g = uid(), cw = GROUP_W / 3, out: Annotation[] = []
+  const cell = (c: number, top: number, h: number, text: string, o: { fill?: string; color?: string; bold?: boolean; span?: number; size?: number } = {}) => {
+    const w = cw * (o.span ?? 1)
+    out.push(words(x + c * cw + w / 2, top, text, o.size ?? 17, o.color ?? '#475569', {
+      align: 'center', bold: o.bold ?? false, groupId: g,
+      box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: 4, width: w, height: h },
+    }))
+  }
+  cell(0, y, GROUP_HEAD, title, { fill, color: light(fill) ? '#0F172A' : '#FFFFFF', bold: true, span: 3, size: 18 })
+  const row = (i: number) => y + GROUP_HEAD + i * GROUP_ROW
+  cell(0, row(0), GROUP_ROW, 'N'); cell(1, row(0), GROUP_ROW, 'Pipe'); cell(2, row(0), GROUP_ROW, '')
+  cell(0, row(1), GROUP_ROW, String(sp.total)); cell(1, row(1), GROUP_ROW, pct(sp.by.pipe.n, sp.total)); cell(2, row(1), GROUP_ROW, '')
+  ;(['right', 'middle', 'left'] as SetPlace[]).forEach((k, c) => {
+    cell(c, row(2), GROUP_ROW, PLACE_LABEL[k], { color: PLACE_FILL[k] })
+    cell(c, row(3), GROUP_ROW, pct(sp.by[k].n, sp.total), { color: PLACE_FILL[k] })
+  })
+  return out
 }
 
 // The rotation's serve receive: receptions, side-out % and first-ball side-out %, a head in the team's
@@ -449,6 +480,7 @@ export interface RotationSlideData {
   cones?: boolean // the spikers' cones on the court (missing: shown)
   tables?: RotationTables // which of the tables at the bottom right (missing: all six)
   court?: CourtLook // the court in perspective or flat from above (missing: 3D)
+  callGroups?: boolean // the team's own CALL A and CALL B at the bottom left (CALL_GROUPS; for an account allowed them)
 }
 
 // The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
@@ -537,6 +569,12 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
     const row = which === 'all' ? (i < passes.length ? i : i - passes.length) : i % grid.rows
     out.push(...table(tb.title, tb.head, tb.sp, x0 + col * (w + TABLE_COL_GAP), TABLE_AREA.y + row * (h + TABLE_GAP), w, grid.k).out)
   })
+  // The team's own call groups at the bottom left, over the near court: when the setter uses those calls.
+  const grouped = CALL_GROUPS.flatMap(c => c.calls)
+  if (v.callGroups && v.sets.some(s => grouped.includes(setterCall(s.set)))) {
+    const y0 = 0.995 - CALL_GROUPS.length * GROUP_H
+    CALL_GROUPS.forEach((c, i) => out.push(...callGroupTable(c.title, c.fill, splitSets(callGroupSets(rot, c.calls)), 0.004, y0 + i * GROUP_H)))
+  }
   return out
 }
 

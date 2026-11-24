@@ -57,6 +57,26 @@ describe('a rotation', () => {
     for (const a of anns) if (a.kind === 'rect' || a.kind === 'circle') { expect(a.x + a.w).toBeLessThanOrEqual(1); expect(a.y + a.h).toBeLessThanOrEqual(1) }
     for (const a of anns) if (a.kind === 'text' && a.box?.width) expect(a.x + a.box.width / 2).toBeLessThanOrEqual(1)
   })
+  // The team's own call groups (src/internal/README.md): CALL A = KA + KC, CALL B = KB + KQ, after # + !.
+  it('adds CALL A and CALL B at the bottom left only when asked, and only for a setter using those calls', () => {
+    const make = (o: object, s = sets) => rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets: s, formation: [], ...o }, 'both', '#0F172A')
+    const texts = (anns: ReturnType<typeof make>) => anns.flatMap(a => (a.kind === 'text' ? [a.text] : []))
+    expect(texts(make({}))).not.toContain('CALL A')
+    expect(texts(make({ callGroups: true, tables: 'none' })).filter(x => /^CALL [AB]$/.test(x))).toEqual(['CALL A', 'CALL B'])
+    // The two KA sets (# zone 3, + zone 4), the two KB (! zone 2, + zone 1): N, Pipe, then Z2/1 · Quick · Z4, each over its share.
+    const group = (title: string) => {
+      const anns = make({ callGroups: true, tables: 'none' }), head = anns.find(a => a.kind === 'text' && a.text === title)!
+      return anns.filter(a => a.kind === 'text' && a.groupId === head.groupId).map(a => (a.kind === 'text' ? a.text : ''))
+    }
+    expect(group('CALL A')).toEqual(['CALL A', 'N', 'Pipe', '', '2', '0%', '', 'Z2/1', '0%', 'Quick', '50%', 'Z4', '50%'])
+    expect(group('CALL B')).toEqual(['CALL B', 'N', 'Pipe', '', '2', '0%', '', 'Z2/1', '100%', 'Quick', '0%', 'Z4', '0%'])
+    for (const a of make({ callGroups: true })) if (a.kind === 'text' && a.box?.width) {
+      expect(a.x - a.box.width / 2).toBeGreaterThanOrEqual(0); expect(a.y + (a.box.height ?? 0)).toBeLessThanOrEqual(1)
+    }
+    // A setter with none of those calls: no tables.
+    const other = setterSets([match([rallyOf({ rot: 2, call: 'K1', zone: 4 })], () => [2, 10, 19, 92, 6, 7])], 'S')
+    expect(texts(make({ callGroups: true }, other))).not.toContain('CALL A')
+  })
   it('shows the tables chosen, larger the fewer, and the cones only when asked', () => {
     const make = (o: object) => rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation: [], callNames: d.codeNames, ...o }, 'both', '#0F172A')
     const titles = (anns: ReturnType<typeof make>) => anns.flatMap(a => (a.kind === 'text' && /pass$|^[0-9]\. CALL/.test(a.text) ? [a] : []))

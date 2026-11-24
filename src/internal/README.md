@@ -14,6 +14,7 @@
 | データスライド「アタックディレクション」（D） | `attackBoard.ts`、`BoardDialogParts.tsx` の `AttackOptions` |
 | 分析「得点率・ミス率」 | `pointError.ts`、`PointErrorReport.tsx` |
 | ポッシビリティー（Poss）のすべて: マッチレポートのサーブ欄「Poss」（画面と PDF）、プレー一覧の **P**、チーム比較の「POSS%」「POSSIBILITY/SET」 | `shared/reportHtml.ts` の `poss`、`MatchReportDialog.tsx`、`PlayList.tsx`、`shared/compare.ts` の `internal`（`rowsFor`） |
+| データスライド「ローテーション」の左下の **CALL A**（KA と KC）と **CALL B**（KB と KQ）: # + ! レセプションのあとの配分。セッターがこれらのコールを使っているときだけ | `shared/rotationBoard.ts` の `CALL_GROUPS`・`callGroupTable` |
 | 新しいプロジェクトで対象チームに `HTH` が最初から入る | `App.tsx` |
 
 許可されていないアカウントでも、プロジェクトにある T・D のスライドは表示・書き出しできる。

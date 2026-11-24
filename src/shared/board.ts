@@ -459,8 +459,10 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const fits = !narrow && bottom - TOP - (tall ? tall + 0.015 : 0) - 0.118 - 0.03 >= 0.14
     const second = opts.split && fits && types[1]?.plays.length >= MIN_SECOND ? types[1] : null
     const main = second ? types[0].plays : p.plays
-    const mainLabel = p.code ? `${p.code}${p.codeName ? ` ${p.codeName}` : ''}` : second ? serveTypeName(types[0].type) : null
-    const mainColor = !p.code && second ? serveTypeColor(types[0].type) : '#1D4ED8'
+    // A server of one type only is marked with it too; one of mixed types shown together is not.
+    const typed = second || (types.length === 1 && types[0].type !== '~') ? types[0].type : null
+    const mainLabel = p.code ? `${p.code}${p.codeName ? ` ${p.codeName}` : ''}` : typed ? serveTypeName(typed) : null
+    const mainColor = !p.code && typed ? serveTypeColor(typed) : '#1D4ED8'
     const role = (p.player.role && ROLE_COLORS[p.player.role]) || NO_ROLE
     const name = p.player.lastName.toUpperCase()
     const fit = (size: number, room: number, text: string) => Math.min(size, Math.floor((room * 1280) / (text.length * 0.72)))

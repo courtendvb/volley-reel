@@ -117,6 +117,24 @@ describe('the colour of a serve label', () => {
   })
 })
 
+describe('a server of one type', () => {
+  const labels = (codes: string[], split: boolean, n = 1) => {
+    const one = boardPlayers([match(codes.map(code => play({ code })))], 'S')[0]
+    const cols = Array.from({ length: n }, (_, i) => ({ ...one, key: `P${i}` }))
+    return boardSlide(cols, 'S', { split }, {}).annotations.filter(a => a.kind === 'text' && ['Jump', 'Float'].includes(a.text)).map(a => (a as { text: string }).text)
+  }
+  it('is marked with the type, with or without the split, and on narrow cards', () => {
+    const jumps = Array.from({ length: 6 }, () => '*07SQ-~~~16C')
+    expect(labels(jumps, true)).toEqual(['Jump'])
+    expect(labels(jumps, false)).toEqual(['Jump'])
+    expect(labels(jumps.map(c => c.replace('SQ', 'SM')), true, 5)).toEqual(Array(5).fill('Float'))
+  })
+  it('is not marked when the serves have no type, nor when mixed types share one chart', () => {
+    expect(labels(Array.from({ length: 6 }, () => '*07S~-~~~16C'), true)).toEqual([])
+    expect(labels(['*07SQ-~~~16C', '*07SQ-~~~16C', '*07SM-~~~16C'], false)).toEqual([])
+  })
+})
+
 describe('boardSlide', () => {
   const many = (code: string, n: number) => Array.from({ length: n }, () => play({ code }))
   const serves = [...many('*07SM-~~~16C', 8), ...many('*07SQ-~~~16C', 4)]

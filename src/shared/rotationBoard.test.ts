@@ -41,6 +41,19 @@ describe('a rotation', () => {
     expect(rotationLineup([d], 'HTH', 5)).toBeNull()
     expect(rotationLineup([d], 'XXX', 2)).toBeNull()
   })
+  it('takes one lineup for every rotation, turned for each, so drills stuck in one rotation do not win it', () => {
+    const LINEUP = [21, 7, 4, 19, 6, 15], DRILL = [21, 1, 2, 4, 5, 6]
+    // In rotation r the six stand turned on: P r is where P1 was in rotation 1.
+    const turned = (r: number) => LINEUP.map((_, i) => LINEUP[(((i - (r - 1)) % 6) + 6) % 6])
+    const game = [1, 6, 5, 4, 3, 2].flatMap(r => Array.from({ length: 10 }, () => ({ r, six: turned(r) })))
+    // Many more rallies of drills, all in rotation 1, with a lineup the scout never changed.
+    const drills = Array.from({ length: 30 }, () => ({ r: 1, six: DRILL }))
+    const all = [...game, ...drills].map(x => ({ x, plays: rallyOf({ rot: x.r }) }))
+    const six = new Map(all.map(({ x, plays }) => [plays[0].rallyId!, x.six]))
+    const m = match(all.map(a => a.plays), id => six.get(id)!)
+    expect(rotationLineup([m], 'HTH', 1)?.jerseys).toEqual(LINEUP)
+    expect(rotationLineup([m], 'HTH', 6)?.jerseys).toEqual([7, 4, 19, 6, 15, 21])
+    expect(rotationLineup([m], 'HTH', 2)?.jerseys).toEqual([15, 21, 7, 4, 19, 6])  })
   it('makes the slide: P2, the six players, three pass tables and the calls most used first, all inside; the court fixed', () => {
     const anns = rotationSlide({ rotation: 2, team: 'HTH', setter: d.players['*2'], sets, formation: rotationFormation([d], 'HTH', 2, rotationLineup([d], 'HTH', 2), 'S'), callNames: d.codeNames }, 'both', '#0F172A')
     const texts = anns.flatMap(a => (a.kind === 'text' ? [a.text] : []))

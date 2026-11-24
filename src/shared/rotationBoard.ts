@@ -27,11 +27,26 @@ const afterRec = (s: SetterSet, recs: string) => s.set.phase === 'r' && !!s.set.
 export const inRotation = (sets: SetterSet[], r: number) => sets.filter(s => rotationOf(s.set) === r)
 export const sideOut = (sets: SetterSet[]) => sets.filter(s => afterRec(s, '#+!'))
 
-// The team's lineup in a rotation: the one it had most often at the start of a rally in it, P1 to P6
-// (jerseys; liberos are not in the lineups). With the players, where the DVW names them.
+// The team's lineup in a rotation, P1 to P6 (jerseys; liberos are not in the lineups), with the
+// players where the DVW names them. One lineup for all six rotations, turned for each: the one the
+// team had most at the start of its rallies over all of them. Each rally's six are turned back to
+// rotation 1 (in rotation r, P r stands where P1 does in rotation 1), so the same six in the same
+// order count together whatever the rotation, and every slide shows the same players.
+// A rotation with far more rallies than the others counts only as much as an average one: files
+// of drills that stay in one rotation (with whoever the scout left in the lineup) would otherwise
+// outweigh the matches. Null when the team has no rally in this rotation with a lineup.
 export interface Lineup { jerseys: number[]; players: (Player | null)[] }
 export function rotationLineup(dvws: ParsedDVW[], team: string, r: number): Lineup | null {
-  const n = new Map<string, { jerseys: number[]; players: (Player | null)[]; count: number }>()
+  const base = teamLineup(dvws, team)
+  if (!base || !base.rotations.has(r)) return null
+  const at = (i: number) => (((i - (r - 1)) % 6) + 6) % 6
+  return { jerseys: base.jerseys.map((_, i) => base.jerseys[at(i)]), players: base.players.map((_, i) => base.players[at(i)]) }
+}
+
+// The lineup in rotation 1's order, and the rotations that had a rally with a lineup.
+function teamLineup(dvws: ParsedDVW[], team: string): (Lineup & { rotations: Set<number> }) | null {
+  const n = new Map<string, { jerseys: number[]; players: (Player | null)[]; by: Map<number, number> }>()
+  const total = new Map<number, number>()
   for (const d of dvws) {
     const i = d.teams.findIndex(t => t.code.toUpperCase() === team.toUpperCase())
     if (i < 0) continue
@@ -41,15 +56,21 @@ export function rotationLineup(dvws: ParsedDVW[], team: string, r: number): Line
       if (p.rallyId === null || seen.has(p.rallyId)) continue
       seen.add(p.rallyId) // the rally's first play: its rotation as the rally starts
       const rot = side === '*' ? p.homeRot : p.awayRot, court = d.rallies[p.rallyId]?.court
-      const jerseys = court ? (side === '*' ? court.home : court.away) : []
-      if (rot !== r || jerseys.length !== 6) continue
-      const k = jerseys.join(','), had = n.get(k) ?? { jerseys, players: jerseys.map(j => d.players[`${side}${j}`] ?? null), count: 0 }
-      had.count++
+      const six = court ? (side === '*' ? court.home : court.away) : []
+      if (six.length !== 6 || rot === null || !ROTATIONS.includes(rot)) continue
+      const jerseys = [...six.slice(rot - 1), ...six.slice(0, rot - 1)]
+      const k = jerseys.join(','), had = n.get(k) ?? { jerseys, players: jerseys.map(j => d.players[`${side}${j}`] ?? null), by: new Map() }
+      had.by.set(rot, (had.by.get(rot) ?? 0) + 1)
       n.set(k, had)
+      total.set(rot, (total.get(rot) ?? 0) + 1)
     }
   }
-  const top = [...n.values()].sort((a, b) => b.count - a.count)[0]
-  return top ? { jerseys: top.jerseys, players: top.players } : null
+  if (!n.size) return null
+  const mean = [...total.values()].reduce((a, b) => a + b, 0) / total.size
+  const weight = (rot: number) => Math.min(1, mean / total.get(rot)!)
+  const score = (l: { by: Map<number, number> }) => [...l.by].reduce((s, [rot, c]) => s + c * weight(rot), 0)
+  const top = [...n.values()].sort((a, b) => score(b) - score(a))[0]
+  return { jerseys: top.jerseys, players: top.players, rotations: new Set(total.keys()) }
 }
 
 // The team's serve receive in each rotation: its receptions, the rallies it won after them (side-out)

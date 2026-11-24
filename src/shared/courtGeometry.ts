@@ -153,6 +153,118 @@ export function floorRect(corners: CourtFit['corners'], from: Pt, to: Pt): [numb
   return ([[a.x, a.y], [b.x, a.y], [b.x, b.y], [a.x, b.y]] as const).map(([u, v]) => { const p = project(H, u, v); return [p.x, p.y] as [number, number] })
 }
 
+// Something flat (a text) lying on the floor: its four corners in the picture (top-left, top-right,
+// bottom-left, bottom-right of the thing), so it shows in the court's perspective. Worked in metres
+// on the floor: a rectangle about the point c, its width along the unit direction e and its top
+// toward -n (n points the way that goes down the picture, so it reads from the camera).
+type FloorQuad = [[number, number], [number, number], [number, number], [number, number]]
+function floorRectQuad(corners: CourtFit['corners'], c: Pt, e: Pt, wm: number, hm: number, down?: Pt): FloorQuad {
+  const H = homography(corners)
+  const shown = (p: Pt) => project(H, p.x / COURT_W, p.y / COURT_L)
+  let n = { x: -e.y, y: e.x }
+  if (down ? n.x * down.x + n.y * down.y < 0 : shown({ x: c.x + n.x * 0.1, y: c.y + n.y * 0.1 }).y < shown(c).y) n = { x: -n.x, y: -n.y }
+  const at = (i: number, j: number): [number, number] => {
+    const p = shown({ x: c.x + e.x * wm * i / 2 + n.x * hm * j / 2, y: c.y + e.y * wm * i / 2 + n.y * hm * j / 2 })
+    return [p.x, p.y]
+  }
+  return [at(-1, -1), at(1, -1), at(-1, 1), at(1, 1)]
+}
+const toMetres = (p: Pt): Pt => ({ x: p.x * COURT_W, y: p.y * COURT_L })
+
+// Laid where it shows: as wide on the floor as from `left` to `right` (points of the picture, the
+// middles of its left and right sides), aspect its width / height. Null off the floor.
+export function floorQuad(corners: CourtFit['corners'], left: Pt, right: Pt, aspect: number): FloorQuad | null {
+  const a = floorAt({ corners }, left), b = floorAt({ corners }, right)
+  if (!a || !b || !(aspect > 0)) return null
+  const A = toMetres(a), B = toMetres(b), wm = Math.hypot(B.x - A.x, B.y - A.y)
+  if (!(wm > 1e-6) || wm > 100) return null
+  return floorRectQuad(corners, { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, { x: (B.x - A.x) / wm, y: (B.y - A.y) / wm }, wm, wm / aspect)
+}
+
+// Laid again where it lies, for a new aspect (its text was changed): same middle and way on the
+// floor, its height times `scale` (its font size changed), its width from the aspect. Null when its
+// corners are off the floor.
+export function refloorQuad(corners: CourtFit['corners'], quad: FloorQuad, aspect: number, scale = 1): FloorQuad | null {
+  const f = quad.map(([x, y]) => floorAt({ corners }, { x, y }))
+  if (f.some(p => !p) || !(aspect > 0)) return null
+  const [tl, tr, bl, br] = (f as Pt[]).map(toMetres)
+  const mid = (p: Pt, q: Pt): Pt => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 })
+  const l = mid(tl, bl), r = mid(tr, br), t = mid(tl, tr), b = mid(bl, br)
+  const wm = Math.hypot(r.x - l.x, r.y - l.y), h0 = Math.hypot(b.x - t.x, b.y - t.y), hm = h0 * scale
+  if (!(wm > 1e-6 && h0 > 1e-6 && hm > 1e-6)) return null
+  // Its own way up is kept (one turned to read from the far side stays so).
+  return floorRectQuad(corners, mid(l, r), { x: (r.x - l.x) / wm, y: (r.y - l.y) / wm }, hm * aspect, hm, { x: (b.x - t.x) / h0, y: (b.y - t.y) / h0 })
+}
+
+// Something flat standing upright on the floor, like a board: its bottom edge on the floor from
+// `left` to `right` (points of the picture, 0..1), its height on the floor's scale from aspect (width /
+// height). W × H: the picture in pixels, for the camera. Null off the floor or when the corners
+// can't tell the camera.
+export function standQuad(corners: CourtFit['corners'], W: number, H: number, left: Pt, right: Pt, aspect: number): FloorQuad | null {
+  const a = floorAt({ corners }, left), b = floorAt({ corners }, right)
+  if (!a || !b || !(aspect > 0)) return null
+  const A = toMetres(a), B = toMetres(b), wm = Math.hypot(B.x - A.x, B.y - A.y)
+  if (!(wm > 1e-6) || wm > 100) return null
+  return standOn(corners, W, H, { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, { x: (B.x - A.x) / wm, y: (B.y - A.y) / wm }, wm, wm / aspect)
+}
+
+function standOn(corners: CourtFit['corners'], W: number, H: number, c: Pt, e: Pt, wm: number, hm: number): FloorQuad | null {
+  const cam = courtCamera(corners.map(p => ({ x: p.x * W, y: p.y * H })) as [Pt, Pt, Pt, Pt], W, H)
+  if (!cam) return null
+  const at = (i: number, z: number): [number, number] => {
+    const p = cam((c.x + e.x * wm * i / 2) / COURT_W, (c.y + e.y * wm * i / 2) / COURT_L, z)
+    return [p.x / W, p.y / H]
+  }
+  return [at(-1, hm), at(1, hm), at(-1, 0), at(1, 0)]
+}
+
+// A board standing on the floor, read back from its corners: the middle of its foot and the way
+// along it (metres on the floor), its width along the foot and its height (found by halving: how far
+// up from the middle of its foot the middle of its top shows). Null off the floor.
+function standParts(corners: CourtFit['corners'], W: number, H: number, quad: FloorQuad): { c: Pt; e: Pt; wm: number; hm: number } | null {
+  const fl = floorAt({ corners }, { x: quad[2][0], y: quad[2][1] }), fr = floorAt({ corners }, { x: quad[3][0], y: quad[3][1] })
+  const cam = courtCamera(corners.map(p => ({ x: p.x * W, y: p.y * H })) as [Pt, Pt, Pt, Pt], W, H)
+  if (!fl || !fr || !cam) return null
+  const A = toMetres(fl), B = toMetres(fr), wm = Math.hypot(B.x - A.x, B.y - A.y)
+  if (!(wm > 1e-6)) return null
+  const c = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }
+  const topY = ((quad[0][1] + quad[1][1]) / 2) * H, foot = (z: number) => cam(c.x / COURT_W, c.y / COURT_L, z).y
+  let lo = 0, hi = 50
+  for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (foot(m) > topY) lo = m; else hi = m }
+  const hm = (lo + hi) / 2
+  return hm > 1e-3 ? { c, e: { x: (B.x - A.x) / wm, y: (B.y - A.y) / wm }, wm, hm } : null
+}
+
+// Stood again where it stands, for a new aspect: same foot, its height times `scale`, its width from the aspect.
+export function restandQuad(corners: CourtFit['corners'], W: number, H: number, quad: FloorQuad, aspect: number, scale = 1): FloorQuad | null {
+  const s = standParts(corners, W, H, quad)
+  if (!s || !(aspect > 0) || !(scale > 0)) return null
+  return standOn(corners, W, H, s.c, s.e, s.hm * scale * aspect, s.hm * scale)
+}
+
+// Moved over the floor by dx, dy of the picture (0..1): the point under its middle (a board: the
+// middle of its foot) goes there, and it is drawn again as the floor shows it there, the same size
+// and way on the floor. So it changes shape as it goes: wider near the camera, slanted at the sides.
+// Null when it would leave the floor.
+export function moveOnFloor(corners: CourtFit['corners'], W: number, H: number, quad: FloorQuad, stand: boolean, dx: number, dy: number): FloorQuad | null {
+  const hom = homography(corners)
+  const shown = (p: Pt): [number, number] => { const q = project(hom, p.x / COURT_W, p.y / COURT_L); return [q.x, q.y] }
+  const floorOf = (x: number, y: number) => { const p = floorAt({ corners }, { x, y }); return p && toMetres(p) }
+  if (stand) {
+    const s = standParts(corners, W, H, quad)
+    if (!s) return null
+    const [fx, fy] = shown(s.c), to = floorOf(fx + dx, fy + dy)
+    return to ? standOn(corners, W, H, to, s.e, s.wm, s.hm) : null
+  }
+  const f = quad.map(([x, y]) => floorOf(x, y))
+  if (f.some(p => !p)) return null
+  const pts = f as Pt[], c = { x: pts.reduce((a, p) => a + p.x, 0) / 4, y: pts.reduce((a, p) => a + p.y, 0) / 4 }
+  const [sx, sy] = shown(c), to = floorOf(sx + dx, sy + dy)
+  if (!to) return null
+  const moved = pts.map(p => shown({ x: p.x + to.x - c.x, y: p.y + to.y - c.y }))
+  return [moved[0], moved[1], moved[2], moved[3]]
+}
+
 // The zone a point of the floor is in; null off the court.
 export function zoneAt(p: Pt): number | null {
   const row = Math.floor(p.y * ROWS), col = Math.floor(p.x * COLS)

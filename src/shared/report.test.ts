@@ -78,6 +78,19 @@ describe('the match report', () => {
     expect(html).toContain('25-20')
     expect(pct(1, 3)).toBe('33%'); expect(per(83, 67)).toBe('1.24'); expect(per(5, 0)).toBe('–')
   })
+  // Poss is the team's own (src/internal/README.md): only on the page of an account allowed it.
+  it('shows the serve\'s Poss column only when asked, with the columns still lined up', () => {
+    const count = (html: string, re: RegExp) => html.match(re)?.length ?? 0
+    const width = (row: string) => [...row.matchAll(/<t[hd](?=[\s>])[^>]*>/g)].reduce((n, m) => n + Number(/colspan="(\d+)"/.exec(m[0])?.[1] ?? 1), 0)
+    for (const poss of [false, true]) {
+      const html = reportHtml(r, undefined, poss)
+      expect(count(html, /<th>Poss<\/th>/g)).toBe(poss ? 2 : 0)
+      expect(html.includes('Possibility')).toBe(poss)
+      const team = /<table class="team">(.*?)<\/table>/.exec(html)![1]
+      const [h1, h2, player, , sethead, set] = team.split('</tr>')
+      expect([width(h1), width(h2) + 1, width(player), width(sethead), width(set)]).toEqual(Array(5).fill(poss ? 20 : 19)) // h2: under the name's rowspan
+    }
+  })
   it('mirrors the right-hand team in Kill on reception, so both read outward from the middle', () => {
     const html = reportHtml(r)
     const cells = (row: string) => [...row.matchAll(/<td[^>]*>([^<]*)<\/td>/g)].map(m => m[1])

@@ -13,6 +13,7 @@
 | データスライド「サーブの狙い」（T） | `serveTargetBoard.ts`、`BoardDialogParts.tsx` の `ServeTargetHint` |
 | データスライド「アタックディレクション」（D） | `attackBoard.ts`、`BoardDialogParts.tsx` の `AttackOptions` |
 | 分析「得点率・ミス率」 | `pointError.ts`、`PointErrorReport.tsx` |
+| マッチレポートのサーブ欄「Poss」（画面と PDF） | `shared/reportHtml.ts` の `poss`、`MatchReportDialog.tsx` |
 | 新しいプロジェクトで対象チームに `HTH` が最初から入る | `App.tsx` |
 
 許可されていないアカウントでも、プロジェクトにある T・D のスライドは表示・書き出しできる。

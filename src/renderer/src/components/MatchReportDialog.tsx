@@ -4,6 +4,7 @@ import { matchLinks, reportHtml, seasonLinks, type ReportPick } from '../../../s
 import type { Match, ParsedDVW } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 import { AccountNote } from './AccountDialog'
+import { useInternal } from '../account'
 
 const api = window.api
 
@@ -50,14 +51,16 @@ export function MatchReportDialog({ matches, dvws, initial, ourCodes, onClose, o
       return d && i >= 0 ? [{ id: m.id, d, side: i === 0 ? '*' : 'a', label: `vs ${d.teams[1 - i].name || d.teams[1 - i].code}` }] : []
     })
   }, [matches, dvws, ourCodes])
+  // The serve's Poss column: the team's own, for an account allowed it (src/internal/README.md).
+  const poss = useInternal()
   // The page twice: on screen with its numbers clickable, and plain for the PDF.
   const [html, screen] = useMemo(() => {
-    if (id === ALL) { const r = seasonReport(ours); return r ? [reportHtml(r), reportHtml(r, seasonLinks(ours.map(o => o.id)))] : ['', ''] }
+    if (id === ALL) { const r = seasonReport(ours); return r ? [reportHtml(r, undefined, poss), reportHtml(r, seasonLinks(ours.map(o => o.id)), poss)] : ['', ''] }
     const d = match ? dvws[match.id] : null
     if (!match || !d) return ['', '']
     const r = matchReport(d)
-    return [reportHtml(r), reportHtml(r, matchLinks(match.id, d, ourCodes))]
-  }, [id, ours, match, dvws, ourCodes])
+    return [reportHtml(r, undefined, poss), reportHtml(r, matchLinks(match.id, d, ourCodes), poss)]
+  }, [id, ours, match, dvws, ourCodes, poss])
   // A click on a number (its data-f, reportHtml.ts) searches its plays. The page has no scripts of
   // its own; the dialog listens on it, so the frame shares the app's origin but runs nothing.
   const frame = useRef<HTMLIFrameElement>(null)

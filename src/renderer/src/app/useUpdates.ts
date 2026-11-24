@@ -14,8 +14,10 @@ export function useUpdates(flushAll: () => Promise<unknown>, exporting: () => bo
   useEffect(() => {
     void api.appVersion().then(setAppVersion)
     return api.onUpdateEvent(ev => {
-      if (ev.type === 'error') { setUpdateBusy(false); setUpdateLater(false) }
-      setUpdate(u => (u?.type === 'ready' && ev.type !== 'error' ? u : ev))
+      // An error, or the update found again (its installer was gone: main/updater.ts downloads it again),
+      // frees the button; otherwise a ready update stays offered.
+      if (ev.type === 'error' || ev.type === 'available') { setUpdateBusy(false); setUpdateLater(false) }
+      setUpdate(u => (u?.type === 'ready' && ev.type !== 'error' && ev.type !== 'available' ? u : ev))
     })
   }, [])
   const restartToUpdate = async () => {

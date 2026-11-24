@@ -65,6 +65,12 @@ let compares!: CompareStore // set when the app is ready
 const exporter = new Exporter()
 let updating = false // restarting into a downloaded update (the renderer saved already)
 let win: BrowserWindow | null = null
+// One installed copy at a time: starting it again (a double click, say) brings the open window forward
+// instead. Two copies also fetched the same update into the same folder at once and spoiled each
+// other's download. Development runs aren't held to it: they share the settings folder with an
+// installed copy and run beside it.
+if (app.isPackaged && !app.requestSingleInstanceLock()) app.exit(0)
+else app.on('second-instance', () => { if (!win) return; if (win.isMinimized()) win.restore(); win.focus() })
 let account: Account // made when the app is ready (it needs the user data folder)
 // Exports, imports and new projects ask first (shared/account.ts: gate); a yes until accounts are on.
 const mayExport = () => {

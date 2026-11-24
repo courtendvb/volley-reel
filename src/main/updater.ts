@@ -16,7 +16,7 @@
 // only announced, and the banner opens the download page. Without a Mac build in the latest
 // release (no latest-mac.yml) the check just fails quietly, into the log.
 import { spawn } from 'node:child_process'
-import { appendFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app, net, shell, type BrowserWindow } from 'electron'
@@ -78,7 +78,7 @@ export function startUpdates(win: BrowserWindow): void {
   // Quitting with an update downloaded (あとで): install it quietly; the next start is the new version.
   app.on('will-quit', () => {
     if (installing || test) return
-    if (downloaded) startInstaller(downloaded, false)
+    if (downloaded && existsSync(downloaded)) startInstaller(downloaded, false)
     else if (stagedAppExists(staged)) { try { swapMac(staged, false) } catch (e) { log('error', e) } }
   })
 }
@@ -99,6 +99,14 @@ export async function installUpdate(): Promise<boolean> {
     }
     setImmediate(() => app.quit()) // after the caller has noted that the app is quitting for it
     return true
+  }
+  // The installer gone since it was downloaded (another copy of the app cleaned the folder, or security
+  // software took it): download it again; the banner offers the restart again once it is back.
+  if (downloaded && !existsSync(downloaded)) {
+    log('warn', `${downloaded} is gone; downloading the update again`)
+    downloaded = null
+    void autoUpdater.checkForUpdates().catch(e => log('error', e))
+    return false
   }
   if (!downloaded) { send({ type: 'error', message: t('ダウンロードした更新が見つかりません') }); return false }
   if (process.env.VR_UPDATE_TEST) { log('info', `test: would start ${downloaded} now`); return false }

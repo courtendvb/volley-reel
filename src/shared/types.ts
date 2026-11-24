@@ -150,6 +150,7 @@ export interface ProjectSettings {
   roles?: Record<string, PlayerRole> // positions set by hand, by player key (shared/roles.ts); missing: the DVW roster's
   range?: Partial<RangeDefaults> // the clip seconds (キープレー − / +) while no scene is open; a new scene starts from them
   overlay?: OverlayPatch // the scoreboard, caption and the rest while no video is open (the left list's plays); a new video starts from it
+  gridOpacity?: number // the court grid's 濃さ for every video of the project (cleanGridOpacity); missing: each video's own, or the usual
 }
 
 export interface ProjectInfo {

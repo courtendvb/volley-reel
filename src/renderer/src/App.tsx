@@ -180,13 +180,25 @@ export function App() {
   // corners belong to each match. With no video open, or a video not yet set, it is this computer's.
   const [localGridStyle, setLocalGridStyle] = useState<GridStyle>(() => { try { return cleanGridStyle(JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}')) } catch { return marksBySkill(DEFAULT_GRID_STYLE) } })
   useEffect(() => { try { localStorage.setItem('vr.courtGrid', JSON.stringify(localGridStyle)) } catch { /* not kept */ } }, [localGridStyle])
+  // The grid's 濃さ alone is the project's (ProjectSettings.gridOpacity), the same in every video; until it
+  // is set there, each video's own (or this computer's) stands.
   const videoCourt = video?.court
-  const gridStyle = useMemo(() => (videoCourt ? cleanGridStyle(videoCourt) : localGridStyle), [videoCourt, localGridStyle])
+  const projectGridOpacity = project?.settings.gridOpacity
+  const localGridStyleRef = useRef(localGridStyle)
+  localGridStyleRef.current = localGridStyle
+  const ownGridStyle = useMemo(() => (videoCourt ? cleanGridStyle(videoCourt) : localGridStyle), [videoCourt, localGridStyle])
+  const gridStyle = useMemo(() => (projectGridOpacity === undefined ? ownGridStyle : { ...ownGridStyle, opacity: projectGridOpacity }), [ownGridStyle, projectGridOpacity])
   const setGridStyle = useCallback((next: GridStyle) => {
-    const v = latest.current.video
-    if (v) updateVideo({ ...v, court: next, updatedAt: new Date().toISOString() })
-    else setLocalGridStyle(next)
-  }, [updateVideo])
+    const v = latest.current.video, st = latest.current.settings, cur = gridStyleRef.current
+    let own = next
+    if (st && next.opacity !== cur.opacity) {
+      void saveSettings({ ...st, gridOpacity: next.opacity })
+      own = { ...next, opacity: (v?.court ? cleanGridStyle(v.court) : localGridStyleRef.current).opacity } // the video's own is left as it was
+      if (JSON.stringify({ ...own, opacity: 0 }) === JSON.stringify({ ...cur, opacity: 0 })) return // only the 濃さ changed
+    }
+    if (v) updateVideo({ ...v, court: own, updatedAt: new Date().toISOString() })
+    else setLocalGridStyle(own)
+  }, [updateVideo, saveSettings])
   const [courtFitting, setCourtFitting] = useState(false)
   // The right column's tab, kept on this computer.
   const [rightTab, setRightTab] = useState<RightTab>(() => { try { const r = localStorage.getItem('vr.rightTab'); return RIGHT_TABS.find(x => x === r) ?? 'scene' } catch { return 'scene' } })

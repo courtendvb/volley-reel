@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART } from './chart'
 import { DEFAULT_SET_CHART } from './setChart'
-import { DEFAULT_GRID_STYLE, cleanClipCourtStyle, clipCourtStyle, markStyle, pinClipStyle, splitClipStyle, type GridStyle } from './courtStyle'
+import { DEFAULT_GRID_STYLE, cleanClipCourtStyle, cleanGridOpacity, clipCourtStyle, markStyle, pinClipStyle, splitClipStyle, type GridStyle } from './courtStyle'
 
 // The 表示 tab as a user left it: ripple on, heat on a serve, cones on an attack.
 const tab: GridStyle = {
@@ -119,5 +119,12 @@ describe('cleanClipCourtStyle', () => {
 
   it('a marks object with nothing valid is an empty set of marks (the clip shows none)', () => {
     expect(cleanClipCourtStyle({ marks: { heat: 0, unknown: 1 } })).toEqual({ marks: {} })
+  })
+})
+
+describe('cleanGridOpacity', () => {
+  it('keeps what the slider gives and drops anything else', () => {
+    expect([cleanGridOpacity(0.45), cleanGridOpacity(1), cleanGridOpacity(0.1), cleanGridOpacity(0.333)]).toEqual([0.45, 1, 0.1, 0.33])
+    expect([cleanGridOpacity(0), cleanGridOpacity(1.5), cleanGridOpacity('0.5'), cleanGridOpacity(NaN), cleanGridOpacity(undefined)]).toEqual([undefined, undefined, undefined, undefined, undefined])
   })
 })

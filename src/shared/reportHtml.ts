@@ -43,10 +43,11 @@ const playedCell = (p: PlayerLine) => {
 
 // The stat columns shared by players, totals and sets. mk: the row's search, for the numbers that
 // are plays of one kind (break points, W-L, possibilities and BP% are not, and stay plain).
-function cells(l: StatLine, points = true, mk: Mk = none): string {
+// poss: the serve's Poss column, for the accounts allowed the team's own features (src/internal/README.md).
+function cells(l: StatLine, poss: boolean, points = true, mk: Mk = none): string {
   const r = l.rec, a = l.att
   return `${points ? `${td(n(l.points), mk, SAB)}<td>${n(l.bp)}</td><td>${signed(l.wl)}</td>` : ''}`
-    + `${td(n(l.serve.tot), mk, { skills: ['S'] }, 'g')}${td(n(l.serve.err), mk, { skills: ['S'], effects: ['='] })}${td(n(l.serve.pts), mk, { skills: ['S'], effects: ['#'] })}<td>${n(l.serve.poss)}</td><td>${l.serve.tot ? pct(l.serve.brk, l.serve.tot) : '.'}</td>`
+    + `${td(n(l.serve.tot), mk, { skills: ['S'] }, 'g')}${td(n(l.serve.err), mk, { skills: ['S'], effects: ['='] })}${td(n(l.serve.pts), mk, { skills: ['S'], effects: ['#'] })}${poss ? `<td>${n(l.serve.poss)}</td>` : ''}<td>${l.serve.tot ? pct(l.serve.brk, l.serve.tot) : '.'}</td>`
     + `${td(n(r.tot), mk, { skills: ['R'] }, 'g')}${td(n(r.err), mk, { skills: ['R'], effects: ['='] })}${td(n(r.ovr), mk, { skills: ['R'], effects: ['/'] })}${td(r.tot ? `${pct(r.pos, r.tot)} (${pct(r.exc, r.tot)})` : '.', mk, r.pos ? { skills: ['R'], effects: ['#', '+'] } : null, 'w')}`
     + `${td(n(a.tot), mk, { skills: ['A'] }, 'g')}${td(n(a.err), mk, { skills: ['A'], effects: ['='] })}${td(n(a.blo), mk, { skills: ['A'], effects: ['/'] })}${td(n(a.pts), mk, { skills: ['A'], effects: ['#'] })}${td(a.tot ? pct(a.pts, a.tot) : '.', mk, a.pts ? { skills: ['A'], effects: ['#'] } : null)}`
     + td(n(l.blk), mk, { skills: ['B'], effects: ['#'] }, 'g')
@@ -56,12 +57,12 @@ function cells(l: StatLine, points = true, mk: Mk = none): string {
 const teamCtx = (links: ReportLinks | undefined, i: 0 | 1, m?: string[]): Ctx => (links?.teams[i].pick ? { m: m ?? links.matchIds, f: links.teams[i].pick! } : null)
 
 // several: a report of several matches: the share of the team's rallies each was on court for in place of the boxes.
-function teamTable(t: TeamReport, several: boolean, i: 0 | 1, links?: ReportLinks): string {
-  const head = `<tr class="h1"><th class="name" rowspan="2">${esc(t.name)}</th><th>${several ? 'Played' : 'Set'}</th><th colspan="3">Points</th><th colspan="5" class="g">Serve</th><th colspan="4" class="g">Reception</th><th colspan="5" class="g">Attack</th><th class="g">BK</th></tr>`
-    + `<tr class="h2"><th>${several ? 'Rallies%' : `<span class="sets">${[1, 2, 3, 4, 5].map(s => `<em>${s}</em>`).join('')}</span>`}</th><th>Tot</th><th>BP</th><th>W-L</th><th class="g">Tot</th><th>Err</th><th>Pts</th><th>Poss</th><th>BP%</th><th class="g">Tot</th><th>Err</th><th>Ovr</th><th>Pos% (Exc%)</th><th class="g">Tot</th><th>Err</th><th>Blo</th><th>Pts</th><th>Pts%</th><th class="g">Pts</th></tr>`
-  const rows = t.players.map(p => `<tr><td class="name"><span class="no">${String(p.jersey).padStart(2, '0')}</span>${p.libero ? '<span class="lib">L</span>' : '<span class="lib"></span>'}${esc(p.name)}</td><td>${p.played ? playedCell(p) : setBoxes(p.sets)}</td>${cells(p, true, links ? maker({ m: links.matchIds, f: { persons: [p.key] } }) : none)}</tr>`).join('')
-  const total = `<tr class="total"><td class="name">Players total</td><td></td>${cells(t.total, true, maker(teamCtx(links, i)))}</tr>`
-  const setHead = `<tr class="h2 sethead"><td class="name"></td><td colspan="4" class="won">Points won <span>Ser</span><span>Atk</span><span>Blo</span><span>Op.Er</span></td><td colspan="18"></td></tr>`
+function teamTable(t: TeamReport, several: boolean, i: 0 | 1, poss: boolean, links?: ReportLinks): string {
+  const head = `<tr class="h1"><th class="name" rowspan="2">${esc(t.name)}</th><th>${several ? 'Played' : 'Set'}</th><th colspan="3">Points</th><th colspan="${poss ? 5 : 4}" class="g">Serve</th><th colspan="4" class="g">Reception</th><th colspan="5" class="g">Attack</th><th class="g">BK</th></tr>`
+    + `<tr class="h2"><th>${several ? 'Rallies%' : `<span class="sets">${[1, 2, 3, 4, 5].map(s => `<em>${s}</em>`).join('')}</span>`}</th><th>Tot</th><th>BP</th><th>W-L</th><th class="g">Tot</th><th>Err</th><th>Pts</th>${poss ? '<th>Poss</th>' : ''}<th>BP%</th><th class="g">Tot</th><th>Err</th><th>Ovr</th><th>Pos% (Exc%)</th><th class="g">Tot</th><th>Err</th><th>Blo</th><th>Pts</th><th>Pts%</th><th class="g">Pts</th></tr>`
+  const rows = t.players.map(p => `<tr><td class="name"><span class="no">${String(p.jersey).padStart(2, '0')}</span>${p.libero ? '<span class="lib">L</span>' : '<span class="lib"></span>'}${esc(p.name)}</td><td>${p.played ? playedCell(p) : setBoxes(p.sets)}</td>${cells(p, poss, true, links ? maker({ m: links.matchIds, f: { persons: [p.key] } }) : none)}</tr>`).join('')
+  const total = `<tr class="total"><td class="name">Players total</td><td></td>${cells(t.total, poss, true, maker(teamCtx(links, i)))}</tr>`
+  const setHead = `<tr class="h2 sethead"><td class="name"></td><td colspan="4" class="won">Points won <span>Ser</span><span>Atk</span><span>Blo</span><span>Op.Er</span></td><td colspan="${poss ? 15 : 14}"></td></tr>`
   // A set's row has the coaches beside it; a match's (several matches) its opponent.
   const staff = (i: number) => (i === 0 && t.coach ? `<span class="muted">Coach</span> ${esc(t.coach)}` : i === 1 && t.assistant ? `<span class="muted">Assistant</span> ${esc(t.assistant)}` : '')
   // A set's row searches that set; a match's row (several matches) that match.
@@ -73,7 +74,7 @@ function teamTable(t: TeamReport, several: boolean, i: 0 | 1, links?: ReportLink
   const setRow = (s: SetLine, k: number) => {
     const mk = rowMk(s, k)
     return `<tr class="set"><td class="name">${s.label ? esc(s.label) : staff(k)}</td>`
-      + `<td colspan="4" class="won"><b>${s.label ? '' : `Set ${s.set}`}</b>${span(s.won.ser, mk, { skills: ['S'], effects: ['#'] })}${span(s.won.atk, mk, { skills: ['A'], effects: ['#'] })}${span(s.won.blo, mk, { skills: ['B'], effects: ['#'] })}<span>${n(s.won.opErr)}</span></td>${cells(s, false, mk)}</tr>`
+      + `<td colspan="4" class="won"><b>${s.label ? '' : `Set ${s.set}`}</b>${span(s.won.ser, mk, { skills: ['S'], effects: ['#'] })}${span(s.won.atk, mk, { skills: ['A'], effects: ['#'] })}${span(s.won.blo, mk, { skills: ['B'], effects: ['#'] })}<span>${n(s.won.opErr)}</span></td>${cells(s, poss, false, mk)}</tr>`
   }
   return `<table class="team">${head}${rows}${total}${setHead}${t.sets.map(setRow).join('')}</table>`
 }
@@ -87,7 +88,7 @@ const attackRow = (a: AttackLine, mk: Mk, f: Partial<PlayFilter>, mirror = false
 }
 const KILL: Record<'pos' | 'neg' | 'dig', Partial<PlayFilter>> = { pos: { phase: 'reception', recEffects: ['#', '+'] }, neg: { phase: 'reception', recEffects: ['-', '!'] }, dig: { phase: 'transition' } }
 
-function summary(r: MatchReport, links?: ReportLinks): string {
+function summary(r: MatchReport, poss: boolean, links?: ReportLinks): string {
   const [h, v] = r.teams
   const mkOf = (i: 0 | 1) => maker(teamCtx(links, i))
   // A rotation's plays, whichever team made them.
@@ -99,14 +100,15 @@ function summary(r: MatchReport, links?: ReportLinks): string {
     + `<tr class="kh"><td>Errors</td><td>Blo</td><td>Pts%</td><td>Tot</td><td></td><td>Tot</td><td>Pts%</td><td>Blo</td><td>Errors</td></tr>`
     + `<tr class="kv">${attackRow(h.kill[k], mkOf(0), KILL[k])}<td></td>${attackRow(v.kill[k], mkOf(1), KILL[k], true)}</tr>`
   return `<table class="summary"><tr><th colspan="2">${esc(h.name)}</th><th>Kill on reception</th><th colspan="2">${esc(v.name)}</th><td rowspan="2" class="legend">`
-    + `<div><b>BP</b> Break point</div><div><b>Err</b> Errors</div><div><b>Pos%</b> Positive +#</div><div><b>W-L</b> Won-Lost</div><div><b>Pts</b> Points</div><div><b>Blo</b> Blocked</div><div><b>Exc</b> Excellent</div><div><b>Poss</b> Possibility</div><div><b>Ovr</b> Overpass</div><div><b>BP%</b> Serve → point</div>${r.matches ? '<div><b>Rallies%</b> On court (L: sets)</div>' : ''}`
+    + `<div><b>BP</b> Break point</div><div><b>Err</b> Errors</div><div><b>Pos%</b> Positive +#</div><div><b>W-L</b> Won-Lost</div><div><b>Pts</b> Points</div><div><b>Blo</b> Blocked</div><div><b>Exc</b> Excellent</div>${poss ? '<div><b>Poss</b> Possibility</div>' : ''}<div><b>Ovr</b> Overpass</div><div><b>BP%</b> Serve → point</div>${r.matches ? '<div><b>Rallies%</b> On court (L: sets)</div>' : ''}`
     + `<div class="gap"><span class="sets"><b class="sub"></b></span> Substitute</div><div><span class="sets"><b>n</b></span> Starting zone</div></td></tr>`
     + `<tr>${side(h, 0)}<td class="kill"><table>${block('1st Attack AFTER POSITIVE RECEPTION (+#)', 'pos')}${block('1st Attack AFTER NEGATIVE RECEPTION (-!)', 'neg')}${block('Attack on dig', 'dig')}</table></td>${side(v, 1).split('</td>').reverse().filter(Boolean).map(x => `${x}</td>`).join('')}</tr></table>`
 }
 
 // links: on screen, the plays behind each number (see ReportPick); left out for the PDF.
-export function reportHtml(r: MatchReport, links?: ReportLinks): string {
-  if (r.matches) return severalHtml(r, links)
+// poss: show the serve's Poss column (the team's own: only for the accounts allowed it).
+export function reportHtml(r: MatchReport, links?: ReportLinks, poss = false): string {
+  if (r.matches) return severalHtml(r, poss, links)
   const [h, v] = r.teams, info = r.info, more = info?.more
   const sets = (info?.sets ?? []).map((s, i) => `<tr><td>${i + 1}</td><td>${s.minutes ? `0:${String(s.minutes).padStart(2, '0')}` : ''}</td><td>${s.partials.join(' ')}</td><td><b>${s.score}</b></td></tr>`).join('')
   return `<!doctype html><html><head><meta charset="utf-8"><title>Match report</title><style>${CSS}</style></head><body><div class="page">
@@ -115,20 +117,20 @@ export function reportHtml(r: MatchReport, links?: ReportLinks): string {
 <div class="meta"><div><span class="muted">Hall</span> ${esc(more?.hall ?? '')}</div><div><span class="muted">Date</span> ${dateOf(r.date)}</div><div><span class="muted">Spectators</span> ${esc(more?.spectators ?? '')}</div>
 <div><span class="muted">City</span> ${esc(more?.city ?? '')}</div><div><span class="muted">Time</span> ${esc(r.time ?? '')}</div><div><span class="muted">Referees</span> ${esc(more?.referees ?? '')}</div></div></div>
 <table class="sets-table"><tr><th>Set</th><th>Duration</th><th>Partial score</th><th>Score</th></tr>${sets}</table></section>
-${teamTable(h, false, 0, links)}${teamTable(v, false, 1, links)}${summary(r, links)}
+${teamTable(h, false, 0, poss, links)}${teamTable(v, false, 1, poss, links)}${summary(r, poss, links)}
 </div></body></html>`
 }
 
 // One team over several matches: their results at the top, the team's players (with the share of
 // the sets they played) and a row per match, the opponents' rows, and how the team scored.
-function severalHtml(r: MatchReport, links?: ReportLinks): string {
+function severalHtml(r: MatchReport, poss: boolean, links?: ReportLinks): string {
   const [h, v] = r.teams, ms = r.matches!
   const rows = ms.map(m => `<tr><td>${dateOf(m.date)}</td><td class="lbl">${esc(m.label)}</td><td><b class="${m.won ? 'win' : 'loss'}">${m.score}</b></td></tr>`).join('')
   return `<!doctype html><html><head><meta charset="utf-8"><title>Team report</title><style>${CSS}</style></head><body><div class="page">
 <header><div><div class="date">${ms.length} ${ms.length === 1 ? 'match' : 'matches'}</div><h1>Team report</h1></div></header>
 <section class="top"><div class="score"><div class="teams"><span>${esc(h.name)}</span><b>${h.setsWon}</b><b>${v.setsWon}</b><span class="muted">Won – Lost</span></div></div>
 <table class="sets-table"><tr><th>Date</th><th>Match</th><th>Sets</th></tr>${rows}</table></section>
-${teamTable(h, true, 0, links)}${teamTable(v, true, 1, links)}${summary(r, links)}
+${teamTable(h, true, 0, poss, links)}${teamTable(v, true, 1, poss, links)}${summary(r, poss, links)}
 </div></body></html>`
 }
 

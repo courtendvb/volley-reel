@@ -9,7 +9,7 @@ import { ATTACKER_CARDS, COURT_LOOKS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, di
 import { logoColor } from '../assets'
 import { useInternal } from '../account'
 import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
-import { compareRows as rowsOf, compareSide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, type CompareSide } from '../../../shared/compare'
+import { compareRows as rowsOf, compareSide, DEFAULT_COMPARE_ROWS, idsFor, rowsFor, type CompareSide } from '../../../shared/compare'
 import { MOST_ROWS, STAT_COLUMNS, STAT_KINDS, STAT_LOOK, STAT_ROWS, STAT_STRIPE, type StatKind, type StatLook } from '../../../shared/statsBoard'
 import { cap, t } from '../../../shared/i18n'
 
@@ -69,10 +69,11 @@ function useOwnTeam(on: boolean, initial: string | undefined) {
 
 // The figures on a comparison, top to bottom: each picked one a chip in its place, dragged (or moved
 // with its arrows) to another, taken off with ×; the rest below, to add at the bottom.
-function CompareRowPicker({ ids, onChange }: { ids: string[]; onChange: (ids: string[]) => void }) {
+// internal: the account may use the team's own figures (possibilities).
+function CompareRowPicker({ ids, internal, onChange }: { ids: string[]; internal: boolean; onChange: (ids: string[]) => void }) {
   const [dragged, setDragged] = useState<string | null>(null)
   const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null)
-  const picked = ids.flatMap(id => SKILL_ROWS.filter(r => r.id === id)), rest = SKILL_ROWS.filter(r => !ids.includes(r.id))
+  const rows = rowsFor(internal), picked = ids.flatMap(id => rows.filter(r => r.id === id)), rest = rows.filter(r => !ids.includes(r.id))
   const isDefault = ids.length === DEFAULT_COMPARE_ROWS.length && DEFAULT_COMPARE_ROWS.every((id, i) => ids[i] === id)
   const move = (id: string, to: number) => { const list = ids.filter(x => x !== id); list.splice(Math.max(0, Math.min(list.length, to)), 0, id); onChange(list) }
   const drop = () => {
@@ -176,7 +177,8 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const ownTeam = useOwnTeam(skill === 'C', initial?.compareProject)
   const right = useMemo(() => (skill === 'C' && open ? compareSide(dvws, open) : null), [skill, open, dvws])
   const compare = ownTeam.own && right ? { left: ownTeam.own.side, right } : undefined
-  const [rowIds, setRowIds0] = useState<string[]>(() => rowsOf(initial?.skill === 'C' ? initial.compareRows : loadCompareRows()).map(r => r.id)) // the figures on a comparison
+  const [keptRowIds, setRowIds0] = useState<string[]>(() => rowsOf(initial?.skill === 'C' ? initial.compareRows : loadCompareRows()).map(r => r.id)) // the figures on a comparison
+  const rowIds = idsFor(keptRowIds, internal) // without the team's own figures (possibilities) for an account not allowed them
   const setRowIds = (ids: string[]) => { setRowIds0(ids); if (ids.length) saveCompareRows(ids) }
   const [display, setDisplay] = useState<ChartDisplay>(() => initial?.display ?? { points: true, lines: DEFAULT_CHART.lines, heat: false, starts: true, lineOpacity: LINE_OPACITY })
   // A place keeps its player as the count changes; a new place takes whoever has the most plays and has
@@ -286,7 +288,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
           {ownTeam.error && <p className="muted small">{ownTeam.error}</p>}
           {ownTeam.own && !ownTeam.own.side.counts.matches && <p className="muted small">{t('そのプロジェクトに {0} の試合の DVW がありません', ownTeam.own.side.code || '?')}</p>}
           {ownTeam.own && ownTeam.own.failed.length > 0 && <p className="muted small">{t('読めなかった試合: {0}', ownTeam.own.failed.join(' / '))}</p>}
-          <CompareRowPicker ids={rowIds} onChange={setRowIds} />
+          <CompareRowPicker ids={rowIds} internal={internal} onChange={setRowIds} />
           {!rowIds.length && <p className="muted small">{t('数字を 1 つ以上選んでください')}</p>}
           <p className="hint" title={rowsOf(rowIds).map(r => `${r.label}: ${t(r.title)}`).join('\n')}>{t('左に自チーム（選んだプロジェクトの対象チーム）、右に上で選んだチーム（このプロジェクトの試合）の数字を並べ、良いほうを赤で示します。どちらもそれぞれの全試合の合計です。SERVE INDEX はサーブ 1 本あたりの重み（# 1、/ 0.752、+ 0.455、! 0.344、- 0.281、= 0）の平均。ここに重ねると各項目の計算式が出ます')}</p>
         </>}

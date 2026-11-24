@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { newestFirst } from '../../../shared/matchOrder'
 import type { LibraryInfo, Match, MissingPart, RecentProject } from '../../../shared/types'
 import { MatchCells } from './MatchPicker'
 import { AccountButton, AccountNote } from './AccountDialog'
@@ -23,7 +24,7 @@ interface Props {
 // projects on the right. A project is made by picking matches out of the library.
 export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportOne, onNewProject, onOpenProject, onOpenMatch, onRelocate, onDeleteMatch, onDeleteProject }: Props) {
   const [q, setQ] = useState('')
-  const shown = useMemo(() => filterMatches(library?.matches ?? [], q), [library, q])
+  const shown = useMemo(() => newestFirst(filterMatches(library?.matches ?? [], q)), [library, q]) // the latest match at the top
 
   return (
     <main className="home">

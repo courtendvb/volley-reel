@@ -123,24 +123,26 @@ function table(title: string, head: { fill: string; text: string }, sp: SetSplit
 }
 
 // A call group's table at the bottom left: its title on its colour, then N · Pipe and Z2/1 · Quick · Z4,
-// each a label over its share, the places' in their colours. One group.
+// each a label over its share, the places' in their colours. One group. k: its size (1 = as first drawn;
+// CALL_GROUP_SIZE the range), the type growing with it.
 const GROUP_W = 0.17, GROUP_HEAD = 0.045, GROUP_ROW = 0.04, GROUP_H = GROUP_HEAD + 4 * GROUP_ROW
-function callGroupTable(title: string, fill: string, sp: SetSplit, x: number, y: number): Annotation[] {
-  const g = uid(), cw = GROUP_W / 3, out: Annotation[] = []
+export const CALL_GROUP_SIZE = { min: 0.6, max: 1.6, step: 0.1 }
+function callGroupTable(title: string, fill: string, sp: SetSplit, x: number, y: number, k = 1): Annotation[] {
+  const g = uid(), cw = (GROUP_W * k) / 3, head = GROUP_HEAD * k, rh = GROUP_ROW * k, out: Annotation[] = []
   const cell = (c: number, top: number, h: number, text: string, o: { fill?: string; color?: string; bold?: boolean; span?: number; size?: number } = {}) => {
     const w = cw * (o.span ?? 1)
-    out.push(words(x + c * cw + w / 2, top, text, o.size ?? 17, o.color ?? '#475569', {
+    out.push(words(x + c * cw + w / 2, top, text, Math.round((o.size ?? 17) * k), o.color ?? '#475569', {
       align: 'center', bold: o.bold ?? false, groupId: g,
-      box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: 4, width: w, height: h },
+      box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: Math.round(4 * k), width: w, height: h },
     }))
   }
-  cell(0, y, GROUP_HEAD, title, { fill, color: light(fill) ? '#0F172A' : '#FFFFFF', bold: true, span: 3, size: 18 })
-  const row = (i: number) => y + GROUP_HEAD + i * GROUP_ROW
-  cell(0, row(0), GROUP_ROW, 'N'); cell(1, row(0), GROUP_ROW, 'Pipe'); cell(2, row(0), GROUP_ROW, '')
-  cell(0, row(1), GROUP_ROW, String(sp.total)); cell(1, row(1), GROUP_ROW, pct(sp.by.pipe.n, sp.total)); cell(2, row(1), GROUP_ROW, '')
-  ;(['right', 'middle', 'left'] as SetPlace[]).forEach((k, c) => {
-    cell(c, row(2), GROUP_ROW, PLACE_LABEL[k], { color: PLACE_FILL[k] })
-    cell(c, row(3), GROUP_ROW, pct(sp.by[k].n, sp.total), { color: PLACE_FILL[k] })
+  cell(0, y, head, title, { fill, color: light(fill) ? '#0F172A' : '#FFFFFF', bold: true, span: 3, size: 18 })
+  const row = (i: number) => y + head + i * rh
+  cell(0, row(0), rh, 'N'); cell(1, row(0), rh, 'Pipe'); cell(2, row(0), rh, '')
+  cell(0, row(1), rh, String(sp.total)); cell(1, row(1), rh, pct(sp.by.pipe.n, sp.total)); cell(2, row(1), rh, '')
+  ;(['right', 'middle', 'left'] as SetPlace[]).forEach((p, c) => {
+    cell(c, row(2), rh, PLACE_LABEL[p], { color: PLACE_FILL[p] })
+    cell(c, row(3), rh, pct(sp.by[p].n, sp.total), { color: PLACE_FILL[p] })
   })
   return out
 }
@@ -481,6 +483,7 @@ export interface RotationSlideData {
   tables?: RotationTables // which of the tables at the bottom right (missing: all six)
   court?: CourtLook // the court in perspective or flat from above (missing: 3D)
   callGroups?: boolean // the team's own CALL A and CALL B at the bottom left (CALL_GROUPS; for an account allowed them)
+  callGroupSize?: number // and their size (CALL_GROUP_SIZE; missing: 1)
 }
 
 // The tables at the bottom right: all six (# + ! pass and the top three setter calls), only the #
@@ -572,8 +575,8 @@ export function rotationSlide(v: RotationSlideData, _view: SetView, ink: string)
   // The team's own call groups at the bottom left, over the near court: when the setter uses those calls.
   const grouped = CALL_GROUPS.flatMap(c => c.calls)
   if (v.callGroups && v.sets.some(s => grouped.includes(setterCall(s.set)))) {
-    const y0 = 0.995 - CALL_GROUPS.length * GROUP_H
-    CALL_GROUPS.forEach((c, i) => out.push(...callGroupTable(c.title, c.fill, splitSets(callGroupSets(rot, c.calls)), 0.004, y0 + i * GROUP_H)))
+    const k = Math.min(CALL_GROUP_SIZE.max, Math.max(CALL_GROUP_SIZE.min, v.callGroupSize ?? 1)), h = GROUP_H * k, y0 = 0.995 - CALL_GROUPS.length * h
+    CALL_GROUPS.forEach((c, i) => out.push(...callGroupTable(c.title, c.fill, splitSets(callGroupSets(rot, c.calls)), 0.004, y0 + i * h, k)))
   }
   return out
 }

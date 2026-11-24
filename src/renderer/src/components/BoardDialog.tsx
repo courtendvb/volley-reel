@@ -5,7 +5,7 @@ import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type Ch
 import { BoardPreview } from './BoardPreview'
 import { AttackOptions, ServeTargetHint } from '../../../internal/BoardDialogParts'
 import { MARKERS, type Marker, type Reel } from '../../../shared/reel'
-import { ATTACKER_CARDS, COURT_LOOKS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type CourtLook, type RotationTables } from '../../../shared/rotationBoard'
+import { ATTACKER_CARDS, CALL_GROUP_SIZE, COURT_LOOKS, ROTATIONS, ROTATION_TABLES, TEAM_COLOR, discLine as darker, type CourtLook, type RotationTables } from '../../../shared/rotationBoard'
 import { logoColor } from '../assets'
 import { useInternal } from '../account'
 import type { ParsedDVW, Play, ProjectSummary } from '../../../shared/types'
@@ -28,7 +28,7 @@ export function ChartShow({ value, skill, onChange }: { value: ChartDisplay & { 
   )
 }
 
-export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; court: CourtLook; attackers: number; callGroups: boolean; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook; attack?: AttackBoard } // marker 'head': the scene's head, in no marker // marker 'head': the scene's head, in no marker
+export interface BoardChoice { setView: SetView; setLayout: SetLayout; rotations: number[]; display: ChartDisplay; skill: BoardSkill; columns: BoardPlayer[]; split: boolean; notes: boolean; noteSize: number; noteFills: [string, string]; photos: boolean; background: string; marker: Marker | 'head'; team: string; searched: boolean; teamColor: string; discLine: string; cones: boolean; tables: RotationTables; court: CourtLook; attackers: number; callGroups?: boolean; callGroupSize: number; compare?: { left: CompareSide; right: CompareSide }; compareProject?: string; compareRows: string[]; stat: StatKind; statTop: number; statLook: StatLook; attack?: AttackBoard } // marker 'head': the scene's head, in no marker // marker 'head': the scene's head, in no marker
 
 // The choices of tables on a rotation slide.
 const TABLE_NAMES: Record<RotationTables, string> = {
@@ -165,6 +165,9 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const [tables, setTables] = useState<RotationTables>(initial?.tables ?? 'all')
   const [court, setCourt] = useState<CourtLook>(initial?.court ?? '3d') // the court in perspective or flat
   const [attackers, setAttackers] = useState(initial?.attackers ?? ATTACKER_CARDS) // with the attackers' cards: how many
+  // The team's own CALL A and CALL B at the bottom left (an account allowed them): shown, and how large.
+  const [showCalls, setShowCalls] = useState(initial?.callGroups ?? true)
+  const [callSize, setCallSize] = useState(initial?.callGroupSize ?? 1)
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
   // A slide being remade keeps its own; a new one starts from the last one made (loadLook).
@@ -260,6 +263,10 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
               <select value={court} onChange={e => setCourt(e.target.value as CourtLook)} aria-label={t('コートの見せ方')}>
                 {COURT_LOOKS.map(v => <option key={v} value={v}>{v === '3d' ? '3D' : '2D'}</option>)}
               </select></label>
+            {internal && <label className="check" title={t('左下に CALL A（KA・KC）と CALL B（KB・KQ）の配分を出します')}><input type="checkbox" checked={showCalls} onChange={e => setShowCalls(e.target.checked)} /> {t('CALL A・B')}</label>}
+            {internal && showCalls && <label className="check" title={t('CALL A・B の表の大きさ')}>{t('大きさ')}{' '}
+              <input type="number" min={CALL_GROUP_SIZE.min * 100} max={CALL_GROUP_SIZE.max * 100} step={CALL_GROUP_SIZE.step * 100} value={Math.round(callSize * 100)} style={{ width: 60 }} aria-label={t('CALL A・B の表の大きさ（%）')}
+                onChange={e => { const v = Number(e.target.value) / 100; if (v >= CALL_GROUP_SIZE.min && v <= CALL_GROUP_SIZE.max) setCallSize(Math.round(v * 10) / 10) }} /> %</label>}
             <label className="check" title={t('アタッカーごとのよく打つコースの扇形')}><input type="checkbox" checked={cones} onChange={e => setCones(e.target.checked)} /> {t('コーン')}</label>
             <label className="check" title={t('右下の配分の表。数が少ないほど大きく出ます')}>{t('表')}{' '}
               <select value={tables} onChange={e => setTables(e.target.value as RotationTables)} aria-label={t('右下の表')}>
@@ -349,7 +356,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         {isD && <AttackOptions attacker={columns[0]} names={names} {...(attack ?? initial?.attack ? { initial: (attack ?? initial?.attack)! } : {})} onChange={setAttack} />}
         {!inTeam.length && <p className="muted">{t('このプレーがありません')}</p>}
         <BoardPreview columns={columns} skill={skill} photos={photos && skill !== 'P'}
-          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, court, attackers, callGroups: internal, ...(isD && attack ? { attack } : {}), split, notes: notes && !single, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
+          opts={{ ...(compare ? { compare, compareRows: rowIds } : {}), ...(skill === 'P' ? { stat, statTop, statLook } : {}), setView, setLayout, rotation: rotations[0] ?? 1, teamColor, discLine, cones, tables, court, attackers, callGroups: internal && showCalls, callGroupSize: callSize, ...(isD && attack ? { attack } : {}), split, notes: notes && !single, noteSize, noteFills, background, display, ...(chartStyle?.(skill) ? { style: chartStyle(skill) } : {}) }} />
         {!single && !isT && skill !== 'C' && skill !== 'P' && <div className="filter-row"><ChartShow value={display} skill={skill} onChange={p => setDisplay({ ...display, ...p })} /></div>}
         <div className="filter-row">
           {skill !== 'P' && <label className="check" title={skill === 'C' ? t('倉庫にあるチームのロゴを入れます') : t('パックの写真を入れます。外すと写真なしの配置になります')}><input type="checkbox" checked={photos} onChange={e => setPhotos(e.target.checked)} /> {skill === 'C' ? t('ロゴ') : t('写真')}</label>}
@@ -383,7 +390,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length) || (isD && !attack)} onClick={() => { saveLook({ background, notes, noteSize, noteFills }); onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, callGroups: internal, stat, statTop, statLook, ...(isD && attack ? { attack } : {}) }) }}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length) || (isD && !attack)} onClick={() => { saveLook({ background, notes, noteSize, noteFills }); onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, ...(internal ? { callGroups: showCalls } : {}), callGroupSize: callSize, stat, statTop, statLook, ...(isD && attack ? { attack } : {}) }) }}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

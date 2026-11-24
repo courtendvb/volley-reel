@@ -73,6 +73,15 @@ describe('a rotation', () => {
     for (const a of make({ callGroups: true })) if (a.kind === 'text' && a.box?.width) {
       expect(a.x - a.box.width / 2).toBeGreaterThanOrEqual(0); expect(a.y + (a.box.height ?? 0)).toBeLessThanOrEqual(1)
     }
+    // Their size: larger with it, the type too, kept to its range, and inside the slide at its largest.
+    const head = (o: object) => make({ callGroups: true, tables: 'none', ...o }).find(a => a.kind === 'text' && a.text === 'CALL A')
+    const w = (o: object) => { const a = head(o); return a?.kind === 'text' ? [a.box!.width!, a.size] : [] }
+    expect(w({ callGroupSize: 1.5 })[0]).toBeCloseTo(w({})[0] * 1.5)
+    expect(w({ callGroupSize: 1.5 })[1]).toBeGreaterThan(w({})[1])
+    expect(w({ callGroupSize: 9 })).toEqual(w({ callGroupSize: 1.6 }))
+    for (const a of make({ callGroups: true, callGroupSize: 1.6 })) if (a.kind === 'text' && a.box?.width) {
+      expect(a.x - a.box.width / 2).toBeGreaterThanOrEqual(0); expect(a.y).toBeGreaterThanOrEqual(0); expect(a.y + (a.box.height ?? 0)).toBeLessThanOrEqual(1)
+    }
     // A setter with none of those calls: no tables.
     const other = setterSets([match([rallyOf({ rot: 2, call: 'K1', zone: 4 })], () => [2, 10, 19, 92, 6, 7])], 'S')
     expect(texts(make({ callGroups: true }, other))).not.toContain('CALL A')

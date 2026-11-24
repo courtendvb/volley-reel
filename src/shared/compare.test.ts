@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
-import { better, compareRows, compareSlide, DEFAULT_COMPARE_ROWS, SKILL_ROWS, skillCounts } from './compare'
+import { better, compareRows, compareSlide, DEFAULT_COMPARE_ROWS, idsFor, rowsFor, SKILL_ROWS, skillCounts } from './compare'
 
 // Five rallies: a home serve received and killed by the away team; an away serve error; a home ace;
 // a reception error (=) by the away team; an away attack error; an away attack blocked by the home team.
@@ -53,6 +53,14 @@ describe('the skill comparison', () => {
     // Away: its serve error gave no possibility; three attacks after # or + receptions: a kill, an error, one blocked.
     expect(SKILL_ROWS.find(r => r.id === 'possSet')!.format(SKILL_ROWS.find(r => r.id === 'possSet')!.value({ ...home, poss: 3, sets: 2 })!)).toBe('1.50')
     expect(all(away)).toEqual({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'KILL% #+ REC': '33.3%', 'KILL% -! REC': '', 'TRANSITION KILL%': '', 'ATTACK ERR%': '33.3%', 'BLOCKED%': '33.3%', 'RECEPTION#%': '50.0%' })
+  })
+  // Possibilities are the team's own (src/internal/README.md): offered only to an account allowed them.
+  it('offers the possibility rows only to an account allowed them', () => {
+    expect(rowsFor(true).map(r => r.id)).toEqual(SKILL_ROWS.map(r => r.id))
+    expect(rowsFor(false).map(r => r.id)).toEqual(SKILL_ROWS.map(r => r.id).filter(id => id !== 'poss' && id !== 'possSet'))
+    expect(idsFor(['poss', 'so', 'possSet', 'bp'], false)).toEqual(['so', 'bp'])
+    expect(idsFor(['poss', 'so'], true)).toEqual(['poss', 'so'])
+    expect(DEFAULT_COMPARE_ROWS.every(id => rowsFor(false).some(r => r.id === id))).toBe(true)
   })
   it('shows the rows picked in the order picked, the default when none are', () => {
     expect(compareRows().map(r => r.id)).toEqual(DEFAULT_COMPARE_ROWS)

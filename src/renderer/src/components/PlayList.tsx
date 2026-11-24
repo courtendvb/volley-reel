@@ -6,6 +6,7 @@ import type { Match } from '../../../shared/types'
 import { formatTime, pad2 } from '../format'
 import { playback } from '../playback'
 import { t } from '../../../shared/i18n'
+import { useInternal } from '../account'
 
 const ROW = 30 // px; fixed so the list can be windowed
 
@@ -30,6 +31,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
   const [height, setHeight] = useState(600)
   const live = useMemo(() => refs.filter(r => !r.play.deleted), [refs])
   const nowId = useNowPlayId(live, currentMatchId, currentMatchId ? matches[currentMatchId]?.offsetSec ?? 0 : 0)
+  const poss = useInternal() // the P (possibility) mark: the team's own, for an account allowed it (src/internal/README.md)
 
   useLayoutEffect(() => {
     const el = box.current
@@ -81,7 +83,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
       <PlayRow
         key={r.play.deleted ? `${r.matchId}:d${r.play.line}` : `${r.matchId}:${r.play.id}`} r={r} top={i * ROW} odd={i % 2 === 1}
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
-        selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump}
+        selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump} poss={poss}
         marks={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark} onEditCode={onEditCode}
       />,
     )
@@ -97,8 +99,8 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
 }
 
 // odd: every other row is shaded a little (by its place in the list, so the stripes stay put while scrolling).
-const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark, onEditCode }: {
-  r: PlayRef; top: number; odd: boolean; videoTime: number; selected: boolean; now: boolean
+const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark, onEditCode, poss }: {
+  r: PlayRef; top: number; odd: boolean; videoTime: number; selected: boolean; now: boolean; poss: boolean
   onJump: (r: PlayRef) => void; marks: string | null; onMark: (r: PlayRef, m: Marker) => void; onEditCode?: (r: PlayRef) => void
 }) {
   const p = r.play
@@ -111,7 +113,7 @@ const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, o
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
-      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{skillName(p.skill)}{p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {effectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}{p.original && <b className="edited" title={t('コードを直しています（元: {0}）', p.original)}>✎</b>}{p.moved && <b className="edited" title={t('座標を直しています')}>⌖</b>}{p.inserted && <b className="edited" title={t('手で足したプレーです')}>＋</b>}{p.deleted && <b className="edited" title={t('削除したプレーです（右クリックで元に戻す）')}>×</b>}</span>
+      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{skillName(p.skill)}{poss && p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {effectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}{p.original && <b className="edited" title={t('コードを直しています（元: {0}）', p.original)}>✎</b>}{p.moved && <b className="edited" title={t('座標を直しています')}>⌖</b>}{p.inserted && <b className="edited" title={t('手で足したプレーです')}>＋</b>}{p.deleted && <b className="edited" title={t('削除したプレーです（右クリックで元に戻す）')}>×</b>}</span>
       {!p.deleted && <span className="marks">
         {MARKERS.map(m => {
           const on = !!marks && marks.split(',').includes(String(m))

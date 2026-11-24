@@ -54,15 +54,16 @@ export const SERVE_WEIGHTS: Record<string, number> = { '#': 1, '/': 0.752, '+': 
 // The rows a slide can show, in the order they are offered: the label, the figure ('' when there is nothing to count) and
 // whether a higher figure is the better one (for marking the better team). A slide shows those picked,
 // in the order picked (compareRows), DEFAULT_COMPARE_ROWS when none were.
-export interface SkillRow { id: string; label: string; value: (c: SkillCounts) => number | null; format: (v: number) => string; higher: boolean; title: string }
+// internal: the team's own (src/internal/README.md), offered only to an account allowed it (rowsFor).
+export interface SkillRow { id: string; label: string; value: (c: SkillCounts) => number | null; format: (v: number) => string; higher: boolean; title: string; internal?: true }
 const ratio = (n: number, of: number) => (of ? n / of : null)
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 export const SKILL_ROWS: SkillRow[] = [
   { id: 'so', label: 'SO%', value: c => ratio(c.soWon, c.oppServe), format: pct, higher: true, title: 'SO 得点 ÷ 相手サーブ（相手のサーブミスを含む）' },
   { id: 'fbso', label: '1ST BALL SO%', value: c => ratio(c.fbKill, c.fbRec), format: pct, higher: true, title: 'レセプションからの最初の攻撃で決めた本数 ÷ レセプションしたラリー' },
   { id: 'bp', label: 'BP%', value: c => ratio(c.bpWon, c.serve), format: pct, higher: true, title: 'BP 得点 ÷ サーブ' },
-  { id: 'poss', label: 'POSS%', value: c => ratio(c.poss, c.serve), format: pct, higher: true, title: 'ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ サーブ' },
-  { id: 'possSet', label: 'POSSIBILITY/SET', value: c => ratio(c.poss, c.sets), format: v => v.toFixed(2), higher: true, title: 'ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ セット数' },
+  { id: 'poss', internal: true, label: 'POSS%', value: c => ratio(c.poss, c.serve), format: pct, higher: true, title: 'ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ サーブ' },
+  { id: 'possSet', internal: true, label: 'POSSIBILITY/SET', value: c => ratio(c.poss, c.sets), format: v => v.toFixed(2), higher: true, title: 'ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ セット数' },
   { id: 'kill', label: 'ATTACK KILL%', value: c => ratio(c.kill, c.attack), format: pct, higher: true, title: 'アタック決定（#）÷ 打数' },
   { id: 'killPos', label: 'KILL% #+ REC', value: c => ratio(c.killPos.pts, c.killPos.tot), format: pct, higher: true, title: '# + レセプションからのアタックの決定（#）÷ その打数' },
   { id: 'killNeg', label: 'KILL% -! REC', value: c => ratio(c.killNeg.pts, c.killNeg.tot), format: pct, higher: true, title: '- ! レセプションからのアタックの決定（#）÷ その打数' },
@@ -84,6 +85,11 @@ export const DEFAULT_COMPARE_ROWS = ['so', 'fbso', 'bp', 'kill', 'eff', 'serveIn
 // The rows picked, top to bottom as picked (unknown ids and repeats left out); none picked: the default.
 export const compareRows = (ids?: string[]): SkillRow[] =>
   [...new Set(ids?.length ? ids : DEFAULT_COMPARE_ROWS)].flatMap(id => SKILL_ROWS.filter(r => r.id === id))
+
+// The rows an account may pick: the team's own ones (possibilities) only for an account allowed them.
+export const rowsFor = (internal: boolean): SkillRow[] => SKILL_ROWS.filter(r => internal || !r.internal)
+// The picked ids an account may use, in their order.
+export const idsFor = (ids: string[], internal: boolean): string[] => ids.filter(id => rowsFor(internal).some(r => r.id === id))
 
 // Which side is better on a row: 'a', 'b', or null (a tie, or a side with nothing to count).
 export function better(row: SkillRow, a: SkillCounts, b: SkillCounts): 'a' | 'b' | null {

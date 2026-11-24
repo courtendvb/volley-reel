@@ -52,6 +52,33 @@ describe('fit / findPhoto', () => {
     expect(fit(pp({ lastName: 'SATO', firstName: 'Ken' }), player({ lastName: 'SATO', firstName: 'Yuki' }), 'SUN')).toBe(0)
   })
 
+  // Cases from the league's scouts against its pack.
+  it('fits names a scout wrote another way', () => {
+    const f = (a: Partial<PackPlayer>, b: Partial<Player>) => fit(pp(a), player(b), 'SUN')
+    // The two names the other way round, a first name also written short.
+    expect(f({ lastName: 'JUDSON', firstName: 'Nunes', jersey: 11 }, { lastName: 'NUNES', firstName: 'Judson', jersey: 11 })).toBe(12)
+    expect(f({ lastName: 'RAMA', firstName: 'Zachary', jersey: 2 }, { lastName: 'ZACH', firstName: 'Rama', jersey: 2 })).toBe(12)
+    // A first name's words in another order; a surname with more words; a long vowel spelt another way.
+    expect(f({ lastName: 'EVBADE-DAN', firstName: 'IK Larry', jersey: 23 }, { lastName: 'EVBADE-DAN', firstName: 'Larry Ik', jersey: 23 })).toBe(18)
+    expect(f({ lastName: 'LOPEZ', firstName: 'Miguel', jersey: 81 }, { lastName: 'LOPEZ CASTRO', firstName: 'Miguel Angel', jersey: 81 })).toBe(14)
+    expect(f({ lastName: 'KAMIJO', firstName: 'Reimondo', jersey: 16 }, { lastName: 'KAMIJOU', firstName: 'Raymond', jersey: 16 })).toBe(14)
+    // Another romanisation of the surname: only with the same jersey and first name.
+    expect(f({ lastName: 'RI', firstName: 'Haku', jersey: 15 }, { lastName: 'LEE', firstName: 'Haku', jersey: 15 })).toBe(6)
+    expect(f({ lastName: 'RI', firstName: 'Haku', jersey: 15 }, { lastName: 'LEE', firstName: 'Haku', jersey: 9 })).toBe(0)
+    expect(f({ lastName: 'RI', firstName: 'Ken', jersey: 15 }, { lastName: 'LEE', firstName: 'Haku', jersey: 15 })).toBe(0)
+    // A swap needs both names: a surname that is someone's first name alone is not enough.
+    expect(f({ lastName: 'DAVID', firstName: 'Smith' }, { lastName: 'JONES', firstName: 'David' })).toBe(0)
+  })
+
+  it('keeps the names as written ahead of a looser fit', () => {
+    const packs: PackInfo[] = [{ id: 'p', name: 'P', players: [
+      pp({ lastName: 'SMITH', firstName: 'David', jersey: 15, photo: 'smith.jpg' }),
+      pp({ lastName: 'DAVID', firstName: 'Smith', jersey: 15, photo: 'david.jpg' }),
+    ] }]
+    expect(findPhoto(packs, player({ lastName: 'SMITH', firstName: 'David', jersey: 15 }), 'SUN')?.player.photo).toBe('smith.jpg')
+    expect(findPhoto([{ ...packs[0], players: [packs[0].players[0]] }], player({ lastName: 'DAVID', firstName: 'Smith', jersey: 15 }), 'SUN')?.player.photo).toBe('smith.jpg')
+  })
+
   it('picks the best fit, and nothing when two fit equally', () => {
     const packs: PackInfo[] = [{ id: 'p', name: 'P', players: [
       pp({ lastName: 'SATO', firstName: 'Ken', jersey: 4, photo: 'ken.jpg' }),

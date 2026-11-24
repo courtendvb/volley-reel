@@ -31,4 +31,8 @@ export const INTERNAL_ES: Record<string, string> = {
   "パスの質（とトランジション）で列を分け、各列の上にトスの位置を出します": "Una columna por calidad de recepción (y transición), con dónde se colocó encima de cada una",
   "アタックコードで列を分けます（ミドルの A・C クイックと、それ以外など）": "Una columna por grupo de códigos de ataque (por ejemplo, las rápidas A y C de un central, y el resto)",
   "{0} 列目": "Columna {0}",
+  "CALL A・B": "CALL A/B",
+  "左下に CALL A（KA・KC）と CALL B（KB・KQ）の配分を出します": "Muestra la distribución de colocaciones de CALL A (KA, KC) y CALL B (KB, KQ) abajo a la izquierda",
+  "CALL A・B の表の大きさ": "El tamaño de las tablas de CALL A/B",
+  "CALL A・B の表の大きさ（%）": "El tamaño de las tablas de CALL A/B (%)",
 }

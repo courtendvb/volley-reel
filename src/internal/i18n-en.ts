@@ -31,4 +31,8 @@ export const INTERNAL_EN: Record<string, string> = {
   "パスの質（とトランジション）で列を分け、各列の上にトスの位置を出します": "A column per pass quality (and transition), where the sets were given over each",
   "アタックコードで列を分けます（ミドルの A・C クイックと、それ以外など）": "A column per group of attack codes (a middle's A and C quicks, and the rest, say)",
   "{0} 列目": "Column {0}",
+  "CALL A・B": "CALL A/B",
+  "左下に CALL A（KA・KC）と CALL B（KB・KQ）の配分を出します": "Shows the set distribution for CALL A (KA, KC) and CALL B (KB, KQ) at the bottom left",
+  "CALL A・B の表の大きさ": "The size of the CALL A/B tables",
+  "CALL A・B の表の大きさ（%）": "The size of the CALL A/B tables (%)",
 }

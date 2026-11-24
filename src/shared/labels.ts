@@ -24,6 +24,12 @@ export const HITS: Record<string, string> = { H: 'Hard', P: 'Soft', T: 'Tip' }
 export const skillName = (skill: string): string => SKILLS[skill] ?? skill
 export const effectName = (skill: string, effect: string): string => EFFECTS[skill]?.[effect] ?? effect
 
+// The play list's narrower words, where the full ones crowd the row.
+const SHORT: Record<string, string> = { Reception: 'Rec', Positive: 'Pos', Negative: 'Neg', Recovered: 'Recov' }
+const short = (name: string): string => SHORT[name] ?? name
+export const shortSkillName = (skill: string): string => short(skillName(skill))
+export const shortEffectName = (skill: string, effect: string): string => short(effectName(skill, effect))
+
 export function playLabel(skill: string, effect: string): string {
   return `${skillName(skill)} · ${effectName(skill, effect)}`
 }

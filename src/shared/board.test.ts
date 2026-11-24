@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, setDistribution, serveTypeColor, serveTypeName, serveTypes } from './board'
+import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, readBoardLook, setDistribution, serveTypeColor, serveTypeName, serveTypes } from './board'
 import { chartWidth } from './chart'
 import type { ParsedDVW, Play } from './types'
 
@@ -287,5 +287,17 @@ describe('attention', () => {
     const [p] = boardPlayers([d], 'S')
     expect(boardSlide([{ ...p, attention: true }], 'S', { split: false }, {}).annotations.some(a => a.kind === 'text' && a.text === 'Attention')).toBe(true)
     expect(boardSlide([p], 'S', { split: false }, {}).annotations.some(a => a.kind === 'text' && a.text === 'Attention')).toBe(false)
+  })
+})
+
+// The look of the last slide made, kept on this computer for the next new one.
+describe('readBoardLook', () => {
+  it('takes what is usable of a kept look and leaves the rest to the defaults', () => {
+    const look = { background: '#0F172A', notes: true, noteSize: 1.2, noteFills: ['#FEF3C7', '#FFFFFF'] }
+    expect(readBoardLook(look)).toEqual(look)
+    expect(readBoardLook(JSON.parse(JSON.stringify(look)))).toEqual(look) // as kept: through JSON
+    expect(readBoardLook({ background: 'red', notes: 'yes', noteSize: 5, noteFills: ['#FFFFFF'] })).toEqual({})
+    expect(readBoardLook({ notes: false })).toEqual({ notes: false })
+    for (const v of [null, 'x', 3, []]) expect(readBoardLook(v)).toEqual({})
   })
 })

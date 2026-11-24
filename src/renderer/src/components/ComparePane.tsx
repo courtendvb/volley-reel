@@ -4,6 +4,7 @@ import { MAX_ZOOM, MIN_ZOOM, type CompareSource, type ComparePane as PaneState, 
 import { currentPlay, filterPlayRows, isNear, NO_FILTER, playerChoices, type PlayJumpFilter, type PlayJumpRow } from '../../../shared/comparePlays'
 import { formatTime } from '../format'
 import { cap, t } from '../../../shared/i18n'
+import { skillName } from '../../../shared/labels'
 import type { VideoLook } from '../../../shared/videoLook'
 import { LookFilter, lookStyle } from './VideoLook'
 
@@ -184,7 +185,6 @@ function SourceMenu({ label, matches, onSource, onPickFile }: { label: string | 
 }
 
 const SKILL_FILTERS = ['S', 'R', 'A', 'B', 'D', 'E']
-const playName = (k: string) => ({ S: 'Serve', R: 'Reception', A: 'Attack', B: 'Block', D: 'Dig', E: 'Set' })[k] ?? k
 
 // The plays of a match with a DVW: a jump puts this side's timeline just before the one picked.
 // Which side of the court is near the camera comes from the match's fitted court; where it isn't fitted
@@ -241,7 +241,7 @@ function PlayMenu({ rows, nearSet1, time, onJump }: { rows: PlayJumpRow[]; nearS
             <label>{t('プレーの種類')}
               <select value={f.skill ?? ''} onChange={e => set({ skill: e.target.value || null })}>
                 <option value="">{t('すべて')}</option>
-                {SKILL_FILTERS.map(k => <option key={k} value={k}>{playName(k)}</option>)}
+                {SKILL_FILTERS.map(k => <option key={k} value={k}>{skillName(k)}</option>)}
               </select>
             </label>
           </div>

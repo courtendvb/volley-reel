@@ -5,9 +5,9 @@ import { DEFAULT_CHART, type ChartScope } from '../../../shared/chart'
 import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, RIPPLE_COLOR, RIPPLE_LEAD_MAX, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
 import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilterCount, type SetChartView, type SetCourtLayer, type SetFilter, type SetPhase } from '../../../shared/setChart'
-import { effectName } from '../../../shared/labels'
+import { effectName, skillName } from '../../../shared/labels'
 import type { MarkRange } from '../../../shared/markRange'
-import { t } from '../../../shared/i18n'
+import { getLang, t } from '../../../shared/i18n'
 import { useAnchoredPop } from './anchoredPop'
 
 interface Props {
@@ -57,7 +57,8 @@ function Layer({ label, title, on, onToggle, help, children }: { label: string; 
   )
 }
 
-const MARK_TABS: [MarkSkill, string][] = [['S', t('サーブ')], ['A', t('アタック')], ['E', t('セット')]]
+// セット is also a set of the match ("Set" in Spanish too); the skill is el armado there.
+const MARK_TABS: [MarkSkill, string][] = [['S', t('サーブ')], ['A', t('アタック')], ['E', getLang() === 'es' ? skillName('E') : t('セット')]]
 const tabName = (k: MarkSkill) => MARK_TABS.find(([x]) => x === k)![1]
 
 // The court grid for the match on screen: fit its corners, what to show, which team is near. What

@@ -4,6 +4,7 @@
 // court, the share of sets to each place; below it, the kill rate there. The setter's own attacks
 // (second-ball dumps) count as a place of their own. Pure: no DOM.
 import { chartBox, type ChartCorner } from './chart'
+import { getLang } from './i18n'
 import type { ClickPoint, Play } from './types'
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
@@ -253,8 +254,11 @@ function drawKey(ctx: Ctx, cx: number, cy: number, size: number, maxW: number): 
   ctx.textAlign = 'center'
 }
 
-// The places' names, in the scout's terms on every screen.
-export const SET_NAMES: Record<SetTarget, string> = { left: 'Zone4', middle: 'Zone3', right: 'Zone2', back: 'Zone1', pipe: 'Pipe', dump: 'SD' }
+// The places' names, in the scout's terms on the Japanese and English screens, in Spanish on the
+// Spanish ones (SD, the setter's dump, is la segunda).
+const SET_NAMES: Record<SetTarget, string> = { left: 'Zone4', middle: 'Zone3', right: 'Zone2', back: 'Zone1', pipe: 'Pipe', dump: 'SD' }
+const SET_NAMES_ES: Record<SetTarget, string> = { left: 'Zona 4', middle: 'Zona 3', right: 'Zona 2', back: 'Zona 1', pipe: 'Pipe', dump: 'Segunda' }
+export const setTargetName = (k: SetTarget): string => (getLang() === 'es' ? SET_NAMES_ES : SET_NAMES)[k]
 
 // The places most and least set to (of those set to at all), for the red and blue frames.
 export function setExtremes(c: SetChart): { most: SetTarget | null; least: SetTarget | null } {
@@ -359,7 +363,7 @@ export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y:
     ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(cx - bw / 2, top, bw, bh)
     ctx.strokeStyle = k === most ? '#DC2626' : k === least ? '#2563EB' : '#CBD5E1'; ctx.lineWidth = k === most || k === least ? Math.max(1.5, f / 6) : 1
     ctx.strokeRect(cx - bw / 2, top, bw, bh)
-    ctx.fillStyle = SET_COLORS[k]; ctx.font = `bold ${fs}px sans-serif`; ctx.fillText(SET_NAMES[k], cx, top + bh * 0.3, bw * 0.94)
+    ctx.fillStyle = SET_COLORS[k]; ctx.font = `bold ${fs}px sans-serif`; ctx.fillText(setTargetName(k), cx, top + bh * 0.3, bw * 0.94)
     ctx.fillStyle = TEXT; ctx.font = `${fs * 1.1}px sans-serif`; ctx.fillText(pct(c.by[k].n, c.total), cx, top + bh * 0.72, bw * 0.94)
   }
   ctx.restore()

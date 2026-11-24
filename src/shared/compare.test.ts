@@ -43,8 +43,8 @@ describe('the skill comparison', () => {
   const show = (c: typeof home) => Object.fromEntries(compareRows().map(r => { const v = r.value(c); return [r.label, v === null ? '' : r.format(v)] }))
   it('counts each team over its own matches', () => {
     expect(home).toMatchObject({ matches: 1, sets: 1, oppServe: 1, soWon: 1, serve: 5, bpWon: 4, ace: 1, serveErr: 0, blockPts: 1, attack: 0, rec: 0 })
-    expect(show(home)).toEqual({ 'SO%': '100.0%', '1ST BALL SO%': '', 'BP%': '80.0%', 'ATTACK KILL%': '', 'ATTACK EFF': '', 'SERVE INDEX': '0.529', 'ACE%': '20.0%', 'ERR%': '0.0%', 'RECEPTION#+%': '', 'BLOCK PTS/SET': '1.00', 'ERR PTS/SET': '0.00' })
-    expect(show(away)).toEqual({ 'SO%': '20.0%', '1ST BALL SO%': '25.0%', 'BP%': '0.0%', 'ATTACK KILL%': '33.3%', 'ATTACK EFF': '-33.3%', 'SERVE INDEX': '0.000', 'ACE%': '0.0%', 'ERR%': '100.0%', 'RECEPTION#+%': '75.0%', 'BLOCK PTS/SET': '0.00', 'ERR PTS/SET': '3.00' })
+    expect(show(home)).toEqual({ 'SO%': '100.0%', '1ST BALL SO%': '', 'BP%': '80.0%', 'ATTACK KILL%': '', 'ATTACK EFF': '', 'SERVE INDEX': '0.529', 'SERVICE ACE%': '20.0%', 'SERVICE ERR%': '0.0%', 'RECEPTION#+%': '', 'BLOCK PTS/SET': '1.00', 'ERR PTS/SET': '0.00' })
+    expect(show(away)).toEqual({ 'SO%': '20.0%', '1ST BALL SO%': '25.0%', 'BP%': '0.0%', 'ATTACK KILL%': '33.3%', 'ATTACK EFF': '-33.3%', 'SERVE INDEX': '0.000', 'SERVICE ACE%': '0.0%', 'SERVICE ERR%': '100.0%', 'RECEPTION#+%': '75.0%', 'BLOCK PTS/SET': '0.00', 'ERR PTS/SET': '3.00' })
   })
   it('counts the figures that can be added: possibilities, kills by phase, attack and reception errors', () => {
     const all = (c: typeof home) => Object.fromEntries(SKILL_ROWS.filter(r => !DEFAULT_COMPARE_ROWS.includes(r.id)).map(r => { const v = r.value(c); return [r.label, v === null ? '' : r.format(v)] }))

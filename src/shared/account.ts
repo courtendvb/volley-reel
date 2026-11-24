@@ -37,6 +37,10 @@
 //     → { url }: a Stripe Checkout page for the team, opened in the browser. For a team whose renewal
 //       didn't go through, the page of its unpaid invoice instead ({ url, kind: 'invoice' }); paying it
 //       counts at the next refresh, which reads the subscription from Stripe.
+//   POST {SUPABASE_URL}/functions/v1/account-portal  { device_token, device_id, team_id }
+//     → { url }: the team's Stripe Customer Portal, opened in the browser, to cancel (at the end of the
+//       paid period), change the card or read the invoices. Only an admin of the team gets it
+//       (not_admin otherwise); a team with no Stripe customer (trial, free) gets no_customer.
 // This file holds the parts both sides agree on and the checks that need no network or key.
 
 import { INTERNAL_APP } from './edition'
@@ -95,6 +99,8 @@ export type AccountError =
   | 'already_subscribed' // account-checkout: the team's paid plan is still running
   | 'invalid_credentials' // join: no team with that ID, or the wrong passcode
   | 'trial_used' // trial: this account had its free trial already
+  | 'not_admin' // account-portal: only the team's admin manages the contract
+  | 'no_customer' // account-portal: the team has never paid (trial, free), so there is nothing to manage
 
 // What the app shows and allows.
 // internal: this account may use the team's own features (src/internal/README.md): its lease carries

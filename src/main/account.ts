@@ -132,7 +132,7 @@ export class Account {
     if (path.startsWith('/auth/v1/verify')) throw new AccountFailure('invalid_code')
     if (res.status === 429) throw new AccountFailure('too_many_attempts')
     const code = typeof data.error === 'string' ? data.error : ''
-    const known: AccountError[] = ['invalid_code', 'invalid_device', 'licence_expired', 'payment_required', 'no_access', 'too_many_attempts', 'already_subscribed', 'invalid_credentials', 'trial_used']
+    const known: AccountError[] = ['invalid_code', 'invalid_device', 'licence_expired', 'payment_required', 'no_access', 'too_many_attempts', 'already_subscribed', 'invalid_credentials', 'trial_used', 'not_admin', 'no_customer']
     throw new AccountFailure(known.includes(code as AccountError) ? code as AccountError : 'server', code || `HTTP ${res.status}`)
   }
 
@@ -214,6 +214,15 @@ export class Account {
     if (!token || !p) throw new AccountFailure('invalid_device')
     const r = await this.call<{ url?: string }>('/functions/v1/account-checkout', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id, plan })
     if (!r.url?.startsWith('https://')) throw new AccountFailure('server', 'no checkout url')
+    return r.url
+  }
+
+  // The team's Stripe Customer Portal: cancel, change the card, read the invoices. Admins only.
+  async portalUrl(): Promise<string> {
+    const token = this.deviceToken(), p = this.lease()
+    if (!token || !p) throw new AccountFailure('invalid_device')
+    const r = await this.call<{ url?: string }>('/functions/v1/account-portal', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id })
+    if (!r.url?.startsWith('https://')) throw new AccountFailure('server', 'no portal url')
     return r.url
   }
 

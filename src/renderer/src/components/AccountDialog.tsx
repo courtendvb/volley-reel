@@ -9,7 +9,8 @@ import { setAccountState, useAccount } from '../account'
 // the person's choice, never guessed: a team whose contact email is this address, a team joined with its
 // ID and passcode (people already on SyncScout know them), or a free trial of their own. Paying opens
 // Stripe in the browser, and coming back to the app picks the payment up at once (the server asks
-// Stripe, it doesn't wait for the webhook).
+// Stripe, it doesn't wait for the webhook). A paying team's admin manages the contract (cancel, card,
+// invoices) on Stripe's Customer Portal, also opened in the browser.
 export function AccountButton() {
   const info = useAccount()
   const [open, setOpen] = useState(false)
@@ -105,7 +106,7 @@ interface Props {
 export function AccountDialog({ state, onState, onClose }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [paying, setPaying] = useState(false) // the payment page is open in the browser
+  const [paying, setPaying] = useState(false) // the payment page or the Customer Portal is open in the browser
   const run = useCallback(async (f: () => Promise<AccountState | void>) => {
     setBusy(true); setError('')
     try { const s = await f(); if (s) onState(s) } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
@@ -126,7 +127,8 @@ export function AccountDialog({ state, onState, onClose }: Props) {
         {state.kind !== 'ok' && <WhatNeedsSignIn state={state} />}
         {state.kind === 'signed_out' ? <SignIn busy={busy} run={run} />
           : state.kind === 'needs_team' ? <ChooseTeam email={state.email} suggested={state.suggested} busy={busy} run={run} />
-          : <Signed state={state} busy={busy} run={run} onPay={plan => { setPaying(true); void run(() => window.api.accountCheckout(plan)) }} />}
+          : <Signed state={state} busy={busy} run={run} onPay={plan => { setPaying(true); void run(() => window.api.accountCheckout(plan)) }}
+              onManage={() => { setPaying(true); void run(() => window.api.accountPortal()) }} />}
         {error && <p className="error" role="alert">{error}</p>}
         <div className="modal-actions">
           {state.kind !== 'signed_out' && <button onClick={() => void run(() => window.api.accountSignOut())} disabled={busy}>{t('このパソコンからログアウト')}</button>}
@@ -210,7 +212,7 @@ function JoinForm({ busy, run }: { busy: boolean; run: Run }) {
   )
 }
 
-function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { team: LeaseTeam }>; busy: boolean; run: Run; onPay: (plan: 'monthly' | 'annual') => void }) {
+function Signed({ state, busy, run, onPay, onManage }: { state: Extract<AccountState, { team: LeaseTeam }>; busy: boolean; run: Run; onPay: (plan: 'monthly' | 'annual') => void; onManage: () => void }) {
   const [teamsOpen, setTeamsOpen] = useState(false)
   const status = state.kind === 'ok'
     ? state.status === 'trialing' ? t('お試し中（あと {0} 日）', state.daysLeft ?? '') : state.status === 'free' ? t('無料でご利用いただけます') : state.until ? t('契約中（{0} まで）', state.until) : t('契約中')
@@ -222,6 +224,10 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
   // invoice (any card), not a new plan. The server answers that case with the invoice page.
   const unpaid = state.kind === 'expired' && state.reason === 'payment_required'
   const canPay = !unpaid && (state.kind !== 'ok' || state.status === 'trialing')
+  // A paid contract, running or behind on a renewal: cancel it, change the card or read the invoices on
+  // Stripe's Customer Portal. The lease doesn't say who is the team's admin; the server does, and tells
+  // anyone else to ask the admin (not_admin). A trial or a free team has nothing there to manage.
+  const canManage = unpaid || (state.kind === 'ok' && state.status === 'active')
   // The prices on the plan buttons, asked once per team; offline the buttons go without.
   const [prices, setPrices] = useState<PlanPrices | null>(null)
   useEffect(() => {
@@ -260,8 +266,10 @@ function Signed({ state, busy, run, onPay }: { state: Extract<AccountState, { te
         {canPay && <button className="plan-button" onClick={() => onPay('monthly')} disabled={busy}>
           {t('月額プランに申し込む')}{monthlyPrice && <span className="plan-price">{monthlyPrice}</span>}
         </button>}
+        {canManage && <button onClick={onManage} disabled={busy}>{t('契約の管理・解約')}</button>}
         <button onClick={() => void run(() => window.api.accountRefresh(state.team.id))} disabled={busy}>{t('状態を更新')}</button>
       </div>
+      {canManage && <p className="muted">{t('契約の管理・解約は、チームの管理者が Stripe のページで行います。解約しても、お支払い済みの期間の終わりまで使えます。作ったプロジェクトや書き出した動画は、このパソコンに残ります。')}</p>}
       <WebInfo teamId={state.team.id} />
       <button type="button" className="link account-teams-toggle" onClick={() => setTeamsOpen(!teamsOpen)} aria-expanded={teamsOpen}>
         {teamsOpen ? t('チームの参加・退出を閉じる') : t('ほかのチームに参加する・このチームから抜ける')}

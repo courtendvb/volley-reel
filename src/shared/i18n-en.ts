@@ -1872,4 +1872,8 @@ export const EN: Record<string, string> = {
   "映像の補正: 暗い動画を明るくするなど。この試合の動画すべてに効き、書き出しにも入ります": "Picture: brighten a dark video and the like. It applies to this match's whole video, and goes into the export too",
   "映像の補正（この試合）": "Picture (this match)",
   "書き出しにも同じ補正が入ります": "The export gets the same correction",
+  "契約の管理・解約": "Manage plan / cancel",
+  "契約の管理・解約は、チームの管理者が Stripe のページで行います。解約しても、お支払い済みの期間の終わりまで使えます。作ったプロジェクトや書き出した動画は、このパソコンに残ります。": "Your team's admin manages or cancels the plan on Stripe's page. After cancelling, you can keep using the app until the end of the paid period. Your projects and exported videos stay on this computer.",
+  "契約の管理・解約は、チームの管理者だけができます。管理者に依頼してください": "Only your team's admin can manage or cancel the plan. Ask your admin",
+  "このチームは有料プランを契約していないため、管理する契約がありません。「状態を更新」を押してください": "This team hasn't paid for a plan, so there is nothing to manage. Press Refresh",
 }

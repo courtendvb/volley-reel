@@ -167,6 +167,9 @@ export function cleanGridStyle(x: unknown): GridStyle {
 
 export const RIPPLE_LEAD_MAX = 3 // seconds either way
 
+// The project's grid 濃さ (ProjectSettings.gridOpacity) as read back: 0.1..1 as the slider gives it, anything else none.
+export const cleanGridOpacity = (x: unknown): number | undefined => (typeof x === 'number' && Number.isFinite(x) && x >= 0.1 && x <= 1 ? Math.round(x * 100) / 100 : undefined)
+
 export const DEFAULT_GRID_STYLE: GridStyle = {
   grid: true, color: '#FFFFFF', opacity: 0.7, lineWidth: 2, playZones: true, detail: 'zone',
 }

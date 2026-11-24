@@ -36,7 +36,8 @@ setx VR_INTERNAL_EMAILS "a@example.com,b@example.com"
   リポジトリにもアプリにも入らない
 - `npm run release` は `VR_INTERNAL_EMAILS` がないと止まる（入れ忘れると、誰にも開かなくなるため）
 - 人を足す・外すときは、これを直して `npm run release`（新しい版が届けば変わる）
-- Mac 版は、ビルドした Mac に `VR_INTERNAL_EMAILS` があるときだけアドレスで開く（リースの `apps` ならどちらでも開く）
+- Mac 版は Actions（`.github/workflows/mac.yml`）でビルドし、リポジトリの Secret `VR_INTERNAL_EMAILS` を使う。
+  人を足す・外すときは、こちらも同じ値に直す（`gh secret set VR_INTERNAL_EMAILS --repo courtendvb/volley-reel`）
 
 ## 機能を足すとき
 

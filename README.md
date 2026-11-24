@@ -240,7 +240,7 @@ npm run dist
 ほかの人には、機能があることも表示しない。仕組みと決まりは [src/internal/README.md](src/internal/README.md)。
 
 - 許可する人は、ビルドする PC の環境変数 `VR_INTERNAL_EMAILS`（カンマ区切りのメールアドレス）。`npm run release` はこれがないと止まる
-- 人を足す・外すときは、これを直して `npm run release`（新しい版が届けば変わる）
+- 人を足す・外すときは、これを直して `npm run release`（新しい版が届けば変わる）。Mac 版はリポジトリの Secret `VR_INTERNAL_EMAILS` を使うので、そちらも直す
 
 ## Mac 版
 

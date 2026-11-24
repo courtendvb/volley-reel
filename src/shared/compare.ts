@@ -73,8 +73,8 @@ export const SKILL_ROWS: SkillRow[] = [
   { id: 'blocked', label: 'BLOCKED%', value: c => ratio(c.blocked, c.attack), format: pct, higher: false, title: '被ブロック（/）÷ 打数' },
   // The team's serve index: each serve weighed by its evaluation (SERVE_WEIGHTS), per serve.
   { id: 'serveIndex', label: 'SERVE INDEX', value: c => ratio(c.serveWeight, c.serve), format: v => v.toFixed(3), higher: true, title: '（# × 1 ＋ / × 0.752 ＋ + × 0.455 ＋ ! × 0.344 ＋ - × 0.281）÷ サーブ' },
-  { id: 'ace', label: 'ACE%', value: c => ratio(c.ace, c.serve), format: pct, higher: true, title: 'サーブエース（#）÷ サーブ' },
-  { id: 'err', label: 'ERR%', value: c => ratio(c.serveErr, c.serve), format: pct, higher: false, title: 'サーブミス（=）÷ サーブ' },
+  { id: 'ace', label: 'SERVICE ACE%', value: c => ratio(c.ace, c.serve), format: pct, higher: true, title: 'サーブエース（#）÷ サーブ' },
+  { id: 'err', label: 'SERVICE ERR%', value: c => ratio(c.serveErr, c.serve), format: pct, higher: false, title: 'サーブミス（=）÷ サーブ' },
   { id: 'rec', label: 'RECEPTION#+%', value: c => ratio(c.recPos, c.rec), format: pct, higher: true, title: 'レセプションの # と + ÷ レセプション' },
   { id: 'recExc', label: 'RECEPTION#%', value: c => ratio(c.recExc, c.rec), format: pct, higher: true, title: 'レセプションの # ÷ レセプション' },
   { id: 'block', label: 'BLOCK PTS/SET', value: c => ratio(c.blockPts, c.sets), format: v => v.toFixed(2), higher: true, title: 'ブロック得点（#）÷ セット数' },

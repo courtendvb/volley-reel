@@ -55,18 +55,58 @@ export function readManifest(raw: unknown): PackManifest | null {
 }
 
 const norm = (s: string | undefined) => (s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+const words = (s: string | undefined) => (s ?? '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)
+const sorted = (s: string | undefined) => [...words(s)].sort().join(' ')
+// A Japanese long vowel spelt either way: KAMIJOU, KAMIJOH, KAMIJOO and KAMIJO; YUUKI and YUKI.
+const plain = (s: string) => s.replace(/O[UHO](?![AEIOUY])/g, 'O').replace(/UU/g, 'U')
+
+// Two spellings of a surname: 'same', 'like' (a long vowel spelt another way, or one with more words
+// than the other: LOPEZ CASTRO and LOPEZ), or null (another name, or one missing).
+function surnames(a: string | undefined, b: string | undefined): 'same' | 'like' | null {
+  const x = norm(a), y = norm(b)
+  if (!x || !y) return null
+  if (x === y) return 'same'
+  if (plain(x) === plain(y)) return 'like'
+  const [short, long] = words(a).length <= words(b).length ? [words(a), words(b)] : [words(b), words(a)]
+  return short.length < long.length && short.every((w, i) => w === long[i]) ? 'like' : null
+}
+
+// Two first names: 'same' (alike, or the same words in another order: Larry Ik and IK Larry), 'like'
+// (sharing an initial: one written short), 'other', or null when one is missing.
+function firstNames(a: string | undefined, b: string | undefined): 'same' | 'like' | 'other' | null {
+  const x = norm(a), y = norm(b)
+  if (!x || !y) return null
+  if (x === y || sorted(a) === sorted(b)) return 'same'
+  const initials = words(b).map(w => w[0])
+  return words(a).some(w => initials.includes(w[0])) ? 'like' : 'other'
+}
+
+// A name written in full on one side and short on the other (ZACHARY and ZACH), or alike.
+const alike = (a: string | undefined, b: string | undefined) => {
+  const x = norm(a), y = norm(b)
+  return !!x && !!y && (x === y || sorted(a) === sorted(b) || plain(x) === plain(y) || (Math.min(x.length, y.length) >= 3 && (x.startsWith(y) || y.startsWith(x))))
+}
 
 // How well a pack player fits a scouted one; 0 = not this person. Player IDs differ between scouts,
-// so an ID is enough on its own; otherwise team and surname must both match (a jersey alone would put
-// a teammate's face on a player), and the first name and jersey tell same-surname players apart.
+// so an ID is enough on its own; otherwise the team must match and then the names (a jersey alone would
+// put a teammate's face on a player), the first name and jersey telling same-surname players apart.
+// The names as written fit best; then a surname spelt another way; then a scout that has the two
+// names the other way round (NUNES/Judson for JUDSON/Nunes); last, the same jersey and first name
+// under a surname romanised another way (LEE and RI).
 export function fit(pp: PackPlayer, p: Player, teamCode: string): number {
   if (pp.ids?.some(id => id.replace(/-a$/i, '').toUpperCase() === p.key.toUpperCase())) return 100
   const code = teamCode.toUpperCase()
   if (pp.team !== code && !pp.teams?.includes(code)) return 0
-  if (!norm(pp.lastName) || norm(pp.lastName) !== norm(p.lastName)) return 0
-  const a = norm(pp.firstName), b = norm(p.firstName)
-  if (a && b && a[0] !== b[0]) return 0 // another first name: a teammate with the same surname
-  return 10 + (a && b ? (a === b ? 3 : 1) : 0) + (pp.jersey !== undefined && pp.jersey === p.jersey ? 5 : 0)
+  const jersey = pp.jersey !== undefined && pp.jersey === p.jersey ? 5 : 0
+  const sur = surnames(pp.lastName, p.lastName)
+  if (sur) {
+    const first = firstNames(pp.firstName, p.firstName)
+    if (first === 'other') return 0 // another first name: a teammate with the same surname
+    return (sur === 'same' ? 10 : 8) + (first === 'same' ? 3 : first === 'like' ? 1 : 0) + jersey
+  }
+  if (alike(pp.lastName, p.firstName) && alike(pp.firstName, p.lastName)) return 7 + jersey
+  if (jersey && norm(pp.firstName).length >= 3 && firstNames(pp.firstName, p.firstName) === 'same') return 6
+  return 0
 }
 
 export interface PackPhoto { pack: string; player: PackPlayer }

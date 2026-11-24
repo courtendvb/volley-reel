@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PaletteColor } from './PaletteColor'
-import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, boardColumn, boardPlayers, type AttackBoard, type BoardConfig, type BoardPlayer, type BoardSkill, type SetLayout, type SetView } from '../../../shared/board'
+import { MOST_PER_SLIDE, NOTE_FILLS, NOTE_SIZE, attackCodes, readBoardLook, type BoardLook, boardColumn, boardPlayers, type AttackBoard, type BoardConfig, type BoardPlayer, type BoardSkill, type SetLayout, type SetView } from '../../../shared/board'
 import { DEFAULT_CHART, LINE_OPACITY, type ChartDisplay, type ChartLook, type ChartStyle } from '../../../shared/chart'
 import { BoardPreview } from './BoardPreview'
 import { AttackOptions, ServeTargetHint } from '../../../internal/BoardDialogParts'
@@ -49,6 +49,9 @@ const loadOwnProject = () => { try { return localStorage.getItem('vr.compareProj
 const saveOwnProject = (p: string) => { try { localStorage.setItem('vr.compareProject', p) } catch { /* not kept */ } }
 // And the figures picked last, for the next comparison.
 const loadCompareRows = () => { try { const v = JSON.parse(localStorage.getItem('vr.compareRows') ?? 'null') as unknown; return Array.isArray(v) && v.length ? v.filter((x): x is string => typeof x === 'string') : DEFAULT_COMPARE_ROWS } catch { return DEFAULT_COMPARE_ROWS } }
+// The background and notes of the last slide made, for the next new one (shared/board.ts BoardLook).
+const loadLook = (): Partial<BoardLook> => { try { return readBoardLook(JSON.parse(localStorage.getItem('vr.boardLook') ?? 'null')) } catch { return {} } }
+const saveLook = (look: BoardLook) => { try { localStorage.setItem('vr.boardLook', JSON.stringify(look)) } catch { /* not kept */ } }
 const saveCompareRows = (ids: string[]) => { try { localStorage.setItem('vr.compareRows', JSON.stringify(ids)) } catch { /* not kept */ } }
 function useOwnTeam(on: boolean, initial: string | undefined) {
   const [path, setPath0] = useState(initial ?? loadOwnProject)
@@ -164,11 +167,13 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
   const [attackers, setAttackers] = useState(initial?.attackers ?? ATTACKER_CARDS) // with the attackers' cards: how many
   const [slots, setSlots] = useState<Slot[]>(() => (initial?.columns ?? []).map(c => ({ key: c.key, code: c.code ?? '', ...(c.attention ? { attention: true } : {}) })))
   const [split, setSplit] = useState(initial?.split ?? true)
-  const [notes, setNotes] = useState(initial?.notes ?? false)
-  const [noteSize, setNoteSize] = useState(initial?.noteSize ?? 1)
-  const [noteFills, setNoteFills] = useState<[string, string]>(initial?.noteFills ?? NOTE_FILLS)
+  // A slide being remade keeps its own; a new one starts from the last one made (loadLook).
+  const [last] = useState(() => (initial ? {} : loadLook()))
+  const [notes, setNotes] = useState(initial?.notes ?? last.notes ?? false)
+  const [noteSize, setNoteSize] = useState(initial?.noteSize ?? last.noteSize ?? 1)
+  const [noteFills, setNoteFills] = useState<[string, string]>(initial?.noteFills ?? last.noteFills ?? NOTE_FILLS)
   const [photos, setPhotos] = useState(initial?.photos ?? true)
-  const [background, setBackground] = useState(initial?.background ?? '#FFFFFF')
+  const [background, setBackground] = useState(initial?.background ?? last.background ?? '#FFFFFF')
   const [inMarker, setInMarker] = useState<Marker>(scene?.groupOrder[0] ?? MARKERS[0])
   const [asCard, setAsCard] = useState(false) // a title card at the scene's head, outside the markers
   const marker: Marker | 'head' = asCard ? 'head' : inMarker
@@ -378,7 +383,7 @@ export function BoardDialog({ dvws, results, ourTeam, scene, initial, chartStyle
         <p className="hint">{t('写真はパックから入れます。文字と写真はあとで動かせて、矢印や図形も足せます。チャートの位置は変えられません。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length) || (isD && !attack)} onClick={() => onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, callGroups: internal, stat, statTop, statLook, ...(isD && attack ? { attack } : {}) })}>{initial ? t('更新') : t('作成')}</button>
+          <button className="primary" disabled={skill === 'C' ? !compare || !rowIds.length : !columns.length || (skill === 'R' && !rotations.length) || (isD && !attack)} onClick={() => { saveLook({ background, notes, noteSize, noteFills }); onCreate({ ...(compare ? { compare, compareProject: ownTeam.path } : {}), compareRows: rowIds, setView, setLayout, rotations, display, skill, columns, split, notes: notes && !single && skill !== 'P', noteSize, noteFills, photos: photos && skill !== 'P', background, marker, team: open, searched, teamColor, discLine, cones, tables, court, attackers, callGroups: internal, stat, statTop, statLook, ...(isD && attack ? { attack } : {}) }) }}>{initial ? t('更新') : t('作成')}</button>
         </div>
       </div>
     </div>

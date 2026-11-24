@@ -293,6 +293,21 @@ const NOTE_LINES = [0.064, 0.044, 0.044, 0.044]
 // The notes' lines and where they start, made taller or shorter (1 = as above); the type follows.
 export const NOTE_SIZE = { min: 0.6, max: 1.6, step: 0.1 }
 export const NOTE_FILLS: [string, string] = ['#E2E8F0', '#FFFFFF'] // the lines by turns
+
+// A slide's look as last made: its background, and the notes, their height and colours. The data slide
+// dialog starts the next new slide from it (kept on this computer). readBoardLook: what is usable of a
+// kept one; anything else is left to the defaults.
+export interface BoardLook { background: string; notes: boolean; noteSize: number; noteFills: [string, string] }
+const isColor = (v: unknown): v is string => typeof v === 'string' && /^#[0-9A-F]{6}$/i.test(v)
+export function readBoardLook(v: unknown): Partial<BoardLook> {
+  if (!v || typeof v !== 'object') return {}
+  const o = v as Record<string, unknown>, out: Partial<BoardLook> = {}
+  if (isColor(o.background)) out.background = o.background
+  if (typeof o.notes === 'boolean') out.notes = o.notes
+  if (typeof o.noteSize === 'number' && o.noteSize >= NOTE_SIZE.min && o.noteSize <= NOTE_SIZE.max) out.noteSize = o.noteSize
+  if (Array.isArray(o.noteFills) && o.noteFills.length === 2 && o.noteFills.every(isColor)) out.noteFills = [o.noteFills[0], o.noteFills[1]]
+  return out
+}
 const noteLines = (scale = 1) => { const lines = NOTE_LINES.map(h => h * scale); return { lines, top: 0.975 - lines.reduce((a, b) => a + b, 0) } }
 const NARROW = 4 // from this many columns the card stacks above the chart
 export const MOST_PER_SLIDE = 6

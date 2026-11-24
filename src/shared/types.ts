@@ -274,6 +274,7 @@ export interface Api {
   accountSignIn(email: string, code: string): Promise<AccountState>
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
+  accountPortal(): Promise<void> // the team's Stripe Customer Portal in the browser: cancel, card, invoices
   accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
   accountWeb(): Promise<WebAccess> // the team ID (and, for an admin, the passcodes) for SyncScout Web
   accountOpenWeb(page: 'view' | 'admin'): Promise<void> // SyncScout Web in the browser

@@ -99,6 +99,8 @@ const accountMessage = (e: unknown): string => {
     already_subscribed: t('このチームはすでに有料プランを契約しています。「状態を更新」を押してください'),
     invalid_credentials: t('チームID か合言葉が違います'),
     trial_used: t('このアカウントの無料お試しは使用済みです。チームに参加するか、有料プランをお申し込みください'),
+    not_admin: t('契約の管理・解約は、チームの管理者だけができます。管理者に依頼してください'),
+    no_customer: t('このチームは有料プランを契約していないため、管理する契約がありません。「状態を更新」を押してください'),
     network: t('サーバーにつながりません。インターネットの接続を確かめてください'),
     server: t('サーバーでエラーが起きました。少し待ってからもう一度試してください'),
   } as Record<string, string>)[code]
@@ -485,6 +487,7 @@ function registerIpc(): void {
   ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
+  ipcMain.handle('account:portal', () => withAccount(async () => { await shell.openExternal(await account.portalUrl()) }))
   ipcMain.handle('account:prices', () => account.prices())
   ipcMain.handle('account:web', () => withAccount(() => account.webAccess()))
   ipcMain.handle('account:openWeb', (_e, page: 'view' | 'admin') => shell.openExternal(page === 'admin' ? WEB_ADMIN_URL : `${WEB_URL}/`))

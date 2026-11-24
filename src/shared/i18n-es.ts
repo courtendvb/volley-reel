@@ -1872,4 +1872,8 @@ export const ES: Record<string, string> = {
   "映像の補正: 暗い動画を明るくするなど。この試合の動画すべてに効き、書き出しにも入ります": "Imagen: aclarar un vídeo oscuro, por ejemplo. Se aplica a todo el vídeo de este partido y también a la exportación",
   "映像の補正（この試合）": "Imagen (este partido)",
   "書き出しにも同じ補正が入ります": "La exportación lleva la misma corrección",
+  "契約の管理・解約": "Gestionar o cancelar el plan",
+  "契約の管理・解約は、チームの管理者が Stripe のページで行います。解約しても、お支払い済みの期間の終わりまで使えます。作ったプロジェクトや書き出した動画は、このパソコンに残ります。": "El administrador de tu equipo gestiona o cancela el plan en la página de Stripe. Tras cancelar, puedes seguir usando la app hasta el final del período pagado. Tus proyectos y videos exportados se quedan en esta computadora.",
+  "契約の管理・解約は、チームの管理者だけができます。管理者に依頼してください": "Solo el administrador de tu equipo puede gestionar o cancelar el plan. Pídeselo a tu administrador",
+  "このチームは有料プランを契約していないため、管理する契約がありません。「状態を更新」を押してください": "Este equipo no ha pagado ningún plan, así que no hay nada que gestionar. Presiona Actualizar",
 }

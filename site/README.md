@@ -51,7 +51,7 @@ The two download buttons (top and bottom) and the list of builds are filled in b
 
 ## Pricing
 
-The Pricing section (`#pricing`) is plain text, not read from Stripe: US dollars, the same plans as the SyncScout page (https://syncscout.courtend.net/#pricing), since one subscription covers both. When the prices or the trial change there or in Stripe, change both pages here by hand. Its buttons lead to the download, never to Stripe: a purchase has to be tied to the signed-in account and its team, which only the app's checkout does. The footer links to SyncScout's terms, privacy and refund pages and its contact address.
+The Pricing section (`#pricing`) is plain text, not read from Stripe: US dollars, the same plans as the SyncScout page (https://syncscout.courtend.net/#pricing), since one subscription covers both. When the prices or the trial change there or in Stripe, change both pages here by hand. Its buttons lead to the download, never to Stripe: a purchase has to be tied to the signed-in account and its team, which only the app's checkout does. Cancelling is in the app too: the "Trial and payment" note says the team's admin does it from the account screen ("Manage plan / cancel", which opens Stripe's Customer Portal), so keep that line in step with the app's wording. The footer links to SyncScout's terms, privacy and refund pages and its contact address.
 
 ## The how-it-works animation
 

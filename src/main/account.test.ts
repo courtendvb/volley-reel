@@ -162,6 +162,23 @@ describe('Account', () => {
     expect(await b.prices()).toBeNull()
   })
 
+  it('opens the Customer Portal for an admin of a paying team, and says why not to anyone else', async () => {
+    await expect(account().a.portalUrl()).rejects.toMatchObject({ code: 'invalid_device' }) // signed out
+    let answer: [number, unknown] = [200, { url: 'https://billing.stripe.com/p/session/7' }]
+    const s = signedIn({ '/functions/v1/account-portal': () => answer }, { status: 'active' })
+    const { a } = account({ fetch: s.f })
+    await a.signIn('a@example.com', '123456')
+    expect(await a.portalUrl()).toBe('https://billing.stripe.com/p/session/7')
+    expect(s.calls.at(-1)).toMatchObject({ path: '/functions/v1/account-portal', body: { device_token: 'dev-1', team_id: 7 } })
+    answer = [403, { error: 'not_admin' }]
+    await expect(a.portalUrl()).rejects.toMatchObject({ code: 'not_admin' })
+    answer = [409, { error: 'no_customer' }]
+    await expect(a.portalUrl()).rejects.toMatchObject({ code: 'no_customer' })
+    answer = [200, { url: 'http://example.com/not-stripe' }]
+    await expect(a.portalUrl()).rejects.toMatchObject({ code: 'server' })
+    expect(a.state().kind).toBe('ok') // none of these sign out or change the state
+  })
+
   it('asks for the SyncScout Web details of its team: the passcodes for an admin, the team ID alone for a member', async () => {
     await expect(account().a.webAccess()).rejects.toMatchObject({ code: 'invalid_device' }) // signed out
     let role = 'admin'

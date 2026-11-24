@@ -122,9 +122,10 @@ export function App() {
   useEffect(() => { try { localStorage.setItem('vr.extract', extract) } catch { /* not kept */ } }, [extract])
   const extractRef = useRef(extract)
   extractRef.current = extract
-  // With all matches listed: the order of the matches (each keeps its plays in time order).
-  const [matchOrder, setMatchOrder] = useState<'old' | 'new'>(() => { try { return localStorage.getItem('vr.matchOrder') === 'new' ? 'new' : 'old' } catch { return 'old' } })
-  useEffect(() => { try { localStorage.setItem('vr.matchOrder', matchOrder) } catch { /* not kept */ } }, [matchOrder])
+  // With all matches listed: the order of the matches (each keeps its plays in time order). Each project
+  // opens with the newest match first; 古い試合から holds until another project is opened.
+  const [matchOrder, setMatchOrder] = useState<'old' | 'new'>('new')
+  useEffect(() => setMatchOrder('new'), [project?.path])
   const [filter, setFilter] = useState<PlayFilter>(EMPTY_FILTER)
   const packs = usePacks() // player photos, for the caption's photo
   const packsRef = useRef(packs)

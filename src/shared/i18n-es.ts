@@ -1912,4 +1912,7 @@ export const ES: Record<string, string> = {
   "画面の上下中央": "Centrar en vertical",
   "選んだものを、並びはそのままで画面の左右中央へ動かす": "Mueve la selección, tal como está ordenada, al centro horizontal de la imagen",
   "選んだものを、並びはそのままで画面の上下中央へ動かす": "Mueve la selección, tal como está ordenada, al centro vertical de la imagen",
+  "動画のコートにグリッドを重ねる（書き出しも同じ）。色・太さ・出す範囲は「表示」>「コートの準備」": "Superpone la cuadrícula a la cancha del video (también en la exportación). Color, grosor y dónde se muestra: Mostrar > Preparación de la cancha",
+  "グリッドの濃さ": "Opacidad de la cuadrícula",
+  "グリッドの濃さ（プロジェクトのどの動画でも同じ）": "Opacidad de la cuadrícula (la misma en todos los videos del proyecto)",
 }

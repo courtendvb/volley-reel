@@ -79,6 +79,7 @@ import { useExport } from './app/useExport'
 import { useShortcuts } from './app/useShortcuts'
 import { Banners } from './app/Banners'
 import { STAGE_PANELS, StageTabs, type StagePanel } from './components/StageTabs'
+import { GridQuick } from './components/GridQuick'
 import { ServeMarkBar } from './components/ServeMarkBar'
 import { OffsetBar } from './components/OffsetBar'
 import { cleanLook, type VideoLook } from '../../shared/videoLook'
@@ -1152,6 +1153,7 @@ export function App() {
                   <HeadlineBar annotations={activeAnns} onChange={setAnns} style={annStyle} headline={settings?.headline} disabled={seqPlaying} clipIn={activeInfo.range.in} compact
                     onFormat={id => { setAnnTool('select'); setSelectedAnn(id); showObjects() }} />
                 )}
+                {match.court && <GridQuick style={gridStyle} onStyle={setGridStyle} />}
               </StageTabs>
             )}
             <div className="stage-work">

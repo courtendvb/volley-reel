@@ -2429,6 +2429,18 @@ export function installSmoke(h: SmokeHost): void {
     const setZones = setRef ? playZones(setRef.play, swapped, dvwPlays[setRef.play.id + 1]) : null
     await api.smokeShot!('court-sub.png')
     const detail = JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}').detail
+    // The grid's on/off and 濃さ at the right of the tabs: a click on the slider with the real mouse
+    // (the 濃さ goes to the project), then the checkbox off and on again (the tab's style, here this computer's).
+    const quick = await waitFor(() => document.querySelector<HTMLElement>('.stage-tabs .grid-quick'), 10000, 'grid quick')
+    const qr = quick.querySelector<HTMLInputElement>('input[type=range]')!.getBoundingClientRect()
+    await api.smokeDrag!([[qr.left + qr.width * 0.8, qr.top + qr.height / 2]])
+    const quickOpacity = await until(async () => latest.current.settings?.gridOpacity ?? null, 10000, 'grid opacity saved')
+    const gridOn = () => JSON.parse(localStorage.getItem('vr.courtGrid') ?? '{}').grid as boolean
+    quick.querySelector<HTMLInputElement>('input[type=checkbox]')!.click(); await sleep(200)
+    const offThen = gridOn(), sliderOff = quick.querySelector<HTMLInputElement>('input[type=range]')!.disabled
+    await api.smokeShot!('grid-quick-off.png')
+    quick.querySelector<HTMLInputElement>('input[type=checkbox]')!.click(); await sleep(200)
+    const gridQuick = { opacity: quickOpacity, offThen, sliderOff, onAgain: gridOn() }
 
     // A heatmap-like picture on the clip, laid on the near half through the format panel's select,
     // one corner dragged, then drawn the way the export draws it.
@@ -2494,7 +2506,7 @@ export function installSmoke(h: SmokeHost): void {
       exported = { state: latest.current.exportState?.status, path: exportTo, wholeLayer: clip?.kind === 'clip' ? clip.layers.filter(l => l.from === undefined).length : 0 }
     }
     return { play: `${r.play.code} set ${r.play.setNum}`, corner0: fitted.corners[0], handlesOnTop, afterDone, zones: zones1, nearSet1: swapped.nearSet1, zonesSwapped: playZones(r.play, swapped),
-      set: setRef ? { code: setRef.play.code, zones: setZones } : null, detail,
+      set: setRef ? { code: setRef.play.code, zones: setZones } : null, detail, gridQuick,
       transparency, exported,
       heatmap: { onCourt, corner1Moved: +(dragged[1][0] - qx).toFixed(3), exportInside: alpha(mid[0], mid[1]), exportOutside: alpha(b.x + 0.005, b.y + 0.005) } }
   }

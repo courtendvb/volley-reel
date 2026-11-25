@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { restyleBoard, attackCodes, boardColumn, boardPlayers, boardRates, boardSlide, keptByHand, readBoardLook, setDistribution, serveTypeColor, serveTypeName, serveTypes } from './board'
-import { chartWidth } from './chart'
+import { chartCourt, chartWidth } from './chart'
 import type { ParsedDVW, Play } from './types'
 
 const play = (over: object) => ({ side: '*', jersey: 7, playerKey: 'A', skill: 'S', effect: '-', rallyId: 0, setNum: 1, score: { home: 0, away: 0 }, startZone: 1, endZone: 6, startSub: null, endSub: null,
@@ -162,12 +162,25 @@ describe('boardSlide', () => {
     const lines = texts(boardSlide(players(3), 'S', { split: false, notes: true }, {}).annotations, '') as unknown as { box: { fill: string; width: number }; size: number; bold: boolean; align: string }[]
     expect(lines).toHaveLength(12)
     expect(lines.slice(0, 4).map(l => l.box.fill)).toEqual(['#E2E8F0', '#FFFFFF', '#E2E8F0', '#FFFFFF'])
-    expect(lines[0].box.width).toBeGreaterThan(0.2)
+    expect(lines[0].box.width).toBeGreaterThan(0.15)
     expect(lines[0].size).toBeGreaterThan(lines[1].size)
     expect([lines[0].bold, lines[1].bold, lines[0].align]).toEqual([true, false, 'center'])
     const six = texts(boardSlide(players(6), 'S', { split: false, notes: true }, {}).annotations, '') as unknown as { size: number }[]
     expect(six[0].size).toBeGreaterThanOrEqual(24)
     expect(texts(boardSlide(players(3), 'S', { split: false }, {}).annotations, '')).toHaveLength(0)
+  })
+  it('makes the notes of a serve slide as wide as the court above them, lined up with its side lines', () => {
+    for (const n of [1, 3, 5]) {
+      const r = boardSlide(players(n), 'S', { split: false, notes: true }, {})
+      const notes = r.annotations.filter(a => r.noteIds.includes(a.id)) as Extract<(typeof r.annotations)[number], { kind: 'text' }>[]
+      r.charts.forEach((c, i) => {
+        const court = chartCourt({ x: 0, y: 0, h: c.h }, false), left = c.x + court.left / (16 / 9), w = court.w / (16 / 9)
+        for (const line of notes.slice(i * 4, i * 4 + 4)) {
+          expect(line.box!.width).toBeCloseTo(w, 6)
+          expect(line.x - line.box!.width! / 2).toBeCloseTo(left, 6) // centred text: x is the middle
+        }
+      })
+    }
   })
   it('keeps to one chart a column from four across', () => {
     expect(boardSlide(players(4), 'S', { split: true }, {}).charts).toHaveLength(4)

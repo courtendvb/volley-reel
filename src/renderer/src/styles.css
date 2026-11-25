@@ -606,6 +606,8 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .fmt-body input[type=number] { width: 52px; padding: 1px var(--space-2); font: inherit; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .fmt-body input[type=color] { width: 24px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .fmt-body select { padding: 1px var(--space-2); font-size: var(--fs-label); }
+.align-btns { display: inline-flex; gap: 2px; }
+.align-btns .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 2px var(--space-2); line-height: 0; }
 .fmt-pct input { width: 80px; accent-color: var(--primary); }
 .fmt-pct span { min-width: 32px; font-variant-numeric: tabular-nums; }
 .ann-hint { position: absolute; left: 8px; bottom: 8px; padding: var(--space-1) var(--space-4); border-radius: var(--radius-sm); background: rgba(15, 23, 42, 0.75); color: #fff; font-size: var(--fs-label); pointer-events: none; }

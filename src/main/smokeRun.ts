@@ -148,6 +148,7 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_PRESETBLOCK=1: the block preset by middle split by the opposing setter, made newest match first]
 // [VR_SMOKE_FOLD=1: the list rows' six markers, the right column folded by its », Ctrl+B and the strip]
 // [VR_SMOKE_SCENETITLE=1: a scene card with a long name; dragging its title saves a top-left]
+// [VR_SMOKE_ARRANGE=1: objects lined up (配置) and smart guides, on a clip and on a blank slide; screenshots mid-drag]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
 // imports matches if needed, applies the filter, jumps to the n-th result, and saves a screenshot.
 export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string): Promise<void> {
@@ -173,6 +174,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       home: process.env.VR_SMOKE_HOME,
       video: !!process.env.VR_SMOKE_VIDEO,
       obj: !!process.env.VR_SMOKE_OBJ,
+      arrange: !!process.env.VR_SMOKE_ARRANGE,
       copy: !!process.env.VR_SMOKE_COPY,
       slides: !!process.env.VR_SMOKE_SLIDES,
       mem: process.env.VR_SMOKE_MEM ? Number(process.env.VR_SMOKE_MEM) : undefined,

@@ -3,6 +3,8 @@ import { composing } from '../keys'
 import {
   animAt, applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, isAnimated, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
   type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle, refloorTexts } from '../../../shared/annotation'
+import { snapMove, unionBox, type Guide } from '../../../shared/annotationAlign'
+import { setAnnFrame } from '../annFrame'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
@@ -56,7 +58,8 @@ interface Props {
 type PathDraft = { kind: 'polyline' | 'polygon'; points: [number, number][]; hover: [number, number] | null }
 
 type Drag =
-  | { mode: 'move'; id: string; from: [number, number]; orig: Annotation; others: Annotation[] }
+  // box: what moves, all of it, where it was; targets: the other objects on screen, which it sticks to (smart guides).
+  | { mode: 'move'; id: string; from: [number, number]; orig: Annotation; others: Annotation[]; box: Rect; targets: Rect[] }
   | { mode: 'handle'; id: string; handle: string }
   | { mode: 'draw'; draft: Annotation; from: [number, number] }
   | { mode: 'crop'; id: string; handle: BoxHandle; full: Rect }
@@ -88,6 +91,7 @@ export function AnnotationLayer(p: Props) {
   const pathRef = useRef<PathDraft | null>(null)
   const setPath = (q: PathDraft | null) => { pathRef.current = q; setPathState(q) }
   const [textEdit, setTextEdit] = useState<{ id: string | null; x: number; y: number; value: string } | null>(null)
+  const [guides, setGuides] = useState<Guide[]>([]) // smart guides while an object is dragged
   const [assetTick, setAssetTick] = useState(0) // redraw when an image finishes loading
   useEffect(() => subscribeAssets(() => setAssetTick(n => n + 1)), [])
   // Which objects are visible right now ("id,id,…"): the layer redraws when this changes, not on
@@ -107,6 +111,7 @@ export function AnnotationLayer(p: Props) {
   clipRef.current = p.clip
   useEffect(() => playback.subscribe(s => { setVisKey(visibleKey(s.time) + (s.paused ? '|paused' : '')); setOnCard(!!s.card) }), [])
 
+  setAnnFrame(p.size.w, p.size.h)
   const onScreen = p.always || playback.attachedKey === p.clip.key
   const pathDraft: Annotation | null = path && path.points.length
     ? applyStyle({ id: 'path-draft', kind: path.kind, color: p.style.color, width: p.style.width, points: path.hover ? [...path.points, path.hover] : path.points } as Annotation, p.style)
@@ -171,7 +176,22 @@ export function AnnotationLayer(p: Props) {
       }
       for (const h of handles) drawHandle(ctx, h, p.size.w, p.size.h)
     }
-  }, [shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds, p.images])
+    // Smart guides: where the dragged object lines up with another, or with the picture's edges and middle.
+    if (guides.length) {
+      // A pale edge under the pink line keeps it seen on any picture.
+      ctx.save()
+      for (const [width, color] of [[3, 'rgba(255, 255, 255, 0.75)'], [1.5, '#EC4899']] as const) {
+        ctx.lineWidth = width; ctx.strokeStyle = color
+        for (const g of guides) {
+          ctx.beginPath()
+          if (g.axis === 'x') { const x = Math.round(g.at * p.size.w) + 0.5; ctx.moveTo(x, g.from * p.size.h); ctx.lineTo(x, g.to * p.size.h) }
+          else { const y = Math.round(g.at * p.size.h) + 0.5; ctx.moveTo(g.from * p.size.w, y); ctx.lineTo(g.to * p.size.w, y) }
+          ctx.stroke()
+        }
+      }
+      ctx.restore()
+    }
+  }, [guides, shown, visKey, p.size.w, p.size.h, p.editable, selected, handles, p.clip, onScreen, textEdit, assetTick, onCard, p.scopeOf, p.extraIds, p.images])
 
   // Enter / Escape finish or cancel a polyline / polygon being drawn.
   useEffect(() => {
@@ -284,7 +304,12 @@ export function AnnotationLayer(p: Props) {
       if (hit) {
         const extras = keep ? [...(selected ? [selected.id] : []), ...(p.extraIds ?? [])] : []
         const ids = withGroups(p.annotations, [hit.id, ...extras]).filter(id => id !== hit.id)
-        setDrag({ mode: 'move', id: hit.id, from: pt, orig: hit, others: p.annotations.filter(a => ids.includes(a.id)) })
+        const others = p.annotations.filter(a => ids.includes(a.id)), c = ctx2d(), time = playback.current.time
+        const box = unionBox([hit, ...others].map(a => bounds(c, a, p.size.w, p.size.h)))
+        // What it can stick to: the other objects showing now (a slide's court too), not the ones moving.
+        const targets = p.annotations.filter(a => a.id !== hit.id && !ids.includes(a.id) && (p.always || visibleAt(a, time, p.clip)))
+          .map(a => bounds(c, a, p.size.w, p.size.h))
+        setDrag({ mode: 'move', id: hit.id, from: pt, orig: hit, others, box, targets })
       }
       return
     }
@@ -306,7 +331,10 @@ export function AnnotationLayer(p: Props) {
     const drag = dragRef.current
     if (!drag) return
     if (drag.mode === 'move') {
-      const dx = x - drag.from[0], dy = y - drag.from[1]
+      // It sticks to the others' and the picture's edges and middles; Alt moves it freely.
+      const snap = e.altKey ? null : snapMove(drag.box, x - drag.from[0], y - drag.from[1], drag.targets, p.size.w, p.size.h)
+      const dx = snap ? snap.dx : x - drag.from[0], dy = snap ? snap.dy : y - drag.from[1]
+      setGuides(snap?.guides ?? [])
       const floor = p.floor ? { corners: p.floor, W: p.size.w, H: p.size.h } : null // texts on the floor move over it
       const moved = new Map([drag.orig, ...drag.others].map(a => [a.id, translate(a, dx, dy, floor)]))
       const next = annsRef.current.map(a => moved.get(a.id) ?? a)
@@ -368,6 +396,7 @@ export function AnnotationLayer(p: Props) {
       }
     }
     setDrag(null)
+    setGuides([])
   }
 
   const onDouble = (e: MouseEvent) => {

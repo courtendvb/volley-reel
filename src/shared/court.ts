@@ -3,7 +3,7 @@
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
 import type { PlacedChart } from './board'
-import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_TARGETS, drawSetChart, setChart, setChartBox, setExtremes, setTargetName, type SetChart, type SetCourtLayer, type SetShareLook } from './setChart'
+import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_TARGETS, drawSetChart, foldBack, setChart, setChartBox, setExtremes, setTargetName, type SetChart, type SetCourtLayer, type SetShareLook } from './setChart'
 import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
@@ -736,7 +736,7 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
   // The team's view (u from its left, v from its end line) as court units, then the picture.
   const unit = (u: number, v: number) => (s.near ? { x: u, y: 1 - v } : { x: 1 - u, y: v })
   const on = (u: number, v: number) => { const c = unit(u, v); return project(H, c.x, c.y) }
-  const c = s.chart
+  const c = foldBack(s.chart)
   ctx.save()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   if (s.layer === 'spots') {

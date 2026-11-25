@@ -32,7 +32,7 @@ export function setterSets(dvws: ParsedDVW[], setter: string, keep?: (p: Play) =
       const attack = attackOfContact(d.plays, i)
       const target = attack ? setTarget(attack, setter, p) : null
       if (!attack || !target) return
-      out.push({ set: p, attack, place: target === 'back' ? 'right' : target })
+      out.push({ set: p, attack, place: target })
     })
   }
   return out

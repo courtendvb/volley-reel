@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSetChart, cleanSetCourt, cleanSetFilter, setBefore, setChart, setForReception, setChartShows, setExtremes, setTarget, setterCall } from './setChart'
+import { cleanSetChart, foldBack, cleanSetCourt, cleanSetFilter, setBefore, setChart, setForReception, setChartShows, setExtremes, setTarget, setterCall } from './setChart'
+import type { SetChart } from './setChart'
 import type { Play } from './types'
 
 let id = 0
@@ -11,8 +12,16 @@ const set = (rallyId: number, over: Partial<Play> = {}) => play({ rallyId, start
 const hit = (rallyId: number, startZone: number, effect: string, over: Partial<Play> = {}) => play({ skill: 'A', rallyId, startZone, effect, jersey: 4, playerKey: 'H', ...over })
 
 describe('where a set went', () => {
+  it("counts a saved chart's Zone1 in Zone2/1", () => {
+    const by = { left: { n: 1, kills: 0 }, middle: { n: 0, kills: 0 }, right: { n: 2, kills: 1 }, back: { n: 3, kills: 2 }, pipe: { n: 0, kills: 0 }, dump: { n: 0, kills: 0 } }
+    const old = { title: '', rotation: 1, rotLabel: 'S1', filtered: '', total: 6, kills: 3, errors: 0, by, dots: [{ at: null, click: null, target: 'back', result: 'kill' }] } as unknown as SetChart
+    const c = foldBack(old)
+    expect(c.by.right).toEqual({ n: 5, kills: 3 })
+    expect('back' in c.by).toBe(false)
+    expect(c.dots[0].target).toBe('right')
+  })
   it('names the place by the attack\'s start zone, and the setter\'s own attack a dump', () => {
-    expect([4, 3, 2, 1, 9, 8, 7].map(z => setTarget({ startZone: z, playerKey: 'H' }, 'S'))).toEqual(['left', 'middle', 'right', 'back', 'back', 'pipe', 'left'])
+    expect([4, 3, 2, 1, 9, 8, 7].map(z => setTarget({ startZone: z, playerKey: 'H' }, 'S'))).toEqual(['left', 'middle', 'right', 'right', 'right', 'pipe', 'left']) // Zone2 and Zone1 one place: the opposite's
     expect(setTarget({ startZone: 2, playerKey: 'S' }, 'S')).toBe('dump')
   })
   it('takes the target attacker coded on the set, not the start zone of the attack', () => {
@@ -20,7 +29,7 @@ describe('where a set went', () => {
     expect(at('*09EHQKQF', 3)).toBe('left') // F: left, even if the attack came from the middle
     expect(at('*09EHQKQC', 4)).toBe('middle')
     expect(at('*09EHQKQB', 2)).toBe('right')
-    expect(at('*09EHQKQB', 9)).toBe('back') // B from the back right
+    expect(at('*09EHQKQB', 9)).toBe('right') // B from the back right: still Zone2/1
     expect(at('*09EHQKQP', 4)).toBe('pipe')
     expect(at('*09EHQKQf', 3)).toBe('left') // either case
   })

@@ -221,7 +221,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
         {tab !== 'S' && (
           <Layer label={tab === 'E' ? t('チャート') : t('トスのチャート')} on={!!m.setChart} onToggle={on => put('setChart', on ? DEFAULT_SET_CHART : undefined)}
             title={tab === 'E' ? t('そのセッターのそのローテーションのトスを、動画の隅にチャートで出す（全試合の分。書き出しも同じ）') : t('アタックの前にトスを上げたセッターの、そのローテーションのトスのチャートを出す（書き出しも同じ）')}
-            help={tab === 'E' ? [t('そのセッターのそのローテーションのトスを、動画の隅にチャートで出す。点はトスを上げた位置、色は上げた先（Zone4 青・Zone3 緑・Zone2 赤・Zone1 濃い赤・Pipe 紫・SD 黄）、塗りは決定、白抜きは決まらず、×は失点。コートの上に配分（いちばん多い先は赤枠、少ない先は青枠）（全試合の分。書き出しも同じ）')] : undefined}>
+            help={tab === 'E' ? [t('そのセッターのそのローテーションのトスを、動画の隅にチャートで出す。点はトスを上げた位置、色は上げた先（Zone4 青・Zone3 緑・Zone2/1 赤・Pipe 紫・SD 黄）、塗りは決定、白抜きは決まらず、×は失点。コートの上に配分（いちばん多い先は赤枠、少ない先は青枠）（全試合の分。書き出しも同じ）')] : undefined}>
             {m.setChart && (
               <>
                 <select value={m.setChart.view ?? 'auto'} aria-label={t('セット配分の見せ方')} title={t('点はトスを上げた位置（DVW にセットの座標が要る）。ゾーンはアタックのゾーンだけで、行き先ごとの割合を塗る。自動は、座標のあるセットが半分以上なら点')}

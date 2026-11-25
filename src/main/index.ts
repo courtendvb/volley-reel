@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } from 'electron'
 import { APP_NAME } from '../shared/edition'
 import { Account, AccountFailure, ENFORCED, LEASE_PUBLIC_KEY } from './account'
-import { FREE_MATCHES, WEB_ADMIN_URL, WEB_URL, type TeamAction } from '../shared/account'
+import { FREE_MATCHES, WEB_ADMIN_URL, WEB_URL, type PortalResult, type TeamAction } from '../shared/account'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
 import type { ScoutInsert } from '../shared/codeEdit'
@@ -99,7 +99,8 @@ const accountMessage = (e: unknown): string => {
     already_subscribed: t('このチームはすでに有料プランを契約しています。「状態を更新」を押してください'),
     invalid_credentials: t('チームID か合言葉が違います'),
     trial_used: t('このアカウントの無料お試しは使用済みです。チームに参加するか、有料プランをお申し込みください'),
-    not_admin: t('契約の管理・解約は、チームの管理者だけができます。管理者に依頼してください'),
+    not_admin: t('契約の管理・解約は、チームの管理者か、支払いをしている人だけができます。管理者に依頼してください'),
+    wrong_admin_passcode: t('管理者パスコードが違います'),
     no_customer: t('このチームは有料プランを契約していないため、管理する契約がありません。「状態を更新」を押してください'),
     network: t('サーバーにつながりません。インターネットの接続を確かめてください'),
     server: t('サーバーでエラーが起きました。少し待ってからもう一度試してください'),
@@ -487,7 +488,12 @@ function registerIpc(): void {
   ipcMain.handle('account:signIn', (_e, email: string, code: string) => withAccount(() => account.signIn(email, code)))
   ipcMain.handle('account:refresh', (_e, teamId?: number) => withAccount(() => account.refresh(teamId)))
   ipcMain.handle('account:checkout', (_e, plan: 'monthly' | 'annual') => withAccount(async () => { await shell.openExternal(await account.checkoutUrl(plan === 'monthly' ? 'monthly' : 'annual')) }))
-  ipcMain.handle('account:portal', () => withAccount(async () => { await shell.openExternal(await account.portalUrl()) }))
+  ipcMain.handle('account:portal', (_e, adminPasscode?: string) => withAccount(async (): Promise<PortalResult> => {
+    const url = await account.portalUrl(typeof adminPasscode === 'string' ? adminPasscode : undefined)
+    if (!url) return 'needs_admin'
+    await shell.openExternal(url)
+    return 'opened'
+  }))
   ipcMain.handle('account:prices', () => account.prices())
   ipcMain.handle('account:web', () => withAccount(() => account.webAccess()))
   ipcMain.handle('account:openWeb', (_e, page: 'view' | 'admin') => shell.openExternal(page === 'admin' ? WEB_ADMIN_URL : `${WEB_URL}/`))

@@ -162,21 +162,39 @@ describe('Account', () => {
     expect(await b.prices()).toBeNull()
   })
 
-  it('opens the Customer Portal for an admin of a paying team, and says why not to anyone else', async () => {
+  it('opens the Customer Portal for an admin or the payer, and asks a member for the admin passcode', async () => {
     await expect(account().a.portalUrl()).rejects.toMatchObject({ code: 'invalid_device' }) // signed out
-    let answer: [number, unknown] = [200, { url: 'https://billing.stripe.com/p/session/7' }]
+    const ADMIN = 'mnpqrs'
+    let admin = false // the server's view: an admin, or the person who pays
+    const s = signedIn({ '/functions/v1/account-portal': b => {
+      if (b.admin_passcode !== undefined) {
+        if (b.admin_passcode !== ADMIN) return [401, { error: 'invalid_credentials' }]
+        admin = true
+      }
+      return admin ? [200, { url: 'https://billing.stripe.com/p/session/7' }] : [403, { error: 'not_admin' }]
+    } }, { status: 'active' })
+    const { a } = account({ fetch: s.f })
+    await a.signIn('a@example.com', '123456')
+    expect(await a.portalUrl()).toBeNull() // a member who doesn't pay: the app asks for the admin passcode
+    expect(s.calls.at(-1)).toMatchObject({ path: '/functions/v1/account-portal', body: { device_token: 'dev-1', team_id: 7 } })
+    expect(s.calls.at(-1)!.body).not.toHaveProperty('admin_passcode')
+    await expect(a.portalUrl(' wrong ')).rejects.toMatchObject({ code: 'wrong_admin_passcode' })
+    expect(s.calls.at(-1)!.body).toMatchObject({ admin_passcode: 'wrong' })
+    expect(await a.portalUrl(` ${ADMIN} `)).toBe('https://billing.stripe.com/p/session/7')
+    expect(await a.portalUrl()).toBe('https://billing.stripe.com/p/session/7') // now the team's admin
+    expect(a.state().kind).toBe('ok') // none of these sign out or change the state
+  })
+
+  it('says why the Customer Portal did not open', async () => {
+    let answer: [number, unknown] = [409, { error: 'no_customer' }]
     const s = signedIn({ '/functions/v1/account-portal': () => answer }, { status: 'active' })
     const { a } = account({ fetch: s.f })
     await a.signIn('a@example.com', '123456')
-    expect(await a.portalUrl()).toBe('https://billing.stripe.com/p/session/7')
-    expect(s.calls.at(-1)).toMatchObject({ path: '/functions/v1/account-portal', body: { device_token: 'dev-1', team_id: 7 } })
-    answer = [403, { error: 'not_admin' }]
-    await expect(a.portalUrl()).rejects.toMatchObject({ code: 'not_admin' })
-    answer = [409, { error: 'no_customer' }]
     await expect(a.portalUrl()).rejects.toMatchObject({ code: 'no_customer' })
+    answer = [429, { error: 'too_many_attempts' }]
+    await expect(a.portalUrl('x')).rejects.toMatchObject({ code: 'too_many_attempts' })
     answer = [200, { url: 'http://example.com/not-stripe' }]
     await expect(a.portalUrl()).rejects.toMatchObject({ code: 'server' })
-    expect(a.state().kind).toBe('ok') // none of these sign out or change the state
   })
 
   it('asks for the SyncScout Web details of its team: the passcodes for an admin, the team ID alone for a member', async () => {

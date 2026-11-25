@@ -9,8 +9,9 @@ import { setAccountState, useAccount } from '../account'
 // the person's choice, never guessed: a team whose contact email is this address, a team joined with its
 // ID and passcode (people already on SyncScout know them), or a free trial of their own. Paying opens
 // Stripe in the browser, and coming back to the app picks the payment up at once (the server asks
-// Stripe, it doesn't wait for the webhook). A paying team's admin manages the contract (cancel, card,
-// invoices) on Stripe's Customer Portal, also opened in the browser.
+// Stripe, it doesn't wait for the webhook). A paying team's admin, or the person who pays, manages the
+// contract (cancel, card, invoices) on Stripe's Customer Portal, also opened in the browser; a member can
+// get there with the admin passcode.
 export function AccountButton() {
   const info = useAccount()
   const [open, setOpen] = useState(false)
@@ -128,7 +129,7 @@ export function AccountDialog({ state, onState, onClose }: Props) {
         {state.kind === 'signed_out' ? <SignIn busy={busy} run={run} />
           : state.kind === 'needs_team' ? <ChooseTeam email={state.email} suggested={state.suggested} busy={busy} run={run} />
           : <Signed state={state} busy={busy} run={run} onPay={plan => { setPaying(true); void run(() => window.api.accountCheckout(plan)) }}
-              onManage={() => { setPaying(true); void run(() => window.api.accountPortal()) }} />}
+              onPortalOpen={() => setPaying(true)} />}
         {error && <p className="error" role="alert">{error}</p>}
         <div className="modal-actions">
           {state.kind !== 'signed_out' && <button onClick={() => void run(() => window.api.accountSignOut())} disabled={busy}>{t('このパソコンからログアウト')}</button>}
@@ -172,7 +173,7 @@ function ChooseTeam({ email, suggested, busy, run }: { email: string; suggested:
       <Suggested suggested={suggested} busy={busy} run={run} />
       <section className="account-choice">
         <h3>{t('SyncScout をすでに使っている')}</h3>
-        <p className="muted">{t('チームの管理者から聞いたチームID と合言葉で参加します。')}</p>
+        <p className="muted">{t('チームの管理者から聞いたチームID と、パスコードか管理者パスコードで参加します。契約の管理・解約もする人は、管理者パスコードで参加してください。')}</p>
         <JoinForm busy={busy} run={run} />
       </section>
       <section className="account-choice">
@@ -212,8 +213,16 @@ function JoinForm({ busy, run }: { busy: boolean; run: Run }) {
   )
 }
 
-function Signed({ state, busy, run, onPay, onManage }: { state: Extract<AccountState, { team: LeaseTeam }>; busy: boolean; run: Run; onPay: (plan: 'monthly' | 'annual') => void; onManage: () => void }) {
+function Signed({ state, busy, run, onPay, onPortalOpen }: { state: Extract<AccountState, { team: LeaseTeam }>; busy: boolean; run: Run; onPay: (plan: 'monthly' | 'annual') => void; onPortalOpen: () => void }) {
   const [teamsOpen, setTeamsOpen] = useState(false)
+  // The server didn't let this account into the portal (a member who doesn't pay): ask for the admin passcode.
+  const [needsAdmin, setNeedsAdmin] = useState(false)
+  const [adminPasscode, setAdminPasscode] = useState('')
+  useEffect(() => { setNeedsAdmin(false); setAdminPasscode('') }, [state.team.id])
+  const manage = (passcode?: string) => void run(async () => {
+    if (await window.api.accountPortal(passcode) === 'needs_admin') { setNeedsAdmin(true); return }
+    setNeedsAdmin(false); setAdminPasscode(''); onPortalOpen()
+  })
   const status = state.kind === 'ok'
     ? state.status === 'trialing' ? t('お試し中（あと {0} 日）', state.daysLeft ?? '') : state.status === 'free' ? t('無料でご利用いただけます') : state.until ? t('契約中（{0} まで）', state.until) : t('契約中')
     : state.kind === 'no_access' ? t('このチームの契約には Video Editor が含まれていません')
@@ -225,8 +234,9 @@ function Signed({ state, busy, run, onPay, onManage }: { state: Extract<AccountS
   const unpaid = state.kind === 'expired' && state.reason === 'payment_required'
   const canPay = !unpaid && (state.kind !== 'ok' || state.status === 'trialing')
   // A paid contract, running or behind on a renewal: cancel it, change the card or read the invoices on
-  // Stripe's Customer Portal. The lease doesn't say who is the team's admin; the server does, and tells
-  // anyone else to ask the admin (not_admin). A trial or a free team has nothing there to manage.
+  // Stripe's Customer Portal. The lease doesn't say who is the team's admin; the server does: it lets in
+  // the admin and the person who pays, and anyone else with the admin passcode (never every member: the
+  // viewing passcode is the players' too). A trial or a free team has nothing there to manage.
   const canManage = unpaid || (state.kind === 'ok' && state.status === 'active')
   // The prices on the plan buttons, asked once per team; offline the buttons go without.
   const [prices, setPrices] = useState<PlanPrices | null>(null)
@@ -266,10 +276,19 @@ function Signed({ state, busy, run, onPay, onManage }: { state: Extract<AccountS
         {canPay && <button className="plan-button" onClick={() => onPay('monthly')} disabled={busy}>
           {t('月額プランに申し込む')}{monthlyPrice && <span className="plan-price">{monthlyPrice}</span>}
         </button>}
-        {canManage && <button onClick={onManage} disabled={busy}>{t('契約の管理・解約')}</button>}
+        {canManage && <button onClick={() => manage()} disabled={busy}>{t('契約の管理・解約')}</button>}
         <button onClick={() => void run(() => window.api.accountRefresh(state.team.id))} disabled={busy}>{t('状態を更新')}</button>
       </div>
-      {canManage && <p className="muted">{t('契約の管理・解約は、チームの管理者が Stripe のページで行います。解約しても、お支払い済みの期間の終わりまで使えます。作ったプロジェクトや書き出した動画は、このパソコンに残ります。')}</p>}
+      {canManage && <p className="muted">{t('契約の管理・解約は、チームの管理者か支払いをしている人が、Stripe のページで行います。解約しても、お支払い済みの期間の終わりまで使えます。作ったプロジェクトや書き出した動画は、このパソコンに残ります。')}</p>}
+      {canManage && needsAdmin && (
+        <section className="account-choice">
+          <p className="muted">{t('このアカウントは、チームのメンバーとして参加しています。管理者パスコードを入れると、このチームの管理者になって契約の管理・解約ができます。わからないときは、チームの管理者に依頼してください。')}</p>
+          <form className="account-join" onSubmit={e => { e.preventDefault(); manage(adminPasscode) }}>
+            <label>{t('管理者パスコード')}<input type="password" value={adminPasscode} onChange={e => setAdminPasscode(e.target.value)} autoComplete="off" autoFocus disabled={busy} required /></label>
+            <button type="submit" className="primary" disabled={busy || !adminPasscode.trim()}>{t('管理者として開く')}</button>
+          </form>
+        </section>
+      )}
       <WebInfo teamId={state.team.id} />
       <button type="button" className="link account-teams-toggle" onClick={() => setTeamsOpen(!teamsOpen)} aria-expanded={teamsOpen}>
         {teamsOpen ? t('チームの参加・退出を閉じる') : t('ほかのチームに参加する・このチームから抜ける')}

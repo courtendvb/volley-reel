@@ -898,9 +898,10 @@ function drawShareFloor(ctx: Ctx, labels: ShareLabel[], fs: number, at: (u: numb
 // SetShareLook 'stand': each place's share, the number alone standing upright on the floor at the
 // place's middle like a cut-out sign, its face square to the court's length (read from the camera's
 // end), SHARE_STAND_M tall: nearer ones larger, as the camera sees them. White with a dark edge and a
-// soft shadow under its foot. Numbers that would overlap on the picture are made smaller together;
-// any still overlapping are drawn far to near, so the nearer stands in front.
-export const SHARE_STAND_M = 0.9
+// soft shadow under its foot, a little see-through (SHARE_STAND_ALPHA) so a player behind it still
+// shows. Numbers that would overlap on the picture are made smaller together; any still overlapping
+// are drawn far to near, so the nearer stands in front.
+export const SHARE_STAND_M = 0.9, SHARE_STAND_ALPHA = 0.7
 function drawShareStand(ctx: Ctx, labels: ShareLabel[], camera: (u: number, v: number, z: number) => Pt): void {
   const F = 100, cap = F * 0.72 // the number drawn at F px; its digits' height
   ctx.save()
@@ -924,22 +925,29 @@ function drawShareStand(ctx: Ctx, labels: ShareLabel[], camera: (u: number, v: n
     if (signs.every((p, i) => signs.every((q, j) => j <= i || !clash(p, q)))) break
   }
   const order = labels.map((_, i) => i).sort((i, j) => signs[i].y1 - signs[j].y1) // far (higher on the picture) first
-  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round'
+  // The numbers go on a layer of their own, solid, and the layer onto the picture see-through: so the
+  // dark edge doesn't show through the white, and a nearer number still hides the one behind it.
+  const pic = ctx.canvas as { width: number; height: number }
+  const layer = typeof OffscreenCanvas !== 'undefined' && pic.width > 0 && pic.height > 0 ? new OffscreenCanvas(pic.width, pic.height).getContext('2d') : null
+  const g: Ctx = layer ?? ctx
+  if (layer) { layer.setTransform(ctx.getTransform()); layer.font = ctx.font } else ctx.globalAlpha = SHARE_STAND_ALPHA
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'
   for (const i of order) {
     const s = signs[i], fw = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y)
     // A soft shadow on the floor under the foot.
-    ctx.save()
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'
-    ctx.beginPath(); ctx.ellipse(s.foot.x, s.foot.y, fw * 0.5, Math.max(2, fw * 0.07), Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x), 0, Math.PI * 2); ctx.fill()
-    ctx.restore()
+    g.save()
+    g.fillStyle = 'rgba(0,0,0,0.35)'
+    g.beginPath(); g.ellipse(s.foot.x, s.foot.y, fw * 0.5, Math.max(2, fw * 0.07), Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x), 0, Math.PI * 2); g.fill()
+    g.restore()
     // Text space (x across its width, y down from the digits' top to the baseline at 0) onto the sign.
     const tw = widths[i], mx = (s.a.x + s.b.x) / 2, my = (s.a.y + s.b.y) / 2
     const ux = { x: (s.b.x - s.a.x) / tw, y: (s.b.y - s.a.y) / tw }, uy = { x: (s.a.x - s.top.x) / cap, y: (s.a.y - s.top.y) / cap }
-    ctx.save()
-    ctx.transform(ux.x, ux.y, uy.x, uy.y, mx, my)
-    ctx.lineWidth = F * 0.14; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(labels[i].share, 0, 0)
-    ctx.fillStyle = '#FFFFFF'; ctx.fillText(labels[i].share, 0, 0)
-    ctx.restore()
+    g.save()
+    g.transform(ux.x, ux.y, uy.x, uy.y, mx, my)
+    g.lineWidth = F * 0.14; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(labels[i].share, 0, 0)
+    g.fillStyle = '#FFFFFF'; g.fillText(labels[i].share, 0, 0)
+    g.restore()
   }
+  if (layer) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = SHARE_STAND_ALPHA; ctx.drawImage(layer.canvas, 0, 0) }
   ctx.restore()
 }

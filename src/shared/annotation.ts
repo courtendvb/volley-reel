@@ -11,7 +11,7 @@
 // assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 // With a quad its four corners are placed one by one, so the picture (a heatmap from analysis
 // software, say) lies on the court with the camera's perspective; x, y, w, h are then its bounds.
-import { floorQuad, homography, moveOnFloor, project, refloorQuad, restandQuad, standQuad, type CourtFit, type Ctx, type ZoneCell } from './court'
+import { floorQuad, halfFloorQuad, homography, moveOnFloor, project, refloorQuad, restandQuad, standQuad, type CourtFit, type Ctx, type ZoneCell } from './court'
 import type { DiscPart } from './disc'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
@@ -79,7 +79,10 @@ export type Annotation = Base & (
   | { kind: 'freehand' | 'polyline'; points: [number, number][]; width: number }
   | ({ kind: 'polygon'; points: [number, number][]; width: number; cell?: ZoneCell; disc?: DiscPart } & Fillable) // cell: a court zone painted from the zone panel; disc: part of a disc on the court
   // crop: the part of the picture shown (fractions of its width / height); missing = all of it.
+  // floor: laid flat on the court's floor (lay) or stood on it (stand), so it moves over the floor;
+  // flat: where it was on the picture before, to go back to and to know its shape.
   | { kind: 'image'; x: number; y: number; w: number; h: number; assetId: string; crop?: Crop; quad?: Quad
+      floor?: 'lay' | 'stand'; flat?: Rect
       frame?: 'top' // a photo frame on a title card: filled with the photo of the card's player with the most clips (cardPeople.ts)
       fit?: 'cover' } // the picture fills the box, cut to its shape (else stretched to it)
 )
@@ -256,23 +259,45 @@ export function translate(a: Annotation, dx: number, dy: number, floor?: { corne
     const q = moveOnFloor(floor.corners, floor.W, floor.H, a.quad, !!a.stand, dx, dy)
     if (q) return { ...a, x: a.x + dx, y: a.y + dy, quad: q }
   }
+  const flat = a.kind === 'image' && a.flat ? { flat: { ...a.flat, x: a.flat.x + dx, y: a.flat.y + dy } } : {}
+  if (floor && a.kind === 'image' && a.quad && a.floor) {
+    const q = moveOnFloor(floor.corners, floor.W, floor.H, a.quad, a.floor === 'stand', dx, dy)
+    if (q) return { ...withQuad(a, q), ...flat }
+  }
   switch (a.kind) {
     case 'text': return { ...a, x: a.x + dx, y: a.y + dy, ...(a.quad ? { quad: a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad } : {}) }
     case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy,
       ...(a.c1 && a.c2 ? { c1: [a.c1[0] + dx, a.c1[1] + dy] as Pt, c2: [a.c2[0] + dx, a.c2[1] + dy] as Pt } : {}) }
-    case 'image': return a.quad ? withQuad(a, a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad) : { ...a, x: a.x + dx, y: a.y + dy }
+    case 'image': return a.quad ? { ...withQuad(a, a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad), ...flat } : { ...a, x: a.x + dx, y: a.y + dy }
     case 'circle': case 'rect': return { ...a, x: a.x + dx, y: a.y + dy }
     default: return { ...a, points: a.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }
   }
 }
 
-// A picture laid on these corners (null: flat again, in its bounds).
+// A picture laid on these corners (null: flat again, where it was before it was laid on the floor,
+// or else in its bounds).
 export function withQuad(a: ImageAnnotation, quad: Quad | null): ImageAnnotation {
   const { quad: _q, ...rest } = a
-  if (!quad) return rest
+  if (!quad) { const { floor: _f, flat, ...plain } = rest; return flat ? { ...plain, ...flat } : plain }
   const xs = quad.map(p => p[0]), ys = quad.map(p => p[1])
   const x = Math.min(...xs), y = Math.min(...ys)
   return { ...rest, quad, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+
+// A picture laid flat on the court's floor where it is (lay), stood up on it with its foot where its
+// bottom edge is (stand), or laid big in the middle of the near or far half (a team's logo): its
+// shape kept (W × H: the picture, to know it). Null when it is not over the floor.
+export type ImageFloorMode = 'lay' | 'stand' | 'near' | 'far'
+export function imageOnFloor(a: ImageAnnotation, mode: ImageFloorMode, corners: CourtFit['corners'], W: number, H: number): ImageAnnotation | null {
+  const b = a.flat ?? { x: a.x, y: a.y, w: a.w, h: a.h }
+  if (!(b.w > 0 && b.h > 0)) return null
+  const aspect = (b.w * W) / (b.h * H), y = mode === 'stand' ? b.y + b.h : b.y + b.h / 2
+  const left = { x: b.x, y }, right = { x: b.x + b.w, y }
+  const q = mode === 'lay' ? floorQuad(corners, left, right, aspect)
+    : mode === 'stand' ? standQuad(corners, W, H, left, right, aspect)
+    : halfFloorQuad(corners, mode, aspect)
+  if (!q) return null
+  return { ...withQuad(a, q), flat: b, floor: mode === 'stand' ? 'stand' : 'lay' }
 }
 
 // A text laid on the floor on these corners, or stood on it (null: flat on the picture again where it was).
@@ -492,7 +517,11 @@ function drawKind(ctx: Ctx, a: Annotation, W: number, H: number, s: number, imag
         const iw = (img as { width: number }).width, ih = (img as { height: number }).height
         const c = a.crop ?? (a.fit === 'cover' && !a.quad ? coverCrop(iw, ih, a.w * W, a.h * H) : undefined)
         const src = c ? { x: c.x * iw, y: c.y * ih, w: c.w * iw, h: c.h * ih } : { x: 0, y: 0, w: iw, h: ih }
-        if (a.quad) drawWarped(ctx, img, src, a.quad.map(([x, y]) => [x * W, y * H]) as Quad)
+        if (a.quad) {
+          const q = a.quad.map(([x, y]) => [x * W, y * H]) as Quad, key = `i|${imageId(img)}|${JSON.stringify(src)}`
+          if (!drawWarpedSmooth(ctx, key, q, src.w, src.h, (c, k) => c.drawImage(img, src.x, src.y, src.w, src.h, 0, 0, src.w * k, src.h * k)))
+            drawWarped(ctx, img, src, q)
+        }
         else if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
         else ctx.drawImage(img, a.x * W, a.y * H, a.w * W, a.h * H)
         break
@@ -642,7 +671,7 @@ function drawOutlineIn(ctx: Ctx, a: Extract<Annotation, { kind: 'rect' | 'circle
 // triangle is clipped a little larger than itself so no seams show between them.
 export const WARP_STEPS = 16
 
-function drawWarped(ctx: Ctx, img: CanvasImageSource, src: { x: number; y: number; w: number; h: number }, quad: Quad, n = WARP_STEPS): void {
+function drawWarped(ctx: Ctx, img: CanvasImageSource, src: { x: number; y: number; w: number; h: number }, quad: Quad, n = WARP_STEPS, grow = 0.7): void {
   const pt = ([x, y]: [number, number]) => ({ x, y })
   const hm = homography([pt(quad[0]), pt(quad[1]), pt(quad[2]), pt(quad[3])])
   const dst: { x: number; y: number }[][] = []
@@ -651,14 +680,14 @@ function drawWarped(ctx: Ctx, img: CanvasImageSource, src: { x: number; y: numbe
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       const cell = { x: src.x + (j / n) * src.w, y: src.y + (i / n) * src.h, w: src.w / n, h: src.h / n }
-      drawTriangle(ctx, img, cell, [sp(i, j), sp(i, j + 1), sp(i + 1, j)], [dst[i][j], dst[i][j + 1], dst[i + 1][j]])
-      drawTriangle(ctx, img, cell, [sp(i + 1, j + 1), sp(i + 1, j), sp(i, j + 1)], [dst[i + 1][j + 1], dst[i + 1][j], dst[i][j + 1]])
+      drawTriangle(ctx, img, cell, [sp(i, j), sp(i, j + 1), sp(i + 1, j)], [dst[i][j], dst[i][j + 1], dst[i + 1][j]], grow)
+      drawTriangle(ctx, img, cell, [sp(i + 1, j + 1), sp(i + 1, j), sp(i, j + 1)], [dst[i + 1][j + 1], dst[i + 1][j], dst[i][j + 1]], grow)
     }
   }
 }
 
 type P = { x: number; y: number }
-function drawTriangle(ctx: Ctx, img: CanvasImageSource, cell: { x: number; y: number; w: number; h: number }, s: [P, P, P], d: [P, P, P]): void {
+function drawTriangle(ctx: Ctx, img: CanvasImageSource, cell: { x: number; y: number; w: number; h: number }, s: [P, P, P], d: [P, P, P], grow: number): void {
   const m = affine(s, d)
   if (!m) return
   const cx = (d[0].x + d[1].x + d[2].x) / 3, cy = (d[0].y + d[1].y + d[2].y) / 3
@@ -666,7 +695,7 @@ function drawTriangle(ctx: Ctx, img: CanvasImageSource, cell: { x: number; y: nu
   ctx.beginPath()
   for (const p of d) {
     const dx = p.x - cx, dy = p.y - cy, len = Math.hypot(dx, dy) || 1
-    ctx.lineTo(p.x + (dx / len) * 0.7, p.y + (dy / len) * 0.7)
+    ctx.lineTo(p.x + (dx / len) * grow, p.y + (dy / len) * grow)
   }
   ctx.closePath()
   ctx.clip()
@@ -693,24 +722,91 @@ export function affine(s: [P, P, P], d: [P, P, P]): [number, number, number, num
 // A text on the floor: drawn flat on a canvas of its own (a little larger than its box, for the
 // outline), then warped onto its corners, which stand for its box. False when it can't be (no
 // OffscreenCanvas: tests), and it is then drawn flat.
-const FLOOR_TEXT_SHARP = 2 // drawn this much finer than the picture, so it stays sharp when the floor makes it larger
 function drawTextOnFloor(ctx: Ctx, a: TextAnnotation, W: number, H: number, s: number): boolean {
   if (typeof OffscreenCanvas === 'undefined' || !a.quad) return false
   const flat = withTextQuad(a, null), b = bounds(ctx, flat, W, H)
-  const bw = b.w * W, bh = b.h * H, m = Math.ceil(a.size * s * 0.2) + 2, k = FLOOR_TEXT_SHARP
+  const bw = b.w * W, bh = b.h * H, m = Math.ceil(a.size * s * 0.2) + 2
   if (!(bw > 0 && bh > 0)) return false
-  const cw = Math.ceil((bw + 2 * m) * k), ch = Math.ceil((bh + 2 * m) * k)
-  if (cw > 8192 || ch > 8192) return false
-  const off = new OffscreenCanvas(cw, ch), c = off.getContext('2d')
-  if (!c) return false
-  c.scale(k, k); c.translate(m - b.x * W, m - b.y * H)
-  c.lineJoin = 'round'; c.lineCap = 'round'
-  drawText(c, flat, W, H, s)
-  // The corners stand for the box: the margin goes on beyond them, the same way.
   const hm = homography(a.quad.map(([x, y]) => ({ x: x * W, y: y * H })) as [P, P, P, P])
   const ex = m / bw, ey = m / bh, at = (u: number, v: number): Pt => { const p = project(hm, u, v); return [p.x, p.y] }
-  drawWarped(ctx, off, { x: 0, y: 0, w: cw, h: ch }, [at(-ex, -ey), at(1 + ex, -ey), at(-ex, 1 + ey), at(1 + ex, 1 + ey)])
+  // The corners stand for the box: the margin goes on beyond them, the same way.
+  const dst: Quad = [at(-ex, -ey), at(1 + ex, -ey), at(-ex, 1 + ey), at(1 + ex, 1 + ey)]
+  const key = `t|${W}|${H}|${s}|${JSON.stringify([a.text, a.size, a.bold, a.outline, a.font, a.box, a.align, a.color])}`
+  return drawWarpedSmooth(ctx, key, dst, bw + 2 * m, bh + 2 * m, (c, k) => {
+    c.scale(k, k); c.translate(m - b.x * W, m - b.y * H)
+    c.lineJoin = 'round'; c.lineCap = 'round'
+    drawText(c, flat, W, H, s)
+  })
+}
+
+// A picture or text warped with perspective, drawn smooth. Straight onto the picture, its far end
+// (where the floor shrinks it a lot) and the edges of the mesh came out jagged, worse with thin
+// fonts. So the flat thing is drawn as fine as the warp shows it at its largest, the mesh is drawn
+// onto a canvas SUPERSAMPLE times finer than the picture, and that is drawn down onto the picture
+// with high-quality smoothing. The result is kept for the next frames while nothing about it
+// changes. sw × sh: the flat thing's size in picture pixels; paint draws it flat, k times that size.
+// False without OffscreenCanvas.
+const SUPERSAMPLE = 3
+const MAX_PIXELS = 16_000_000
+interface Warped { canvas: OffscreenCanvas; x: number; y: number; w: number; h: number }
+const warpCache = new Map<string, Warped>()
+function drawWarpedSmooth(ctx: Ctx, key: string, dst: Quad, sw: number, sh: number, paint: (c: OffscreenCanvasRenderingContext2D, k: number) => void): boolean {
+  if (typeof OffscreenCanvas === 'undefined' || !(sw > 0 && sh > 0)) return false
+  const t = typeof ctx.getTransform === 'function' ? ctx.getTransform() : null
+  const dpr = t ? Math.max(Math.hypot(t.a, t.b), Math.hypot(t.c, t.d)) || 1 : 1
+  const cvs = (ctx as { canvas?: { width: number; height: number } }).canvas
+  const full = `${key}|${dpr.toFixed(3)}|${t ? `${t.e.toFixed(1)},${t.f.toFixed(1)}` : ''}|${JSON.stringify(dst)}`
+  let hit = warpCache.get(full)
+  if (hit) { warpCache.delete(full); warpCache.set(full, hit) } // the most recent last
+  else {
+    hit = warpSmooth(dst, sw, sh, paint, dpr, t && cvs && !t.b && !t.c ? { x0: -t.e / t.a, y0: -t.f / t.d, x1: (cvs.width - t.e) / t.a, y1: (cvs.height - t.f) / t.d } : null) ?? undefined
+    if (!hit) return false
+    warpCache.set(full, hit)
+    while (warpCache.size > 24) warpCache.delete(warpCache.keys().next().value!)
+  }
+  if (hit.w > 0 && hit.h > 0) {
+    ctx.save()
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(hit.canvas, hit.x, hit.y, hit.w, hit.h)
+    ctx.restore()
+  }
   return true
+}
+
+function warpSmooth(dst: Quad, sw: number, sh: number, paint: (c: OffscreenCanvasRenderingContext2D, k: number) => void, dpr: number,
+  view: { x0: number; y0: number; x1: number; y1: number } | null): Warped | null {
+  // Only the part that can show: the quad's bounds, cut to the canvas.
+  const xs = dst.map(p => p[0]), ys = dst.map(p => p[1])
+  const lo = (a: number, b: number) => Math.min(a, b), hi = (a: number, b: number) => Math.max(a, b)
+  const x0 = Math.floor(Math.max(Math.min(...xs), view ? lo(view.x0, view.x1) : -Infinity)) - 1
+  const y0 = Math.floor(Math.max(Math.min(...ys), view ? lo(view.y0, view.y1) : -Infinity)) - 1
+  const x1 = Math.ceil(Math.min(Math.max(...xs), view ? hi(view.x0, view.x1) : Infinity)) + 1
+  const y1 = Math.ceil(Math.min(Math.max(...ys), view ? hi(view.y0, view.y1) : Infinity)) + 1
+  const dummy = new OffscreenCanvas(1, 1)
+  if (!(x1 > x0 && y1 > y0) || !isFinite(x0 + y0 + x1 + y1)) return { canvas: dummy, x: 0, y: 0, w: 0, h: 0 } // all of it off the picture
+  let k = SUPERSAMPLE * dpr
+  if ((x1 - x0) * (y1 - y0) * k * k > MAX_PIXELS) k = Math.sqrt(MAX_PIXELS / ((x1 - x0) * (y1 - y0)))
+  const len = (p: Pt, q: Pt) => Math.hypot(q[0] - p[0], q[1] - p[1])
+  const most = Math.max(len(dst[0], dst[1]) / sw, len(dst[2], dst[3]) / sw, len(dst[0], dst[2]) / sh, len(dst[1], dst[3]) / sh)
+  const ks = Math.max(0.25, Math.min(Math.min(most, 6) * k, 8192 / sw, 8192 / sh, Math.sqrt(MAX_PIXELS / (sw * sh))))
+  const src = new OffscreenCanvas(Math.max(1, Math.ceil(sw * ks)), Math.max(1, Math.ceil(sh * ks))), sc = src.getContext('2d')
+  const out = new OffscreenCanvas(Math.max(1, Math.ceil((x1 - x0) * k)), Math.max(1, Math.ceil((y1 - y0) * k))), oc = out.getContext('2d')
+  if (!sc || !oc) return null
+  sc.imageSmoothingEnabled = true; sc.imageSmoothingQuality = 'high'
+  paint(sc, ks)
+  oc.imageSmoothingEnabled = true; oc.imageSmoothingQuality = 'high'
+  oc.scale(k, k); oc.translate(-x0, -y0)
+  drawWarped(oc, src, { x: 0, y: 0, w: sw * ks, h: sh * ks }, dst, WARP_STEPS, 1.2 / k)
+  return { canvas: out, x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+// An id for each picture drawn, so the cache can tell a picture from one loaded in its place.
+const imageIds = new WeakMap<object, number>()
+let nextImageId = 1
+const imageId = (img: CanvasImageSource): number => {
+  let id = imageIds.get(img as object)
+  if (!id) { id = nextImageId++; imageIds.set(img as object, id) }
+  return id
 }
 
 // Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
@@ -852,7 +948,8 @@ export function roundCoords(a: Annotation): Annotation {
   switch (a.kind) {
     case 'text': return { ...a, x: r(a.x), y: r(a.y), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}) }
     case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2), ...(a.c1 && a.c2 ? { c1: [r(a.c1[0]), r(a.c1[1])] as Pt, c2: [r(a.c2[0]), r(a.c2[1])] as Pt } : {}) }
-    case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}) }
+    case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}),
+      ...(a.flat ? { flat: { x: r(a.flat.x), y: r(a.flat.y), w: r(a.flat.w), h: r(a.flat.h) } } : {}) }
     case 'circle': case 'rect': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }
     default: return { ...a, points: a.points.map(([x, y]) => [r(x), r(y)] as [number, number]) }
   }

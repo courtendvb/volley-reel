@@ -181,6 +181,15 @@ export function floorQuad(corners: CourtFit['corners'], left: Pt, right: Pt, asp
   return floorRectQuad(corners, { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, { x: (B.x - A.x) / wm, y: (B.y - A.y) / wm }, wm, wm / aspect)
 }
 
+// Laid in the middle of the near or far half (a team's logo, say), square to the lines and reading
+// from the camera: as wide as `share` of the court's width, aspect its width / height, but never longer
+// than most of the half.
+export function halfFloorQuad(corners: CourtFit['corners'], part: 'near' | 'far', aspect: number, share = 0.7): FloorQuad | null {
+  if (!(aspect > 0)) return null
+  const hm = Math.min((COURT_W * share) / aspect, (COURT_L / 2) * 0.8)
+  return floorRectQuad(corners, { x: COURT_W / 2, y: part === 'near' ? COURT_L * 0.75 : COURT_L * 0.25 }, { x: 1, y: 0 }, hm * aspect, hm)
+}
+
 // Laid again where it lies, for a new aspect (its text was changed): same middle and way on the
 // floor, its height times `scale` (its font size changed), its width from the aspect. Null when its
 // corners are off the floor.

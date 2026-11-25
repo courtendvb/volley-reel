@@ -3,7 +3,7 @@
 // moves and restyles (text, pictures, boxes), and charts placed on the slide (Slide.charts), so it can
 // be finished by hand with arrows and notes. Pure: no files, no DOM.
 import type { Annotation } from './annotation'
-import { DEFAULT_CHART, chartWidth, type ChartDisplay, type ChartStyle, type DirectionChart } from './chart'
+import { DEFAULT_CHART, chartCourt, chartWidth, type ChartDisplay, type ChartStyle, type DirectionChart } from './chart'
 import { directionChart } from './court'
 import { mix } from './overlayDraw'
 import { setterCourts, setterSets, splitSets, type SetLayout, type SetterSet } from './setterBoard'
@@ -445,6 +445,9 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     else charts.push({ chart: directionChart(plays[0], style, () => plays), x, y, h })
   }
   const countOf = (p: BoardPlayer, plays: Play[]) => (skill === 'E' ? setDistribution(p).total : plays.length)
+  // Under a serve chart the notes are as wide as its court, lined up with its side lines; elsewhere, the column.
+  // (The chart's numbers are in picture heights; across the slide they are divided by its aspect.)
+  const courtSpan = (x: number, h: number) => { const c = chartCourt({ x: 0, y: 0, h }, style.name); return { x: x + c.left / ASPECT, w: c.w / ASPECT } }
   columns.forEach((p, i) => {
     const left = i * col + EDGE, width = col - EDGE * 2
     const types = skill === 'S' ? serveTypes(p.plays) : []
@@ -477,11 +480,13 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
         annotations.push(attentionTag(Math.min(after + half, left + headW - half), 0.028 + ((nameSize - tagSize) * 0.6) / 720 - 3 / 720, tagSize, nameGroup))
       }
     }
-    if (opts.notes) {
-      const note = notesBox(left, width, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length, opts.noteSize, opts.noteFills, notesGroup)
+    const notesAt = (x: number, w: number) => {
+      if (!opts.notes) return
+      const note = notesBox(x, w, (opts.noteTexts ?? []).slice(i * NOTE_LINES.length, (i + 1) * NOTE_LINES.length), columns.length, opts.noteSize, opts.noteFills, notesGroup)
       noteIds.push(...note.map(a => a.id))
       annotations.push(...note)
     }
+    const notesUnder = (x: number, h: number) => { if (skill === 'S') { const c = courtSpan(x, h); notesAt(c.x, c.w) } else notesAt(left, width) }
 
     if (narrow) {
       // The card above the chart: the photo, the position and rates beside it.
@@ -498,6 +503,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
       place(p, main, cx, y, h)
       if (mainLabel && !shared) annotations.push(tag(cx + 0.004, y + 0.006, mainLabel, 11, mainColor))
       annotations.push(words(left + width / 2, y + h + 0.006, `n: ${countOf(p, main)}`, 13, ink, { align: 'center' }))
+      notesUnder(cx, h)
       return
     }
 
@@ -505,6 +511,7 @@ export function boardSlide(columns: BoardPlayer[], skill: BoardSkill, opts: Boar
     const room = width - strip - EDGE, chartX = left + strip + EDGE
     const h = Math.min(bottom - TOP - 0.035, room / widthOf(1))
     place(p, main, chartX, TOP, h)
+    notesUnder(chartX, h)
     if (mainLabel) annotations.push(tag(chartX + 0.006, TOP + 0.008, mainLabel, 15, mainColor))
     annotations.push(words(chartX + widthOf(h) / 2, TOP + h + 0.008, `n: ${countOf(p, main)}`, 16, ink, { align: 'center' }))
     let y = TOP

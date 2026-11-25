@@ -357,7 +357,7 @@ export function AnnotationLayer(p: Props) {
       // Shift: box corners keep their proportions; vertices and arrow ends line up with a neighbor.
       const snap = e.shiftKey && /^([pc][12]|[vm]\d+)$/.test(drag.handle)
       const [sx, sy] = snap ? snapToNeighbors(cur, drag.handle, x, y, p.size.w, p.size.h) : [x, y]
-      const r = dragHandle(cur, drag.handle, sx, sy, { keepAspect: e.shiftKey && !snap })
+      const r = dragHandle(cur, drag.handle, sx, sy, { keepAspect: e.shiftKey && !snap, floor: p.floor ? { corners: p.floor, W: p.size.w, H: p.size.h } : null })
       replace(r.a)
       if (r.id !== drag.handle) setDrag({ ...drag, handle: r.id }) // a midpoint became a vertex
       return

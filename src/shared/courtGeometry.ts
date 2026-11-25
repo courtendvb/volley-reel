@@ -251,6 +251,35 @@ export function restandQuad(corners: CourtFit['corners'], W: number, H: number, 
   return standOn(corners, W, H, s.c, s.e, s.hm * scale * aspect, s.hm * scale)
 }
 
+// Made larger or smaller from corner i (0..3: top-left, top-right, bottom-left, bottom-right) dragged
+// to `to` (a point of the picture, 0..1): the same shape and way on the floor, the opposite corner
+// staying where it is (stood up: the foot on the other side). Null off the floor.
+export function resizeOnFloor(corners: CourtFit['corners'], W: number, H: number, quad: FloorQuad, stand: boolean, i: number, to: Pt): FloorQuad | null {
+  const o = 3 - i, MIN = 0.05
+  if (stand) {
+    const s = standParts(corners, W, H, quad)
+    if (!s) return null
+    // How far along the diagonal, in the picture: as the corner shows from the opposite one.
+    const dx = (quad[i][0] - quad[o][0]) * W, dy = (quad[i][1] - quad[o][1]) * H, d2 = dx * dx + dy * dy
+    if (!(d2 > 1e-9)) return null
+    const k = Math.max(MIN, ((to.x - quad[o][0]) * W * dx + (to.y - quad[o][1]) * H * dy) / d2)
+    const side = i % 2 === 0 ? 1 : -1 // dragging a left corner keeps the right foot
+    const foot = { x: s.c.x + side * s.e.x * s.wm / 2, y: s.c.y + side * s.e.y * s.wm / 2 }
+    const c = { x: foot.x - side * s.e.x * s.wm * k / 2, y: foot.y - side * s.e.y * s.wm * k / 2 }
+    return standOn(corners, W, H, c, s.e, s.wm * k, s.hm * k)
+  }
+  const hom = homography(corners)
+  const f = quad.map(([x, y]) => floorAt({ corners }, { x, y }))
+  const p = floorAt({ corners }, to)
+  if (f.some(q => !q) || !p) return null
+  const m = (f as Pt[]).map(toMetres), O = m[o], C = m[i], P = toMetres(p)
+  const dx = C.x - O.x, dy = C.y - O.y, d2 = dx * dx + dy * dy
+  if (!(d2 > 1e-9)) return null
+  const k = Math.max(MIN, ((P.x - O.x) * dx + (P.y - O.y) * dy) / d2)
+  const out = m.map(q => { const r = project(hom, (O.x + (q.x - O.x) * k) / COURT_W, (O.y + (q.y - O.y) * k) / COURT_L); return [r.x, r.y] as [number, number] })
+  return [out[0], out[1], out[2], out[3]]
+}
+
 // Moved over the floor by dx, dy of the picture (0..1): the point under its middle (a board: the
 // middle of its foot) goes there, and it is drawn again as the floor shows it there, the same size
 // and way on the floor. So it changes shape as it goes: wider near the camera, slanted at the sides.

@@ -46,7 +46,11 @@ export function useSceneStore({ latest, setActiveClipId, setProject, setError }:
         }
       }
       if (video) setVideoId(video)
-      if (scene) showScene(scene)
+      // The open scene put back with its open clip still in it (an object on the clip edited, say)
+      // stays as it is, so the clip and its selected object stay open for editing.
+      const open = latest.current, back = scene ? list.find(e => e.kind === 'scene' && e.id === scene) : null
+      const keep = scene && open.reelId === scene && open.activeClipId && back?.kind === 'scene' && back.value?.clips[open.activeClipId]
+      if (scene && !keep) showScene(scene)
     },
   })
   const putScene = (r: Reel) => {

@@ -664,8 +664,11 @@ export function drawCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, style0:
     else drawLandingFx(ctx, w, h, fit, fxKind, impact, ripple ?? landingFxStill[fxKind], style0.rippleColor, trackOf(zones))
   }
   if (after != null && zones) drawAfter(ctx, w, h, fit, style0, zones, after)
-  // The shares: standing on poles with the place's name (the usual), or the number alone on the floor.
-  if (shares.length && zones?.player?.setCourt?.look === 'floor') drawShareFloor(ctx, shares, Math.max(16, w / 32), at)
+  // The shares: standing on poles with the place's name (the usual), or the number alone on the floor,
+  // lying or standing (standing needs the camera; without it, lying).
+  const shareLook = zones?.player?.setCourt?.look, camera = shares.length ? courtCamera(inPixels(fit, w, h), w, h) : null
+  if (shares.length && shareLook === 'stand' && camera) drawShareStand(ctx, shares, camera)
+  else if (shares.length && (shareLook === 'floor' || shareLook === 'stand')) drawShareFloor(ctx, shares, Math.max(16, w / 32), at)
   else if (shares.length) drawSharePoles(ctx, shares, Math.max(11, w / 55), courtCamera(inPixels(fit, w, h), w, h))
   if (zones?.player?.setChart) drawSetChart(ctx, zones.player.setChart, setChartBox(w, h, style.setChart ?? DEFAULT_SET_CHART), style.setChart?.view, !!style.setChart?.flip)
   if (zones?.player?.chart) drawChart(ctx, zones.player.chart, chartBox(w, h, style.chart?.corner ?? 'tr', style.chart?.scale, zones.player.chart.look.name))
@@ -887,6 +890,55 @@ function drawShareFloor(ctx: Ctx, labels: ShareLabel[], fs: number, at: (u: numb
     ctx.font = `bold ${b.f}px sans-serif`
     ctx.lineWidth = Math.max(3, b.f * 0.16); ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(l.share, 0, 0)
     ctx.fillStyle = '#FFFFFF'; ctx.fillText(l.share, 0, 0)
+    ctx.restore()
+  }
+  ctx.restore()
+}
+
+// SetShareLook 'stand': each place's share, the number alone standing upright on the floor at the
+// place's middle like a cut-out sign, its face square to the court's length (read from the camera's
+// end), SHARE_STAND_M tall: nearer ones larger, as the camera sees them. White with a dark edge and a
+// soft shadow under its foot. Numbers that would overlap on the picture are made smaller together;
+// any still overlapping are drawn far to near, so the nearer stands in front.
+export const SHARE_STAND_M = 0.9
+function drawShareStand(ctx: Ctx, labels: ShareLabel[], camera: (u: number, v: number, z: number) => Pt): void {
+  const F = 100, cap = F * 0.72 // the number drawn at F px; its digits' height
+  ctx.save()
+  ctx.font = `bold ${F}px sans-serif`
+  const widths = labels.map(l => ctx.measureText(l.share).width)
+  // The sign at a place, hm metres tall: its foot's ends and its top's left end on the picture.
+  const sign = (l: ShareLabel, tw: number, hm: number) => {
+    const half = (hm * tw) / cap / 2 / COURT_W_M
+    let a = camera(l.court.x - half, l.court.y, 0), b = camera(l.court.x + half, l.court.y, 0), dir = -1
+    if (b.x < a.x) { [a, b] = [b, a]; dir = 1 } // its left on the picture's left
+    const top = camera(l.court.x + dir * half, l.court.y, hm), foot = camera(l.court.x, l.court.y, 0)
+    const tr = { x: top.x + b.x - a.x, y: top.y + b.y - a.y }
+    return { a, b, top, foot, x0: Math.min(a.x, top.x), x1: Math.max(b.x, tr.x), y0: Math.min(top.y, tr.y), y1: Math.max(a.y, b.y) }
+  }
+  type Sign = ReturnType<typeof sign>
+  // Apart by some room (half the taller one's height), so neighbours read as separate numbers.
+  const clash = (p: Sign, q: Sign) => { const m = Math.max(p.y1 - p.y0, q.y1 - q.y0) * 0.5; return p.x0 < q.x1 + m && q.x0 < p.x1 + m && p.y0 < q.y1 + m && q.y0 < p.y1 + m }
+  let signs: Sign[] = []
+  for (const k of [1, 0.85, 0.7, 0.55, 0.45]) {
+    signs = labels.map((l, i) => sign(l, widths[i], SHARE_STAND_M * k))
+    if (signs.every((p, i) => signs.every((q, j) => j <= i || !clash(p, q)))) break
+  }
+  const order = labels.map((_, i) => i).sort((i, j) => signs[i].y1 - signs[j].y1) // far (higher on the picture) first
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round'
+  for (const i of order) {
+    const s = signs[i], fw = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y)
+    // A soft shadow on the floor under the foot.
+    ctx.save()
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'
+    ctx.beginPath(); ctx.ellipse(s.foot.x, s.foot.y, fw * 0.5, Math.max(2, fw * 0.07), Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x), 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+    // Text space (x across its width, y down from the digits' top to the baseline at 0) onto the sign.
+    const tw = widths[i], mx = (s.a.x + s.b.x) / 2, my = (s.a.y + s.b.y) / 2
+    const ux = { x: (s.b.x - s.a.x) / tw, y: (s.b.y - s.a.y) / tw }, uy = { x: (s.a.x - s.top.x) / cap, y: (s.a.y - s.top.y) / cap }
+    ctx.save()
+    ctx.transform(ux.x, ux.y, uy.x, uy.y, mx, my)
+    ctx.lineWidth = F * 0.14; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(labels[i].share, 0, 0)
+    ctx.fillStyle = '#FFFFFF'; ctx.fillText(labels[i].share, 0, 0)
     ctx.restore()
   }
   ctx.restore()

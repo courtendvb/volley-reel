@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { DEFAULT_CHART, type ChartScope } from '../../../shared/chart'
 import { CONE_COLOR, DEFAULT_CORNERS, HEAT_OPACITY, RIPPLE_COLOR, RIPPLE_LEAD_MAX, markSkill, type CourtFit, type GridStyle, type MarkSkill, type PlayerMarkStyle } from '../../../shared/court'
 import type { Match } from '../../../shared/types'
-import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilterCount, type SetChartView, type SetCourtLayer, type SetFilter, type SetPhase } from '../../../shared/setChart'
+import { DEFAULT_SET_CHART, DEFAULT_SET_COURT, REC_EFFECTS, SCORE_BANDS, setFilterCount, type SetChartView, type SetCourtLayer, type SetFilter, type SetPhase, type SetShareLook } from '../../../shared/setChart'
 import { effectName, skillName } from '../../../shared/labels'
 import type { MarkRange } from '../../../shared/markRange'
 import { getLang, t } from '../../../shared/i18n'
@@ -244,9 +244,9 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               </select>
             )}
             {m.setCourt?.layer === 'shares' && (
-              <select aria-label={t('割合の書き方')} title={t('割合の書き方。ポール: エリア名と割合を札にしてポールで立てる。床: 割合の数字だけを床に書く')} value={m.setCourt.look ?? 'poles'}
-                onChange={e => put('setCourt', { layer: 'shares', ...(e.target.value === 'floor' ? { look: 'floor' as const } : {}) })}>
-                <option value="poles">{t('ポール')}</option><option value="floor">{t('床に数字')}</option>
+              <select aria-label={t('割合の書き方')} title={t('割合の書き方。ポール: エリア名と割合を札にしてポールで立てる。床: 割合の数字だけを床に書く。立てる: 割合の数字だけを床の上に立てる')} value={m.setCourt.look ?? 'poles'}
+                onChange={e => put('setCourt', { layer: 'shares', ...(e.target.value === 'floor' || e.target.value === 'stand' ? { look: e.target.value as SetShareLook } : {}) })}>
+                <option value="poles">{t('ポール')}</option><option value="floor">{t('床に数字')}</option><option value="stand">{t('床に立てる')}</option>
               </select>
             )}
           </Layer>

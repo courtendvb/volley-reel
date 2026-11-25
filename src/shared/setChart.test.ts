@@ -101,6 +101,8 @@ describe('the set chart', () => {
     expect(cleanSetChart({}).flip).toBeUndefined()
     expect(cleanSetCourt({ layer: 'spots' })).toEqual({ layer: 'spots' })
     expect(cleanSetCourt({ layer: 'x' })).toEqual({ layer: 'shares' })
+    expect(cleanSetCourt({ layer: 'shares', look: 'stand' })).toEqual({ layer: 'shares', look: 'stand' })
+    expect(cleanSetCourt({ layer: 'shares', look: 'up' })).toEqual({ layer: 'shares' })
   })
   it('keeps to the rotations, setter calls and the other team rotations asked for', () => {
     const coded = [

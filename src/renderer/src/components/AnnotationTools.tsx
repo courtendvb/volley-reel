@@ -5,7 +5,7 @@ import { ZonePainter } from './ZonePainter'
 import { Help } from './CourtControls'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
-  COLORS, DEFAULT_TEXT_BOX, asOneObject, isZonePaint, sameChange, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
+  COLORS, DEFAULT_TEXT_BOX, imageOnFloor, type ImageFloorMode, asOneObject, isZonePaint, sameChange, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
   layTextOnFloor, refloorTexts, standTextOnFloor, withTextQuad,
   type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
@@ -181,23 +181,35 @@ export function AnnotationTools(p: Props) {
         )}
         {sel?.kind === 'image' && !p.cropping && (
           <>
-            {/* Perspective: the picture's four corners dragged one by one, or laid on the fitted court. */}
-            <select className="persp" value={sel.quad ? 'on' : 'off'} disabled={p.disabled} aria-label={t('遠近')}
+            {/* Perspective: the picture's four corners dragged one by one, laid on the fitted court's
+                floor or stood on it (its shape kept, it then moves over the floor), or stretched to the court. */}
+            {(() => {
+              const onFloor = (m: ImageFloorMode) => (p.court ? imageOnFloor(sel, m, p.court, frame.w, frame.h) : null)
+              const floors = { lay: onFloor('lay'), stand: onFloor('stand'), nearMid: onFloor('near'), farMid: onFloor('far') }
+              return (
+            <select className="persp" value={!sel.quad ? 'off' : sel.floor ?? 'on'} disabled={p.disabled} aria-label={t('遠近')}
               title={t('遠近')}
               onChange={e => {
                 const v = e.target.value
                 if (v === 'off') update(withQuad(sel, null))
                 else if (v === 'here') update(withQuad(sel, boxQuad(sel)))
-                else if (p.court) update(withQuad(sel, courtQuad(p.court, v as CourtPart)))
+                else if (v in floors) { const f = floors[v as keyof typeof floors]; if (f) update(f) }
+                else if (p.court) update(withQuad(withQuad(sel, null), courtQuad(p.court, v as CourtPart)))
               }}>
               <option value="off">{t('遠近なし')}</option>
-              {sel.quad ? <option value="on">{t('遠近あり（四隅をドラッグ）')}</option> : <option value="here">{t('遠近をつける（この位置で）')}</option>}
+              {sel.quad && !sel.floor ? <option value="on">{t('遠近あり（四隅をドラッグ）')}</option> : !sel.quad && <option value="here">{t('遠近をつける（この位置で）')}</option>}
+              <option value="lay" disabled={!floors.lay}>{t('床に沿わせる')}</option>
+              <option value="stand" disabled={!floors.stand}>{t('床に立たせる')}</option>
+              <option value="nearMid" disabled={!floors.nearMid}>{t('手前のコートの中央に大きく')}</option>
+              <option value="farMid" disabled={!floors.farMid}>{t('奥のコートの中央に大きく')}</option>
               <option value="full" disabled={!p.court}>{t('コート全体に合わせる')}</option>
               <option value="near" disabled={!p.court}>{t('手前のコートに合わせる')}</option>
               <option value="far" disabled={!p.court}>{t('奥のコートに合わせる')}</option>
             </select>
-            <Help text={[p.court ? t('画像の四隅を別々に動かして遠近をつけます。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）') : t('画像の四隅を別々に動かして遠近をつけます。コートのグリッドを合わせてあれば、コートにも合わせられます')]} />
-            {sel.quad && (
+              )
+            })()}
+            <Help text={[p.court ? t('画像の四隅を別々に動かして遠近をつけます。床に沿わせる・立たせると、縦横の比はそのままでコートの遠近に合わせ、動かすと床の上を動きます（チームのロゴを各コートの中央に大きく置くと、どちらのチームか分かります）。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）') : t('画像の四隅を別々に動かして遠近をつけます。コートのグリッドを合わせてあれば、コートにも合わせられます')]} />
+            {sel.quad && sel.floor !== 'stand' && (
               <button disabled={p.disabled} title={t('画像を上下左右逆にする（反対側から見た図のとき）')}
                 onClick={() => { const q = sel.quad!; update(withQuad(sel, [q[3], q[2], q[1], q[0]])) }}>{t('180°回転')}</button>
             )}

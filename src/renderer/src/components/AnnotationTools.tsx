@@ -10,6 +10,8 @@ import {
   type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, setCurved, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
+import { alignObjects, centerInFrame, distributeObjects, unitCount, type AlignHow, type Axis } from '../../../shared/annotationAlign'
+import { annBoxOf } from '../annFrame'
 import { forgetColor, usePalette } from '../palette'
 import { playback } from '../playback'
 import type { AnnScope } from '../../../shared/annotationScope'
@@ -343,6 +345,35 @@ export function AnnotationTools(p: Props) {
             ? <button onClick={() => update(setCurved(sel, false))} title={t('曲線の矢印をまっすぐに戻す')}>{t('まっすぐにする')}</button>
             : <button onClick={() => update(setCurved(sel, true))} title={t('矢印を曲線にする（青い点を動かして曲げる）')}>{t('曲線にする')}</button>)}
         </Group>}
+        {sel && (() => {
+          // Lining up: a group counts as one object; one object on its own lines up with the picture.
+          const units = unitCount(p.annotations, many), one = units < 2
+          const align = (how: AlignHow) => p.onChange(alignObjects(p.annotations, many, how, annBoxOf()))
+          const spread = (axis: Axis) => p.onChange(distributeObjects(p.annotations, many, axis, annBoxOf()))
+          const center = (axis: Axis) => p.onChange(centerInFrame(p.annotations, many, axis, annBoxOf()))
+          const ALIGN: [AlignHow, string, string][] = [
+            ['left', t('左揃え'), t('画面の左端へ')], ['hcenter', t('左右中央揃え'), t('画面の左右中央へ')], ['right', t('右揃え'), t('画面の右端へ')],
+            ['top', t('上揃え'), t('画面の上端へ')], ['vcenter', t('上下中央揃え'), t('画面の上下中央へ')], ['bottom', t('下揃え'), t('画面の下端へ')],
+          ]
+          return (
+            <Group title={t('配置')}>
+              <span className="align-btns">
+                {ALIGN.map(([how, label, alone]) => (
+                  <button key={how} className="icon-btn" aria-label={label} disabled={p.disabled} onClick={() => align(how)}
+                    title={one ? t('{0}（{1}）', label, alone) : label}><AlignIcon how={how} /></button>
+                ))}
+              </span>
+              <span className="align-btns">
+                <button className="icon-btn" aria-label={t('左右に等間隔')} disabled={p.disabled || units < 3} onClick={() => spread('x')}
+                  title={units < 3 ? t('左右に等間隔（3つ以上を選んだとき）') : t('左右に等間隔')}><SpreadIcon axis="x" /></button>
+                <button className="icon-btn" aria-label={t('上下に等間隔')} disabled={p.disabled || units < 3} onClick={() => spread('y')}
+                  title={units < 3 ? t('上下に等間隔（3つ以上を選んだとき）') : t('上下に等間隔')}><SpreadIcon axis="y" /></button>
+              </span>
+              <button disabled={p.disabled} onClick={() => center('x')} title={t('選んだものを、並びはそのままで画面の左右中央へ動かす')}>{t('画面の左右中央')}</button>
+              <button disabled={p.disabled} onClick={() => center('y')} title={t('選んだものを、並びはそのままで画面の上下中央へ動かす')}>{t('画面の上下中央')}</button>
+            </Group>
+          )
+        })()}
       </div>
 
       <div className="ann-row">
@@ -390,6 +421,26 @@ export function AnnotationTools(p: Props) {
       </div>
     </div>
   )
+}
+
+// Office-like icons for lining up: the line they meet, and two bars of different lengths on it.
+function AlignIcon({ how }: { how: AlignHow }) {
+  const x = how === 'left' || how === 'hcenter' || how === 'right'
+  const at = how === 'left' || how === 'top' ? 2 : how === 'right' || how === 'bottom' ? 14 : 8
+  const bar = (len: number, off: number) => {
+    const s = how === 'left' || how === 'top' ? at : how === 'right' || how === 'bottom' ? at - len : at - len / 2
+    return x ? <rect x={s} y={off} width={len} height={3.5} rx={0.5} /> : <rect x={off} y={s} width={3.5} height={len} rx={0.5} />
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      {x ? <rect x={at - 0.5} y={1} width={1} height={14} /> : <rect x={1} y={at - 0.5} width={14} height={1} />}
+      {bar(11, 3.5)}{bar(7, 9)}
+    </svg>
+  )
+}
+function SpreadIcon({ axis }: { axis: Axis }) {
+  const r = (p: number, len: number) => (axis === 'x' ? <rect x={p} y={8 - len / 2} width={3} height={len} rx={0.5} /> : <rect x={8 - len / 2} y={p} width={len} height={3} rx={0.5} />)
+  return <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">{r(1, 12)}{r(6.5, 7)}{r(12, 10)}</svg>
 }
 
 function Group({ title, children }: { title: string; children: ReactNode }) {

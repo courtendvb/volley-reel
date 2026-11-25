@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type 
 import { composing } from '../keys'
 import {
   animAt, applyStyle, bounds, curveControls, drawAnnotation, fadeAlpha, isAnimated, hitTest, normalizeBox, pointsBox, translate, visibleAt, withGroups,
-  type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle } from '../../../shared/annotation'
+  type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle, refloorTexts } from '../../../shared/annotation'
 import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
@@ -307,7 +307,8 @@ export function AnnotationLayer(p: Props) {
     if (!drag) return
     if (drag.mode === 'move') {
       const dx = x - drag.from[0], dy = y - drag.from[1]
-      const moved = new Map([drag.orig, ...drag.others].map(a => [a.id, translate(a, dx, dy)]))
+      const floor = p.floor ? { corners: p.floor, W: p.size.w, H: p.size.h } : null // texts on the floor move over it
+      const moved = new Map([drag.orig, ...drag.others].map(a => [a.id, translate(a, dx, dy, floor)]))
       const next = annsRef.current.map(a => moved.get(a.id) ?? a)
       annsRef.current = next
       p.onChange(next)
@@ -392,7 +393,9 @@ export function AnnotationLayer(p: Props) {
     if (t.id) {
       // A box of a fixed width (a note line) stays when emptied: it is still there to write in.
       const stays = p.annotations.some(a => a.id === t.id && a.kind === 'text' && a.box?.width)
-      p.onChange(value || stays ? p.annotations.map(a => (a.id === t.id && a.kind === 'text' ? { ...a, text: value } : a)) : p.annotations.filter(a => a.id !== t.id))
+      const next = value || stays ? p.annotations.map(a => (a.id === t.id && a.kind === 'text' ? { ...a, text: value } : a)) : p.annotations.filter(a => a.id !== t.id)
+      // A text on the floor is laid again for its new words.
+      p.onChange(p.floor ? refloorTexts(ctx2d(), p.annotations, next, p.floor, p.size.w, p.size.h) : next)
       return
     }
     if (!value) return

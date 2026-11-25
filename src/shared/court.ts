@@ -3,7 +3,7 @@
 // selected play's DVW start and end zones — or their sub-zones A–D — are lit on it; a serve's start
 // zone lies behind the end line, split in five. Pure: the draw function takes a canvas context, no DOM access.
 import type { PlacedChart } from './board'
-import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_NAMES, SET_TARGETS, drawSetChart, foldBack, setChart, setChartBox, setExtremes, type SetChart, type SetCourtLayer, type SetShareLook } from './setChart'
+import { DEFAULT_SET_CHART, SET_AREAS, SET_COLORS, SET_TARGETS, drawSetChart, foldBack, setChart, setChartBox, setExtremes, setTargetName, type SetChart, type SetCourtLayer, type SetShareLook } from './setChart'
 import { LINE_OPACITY, chartBox, chartResult, chartStats, drawChart, type ChartDot, type ChartStyle, type DirectionChart } from './chart'
 import type { ClickPoint, Play } from './types'
 import { DEFAULT_GRID_STYLE, type GridStyle, markStyle } from './courtStyle'
@@ -765,7 +765,7 @@ function drawSetCourt(ctx: Ctx, w: number, h: number, fit: CourtFit, s: SetCourt
     ctx.globalAlpha = 0.2 + 0.45 * (n / top); ctx.fillStyle = SET_COLORS[k]; ctx.fill(); ctx.globalAlpha = 1
     if (k === most || k === least) { ctx.strokeStyle = k === most ? '#DC2626' : '#2563EB'; ctx.lineWidth = Math.max(3.5, w / 220); ctx.stroke() }
     const mu = (a.u[0] + a.u[1]) / 2, mv = (a.v[0] + a.v[1]) / 2
-    labels.push({ name: SET_NAMES[k], share: `${Math.round((n / c.total) * 100)}%`, ...on(mu, mv), court: unit(mu, mv), rise: n / top })
+    labels.push({ name: setTargetName(k), share: `${Math.round((n / c.total) * 100)}%`, ...on(mu, mv), court: unit(mu, mv), rise: n / top })
   }
   ctx.restore()
   return labels

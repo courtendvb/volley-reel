@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { EFFECTS, HITS, SKILLS, TEMPOS } from '../../../shared/labels'
+import { HIT_CODES, SKILL_CODES, TEMPO_CODES, effectName, effectNames, freeballName, hitName, skillName, tempoName } from '../../../shared/labels'
 import { EMPTY_FILTER, sameFilter, type Person, type PlayFilter, type SavedFilter, type detailOptions } from '../../../shared/filter'
 import type { ClipMode, RangeDefaults } from '../../../shared/reel'
 import { CheckPicker } from './CheckPicker'
@@ -29,11 +29,12 @@ interface Props {
 }
 
 const EFFECT_KEYS = ['#', '+', '!', '-', '/', '=']
-const NEAR_SKILLS: Record<string, string> = { ...SKILLS, F: 'Freeball' }
+const NEAR_SKILLS = [...SKILL_CODES, 'F']
+const nearSkillName = (s: string) => s === 'F' ? freeballName() : skillName(s)
 
 export function FilterPanel({ filter: f, onChange, people, details, targetCode, extract, onExtract, through, onThrough, range: d, onRange, shown, total, teamFilterLimited, dirUnknown, onAddAll, saved, onSaved }: Props) {
   const set = (patch: Partial<PlayFilter>) => onChange({ ...f, ...patch })
-  const effectHint = f.skills.length === 1 ? EFFECTS[f.skills[0]] : null
+  const effectHint = f.skills.length === 1 ? effectNames(f.skills[0]) : null
   const detailCount = f.tempos.length + f.combos.length + f.hits.length + f.startZones.length + f.endZones.length
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
@@ -88,7 +89,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           options={playerChoices.map(personOption)} />
       </div>
 
-      <Chips label={t('スキル')} values={Object.keys(SKILLS)} selected={f.skills} onChange={skills => set({ skills })} render={k => SKILLS[k]} />
+      <Chips label={t('スキル')} values={[...SKILL_CODES]} selected={f.skills} onChange={skills => set({ skills })} render={skillName} />
       <Chips label={t('評価')} values={EFFECT_KEYS} selected={f.effects} onChange={effects => set({ effects })}
         render={k => effectHint ? `${k} ${effectHint[k]}` : k} />
       <div className="filter-row">
@@ -113,7 +114,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         </div>
         {f.phase === 'reception' && (
           <Chips label={t('レセプション評価')} values={EFFECT_KEYS} selected={f.recEffects ?? []} onChange={recEffects => set({ recEffects })}
-            render={k => `${k} ${EFFECTS.R[k]}`} title={() => t('そのラリーのレセプションの評価で絞ります。レセプションアタックとそのトスは、もとのレセプションの評価で探します')} />
+            render={k => `${k} ${effectName('R', k)}`} title={() => t('そのラリーのレセプションの評価で絞ります。レセプションアタックとそのトスは、もとのレセプションの評価で探します')} />
         )}
         <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）')}
           skipTitle={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')} />
@@ -127,11 +128,11 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
       </div>
       {detailOpen && (
         <div className="filter-detail">
-          <Chips label={t('テンポ')} values={Object.keys(TEMPOS).filter(t => details.tempos.includes(t))} selected={f.tempos}
-            onChange={tempos => set({ tempos })} render={t => `${t} ${TEMPOS[t]}`} />
+          <Chips label={t('テンポ')} values={TEMPO_CODES.filter(t => details.tempos.includes(t))} selected={f.tempos}
+            onChange={tempos => set({ tempos })} render={t => `${t} ${tempoName(t)}`} />
           {details.hits.length > 0 && (
-            <Chips label={t('打ち方')} values={Object.keys(HITS).filter(h => details.hits.includes(h))} selected={f.hits}
-              onChange={hits => set({ hits })} render={h => `${h} ${HITS[h]}`} />
+            <Chips label={t('打ち方')} values={HIT_CODES.filter(h => details.hits.includes(h))} selected={f.hits}
+              onChange={hits => set({ hits })} render={h => `${h} ${hitName(h)}`} />
           )}
           {details.combos.length > 0 && (
             <Chips label={t('コンビ')} values={[...new Set([...details.combos.map(c => c.code), ...f.combos])]} selected={f.combos}
@@ -160,10 +161,10 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
 function Near({ f, set, which, label, title, skipTitle }: { f: PlayFilter; set: (p: Partial<PlayFilter>) => void; which: 'prev' | 'next'; label: string; title: string; skipTitle: string }) {
   const put = (s: string, v: unknown) => set({ [`${which}${s}`]: v } as Partial<PlayFilter>)
   const skills = f[`${which}Skills`], effects = f[`${which}Effects`], team = f[`${which}Team`], skipSet = f[`${which}SkipSet`]
-  const hint = skills.length === 1 ? EFFECTS[skills[0]] : null
+  const hint = skills.length === 1 ? effectNames(skills[0]) : null
   return (
     <>
-      <Chips label={label} values={Object.keys(NEAR_SKILLS)} selected={skills} onChange={v => put('Skills', v)} render={s => NEAR_SKILLS[s]} title={() => title} />
+      <Chips label={label} values={NEAR_SKILLS} selected={skills} onChange={v => put('Skills', v)} render={nearSkillName} title={() => title} />
       {(skills.length > 0 || effects.length > 0 || team !== 'any') && (
         <div className="filter-detail">
           <Chips label={t('{0}評価', label)} values={EFFECT_KEYS} selected={effects} onChange={v => put('Effects', v)}

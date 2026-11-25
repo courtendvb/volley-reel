@@ -43,6 +43,7 @@ export interface SmokeOpts {
   photos?: string // a .vrpack read in; the player-photo panel used through its buttons
   court?: boolean // the court grid fitted through its bar and corner handles
   maximize?: boolean // M and Esc with real keys, then the scene played maximized from its ⛶ with a real click
+  sceneKeys?: boolean // with 動画の構成 open, number keys put the selected play into that scene / take it out
   fold?: boolean // the list rows' six markers (only those on, all on the selected row) and the right column folded by click and Ctrl+B
   direction?: boolean // the court fitted, then the 向き buttons: up and down split the plays, the list shows ↑ ↓
   serveTouch?: boolean // a serve's hit and its reception's touch marked on the trim bar: the measured speed in the bar and the caption
@@ -180,6 +181,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.direction) return smokeDirection()
     if (opts.maximize) return smokeMaximize(res)
     if (opts.fold) return smokeFold(res)
+    if (opts.sceneKeys) return smokeSceneKeys(res)
     if (opts.slides) return smokeSlides(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.ov) return smokeOverlay(res, opts.ov)
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
@@ -1333,6 +1335,30 @@ export function installSmoke(h: SmokeHost): void {
     await sleep(200)
     const openTab = document.querySelector('.right-tabs [aria-selected=true]')?.textContent
     return { fold: { marks, before, after, openedByKey, foldedByKey, openTab } }
+  }
+
+  // 動画の構成 open: 2 puts the selected play into the video's second scene, 2 again takes it out,
+  // 9 (no such scene) only says so, Ctrl+Z puts it back; on the シーン tab, 1 is a marker again.
+  const smokeSceneKeys = async (res: PlayRef[]) => {
+    const button = (root: ParentNode, label: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.startsWith(label)) ?? null
+    const a = newReel('keys A'), b = newReel('keys B'), v = newVideo('keys video', [a.id, b.id])
+    setReels(rs => [...rs, a, b]); setVideos(vs => [...vs, v]); setReelId(a.id); setVideoId(v.id)
+    await waitFor(() => latest.current.video?.id === v.id || null, 20000, 'keys video')
+    ;(await waitFor(() => button(document.querySelector('.right-tabs')!, t('動画の構成')), 5000, 'video tab')).click()
+    jump(res[0]); await sleep(300)
+    const key = async (k: string, ctrl = false) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: ctrl, bubbles: true })); await sleep(200) }
+    const n = (id: string) => Object.keys(latest.current.reels.find(r => r.id === id)?.clips ?? {}).length
+    const counts = () => [n(a.id), n(b.id)]
+    await key('2'); const afterTwo = counts(), inMarker1 = latest.current.reels.find(r => r.id === b.id)?.groups[1].length ?? -1, notice1 = document.querySelector('.action-notice span')?.textContent ?? null
+    await api.smokeShot!('scene-keys.png')
+    await key('2'); const afterTwoAgain = counts()
+    await key('1'); await key('2'); const afterBoth = counts()
+    await key('9'); const afterNine = counts()
+    await key('z', true); const afterUndo = counts()
+    ;(await waitFor(() => button(document.querySelector('.right-tabs')!, cap(t('シーン'))), 5000, 'scene tab')).click(); await sleep(200)
+    const reelBefore = latest.current.reel?.id
+    await key('3'); const onSceneTab = counts(), sameReel = latest.current.reel?.id === reelBefore
+    return { sceneKeys: { afterTwo, inMarker1, notice1, afterTwoAgain, afterBoth, afterNine, afterUndo, onSceneTab, sameReel } }
   }
 
   // Which way plays go on screen: unknown before the court is fitted, then the 向き buttons in the

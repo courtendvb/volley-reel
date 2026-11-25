@@ -732,6 +732,30 @@ export function App() {
   }, [updateReel, withReel])
   const refsByMatchRef = useRef(refsByMatch)
   refsByMatchRef.current = refsByMatch
+  // With 動画の構成 open, number keys put the selected play into marker 1 of the video's scene of that
+  // number (the same number takes it out again; Ctrl+Z also undoes it).
+  const videoTabRef = useRef(false)
+  videoTabRef.current = rightTab === 'video' && !rightFolded
+  const sceneKey = useCallback((n: number) => {
+    const { video: v, reels: rs, selected: s } = latest.current
+    const id = v?.sceneIds[n - 1], target = id ? rs.find(r => r.id === id) : undefined
+    if (!target) { setActionNotice({ text: t('動画にシーン {0} がありません', n) }); return }
+    if (!s) return
+    const name = target.name || t('（名前なし）')
+    const have = Object.values(target.clips).find(c => c.matchId === s.matchId && c.playId === s.playId)
+    if (have) {
+      updateReel(removeClip(target, have.id))
+      if (latest.current.activeClipId === have.id) setActiveClipId(null)
+      setActionNotice({ text: t('シーン {0}「{1}」から外しました', n, name) })
+      return
+    }
+    const ref = refsByMatchRef.current[s.matchId]?.[s.playId]
+    if (!ref) return
+    // Into marker 1, in match order like a marker key puts it.
+    const { reel: next, ids } = addClips(target, [{ matchId: s.matchId, play: ref.play }], 'none', extractRef.current)
+    updateReel(toggleMarker(next, ids[0], 1, whenIn(next)))
+    setActionNotice({ text: t('シーン {0}「{1}」のマーカー 1 に入れました', n, name) })
+  }, [updateReel])
 
 
   const [seqPlaying, setSeqPlaying] = useState(false)
@@ -907,7 +931,7 @@ export function App() {
     latest, paused: settingsOpen || !!quickCode || !!codeEditing || !!scoutEditsOf, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
     scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
     undoRedo: kind => { const a = actionRef.current; if (kind === 'undo' && a?.undo) { a.undo(); setActionNotice(null) } else undoRedo(kind) }, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o), toggleRight: () => setRightFolded(f => !f),
-    activateClip, whenIn, jump, setAnnTool, trim, markerKey, editCode: r => setQuickCode(r),
+    activateClip, whenIn, jump, setAnnTool, trim, markerKey, sceneKey, videoTab: () => videoTabRef.current, editCode: r => setQuickCode(r),
     setTag: n => { const { reel: r, activeClipId: id } = latest.current; if (r && id && r.clips[id]) updateReel(setTag(r, id, n === '0' || r.clips[id].tag === n ? null : n)) },
   })
 

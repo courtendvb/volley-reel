@@ -147,6 +147,7 @@ export function corruptFirstReel(dir: string): void {
 // [VR_SMOKE_LOOK=1 [VR_SMOKE_EXPORT=<out.mp4>]: the ☀ picture correction set with its sliders, saved, a clip exported with and without it]
 // [VR_SMOKE_PRESETBLOCK=1: the block preset by middle split by the opposing setter, made newest match first]
 // [VR_SMOKE_FOLD=1: the list rows' six markers, the right column folded by its », Ctrl+B and the strip]
+// [VR_SMOKE_SCENEKEYS=1: with 動画の構成 open, number keys put the selected play into that scene and take it out]
 // [VR_SMOKE_SCENETITLE=1: a scene card with a long name; dragging its title saves a top-left]
 // [VR_SMOKE_ARRANGE=1: objects lined up (配置) and smart guides, on a clip and on a blank slide; screenshots mid-drag]
 // [VR_SMOKE_REEL=<{markers, groupOrder?, scope?, shotAt?} JSON>: build a reel from the results and play it through]
@@ -204,6 +205,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       direction: !!process.env.VR_SMOKE_DIRECTION,
       maximize: !!process.env.VR_SMOKE_MAXIMIZE,
       fold: !!process.env.VR_SMOKE_FOLD,
+      sceneKeys: !!process.env.VR_SMOKE_SCENEKEYS,
       listRun: !!process.env.VR_SMOKE_LISTRUN,
       folders: process.env.VR_SMOKE_FOLDERS?.split(';'),
       newProject: process.env.VR_SMOKE_NEWPROJ }

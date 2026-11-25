@@ -1912,4 +1912,7 @@ export const EN: Record<string, string> = {
   "画面の上下中央": "Center down",
   "選んだものを、並びはそのままで画面の左右中央へ動かす": "Move the selection, as it is arranged, to the center of the picture from left to right",
   "選んだものを、並びはそのままで画面の上下中央へ動かす": "Move the selection, as it is arranged, to the middle of the picture from top to bottom",
+  "動画のコートにグリッドを重ねる（書き出しも同じ）。色・太さ・出す範囲は「表示」>「コートの準備」": "Lay the grid over the court in the video (exports too). Colour, width and where it shows: Shows > Court setup",
+  "グリッドの濃さ": "Grid opacity",
+  "グリッドの濃さ（プロジェクトのどの動画でも同じ）": "Grid opacity (the same in every video of the project)",
 }

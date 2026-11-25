@@ -675,6 +675,9 @@ kbd { display: inline-block; padding: 1px var(--space-3); border: 1px solid var(
 .headline-bar input { flex: 1; min-width: 0; }
 .headline-bar.disabled { opacity: 0.55; }
 .stage-tabs .headline-bar { flex: 1; min-width: 0; margin: 0 0 var(--space-1) var(--space-5); padding: var(--space-1) var(--space-4); }
+.stage-tabs .grid-quick { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; padding: 0 var(--space-2) var(--space-1); white-space: nowrap; }
+.stage-tabs .grid-quick input[type=range] { width: 96px; }
+.grid-quick-pct { min-width: 3.5ch; text-align: right; font-variant-numeric: tabular-nums; color: var(--sub); }
 /* A serve picked in the list: its hit and touch at the playhead, and the speed (ServeMarkBar), under the tabs. */
 .serve-mark { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--line); }
 .serve-mark-time { min-width: 52px; font-variant-numeric: tabular-nums; color: var(--sub); }

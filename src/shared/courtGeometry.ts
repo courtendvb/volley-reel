@@ -115,6 +115,26 @@ export function courtCamera(corners: readonly [Pt, Pt, Pt, Pt], w: number, h: nu
   return (u, v, z) => show(u, v, z, up)
 }
 
+// A point z metres above the floor, clicked in the picture (0..1): the floor under it, in court units (u across,
+// v far to near). Worked as the plane at that height seen by the camera (courtCamera), so a ball struck in the air
+// lands its click where the player stands, not far behind. W × H: the picture in pixels. z 0, or corners that can't
+// tell the camera: the floor under the point itself. Null above the horizon.
+export function floorUnder(corners: CourtFit['corners'], W: number, H: number, p: Pt, z: number): Pt | null {
+  const cam = z > 0 ? courtCamera(corners.map(c => ({ x: c.x * W, y: c.y * H })) as [Pt, Pt, Pt, Pt], W, H) : null
+  if (!cam) return floorAt({ corners }, p)
+  const at = (u: number, v: number) => { const q = cam(u, v, z); return { x: q.x / W, y: q.y / H } }
+  return floorAt({ corners: [at(0, 0), at(1, 0), at(0, 1), at(1, 1)] }, p)
+}
+
+// Where a point of the court (u, v) z metres above the floor shows in the picture (0..1); on the floor when the
+// corners can't tell the camera.
+export function shownAbove(corners: CourtFit['corners'], W: number, H: number, u: number, v: number, z: number): Pt {
+  const cam = z > 0 ? courtCamera(corners.map(c => ({ x: c.x * W, y: c.y * H })) as [Pt, Pt, Pt, Pt], W, H) : null
+  if (!cam) return project(homography(corners), u, v)
+  const q = cam(u, v, z)
+  return { x: q.x / W, y: q.y / H }
+}
+
 // The floor under a point of the picture (0..1), in court units; null above the horizon.
 export function floorAt(fit: CourtFit | Pick<CourtFit, 'corners'>, p: Pt): Pt | null {
   const H = homography(fit.corners)

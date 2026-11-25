@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { clipRangeSource } from '../../shared/markRange'
 import { EMPTY_FILTER, isCorrected, withDeleted, type PlayFilter, type PlayRef } from '../../shared/filter'
-import { effectName, playLabel } from '../../shared/labels'
+import { effectName, playLabel, shortEffectName, shortSkillName } from '../../shared/labels'
 import {
   DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setClipCourt, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
@@ -57,7 +57,7 @@ import { BoardDialog } from './components/BoardDialog'
 import { canMake } from '../../shared/board'
 import { APP_NAME } from '../../shared/edition'
 import { useInternal } from './account'
-import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
+import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle, clipCourtStyle, pinClipStyle, splitClipStyle, markStyle, marksBySkill, floorAt, homography, nearestShots, project as onPicture, serveSpeed, measuredSpeed, flightTiming, setStrikeHeights, clickHeights, nearSide, playMarks, playerMarks, zoneAt, zoneOfCell, type CourtFit, type GridStyle, type Pt } from '../../shared/court'
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
@@ -85,7 +85,8 @@ import { OffsetBar } from './components/OffsetBar'
 import { cleanLook, type VideoLook } from '../../shared/videoLook'
 import { CodeEditDialog } from './components/CodeEditDialog'
 import { ScoutEditsDialog } from './components/ScoutEditsDialog'
-import { QuickCodeDialog } from './components/QuickCodeDialog'
+import { QuickCodeInput } from './components/QuickCodeInput'
+import { CourtFixPanel } from './components/CourtFixPanel'
 import { codeParts, codeWithClickZones } from '../../shared/codeEdit'
 
 const zonePair = (c: string) => { const z = codeParts(c); return `${z.startZone || '—'} → ${z.endZone || '—'}${z.endSub}` }
@@ -282,12 +283,16 @@ export function App() {
   const [quickCode, setQuickCode] = useState<PlayRef | null>(null) // Enter in the list: the code alone, on one line
   // The one-line window goes on through the list: after a save, the play to open next (found again once the match
   // is read again, since ids shift when plays are added or taken out).
-  const quickNext = useRef<{ matchId: string; line: number; inserted?: string; dir: 1 | -1; read?: boolean } | null>(null)
-  const quickMove = (from: PlayRef, dir: 1 | -1) => {
+  // court: the sub-court panel's run (only the selection moves on; the panel shows the selected play).
+  const quickNext = useRef<{ matchId: string; line: number; inserted?: string; dir: 1 | -1; read?: boolean; court?: boolean } | null>(null)
+  const quickMove = (from: PlayRef, dir: 1 | -1, court = false) => {
     const res = (latest.current.listRefs ?? latest.current.results).filter(x => !x.play.deleted), i = res.findIndex(x => x.matchId === from.matchId && x.play.id === from.play.id)
     const n = res[i + dir]
-    if (n && n.play.line !== undefined) { jump(n); setQuickCode(n) }
+    if (n && n.play.line !== undefined) { jump(n); if (!court) setQuickCode(n) }
   }
+  // The selected play's clicks on a court from above, play after play (CourtFixPanel), and whether its zones follow.
+  const [courtFix, setCourtFix] = useState(false)
+  const [courtFixZones, setCourtFixZones] = useState(false)
   // The list's view of corrections: only corrected plays, and plays taken out shown faded (right-click brings one back).
   const [listView, setListView] = useState({ correctedOnly: false, showDeleted: false })
   const [clickFixing, setClickFixing] = useState(false) // dragging on the video's court to correct the selected play's clicks
@@ -582,7 +587,7 @@ export function App() {
     if (i < 0) return
     quickNext.current = null
     const n = rows[i + q.dir]
-    if (n && n.play.line !== undefined) { jump(n); setQuickCode(n) }
+    if (n && n.play.line !== undefined) { jump(n); if (!q.court) setQuickCode(n) }
   }, [listRefs]) // eslint-disable-line react-hooks/exhaustive-deps
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
     latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
@@ -610,6 +615,7 @@ export function App() {
     const m = latest.current.matches[r.matchId]
     if (!m) return
     setSelected({ matchId: r.matchId, playId: r.play.id })
+    setQuickCode(null) // another play picked: the code input closes (the one-line correction reopens it on the next)
     setFollowPlay(null)
     const c = latest.current.reel && findClip(latest.current.reel, r.matchId, r.play.id)
     setActiveClipId(c ? c.id : null)
@@ -929,7 +935,7 @@ export function App() {
   }, [updateReel])
 
   useShortcuts({
-    latest, paused: settingsOpen || !!quickCode || !!codeEditing || !!scoutEditsOf, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
+    latest, paused: settingsOpen || !!codeEditing || !!scoutEditsOf, focusPane, editingCard: () => !!cardEditRef.current, cardAnns: () => cardAnnsRef.current, setCardAnns,
     scopedNow, setAnns, extraSel: () => extraSelRef.current, clearSelection: () => { setSelectedAnn(null); setExtraSel([]) },
     undoRedo: kind => { const a = actionRef.current; if (kind === 'undo' && a?.undo) { a.undo(); setActionNotice(null) } else undoRedo(kind) }, copyObjects, pasteObjects, pasteImage: () => void pasteImage(), toggleShortcuts: () => setShortcutsOpen(o => !o), toggleRight: () => setRightFolded(f => !f),
     activateClip, whenIn, jump, setAnnTool, trim, markerKey, sceneKey, videoTab: () => videoTabRef.current, editCode: r => setQuickCode(r),
@@ -1043,7 +1049,12 @@ export function App() {
                   </div>
                 )}
                 <PlayList refs={listRefs} matches={matches} showMatch={matchIds.length !== 1 && (project?.matches.length ?? 0) > 1}
-                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={r => (r.play.deleted ? restorePlay(r) : setCodeEditing({ ref: r, mode: 'edit' }))} />
+                  currentMatchId={matchId} selected={selected} onJump={jump} reelGroups={reelGroups} onMark={markPlay} onEditCode={r => (r.play.deleted ? restorePlay(r) : setCodeEditing({ ref: r, mode: 'edit' }))}
+                  editor={quickCode ? { matchId: quickCode.matchId, playId: quickCode.play.id, node: (
+                    <QuickCodeInput key={`${quickCode.matchId}:${quickCode.play.id}:${quickCode.play.code}`} code={quickCode.play.code}
+                      onSave={(to, dir) => { quickNext.current = { matchId: quickCode.matchId, line: quickCode.play.line!, ...(quickCode.play.inserted ? { inserted: quickCode.play.inserted } : {}), dir }; saveCode(quickCode, to, 'edit') }}
+                      onMove={dir => quickMove(quickCode, dir)} onClose={() => { setQuickCode(null); focusPane.current = 'list' }} />
+                  ) } : undefined} />
               </>
               : <p className="muted pad">{t('読み込み中…')}</p>}
           </aside>
@@ -1090,7 +1101,8 @@ export function App() {
                     {courtFitting && court}
                     {clickFixing && match.court && selectedPlay && (
                       <ClickFixLayer size={size} fit={match.court} near={nearSide(match.court, selectedPlay) === selectedPlay.side} cells={selectedPlay.cells}
-                        onCancel={() => setClickFixing(false)}
+                        heights={clickHeights(selectedPlay.code)} onCancel={() => setClickFixing(false)}
+                        onMove={dir => { const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id); if (r) quickMove(r, dir, true) }}
                         onDone={(start, end) => {
                           const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id)
                           if (!r) return
@@ -1167,9 +1179,24 @@ export function App() {
                   ? <button className={clickFixing ? 'on' : ''} onClick={() => { if (!clickFixing) { setListRun(false); setFollowPlay(null); playback.pause() } setClickFixing(!clickFixing) }}
                       title={t('動画のコートの上で、このプレーの始まりから終わりへドラッグして座標を直します')}>{clickFixing ? t('やめる') : `◎ ${t('コートで座標を直す')}`}</button>
                   : <span className="muted small">{t('コートのグリッドを合わせると、動画の上で直せます')}</span>}
+                <button className={`small${courtFix ? ' on' : ''}`} onClick={() => { if (!courtFix) setClickFixing(false); setCourtFix(!courtFix) }}
+                  title={t('上から見たコートに線を引いて、Enter で次のプレーへ。座標だけを続けて直せます')}>{courtFix ? t('サブコートを閉じる') : t('サブコートで続けて直す')}</button>
                 <button className="small" onClick={() => { const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id); if (r) setCodeEditing({ ref: r, mode: 'edit' }) }}>{t('コート図で直す…')}</button>
               </div>
             )}
+            {!cardEdit && match && selectedPlay && stagePanel === 'edit' && selectedPlay.line !== undefined && courtFix && (() => {
+              const r = results.find(x => x.matchId === match.id && x.play.id === selectedPlay.id)
+              if (!r) return null
+              const d = dvws[match.id], other = d && !d.allHome ? (selectedPlay.side === '*' ? d.teams[1] : d.teams[0]).code : ''
+              return (
+                <CourtFixPanel key={`${match.id}:${selectedPlay.id}:${selectedPlay.cells?.start ?? ''}:${selectedPlay.cells?.end ?? ''}:${selectedPlay.code}`}
+                  cells={selectedPlay.cells} code={selectedPlay.code} near={r.teamCode} far={other}
+                  label={`S${selectedPlay.setNum} ${selectedPlay.score.home}-${selectedPlay.score.away}  #${selectedPlay.jersey} ${r.name}  ${shortSkillName(selectedPlay.skill)} · ${shortEffectName(selectedPlay.skill, selectedPlay.effect)}`}
+                  zonesToo={courtFixZones} onZonesToo={setCourtFixZones}
+                  onSave={(start, end, to, dir) => { quickNext.current = { matchId: r.matchId, line: r.play.line!, ...(r.play.inserted ? { inserted: r.play.inserted } : {}), dir, court: true }; saveCode(r, to, 'edit', { start, end }) }}
+                  onMove={dir => quickMove(r, dir, true)} onClose={() => setCourtFix(false)} />
+              )
+            })()}
             {!cardEdit && match && listServe && selectedPlay && (
               <ServeMarkBar keyTime={selectedPlay.time + match.offsetSec} mark={listServe.mark} measured={listServe.measured}
                 onMark={patch => setServeMark(match.id, selectedPlay.fingerprint, patch)} />
@@ -1328,12 +1355,6 @@ export function App() {
             setCodeEditing({ ref: codeEditing.ref, mode: 'insert', time: now > at && now < at + 20 ? now : at + 1 }) }}
           onList={() => { setScoutEditsOf(codeEditing.ref.matchId); setCodeEditing(null) }}
           onClose={() => setCodeEditing(null)} />
-      )}
-      {quickCode && (
-        <QuickCodeDialog key={`${quickCode.matchId}:${quickCode.play.id}:${quickCode.play.code}`} code={quickCode.play.code}
-          label={`S${quickCode.play.setNum} ${quickCode.play.score.home}-${quickCode.play.score.away}  #${quickCode.play.jersey} ${quickCode.name}`}
-          onSave={(to, dir) => { quickNext.current = { matchId: quickCode.matchId, line: quickCode.play.line!, ...(quickCode.play.inserted ? { inserted: quickCode.play.inserted } : {}), dir }; saveCode(quickCode, to, 'edit') }}
-          onMove={dir => quickMove(quickCode, dir)} onClose={() => setQuickCode(null)} />
       )}
       {scoutEditsOf && matches[scoutEditsOf] && (
         <ScoutEditsDialog match={matches[scoutEditsOf]} dvw={dvws[scoutEditsOf]} busy={scoutBusy}

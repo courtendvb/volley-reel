@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART } from './chart'
-import { withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, cleanStrikeHeights, setStrikeHeights, type CourtFit } from './court'
+import { withoutPlayerMarks, attackCones, playClicks, ATTACK_Z, DEFAULT_CORNERS, DEFAULT_GRID_STYLE, FLOAT_SERVE_Z, JUMP_SERVE_Z, SET_Z, courtCamera, drawFlight, handleAt, floorAt, floorRect, zoneCellQuad, zoneOfCell, cleanGridStyle, markStyle, marksBySkill, flightTiming, nearestShots, zoneAt, flightsProgress, heatAt, heatColor, heatGrid, flightZ, playerMarks, serveSpeed, measuredSpeed, hasFlight, homography, nearSide, playDirection, playMarks, playPoints, playZones, project, servePath, serveSpot, zoneCell, cleanStrikeHeights, setStrikeHeights, clickHeights, floorUnder, shownAbove, TOUCH_Z, type CourtFit } from './court'
 import { parseDVW } from './dvw'
 
 const fit: CourtFit = { corners: DEFAULT_CORNERS, nearSet1: '*' }
@@ -122,6 +122,42 @@ describe('courtCamera', () => {
   it('gives up on corners that cannot tell', () => {
     const flat: CourtFit['corners'] = [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 100, y: 500 }, { x: 300, y: 500 }]
     expect(courtCamera(flat, 400, 600)).toBeNull()
+  })
+})
+
+describe('floorUnder', () => {
+  // The real fit above, as fractions of a 1280 × 720 picture.
+  const corners = [{ x: 0.23770491803278687, y: 0.48451730418943534 }, { x: 0.7730696798493408, y: 0.49246231155778897 }, { x: 0.1016949152542373, y: 0.9179229480737019 }, { x: 0.903954802259887, y: 0.9179229480737019 }] as CourtFit['corners']
+
+  it('puts a ball struck in the air on the floor under it', () => {
+    for (const [u, v] of [[0.5, 0.75], [0.2, 0.6], [0.8, 0.2]]) {
+      const ball = shownAbove(corners, 1280, 720, u, v, ATTACK_Z)
+      const f = floorUnder(corners, 1280, 720, ball, ATTACK_Z)!
+      expect(f.x).toBeCloseTo(u, 3)
+      expect(f.y).toBeCloseTo(v, 3)
+      // Taken as on the floor, the same click lands well behind (toward the far end) the player.
+      expect(floorAt({ corners }, ball)!.y).toBeLessThan(v - 0.05)
+    }
+  })
+
+  it('is the floor itself at no height', () => {
+    const p = { x: 0.5, y: 0.7 }
+    expect(floorUnder(corners, 1280, 720, p, 0)).toEqual(floorAt({ corners }, p))
+  })
+})
+
+describe('clickHeights', () => {
+  it('takes the heights from the code', () => {
+    setStrikeHeights(undefined)
+    expect(clickHeights('*07AH#P1~41BH3')).toEqual({ start: ATTACK_Z, end: 0 }) // a kill ends on the floor
+    expect(clickHeights('*07AH+P1~41BH3')).toEqual({ start: ATTACK_Z, end: TOUCH_Z }) // dug
+    expect(clickHeights('*07AH/P1~41BH3')).toEqual({ start: ATTACK_Z, end: ATTACK_Z }) // at the block
+    expect(clickHeights('a11SQ-~~~67B')).toEqual({ start: JUMP_SERVE_Z, end: TOUCH_Z })
+    expect(clickHeights('a04SM#~~~58A')).toEqual({ start: FLOAT_SERVE_Z, end: 0 })
+    expect(clickHeights('*05RM-~~~58AR')).toEqual({ start: TOUCH_Z, end: SET_Z })
+    setStrikeHeights({ attack: 2.9 }) // a women's team
+    expect(clickHeights('*07AH#P1~41BH3').start).toBe(2.9)
+    setStrikeHeights(undefined)
   })
 })
 

@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { shortEffectName, shortSkillName } from '../../../shared/labels'
 import { MARKERS, MARKER_COLORS, type Marker } from '../../../shared/reel'
@@ -22,10 +22,11 @@ interface Props {
   reelGroups: Map<string, string> // `${matchId}:${playId}` -> its markers "1,3" ('' = no marker), for plays in the scene
   onMark: (r: PlayRef, m: Marker) => void
   onEditCode?: (r: PlayRef) => void // right-click: correct the play's code (codeEdit.ts)
+  editor?: PlayKey & { node: ReactNode } // Enter: the code input, in that play's row (QuickCodeInput)
 }
 
 // Only the rows in view are rendered: "all matches" can be tens of thousands of plays.
-export function PlayList({ refs, matches, showMatch, currentMatchId, selected, onJump, reelGroups, onMark, onEditCode }: Props) {
+export function PlayList({ refs, matches, showMatch, currentMatchId, selected, onJump, reelGroups, onMark, onEditCode, editor }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(600)
@@ -85,6 +86,7 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
         videoTime={r.play.time + (matches[r.matchId]?.offsetSec ?? 0)}
         selected={i === selIndex} now={r.matchId === currentMatchId && r.play.id === nowId} onJump={onJump} poss={poss}
         marks={reelGroups.get(`${r.matchId}:${r.play.id}`) ?? null} onMark={onMark} onEditCode={onEditCode}
+        editor={editor && !r.play.deleted && editor.matchId === r.matchId && editor.playId === r.play.id ? editor.node : undefined}
       />,
     )
   }
@@ -99,21 +101,22 @@ export function PlayList({ refs, matches, showMatch, currentMatchId, selected, o
 }
 
 // odd: every other row is shaded a little (by its place in the list, so the stripes stay put while scrolling).
-const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark, onEditCode, poss }: {
+const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, onJump, marks, onMark, onEditCode, poss, editor }: {
   r: PlayRef; top: number; odd: boolean; videoTime: number; selected: boolean; now: boolean; poss: boolean
   onJump: (r: PlayRef) => void; marks: string | null; onMark: (r: PlayRef, m: Marker) => void; onEditCode?: (r: PlayRef) => void
+  editor?: ReactNode
 }) {
   const p = r.play
   return (
     <div role="listitem" style={{ top, height: ROW }}
-      className={`play-row${odd ? ' odd' : ''}${selected && !p.deleted ? ' selected' : ''}${now && !p.deleted ? ' now' : ''}${marks === '' ? ' in-scene' : ''}${p.deleted ? ' deleted' : ''}`} onClick={() => { if (!p.deleted) onJump(r) }}
+      className={`play-row${odd ? ' odd' : ''}${selected && !p.deleted ? ' selected' : ''}${now && !p.deleted ? ' now' : ''}${marks === '' ? ' in-scene' : ''}${p.deleted ? ' deleted' : ''}${editor ? ' editing' : ''}`} onClick={() => { if (!p.deleted) onJump(r) }}
       onContextMenu={onEditCode && p.line !== undefined ? e => { e.preventDefault(); onEditCode(r) } : undefined}
       title={p.deleted ? t('削除したプレーです（右クリックで元に戻す）') : t('映像 {0}{1}', formatTime(videoTime), marks === '' ? t('・シーンに入っています（マーカーなし）') : '')}>
       <span className="set">S{p.setNum}</span>
       <span className="score">{pad2(p.score.home)}-{pad2(p.score.away)}</span>
       <span className={`team${r.teamRole === 'our' ? ' ours' : ''}`}>{r.teamCode}</span>
       <span className="player"><b>{p.jersey}</b> {r.name}</span>
-      <span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{shortSkillName(p.skill)}{poss && p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {shortEffectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}{p.original && <b className="edited" title={t('コードを直しています（元: {0}）', p.original)}>✎</b>}{p.moved && <b className="edited" title={t('座標を直しています')}>⌖</b>}{p.inserted && <b className="edited" title={t('手で足したプレーです')}>＋</b>}{p.deleted && <b className="edited" title={t('削除したプレーです（右クリックで元に戻す）')}>×</b>}</span>
+      {editor ?? <><span className={`skill skill-${p.skill}`} title={r.comboName ?? undefined}>{r.dir && <span className="dir" title={r.dir === 'up' ? t('下から上へ') : t('上から下へ')}>{r.dir === 'up' ? '↑' : '↓'}</span>}{shortSkillName(p.skill)}{poss && p.possibility && <b className="poss" title={t('ポッシビリティー: サーブ側のチームがアタックを生み出せたラリー')}>P</b>} · {shortEffectName(p.skill, p.effect)}{r.combo && <small className="combo"> {r.combo}</small>}{p.original && <b className="edited" title={t('コードを直しています（元: {0}）', p.original)}>✎</b>}{p.moved && <b className="edited" title={t('座標を直しています')}>⌖</b>}{p.inserted && <b className="edited" title={t('手で足したプレーです')}>＋</b>}{p.deleted && <b className="edited" title={t('削除したプレーです（右クリックで元に戻す）')}>×</b>}</span>
       {!p.deleted && <span className="marks">
         {MARKERS.map(m => {
           const on = !!marks && marks.split(',').includes(String(m))
@@ -123,7 +126,7 @@ const PlayRow = memo(function PlayRow({ r, top, odd, videoTime, selected, now, o
               onClick={e => { e.stopPropagation(); onMark(r, m) }}>{m}</button>
           )
         })}
-      </span>}
+      </span>}</>}
     </div>
   )
 })

@@ -102,3 +102,36 @@ describe('pictures on the floor', () => {
     expect(a.quad![2][1]).toBeCloseTo(logo.y + logo.h, 3)
   })
 })
+
+describe('pictures on the floor resized from a corner', () => {
+  const logo: Img = { id: 'l', kind: 'image', color: '#FFF', x: 0.4, y: 0.55, w: 0.2, h: 0.2 * 1280 / 2 / 720, assetId: 'logo.png' }
+  const floor = { corners: DEFAULT_CORNERS, W: 1280, H: 720 }
+  const metres = (q: Quad) => q.map(([x, y]) => { const p = floorAt({ corners: DEFAULT_CORNERS }, { x, y })!; return [p.x * 9, p.y * 18] })
+  const size = (q: Quad) => { const [tl, tr, bl] = metres(q); return [Math.hypot(tr[0] - tl[0], tr[1] - tl[1]), Math.hypot(bl[0] - tl[0], bl[1] - tl[1])] }
+
+  it('grow with the same shape, the opposite corner staying', () => {
+    const a = imageOnFloor(logo, 'lay', DEFAULT_CORNERS, 1280, 720)!, q = a.quad!
+    const r = dragHandle(a, 'q3', q[3][0] + 0.05, q[3][1] + 0.03, { floor }).a as Img
+    const [w0, h0] = size(q), [w1, h1] = size(r.quad!)
+    expect(w1).toBeGreaterThan(w0 * 1.1)
+    expect(w1 / h1).toBeCloseTo(w0 / h0, 3)
+    expect(r.quad![0][0]).toBeCloseTo(q[0][0], 6)
+    expect(r.quad![0][1]).toBeCloseTo(q[0][1], 6)
+    expect(r.floor).toBe('lay')
+  })
+
+  it('stood up, keep the foot on the other side', () => {
+    const a = imageOnFloor(logo, 'stand', DEFAULT_CORNERS, 1280, 720)!, q = a.quad!
+    const r = dragHandle(a, 'q1', q[1][0] + 0.03, q[1][1] - 0.05, { floor }).a as Img
+    expect(r.quad![2][0]).toBeCloseTo(q[2][0], 4)
+    expect(r.quad![2][1]).toBeCloseTo(q[2][1], 4)
+    expect(r.quad![3][0]).toBeGreaterThan(q[3][0])
+  })
+
+  it('with Shift, move one corner alone as before', () => {
+    const a = imageOnFloor(logo, 'lay', DEFAULT_CORNERS, 1280, 720)!, q = a.quad!
+    const r = dragHandle(a, 'q3', 0.9, 0.9, { floor, keepAspect: true }).a as Img
+    expect(r.quad![3]).toEqual([0.9, 0.9])
+    expect(r.quad![0]).toEqual(q[0])
+  })
+})

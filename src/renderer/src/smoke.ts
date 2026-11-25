@@ -2465,10 +2465,19 @@ export function installSmoke(h: SmokeHost): void {
     const ab = annCanvas.getBoundingClientRect()
     const apt = (x: number, y: number) => ({ clientX: ab.left + x * ab.width, clientY: ab.top + y * ab.height, bubbles: true, pointerId: 1 })
     const [qx, qy] = laid[1]
+    await sleep(700) // the drag is an undo step of its own, not merged with laying it on the court
     annCanvas.dispatchEvent(new PointerEvent('pointerdown', apt(qx, qy))); await sleep(30)
     annCanvas.dispatchEvent(new PointerEvent('pointermove', apt(qx + 0.02, qy - 0.02))); await sleep(30)
     annCanvas.dispatchEvent(new PointerEvent('pointerup', apt(qx + 0.02, qy - 0.02))); await sleep(200)
     const dragged = heat()!.quad!
+    // Ctrl+Z puts the corner back and leaves the clip open with the picture selected, so editing
+    // goes on; Ctrl+Y does the drag again.
+    const clip0 = latest.current.activeClipId
+    const ctrlKey = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true })); await sleep(400) }
+    await ctrlKey('z')
+    const undoCorner = { back: JSON.stringify(heat()?.quad) === JSON.stringify(laid), sameClip: latest.current.activeClipId === clip0, stillSelected: latest.current.selectedAnn === 'heat' }
+    await ctrlKey('y')
+    Object.assign(undoCorner, { redone: JSON.stringify(heat()?.quad) === JSON.stringify(dragged) })
     await openPanel('objects') // the slider is in the objects panel under the video
     // The transparency slider with the real mouse and keys: a drag, a click, then → (moves the
     // slider, not the video) and ↓ (stays on the slider, not the next play).
@@ -2508,7 +2517,7 @@ export function installSmoke(h: SmokeHost): void {
     return { play: `${r.play.code} set ${r.play.setNum}`, corner0: fitted.corners[0], handlesOnTop, afterDone, zones: zones1, nearSet1: swapped.nearSet1, zonesSwapped: playZones(r.play, swapped),
       set: setRef ? { code: setRef.play.code, zones: setZones } : null, detail, gridQuick,
       transparency, exported,
-      heatmap: { onCourt, corner1Moved: +(dragged[1][0] - qx).toFixed(3), exportInside: alpha(mid[0], mid[1]), exportOutside: alpha(b.x + 0.005, b.y + 0.005) } }
+      undoCorner, heatmap: { onCourt, corner1Moved: +(dragged[1][0] - qx).toFixed(3), exportInside: alpha(mid[0], mid[1]), exportOutside: alpha(b.x + 0.005, b.y + 0.005) } }
   }
 
   const smokeCopy = async (res: PlayRef[]) => {

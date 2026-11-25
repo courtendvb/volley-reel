@@ -1226,7 +1226,7 @@ export const ES: Record<string, string> = {
   "床に沿わせる": "Sobre el suelo",
   "手前のコートの中央に大きく": "Grande en el centro de la cancha cercana",
   "奥のコートの中央に大きく": "Grande en el centro de la cancha lejana",
-  "画像の四隅を別々に動かして遠近をつけます。床に沿わせる・立たせると、縦横の比はそのままでコートの遠近に合わせ、動かすと床の上を動きます（チームのロゴを各コートの中央に大きく置くと、どちらのチームか分かります）。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）": "Arrastra las cuatro esquinas de la imagen una a una para darle perspectiva. Sobre el suelo o de pie en él, conserva su forma con la perspectiva de la cancha y se mueve por el suelo al arrastrarla (el logo de un equipo grande en el centro de cada cancha muestra qué equipo es cuál). Ajustada a la cancha, va en las esquinas de la cuadrícula (recorta antes la imagen hasta las líneas para que encaje)",
+  "画像の四隅を別々に動かして遠近をつけます。床に沿わせる・立たせると、縦横の比はそのままでコートの遠近に合わせ、動かすと床の上を動き、四隅のドラッグで大きさが変わります（Shift を押しながらだと角だけ動く。チームのロゴを各コートの中央に大きく置くと、どちらのチームか分かります）。コートに合わせると、コートのグリッドの四隅に置きます（先にトリミングで画像をコートの線までにしておくと合います）": "Arrastra las cuatro esquinas de la imagen una a una para darle perspectiva. Sobre el suelo o de pie en él, conserva su forma con la perspectiva de la cancha y se mueve por el suelo al arrastrarla, y sus esquinas la agrandan o achican (con Shift, solo se mueve la esquina; el logo de un equipo grande en el centro de cada cancha muestra qué equipo es cuál). Ajustada a la cancha, va en las esquinas de la cuadrícula (recorta antes la imagen hasta las líneas para que encaje)",
   "コートの床に文字を寝かせるか、床に立たせて、コートの遠近に合わせる（四隅は後からドラッグで動かせる。文字をコートの床の上に動かすと使えます）": "Tumba el texto sobre el suelo de la cancha o ponlo de pie sobre él, con su perspectiva (luego puedes arrastrar sus esquinas; mueve el texto sobre el suelo para usarlo)",
   "床との向き": "Texto en el suelo",
   "画面に平ら": "Plano en pantalla",

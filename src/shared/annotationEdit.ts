@@ -2,6 +2,7 @@
 // Office-style "edit points" for polylines, polygons and freehand — drag a vertex, drag a midpoint
 // to insert one, delete one. Pure functions on normalized coordinates, so they are unit-tested.
 import { curveControls, isPoints, normalizeBox, pointsBox, withQuad, withTextQuad, type Annotation, type ImageAnnotation, type PointsAnnotation, type Rect, type Quad } from './annotation'
+import { resizeOnFloor, type CourtFit } from './courtGeometry'
 
 type HandleKind = 'end' | 'resize' | 'vertex' | 'mid' | 'ctrl' // ctrl: a curve's control point
 export interface Handle { id: string; kind: HandleKind; x: number; y: number }
@@ -73,7 +74,10 @@ export function toPolygon(a: Annotation): Annotation {
 
 // Drags a handle to (x, y). Dragging a midpoint inserts a vertex there; the result says which
 // handle to keep dragging (the new vertex). keepAspect (Shift) holds a box's proportions.
-export function dragHandle(a: Annotation, id: string, x: number, y: number, opts: { keepAspect?: boolean } = {}): { a: Annotation; id: string } {
+// floor: the court fitted to the picture (W × H pixels): a picture laid on its floor or stood on it
+// grows or shrinks from a corner, keeping its shape on the floor (Shift: the corner moves alone).
+export function dragHandle(a: Annotation, id: string, x: number, y: number,
+  opts: { keepAspect?: boolean; floor?: { corners: CourtFit['corners']; W: number; H: number } | null } = {}): { a: Annotation; id: string } {
   if (a.kind === 'arrow') {
     // On a curve, an end takes its control point along, so the curve keeps its shape there (as in Office).
     if (id === 'c1' || id === 'c2') return { a: a.c1 && a.c2 ? { ...a, [id]: [x, y] } : a, id }
@@ -85,6 +89,10 @@ export function dragHandle(a: Annotation, id: string, x: number, y: number, opts
   // A picture laid with perspective: each corner moves on its own.
   if (a.kind === 'image' && a.quad) {
     const i = Number(id.slice(1))
+    if (id[0] === 'q' && a.quad[i] && a.floor && opts.floor && !opts.keepAspect) {
+      const q = resizeOnFloor(opts.floor.corners, opts.floor.W, opts.floor.H, a.quad, a.floor === 'stand', i, { x, y })
+      return { a: q ? withQuad(a, q) : a, id }
+    }
     return { a: id[0] === 'q' && a.quad[i] ? withQuad(a, a.quad.map((p, j) => (j === i ? [x, y] : p)) as Quad) : a, id }
   }
   // A text on the floor: each corner moves on its own, as a picture's.

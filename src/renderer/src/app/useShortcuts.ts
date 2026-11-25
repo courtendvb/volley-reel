@@ -38,6 +38,8 @@ interface ShortcutHandlers {
   trim: (edge: 'in' | 'out', t: number | null) => void
   setTag: (n: string) => void
   markerKey: (m: Marker | null) => void
+  sceneKey: (n: number) => void // 動画の構成 open: the selected play into the video's scene n
+  videoTab: () => boolean
 }
 
 // The arrow keys nudge the selected objects, for fine placement: a couple of pixels of a 1080p
@@ -148,6 +150,7 @@ export function useShortcuts(handlers: ShortcutHandlers) {
         e.preventDefault()
         h.setTag(e.code.slice(-1))
       }
+      else if (!e.shiftKey && h.videoTab() && /^[1-9]$/.test(e.key)) { e.preventDefault(); h.sceneKey(Number(e.key)) }
       else if (/^[0-6]$/.test(e.key)) { e.preventDefault(); h.markerKey(e.key === '0' ? null : (Number(e.key) as Marker)) }
     }
     window.addEventListener('keydown', onKey)

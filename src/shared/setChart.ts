@@ -2,16 +2,18 @@
 // click), coloured by where it went (the zone the attack after it came from), and how that attack
 // ended: filled for a kill, open for the ball staying in play, a cross for a point lost. Above the
 // court, the share of sets to each place; below it, the kill rate there. The setter's own attacks
-// (second-ball dumps) count as a place of their own. Pure: no DOM.
+// (second-ball dumps) count as a place of their own. Zone2 and Zone1 are one place (Zone2/1): the
+// opposite hits from both. Pure: no DOM.
 import { chartBox, type ChartCorner } from './chart'
 import type { ClickPoint, Play } from './types'
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
-export type SetTarget = 'left' | 'middle' | 'right' | 'back' | 'pipe' | 'dump'
-export const SET_TARGETS: SetTarget[] = ['left', 'middle', 'right', 'back', 'pipe', 'dump']
-// Zone 4 blue, zone 2 red and zone 1 a deeper red, the middle green, the pipe purple, the setter yellow.
-export const SET_COLORS: Record<SetTarget, string> = { left: '#2563EB', middle: '#16A34A', right: '#EF4444', back: '#991B1B', pipe: '#9333EA', dump: '#EAB308' }
+// right: the right side, front and back (Zone2/1).
+export type SetTarget = 'left' | 'middle' | 'right' | 'pipe' | 'dump'
+export const SET_TARGETS: SetTarget[] = ['left', 'middle', 'right', 'pipe', 'dump']
+// Zone 4 blue, zone 2/1 red, the middle green, the pipe purple, the setter yellow.
+export const SET_COLORS: Record<SetTarget, string> = { left: '#2563EB', middle: '#16A34A', right: '#EF4444', pipe: '#9333EA', dump: '#EAB308' }
 
 export type SetResult = 'kill' | 'play' | 'lost'
 // at: x across, y from the end line (0) to the net (1), as the chart shows it; click: as the scout
@@ -51,14 +53,24 @@ export const cleanSetCourt = (x: unknown): SetCourtStyle => ({ layer: (x as Part
 // Where a set went, as a place: the set's own target attacker (the 9th character of its code, as the
 // scout coded it: F the front-row attacker on the left, C the centre, B the one behind the setter on
 // the right, P the pipe), else where the attack after it came from. The setter's own attack is a dump.
-// B is the right side, or the back right when the attack came from there (zone 1 or 9).
+// B is the right side, front or back (zone 2, 1 or 9).
 const TARGET_ATTACKER: Record<string, SetTarget> = { F: 'left', C: 'middle', B: 'right', P: 'pipe' }
 export function setTarget(attack: Pick<Play, 'startZone' | 'playerKey'>, setter: string, set?: Pick<Play, 'code' | 'skill'> | null): SetTarget | null {
   if (attack.playerKey === setter) return 'dump'
   const coded = set?.skill === 'E' ? TARGET_ATTACKER[set.code.charAt(8).toUpperCase()] : undefined
-  if (coded) return coded === 'right' && (attack.startZone === 1 || attack.startZone === 9) ? 'back' : coded
+  if (coded) return coded
   const z = attack.startZone
-  return z === 4 || z === 5 || z === 7 ? 'left' : z === 3 ? 'middle' : z === 2 ? 'right' : z === 1 || z === 9 ? 'back' : z === 8 || z === 6 ? 'pipe' : null
+  return z === 4 || z === 5 || z === 7 ? 'left' : z === 3 ? 'middle' : z === 2 || z === 1 || z === 9 ? 'right' : z === 8 || z === 6 ? 'pipe' : null
+}
+// A chart saved on a slide before Zone2 and Zone1 were one place: its Zone1 ('back') counted in Zone2/1.
+export function foldBack(c: SetChart): SetChart {
+  const old = c.by as SetChart['by'] & { back?: { n: number; kills: number } }
+  if (!old.back && !c.dots.some(d => (d.target as string) === 'back')) return c
+  const { back, ...by } = old
+  return {
+    ...c, by: { ...by, right: { n: by.right.n + (back?.n ?? 0), kills: by.right.kills + (back?.kills ?? 0) } },
+    dots: c.dots.map(d => ((d.target as string) === 'back' ? { ...d, target: 'right' } : d)),
+  }
 }
 const resultOf = (effect: string): SetResult => (effect === '#' ? 'kill' : effect === '=' || effect === '/' ? 'lost' : 'play')
 const rotationOf = (p: Play) => (p.side === '*' ? p.homeRot : p.awayRot)
@@ -254,7 +266,7 @@ function drawKey(ctx: Ctx, cx: number, cy: number, size: number, maxW: number): 
 }
 
 // The places' names, in the scout's terms on every screen.
-export const SET_NAMES: Record<SetTarget, string> = { left: 'Zone4', middle: 'Zone3', right: 'Zone2', back: 'Zone1', pipe: 'Pipe', dump: 'SD' }
+export const SET_NAMES: Record<SetTarget, string> = { left: 'Zone4', middle: 'Zone3', right: 'Zone2/1', pipe: 'Pipe', dump: 'SD' }
 
 // The places most and least set to (of those set to at all), for the red and blue frames.
 export function setExtremes(c: SetChart): { most: SetTarget | null; least: SetTarget | null } {
@@ -264,11 +276,12 @@ export function setExtremes(c: SetChart): { most: SetTarget | null; least: SetTa
 
 // Each place's area as the team sees its own half: u across from its left, v from its end line (0)
 // to the net (0.5). The front row by the net, the back row's attacks just behind the attack line.
-// A dump has none.
+// Zone2/1 takes the right side of both, so its middle (where its share is written) is on the attack
+// line. A dump has none.
 const FRONT = [1 / 3, 0.5], BACK = [1 / 6, 1 / 3]
 export const SET_AREAS: Partial<Record<SetTarget, { u: [number, number]; v: [number, number] }>> = {
-  left: { u: [0, 1 / 3], v: [FRONT[0], FRONT[1]] }, middle: { u: [1 / 3, 2 / 3], v: [FRONT[0], FRONT[1]] }, right: { u: [2 / 3, 1], v: [FRONT[0], FRONT[1]] },
-  pipe: { u: [1 / 3, 2 / 3], v: [BACK[0], BACK[1]] }, back: { u: [2 / 3, 1], v: [BACK[0], BACK[1]] },
+  left: { u: [0, 1 / 3], v: [FRONT[0], FRONT[1]] }, middle: { u: [1 / 3, 2 / 3], v: [FRONT[0], FRONT[1]] }, right: { u: [2 / 3, 1], v: [BACK[0], FRONT[1]] },
+  pipe: { u: [1 / 3, 2 / 3], v: [BACK[0], BACK[1]] },
 }
 
 // Where the chart goes in a w × h picture: in its corner, its size as a direction chart's height.
@@ -286,8 +299,8 @@ export const setChartShows = (c: SetChart, view: SetChartView = 'auto'): 'points
 // painted). flip: the net at the top, seen from the setter's side. rich (a rotation slide, whose
 // heading is drawn apart): no title or totals; each set a disc, the discs
 // moved apart where they would cover each other, and a key to the marks under the court.
-export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y: number; h: number }, view: SetChartView = 'auto', flip = false, rich = false): void {
-  const w = setChartWidth(h), f = h / 24
+export function drawSetChart(ctx: Ctx, saved: SetChart, { x, y, h }: { x: number; y: number; h: number }, view: SetChartView = 'auto', flip = false, rich = false): void {
+  const c = foldBack(saved), w = setChartWidth(h), f = h / 24
   ctx.save()
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   // The labels: the front row's places on the end line, the back row's beyond it (outside the court).
@@ -345,11 +358,11 @@ export function drawSetChart(ctx: Ctx, c: SetChart, { x, y, h }: { x: number; y:
       }
     }
   }
-  // The shares on the end line, each above its place as it lies across the court: Zone2, Zone3 and
-  // Zone4 on the line, Zone1 (behind Zone2), Pipe (behind Zone3) and SD beyond it. The most set to is
+  // The shares on the end line, each above its place as it lies across the court: Zone2/1, Zone3 and
+  // Zone4 on the line, Pipe (behind Zone3) and SD beyond it. The most set to is
   // framed red, the least blue. Turned round, the columns change sides.
   const { most, least } = setExtremes(c), cell = side / 3
-  const colOf: Record<SetTarget, number> = { right: 0, back: 0, middle: 1, pipe: 1, left: 2, dump: 2 }
+  const colOf: Record<SetTarget, number> = { right: 0, middle: 1, pipe: 1, left: 2, dump: 2 }
   const endY = flip ? ct + side : ct, out = flip ? 1 : -1
   for (const k of SET_TARGETS) {
     const col = flip ? 2 - colOf[k] : colOf[k], cx = cl + cell * (col + 0.5)

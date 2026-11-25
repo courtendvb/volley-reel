@@ -44,12 +44,15 @@ export function cleanSetChart(x: unknown): SetChartStyle {
 }
 // The distribution laid on the court in the video: where the sets were given, or each place's share.
 export type SetCourtLayer = 'spots' | 'shares'
-// How the shares are written on the court: on poles with the place's name (missing: the usual), or the
-// number alone lying on the floor.
-export type SetShareLook = 'poles' | 'floor'
+// How the shares are written on the court: on poles with the place's name (missing: the usual), the
+// number alone lying on the floor, or the number alone standing upright on the floor.
+export type SetShareLook = 'poles' | 'floor' | 'stand'
 export interface SetCourtStyle { layer: SetCourtLayer; look?: SetShareLook }
 export const DEFAULT_SET_COURT: SetCourtStyle = { layer: 'shares' }
-export const cleanSetCourt = (x: unknown): SetCourtStyle => ({ layer: (x as Partial<SetCourtStyle> | null)?.layer === 'spots' ? 'spots' : 'shares', ...((x as Partial<SetCourtStyle> | null)?.look === 'floor' ? { look: 'floor' as const } : {}) })
+export const cleanSetCourt = (x: unknown): SetCourtStyle => {
+  const o = x as Partial<SetCourtStyle> | null
+  return { layer: o?.layer === 'spots' ? 'spots' : 'shares', ...(o?.look === 'floor' || o?.look === 'stand' ? { look: o.look } : {}) }
+}
 
 // Where a set went, as a place: the set's own target attacker (the 9th character of its code, as the
 // scout coded it: F the front-row attacker on the left, C the centre, B the one behind the setter on

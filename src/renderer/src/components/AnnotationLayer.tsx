@@ -178,12 +178,16 @@ export function AnnotationLayer(p: Props) {
     }
     // Smart guides: where the dragged object lines up with another, or with the picture's edges and middle.
     if (guides.length) {
-      ctx.save(); ctx.lineWidth = 1; ctx.strokeStyle = '#EC4899'
-      for (const g of guides) {
-        ctx.beginPath()
-        if (g.axis === 'x') { const x = Math.round(g.at * p.size.w) + 0.5; ctx.moveTo(x, g.from * p.size.h); ctx.lineTo(x, g.to * p.size.h) }
-        else { const y = Math.round(g.at * p.size.h) + 0.5; ctx.moveTo(g.from * p.size.w, y); ctx.lineTo(g.to * p.size.w, y) }
-        ctx.stroke()
+      // A pale edge under the pink line keeps it seen on any picture.
+      ctx.save()
+      for (const [width, color] of [[3, 'rgba(255, 255, 255, 0.75)'], [1.5, '#EC4899']] as const) {
+        ctx.lineWidth = width; ctx.strokeStyle = color
+        for (const g of guides) {
+          ctx.beginPath()
+          if (g.axis === 'x') { const x = Math.round(g.at * p.size.w) + 0.5; ctx.moveTo(x, g.from * p.size.h); ctx.lineTo(x, g.to * p.size.h) }
+          else { const y = Math.round(g.at * p.size.h) + 0.5; ctx.moveTo(g.from * p.size.w, y); ctx.lineTo(g.to * p.size.w, y) }
+          ctx.stroke()
+        }
       }
       ctx.restore()
     }

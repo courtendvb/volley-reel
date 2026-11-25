@@ -35,6 +35,7 @@ export interface SmokeOpts {
   m8?: string
   video?: boolean
   obj?: boolean
+  arrange?: boolean // lining objects up (配置) and smart guides, on a clip and on a blank slide
   copy?: boolean // Ctrl+C / Ctrl+V of objects within a clip and onto another clip
   slides?: boolean // slides: the right-click menu, objects on a slide, PDF pages, a frame, through-play, reading again, export
   assets?: string[] // with obj / slides: image / PDF files to insert
@@ -184,6 +185,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.exportTo) return smokeExport(res, opts.exportTo)
     if (opts.m8) return smokeM8(res, opts.m8)
     if (opts.video) return smokeVideo(res, opts).catch(e => { throw new Error(String((e as Error).stack)) })
+    if (opts.arrange) return smokeArrange(res).catch(e => { throw new Error(String((e as Error).stack)) })
     if (opts.obj) return smokeObjects(res, opts).catch(e => { throw new Error(String((e as Error).stack)) }) // keep where it failed in the log
     if (opts.listRun) {
       // プレー前後: a play picked in the list is followed by the next ones on their own.
@@ -220,6 +222,82 @@ export function installSmoke(h: SmokeHost): void {
       jumped: { match: latest.current.matches[r.matchId].name, code: r.play.code, name: r.name, videoTime: t },
       keys: opts.keys ?? [], groupAfterEachKey: afterKeys, reel: latest.current.reel?.name ?? null,
     }
+  }
+
+  // Lining up (配置) and smart guides through real pointer events and the format panel's buttons, on
+  // a clip and then on a blank slide: three boxes drawn, aligned left, spaced down, put in the middle
+  // across; one dragged to 3 px off the picture's middle sticks there (a screenshot is taken mid-drag,
+  // with the guide), with Alt it does not; one box alone goes to the right edge and the middle down.
+  const smokeArrange = async (res: PlayRef[]) => {
+    const r0 = res.find(x => x.play.rallyId !== null)!
+    let sc = addClips(newReel('arrange smoke'), [{ matchId: r0.matchId, play: r0.play }]).reel
+    const clipId = sc.groups.none[0]
+    sc = toggleMarker(sc, clipId, 1)
+    smokeUse(sc)
+    await waitFor(() => latest.current.reel?.id === sc.id || null, 20000, 'scene')
+    activateClip(latest.current.reel!.clips[clipId], 1)
+    await waitFor(() => playback.attachedKey === r0.matchId && playback.current.ready ? true : null, 20000, 'video')
+    await playback.seekAndWait(latest.current.clipInfo(latest.current.reel!.clips[clipId]).range!.in + 2)
+    const scene = () => latest.current.reels.find(x => x.id === sc.id)!
+    const log: Record<string, unknown> = {}
+    type Box = { id: string; x: number; y: number; w: number; h: number }
+    const r4 = (v: number) => Math.round(v * 10000) / 10000
+    const check = async (label: string, list: () => Annotation[]) => {
+      const canvas = await waitFor(() => document.querySelector<HTMLCanvasElement>('[data-testid=ann-canvas]'), 20000, 'canvas')
+      const pt = (x: number, y: number, mods: { shiftKey?: boolean; altKey?: boolean } = {}) => { const b = canvas.getBoundingClientRect(); return { clientX: b.left + x * b.width, clientY: b.top + y * b.height, bubbles: true, pointerId: 1, ...mods } }
+      const key = async (k: string) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); await sleep(80) }
+      const click = async (x: number, y: number, shiftKey = false) => { canvas.dispatchEvent(new PointerEvent('pointerdown', pt(x, y, { shiftKey }))); await sleep(40); canvas.dispatchEvent(new PointerEvent('pointerup', pt(x, y))); await sleep(120) }
+      const stroke = async (path: [number, number][], altKey = false, shotName?: string) => {
+        canvas.dispatchEvent(new PointerEvent('pointerdown', pt(...path[0]))); await sleep(40)
+        for (const q of path.slice(1)) { canvas.dispatchEvent(new PointerEvent('pointermove', pt(...q, { altKey }))); await sleep(40) }
+        if (shotName) { await sleep(200); await api.smokeShot!(shotName) }
+        canvas.dispatchEvent(new PointerEvent('pointerup', pt(...path[path.length - 1]))); await sleep(150)
+      }
+      const boxes = () => list().filter(a => a.kind === 'rect') as unknown as Box[]
+      const mid = (b: Box): [number, number] => [b.x + b.w / 2, b.y + b.h / 2]
+      const byId = (id: string) => boxes().find(b => b.id === id)!
+      const btn = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('.ann-tools button')].find(b => b.getAttribute('aria-label') === name || b.textContent === name)
+      const press = async (name: string) => { const b = btn(name); if (!b) throw new Error(`no button ${name}`); log[`${label}.${name}.disabled`] = b.disabled || undefined; b.click(); await sleep(200) }
+      for (const [x0, y0, x1, y1] of [[0.1, 0.15, 0.25, 0.3], [0.4, 0.4, 0.5, 0.55], [0.65, 0.6, 0.85, 0.7]]) {
+        await key('r'); await stroke([[x0, y0], [(x0 + x1) / 2, (y0 + y1) / 2], [x1, y1]])
+      }
+      const ids = boxes().map(b => b.id)
+      log[`${label}.drawn`] = ids.length
+      await click(...mid(byId(ids[0]))); await click(...mid(byId(ids[1])), true); await click(...mid(byId(ids[2])), true)
+      log[`${label}.arrangeGroup`] = [...document.querySelectorAll('.fmt-title')].some(e => e.textContent === '配置')
+      await press('左揃え')
+      log[`${label}.left`] = ids.map(id => r4(byId(id).x))
+      await press('上下に等間隔')
+      const tops = ids.map(id => byId(id)).sort((a, b) => a.y - b.y)
+      log[`${label}.gapsDown`] = [r4(tops[1].y - (tops[0].y + tops[0].h)), r4(tops[2].y - (tops[1].y + tops[1].h))]
+      await press('画面の左右中央')
+      const all = ids.map(byId), l = Math.min(...all.map(b => b.x)), r = Math.max(...all.map(b => b.x + b.w))
+      log[`${label}.middleAcross`] = r4((l + r) / 2)
+      // Smart guides: the narrow box dragged so its left edge comes 3 px past the picture's middle.
+      await click(0.03, 0.97) // nothing there: the selection goes
+      const w = canvas.getBoundingClientRect().width, one = byId(ids[1]), [mx, my] = mid(one)
+      const dx = 0.5 - one.x + 3 / w
+      await stroke([[mx, my], [mx + dx / 2, my + 0.01], [mx + dx, my]], false, `arrange-guide-${label}.png`)
+      log[`${label}.snappedLeft`] = r4(byId(ids[1]).x)
+      const before = byId(ids[1]).x, [nx, ny] = mid(byId(ids[1]))
+      await stroke([[nx, ny], [nx + 1.5 / w, ny], [nx + 3 / w, ny]], true)
+      log[`${label}.altMovedPx`] = Math.round((byId(ids[1]).x - before) * w * 10) / 10
+      // One box on its own lines up with the picture.
+      await click(...mid(byId(ids[2])))
+      log[`${label}.alignTitle`] = btn('右揃え')?.title
+      await press('右揃え'); await press('画面の上下中央')
+      const b2 = byId(ids[2])
+      log[`${label}.aloneRightMiddle`] = [r4(b2.x + b2.w), r4(b2.y + b2.h / 2)]
+      log[`${label}.spreadOffWithOne`] = btn('左右に等間隔')?.disabled
+    }
+    await check('clip', () => latest.current.reel!.clips[clipId].annotations)
+    await api.smokeShot!('arrange-clip.png')
+    await putSlide({ group: 1, after: clipId, index: 0 }, 'blank')
+    await waitFor(() => document.querySelector('.card-edit-bar')?.textContent?.includes('スライド') || null, 5000, 'slide editor')
+    await sleep(300)
+    await check('slide', () => (scene().slides ?? []).find(x => x.bg.kind === 'blank')?.annotations ?? [])
+    await api.smokeShot!('arrange-slide.png')
+    return log
   }
 
   // Objects through real pointer, key and form events: a polygon by clicks, a box resized by its

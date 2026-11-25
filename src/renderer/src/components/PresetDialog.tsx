@@ -4,7 +4,7 @@ import type { PlayDir } from '../../../shared/court'
 import { MARKERS, MARKER_COLORS, type ClipMode } from '../../../shared/reel'
 import { HOW_OPTIONS, PRESET_KINDS, REC_MARKS, cleanDialogState, lineupsMissing, buildPreset, presetLabels, presetName, presetRefs, usesRoles, type PresetHow, type PresetKind, type PresetLookups, type PresetSource, type SceneSpec, type VideoPreset } from '../../../shared/presets'
 import { ROLES, roleName } from '../../../shared/roles'
-import { EFFECTS } from '../../../shared/labels'
+import { effectName } from '../../../shared/labels'
 import { personOf, playerLabel } from '../../../shared/rotationSplit'
 import type { PlayerRole } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -106,7 +106,7 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
                   <label key={m}>
                     <input type="checkbox" checked={how.sideoutRec.includes(m)}
                       onChange={e => setHow({ ...how, sideoutRec: e.target.checked ? REC_MARKS.filter(x => x === m || how.sideoutRec.includes(x)) : how.sideoutRec.filter(x => x !== m) })} />
-                    {m} {EFFECTS.R[m]}
+                    {m} {effectName('R', m)}
                   </label>
                 ))}
               </div>

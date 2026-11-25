@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { CHART_EFFECTS, DEFAULT_CHART, chartBox, chartResult, chartStats, drawChart, getChartColors, lineColor, pointColor, setChartColors, type ChartColors, type ChartDot } from '../../../shared/chart'
-import { EFFECTS } from '../../../shared/labels'
+import { effectName } from '../../../shared/labels'
 import { t } from '../../../shared/i18n'
 
 // A made-up chart for each skill with every evaluation in it, drawn in the colours being chosen, and a
@@ -31,7 +31,7 @@ export function ChartPreview({ colors }: { colors: ChartColors }) {
   const look = { colors: DEFAULT_CHART.colors }
   const before = getChartColors()
   setChartColors(colors)
-  const keyOf = (skill: 'A' | 'S') => CHART_EFFECTS.map(e => ({ e, name: EFFECTS[skill][e], line: lineColor(look, e, skill), point: pointColor(look, e, chartResult(e), skill) }))
+  const keyOf = (skill: 'A' | 'S') => CHART_EFFECTS.map(e => ({ e, name: effectName(skill, e), line: lineColor(look, e, skill), point: pointColor(look, e, chartResult(e), skill) }))
   const keys = { S: keyOf('S'), A: keyOf('A') }
   setChartColors(before)
   return (

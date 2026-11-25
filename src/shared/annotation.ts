@@ -11,7 +11,7 @@
 // assets/ folder. Drawing it needs the decoded image, so drawAnnotation takes a lookup for it.
 // With a quad its four corners are placed one by one, so the picture (a heatmap from analysis
 // software, say) lies on the court with the camera's perspective; x, y, w, h are then its bounds.
-import { homography, project, type Ctx, type ZoneCell } from './court'
+import { floorQuad, homography, moveOnFloor, project, refloorQuad, restandQuad, standQuad, type CourtFit, type Ctx, type ZoneCell } from './court'
 import type { DiscPart } from './disc'
 
 export type AnnotationKind = 'text' | 'arrow' | 'circle' | 'rect' | 'freehand' | 'polyline' | 'polygon' | 'image'
@@ -70,7 +70,9 @@ export function nextNumber(list: Annotation[]): number {
 
 export type Annotation = Base & (
   // align center: x is the middle of the text. quick: the clip's headline from the text field in the tools.
-  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean; font?: string }
+  // quad: the text lies on the court's floor, drawn onto these corners (x, y stay where it stood flat);
+  // stand: it stands upright on the floor instead, a board with its foot on the floor.
+  | { kind: 'text'; x: number; y: number; text: string; size: number; bold?: boolean; outline?: boolean; box?: TextBox | null; align?: 'center'; quick?: boolean; font?: string; quad?: Quad; stand?: true }
   // c1 / c2: a curved arrow, a cubic Bézier from (x1, y1) to (x2, y2) pulled toward these two points.
   | { kind: 'arrow'; x1: number; y1: number; x2: number; y2: number; width: number; heads?: Heads; c1?: [number, number]; c2?: [number, number] }
   | ({ kind: 'circle' | 'rect'; x: number; y: number; w: number; h: number; width: number } & Fillable)
@@ -247,9 +249,15 @@ export function coverCrop(iw: number, ih: number, bw: number, bh: number): Crop 
   return k >= 1 ? { x: 0, y: (1 - 1 / k) / 2, w: 1, h: 1 / k } : { x: (1 - k) / 2, y: 0, w: k, h: 1 }
 }
 
-export function translate(a: Annotation, dx: number, dy: number): Annotation {
+// floor: the court fitted to the picture (W × H pixels): a text on the floor moves over it, drawn
+// again as the floor shows it where it goes (without it, or off the floor, it just shifts).
+export function translate(a: Annotation, dx: number, dy: number, floor?: { corners: CourtFit['corners']; W: number; H: number } | null): Annotation {
+  if (floor && a.kind === 'text' && a.quad) {
+    const q = moveOnFloor(floor.corners, floor.W, floor.H, a.quad, !!a.stand, dx, dy)
+    if (q) return { ...a, x: a.x + dx, y: a.y + dy, quad: q }
+  }
   switch (a.kind) {
-    case 'text': return { ...a, x: a.x + dx, y: a.y + dy }
+    case 'text': return { ...a, x: a.x + dx, y: a.y + dy, ...(a.quad ? { quad: a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad } : {}) }
     case 'arrow': return { ...a, x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy,
       ...(a.c1 && a.c2 ? { c1: [a.c1[0] + dx, a.c1[1] + dy] as Pt, c2: [a.c2[0] + dx, a.c2[1] + dy] as Pt } : {}) }
     case 'image': return a.quad ? withQuad(a, a.quad.map(([x, y]) => [x + dx, y + dy]) as Quad) : { ...a, x: a.x + dx, y: a.y + dy }
@@ -265,6 +273,44 @@ export function withQuad(a: ImageAnnotation, quad: Quad | null): ImageAnnotation
   const xs = quad.map(p => p[0]), ys = quad.map(p => p[1])
   const x = Math.min(...xs), y = Math.min(...ys)
   return { ...rest, quad, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+
+// A text laid on the floor on these corners, or stood on it (null: flat on the picture again where it was).
+export function withTextQuad(a: TextAnnotation, quad: Quad | null, stand = !!a.stand): TextAnnotation {
+  const { quad: _q, stand: _s, ...rest } = a
+  return quad ? { ...rest, quad, ...(stand ? { stand: true as const } : {}) } : rest
+}
+export type TextAnnotation = Extract<Annotation, { kind: 'text' }>
+
+// A text laid on the court's floor where it stands (W × H: the picture, to measure it): as wide on
+// the floor as it shows, its height foreshortened. Null when it is not over the floor.
+export function layTextOnFloor(ctx: Ctx, a: TextAnnotation, corners: CourtFit['corners'], W: number, H: number): TextAnnotation | null {
+  const b = bounds(ctx, withTextQuad(a, null), W, H), y = b.y + b.h / 2
+  const q = floorQuad(corners, { x: b.x, y }, { x: b.x + b.w, y }, (b.w * W) / (b.h * H))
+  return q ? withTextQuad(a, q, false) : null
+}
+
+// A text stood upright on the floor, its foot where its bottom edge is, as wide as it shows.
+export function standTextOnFloor(ctx: Ctx, a: TextAnnotation, corners: CourtFit['corners'], W: number, H: number): TextAnnotation | null {
+  const b = bounds(ctx, withTextQuad(a, null), W, H), y = b.y + b.h
+  const q = standQuad(corners, W, H, { x: b.x, y }, { x: b.x + b.w, y }, (b.w * W) / (b.h * H))
+  return q ? withTextQuad(a, q, true) : null
+}
+
+// Texts on the floor whose words or look changed from `before` laid again for their new shape (same
+// place on the floor; the same height, or as much larger or smaller as the font size), so they are
+// not squeezed or stretched onto their old corners.
+export function refloorTexts(ctx: Ctx, before: Annotation[], after: Annotation[], corners: CourtFit['corners'], W: number, H: number): Annotation[] {
+  const shape = (a: TextAnnotation) => JSON.stringify([a.text, a.size, a.bold, a.font, a.box, a.align])
+  return after.map(a => {
+    if (a.kind !== 'text' || !a.quad) return a
+    const old = before.find(x => x.id === a.id)
+    if (!old || old.kind !== 'text' || shape(old) === shape(a)) return a
+    const b = bounds(ctx, withTextQuad(a, null), W, H), aspect = (b.w * W) / (b.h * H)
+    const scale = old.size > 0 && a.size > 0 ? a.size / old.size : 1
+    const q = a.stand ? restandQuad(corners, W, H, a.quad, aspect, scale) : refloorQuad(corners, a.quad, aspect, scale)
+    return q ? withTextQuad(a, q) : a
+  })
 }
 
 // The corners of the picture's box, to start laying it with perspective from where it is.
@@ -355,6 +401,7 @@ export const hasFill = (a: Annotation): boolean => a.kind === 'rect' || a.kind =
 export function bounds(ctx: Ctx, a: Annotation, W: number, H: number): Rect {
   switch (a.kind) {
     case 'text': {
+      if (a.quad) return pointsBox(a.quad)
       const s = H / REF_HEIGHT
       setTextFont(ctx, a.size * s, a.bold !== false, a.font)
       const lines = textLines(a.text)
@@ -391,7 +438,7 @@ export function hitTest(ctx: Ctx, list: Annotation[], x: number, y: number, W: n
     if (a.kind === 'arrow') { if (nearPath(arrowPath(a), false, a.width)) return a; continue }
     if (a.kind === 'freehand' || a.kind === 'polyline') { if (nearPath(a.points, false, a.width)) return a; continue }
     if (a.kind === 'polygon') { if (nearPath(a.points, true, a.width) || (a.fill && pointInPolygon(x, y, a.points))) return a; continue }
-    if (a.kind === 'image' && a.quad) { if (nearPath(quadRing(a.quad), true, 0) || pointInPolygon(x, y, quadRing(a.quad))) return a; continue }
+    if ((a.kind === 'image' || a.kind === 'text') && a.quad) { if (nearPath(quadRing(a.quad), true, 0) || pointInPolygon(x, y, quadRing(a.quad))) return a; continue }
     const b = bounds(ctx, a, W, H)
     if (x >= b.x - tx && x <= b.x + b.w + tx && y >= b.y - ty && y <= b.y + b.h + ty) return a
   }
@@ -438,7 +485,7 @@ export function drawAnnotation(ctx: Ctx, a: Annotation, W: number, H: number, im
 
 function drawKind(ctx: Ctx, a: Annotation, W: number, H: number, s: number, images?: ImageLookup): void {
   switch (a.kind) {
-    case 'text': drawText(ctx, a, W, H, s); break
+    case 'text': if (!a.quad || !drawTextOnFloor(ctx, a, W, H, s)) drawText(ctx, a, W, H, s); break
     case 'image': {
       const img = images?.(a.assetId) ?? null
       if (img) {
@@ -643,6 +690,29 @@ export function affine(s: [P, P, P], d: [P, P, P]): [number, number, number, num
   return [a, b, c, dd, d[0].x - a * s[0].x - c * s[0].y, d[0].y - b * s[0].x - dd * s[0].y]
 }
 
+// A text on the floor: drawn flat on a canvas of its own (a little larger than its box, for the
+// outline), then warped onto its corners, which stand for its box. False when it can't be (no
+// OffscreenCanvas: tests), and it is then drawn flat.
+const FLOOR_TEXT_SHARP = 2 // drawn this much finer than the picture, so it stays sharp when the floor makes it larger
+function drawTextOnFloor(ctx: Ctx, a: TextAnnotation, W: number, H: number, s: number): boolean {
+  if (typeof OffscreenCanvas === 'undefined' || !a.quad) return false
+  const flat = withTextQuad(a, null), b = bounds(ctx, flat, W, H)
+  const bw = b.w * W, bh = b.h * H, m = Math.ceil(a.size * s * 0.2) + 2, k = FLOOR_TEXT_SHARP
+  if (!(bw > 0 && bh > 0)) return false
+  const cw = Math.ceil((bw + 2 * m) * k), ch = Math.ceil((bh + 2 * m) * k)
+  if (cw > 8192 || ch > 8192) return false
+  const off = new OffscreenCanvas(cw, ch), c = off.getContext('2d')
+  if (!c) return false
+  c.scale(k, k); c.translate(m - b.x * W, m - b.y * H)
+  c.lineJoin = 'round'; c.lineCap = 'round'
+  drawText(c, flat, W, H, s)
+  // The corners stand for the box: the margin goes on beyond them, the same way.
+  const hm = homography(a.quad.map(([x, y]) => ({ x: x * W, y: y * H })) as [P, P, P, P])
+  const ex = m / bw, ey = m / bh, at = (u: number, v: number): Pt => { const p = project(hm, u, v); return [p.x, p.y] }
+  drawWarped(ctx, off, { x: 0, y: 0, w: cw, h: ch }, [at(-ex, -ey), at(1 + ex, -ey), at(-ex, 1 + ey), at(1 + ex, 1 + ey)])
+  return true
+}
+
 // Text can have several lines ("\n"); each is 1.2× the size apart, and centered text centers each line.
 const textLines = (t: string): string[] => t.split('\n')
 
@@ -780,7 +850,7 @@ function setTextFont(ctx: Ctx, px: number, bold = true, font?: string): void {
 export function roundCoords(a: Annotation): Annotation {
   const r = (v: number) => Math.round(v * 10000) / 10000
   switch (a.kind) {
-    case 'text': return { ...a, x: r(a.x), y: r(a.y) }
+    case 'text': return { ...a, x: r(a.x), y: r(a.y), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}) }
     case 'arrow': return { ...a, x1: r(a.x1), y1: r(a.y1), x2: r(a.x2), y2: r(a.y2), ...(a.c1 && a.c2 ? { c1: [r(a.c1[0]), r(a.c1[1])] as Pt, c2: [r(a.c2[0]), r(a.c2[1])] as Pt } : {}) }
     case 'image': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h), ...(a.quad ? { quad: a.quad.map(([x, y]) => [r(x), r(y)]) as Quad } : {}) }
     case 'circle': case 'rect': return { ...a, x: r(a.x), y: r(a.y), w: r(a.w), h: r(a.h) }

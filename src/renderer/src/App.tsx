@@ -145,6 +145,7 @@ export function App() {
   // More objects picked with Shift+click: moved, deleted and grouped with the selected one.
   const [extraSel, setExtraSel] = useState<string[]>([])
   const extraSelRef = useRef(extraSel)
+  const stageBox = useRef({ w: 0, h: 0 }) // the video picture on screen (set as it is drawn): texts laid on the floor are measured in it
   extraSelRef.current = extraSel
   const selectAnn = useCallback((id: string | null) => { setSelectedAnn(id); setExtraSel([]) }, [])
   const toggleExtra = useCallback((id: string) => setExtraSel(xs => (xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])), [])
@@ -1029,6 +1030,7 @@ export function App() {
             )}
             {match && (
               <VideoPane key={match.id} match={match} onLook={look => setLook(match.id, look)} editMode={{ on: focusEdit, onToggle: () => setFocusEdit(f => !f) }} overlay={size => {
+                stageBox.current = size
                 const here = active && activeInfo?.range && active.matchId === match.id ? { key: active.matchId, ...activeInfo.range } : null
                 if (cardEditCard) {
                   return (
@@ -1206,7 +1208,7 @@ export function App() {
                 tool={annTool} onTool={setAnnTool} style={annStyle} onStyle={setAnnStyle}
                 annotations={activeAnns} scopeOf={activeScopeOf} onScope={setAnnScope} canVideo={!!video} marker={activeMarker} selectedId={selectedAnn} editPoints={editPoints} onEditPoints={setEditPoints} cropping={cropping} onCropping={setCropping} extraIds={extraSel}
                 onSelect={selectAnn} onChange={setAnns} onInsertImage={() => void insertImage()} clip={activeInfo.range} disabled={seqPlaying}
-                court={matches[active.matchId]?.court?.corners ?? null}
+                court={matches[active.matchId]?.court?.corners ?? null} frame={stageBox.current}
               />
               <ObjectTimeline range={activeInfo.range} objects={timelineObjects} selectedId={selectedAnn} disabled={seqPlaying}
                 onSelect={id => { setAnnTool('select'); setSelectedAnn(id) }} onSpan={setObjectSpan} />

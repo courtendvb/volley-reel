@@ -6,6 +6,7 @@ import { Help } from './CourtControls'
 import { reshapeDisc, syncDiscSides } from '../../../shared/disc'
 import {
   COLORS, DEFAULT_TEXT_BOX, asOneObject, isZonePaint, sameChange, emphasisOf, styleMany, boxQuad, hasFill, isPoints, withEmphasis, withGroups, withQuad,
+  layTextOnFloor, refloorTexts, standTextOnFloor, withTextQuad,
   type Annotation, type Dash, type Emphasis, type Heads, type StylePatch, type TextBox,
 } from '../../../shared/annotation'
 import { MAX_EDIT_POINTS, fullRect, setClosed, setCurved, simplify, toPolygon, zoomCrop } from '../../../shared/annotationEdit'
@@ -39,10 +40,15 @@ interface Props {
   onSelect: (id: string | null) => void
   onChange: (list: Annotation[]) => void
   onInsertImage: () => void
-  court?: CourtFit['corners'] | null // the clip's match has its court fitted: pictures can be laid on it
+  court?: CourtFit['corners'] | null // the clip's match has its court fitted: pictures and texts can be laid on it
+  frame?: { w: number; h: number } // the picture's size on screen, to measure a text laid on the floor
   clip: { in: number; out: number }
   disabled: boolean // during through-play
 }
+
+// For measuring texts laid on the floor.
+let measureCtx: CanvasRenderingContext2D | null = null
+const measure = () => (measureCtx ??= document.createElement('canvas').getContext('2d')!)
 
 const TOOLS: [Tool, string, string, string][] = [
   ['select', t('選択'), 'V', t('選択・移動・頂点の編集')], ['text', 'T', 'T', t('テキスト')], ['arrow', '↗', 'A', t('矢印')], ['curve', '⤴', 'B', t('曲線の矢印（ベジェ曲線。ドラッグで始点から終点へ。青い点を動かして曲げる）')],
@@ -61,9 +67,12 @@ export function AnnotationTools(p: Props) {
   const [zoneColor, setZoneColor] = useState('#EF4444')
   const sel = p.annotations.find(a => a.id === p.selectedId) ?? null
   // On a painted zone the change goes to the whole zone paint (asOneObject); otherwise to the one object.
+  // A text on the floor whose words or look change is laid again for its new shape.
+  const frame = p.frame && p.frame.w > 0 && p.frame.h > 0 ? p.frame : { w: 1280, h: 720 }
+  const change = (list: Annotation[]) => p.onChange(p.court ? refloorTexts(measure(), p.annotations, list, p.court, frame.w, frame.h) : list)
   const update = (a: Annotation) => {
     const before = p.annotations.find(x => x.id === a.id), all = asOneObject(p.annotations, a.id)
-    p.onChange(p.annotations.map(x => (x.id === a.id ? a : before && all.includes(x.id) ? sameChange(before, a, x) : x)))
+    change(p.annotations.map(x => (x.id === a.id ? a : before && all.includes(x.id) ? sameChange(before, a, x) : x)))
   }
   // Several picked (Shift+click): the format applies to all of them and their groups, each taking
   // what suits its kind. The controls show the selected one's values.
@@ -75,7 +84,7 @@ export function AnnotationTools(p: Props) {
     return a?.kind === 'polygon' && a.disc?.part === 'side' ? p.annotations.find(x => x.groupId === a.groupId && x.kind === 'polygon' && x.disc?.part === 'top')?.id ?? id : id
   }
   const set = (patch: StylePatch, on?: (a: Annotation) => boolean) => {
-    if (sel) p.onChange(syncDiscSides(styleMany(p.annotations, many.map(discTop), patch, on)))
+    if (sel) change(syncDiscSides(styleMany(p.annotations, many.map(discTop), patch, on)))
     else p.onStyle({ ...p.style, ...patch } as AnnStyle)
   }
   const notText = (a: Annotation) => a.kind !== 'text', isText = (a: Annotation) => a.kind === 'text'
@@ -247,6 +256,29 @@ export function AnnotationTools(p: Props) {
             </select>}
             <label className="check"><input type="checkbox" checked={!!v.box} aria-label={t('枠付き')} disabled={p.disabled}
               onChange={e => set({ box: e.target.checked ? { ...DEFAULT_TEXT_BOX } : null })} /> {t('枠付き')}</label>
+            {/* On the floor: the text lies on the fitted court in its perspective; its corners can then be dragged. */}
+            {sel?.kind === 'text' && p.court && (() => {
+              // Laid flat on the floor or stood up on it, from where the text is now (flat on the picture).
+              const mode = !sel.quad ? 'flat' : sel.stand ? 'stand' : 'floor'
+              const flat = withTextQuad(sel, null)
+              const lay = mode === 'floor' ? null : layTextOnFloor(measure(), flat, p.court, frame.w, frame.h)
+              const stand = mode === 'stand' ? null : standTextOnFloor(measure(), flat, p.court, frame.w, frame.h)
+              return (
+              <>
+                <select value={mode} aria-label={t('床との向き')} disabled={p.disabled}
+                  title={t('コートの床に文字を寝かせるか、床に立たせて、コートの遠近に合わせる（四隅は後からドラッグで動かせる。文字をコートの床の上に動かすと使えます）')}
+                  onChange={e => update(e.target.value === 'floor' && lay ? lay : e.target.value === 'stand' && stand ? stand : withTextQuad(sel, null))}>
+                  <option value="flat">{t('画面に平ら')}</option>
+                  <option value="floor" disabled={mode !== 'floor' && !lay}>{t('床に沿わせる')}</option>
+                  <option value="stand" disabled={mode !== 'stand' && !stand}>{t('床に立たせる')}</option>
+                </select>
+                {mode === 'floor' && (
+                  <button disabled={p.disabled} title={t('文字を上下左右逆にする（反対側から読む向き）')}
+                    onClick={() => { const q = sel.quad!; update(withTextQuad(sel, [q[3], q[2], q[1], q[0]])) }}>{t('180°回転')}</button>
+                )}
+              </>
+              )
+            })()}
           </Group>
         )}
         {textKinds && v.box && (

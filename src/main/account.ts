@@ -217,11 +217,21 @@ export class Account {
     return r.url
   }
 
-  // The team's Stripe Customer Portal: cancel, change the card, read the invoices. Admins only.
-  async portalUrl(): Promise<string> {
+  // The team's Stripe Customer Portal: cancel, change the card, read the invoices. For the team's admin
+  // or the person who pays; anyone else may send the admin passcode, which makes them the admin.
+  // null: the server wants that passcode first (not_admin).
+  async portalUrl(adminPasscode?: string): Promise<string | null> {
     const token = this.deviceToken(), p = this.lease()
     if (!token || !p) throw new AccountFailure('invalid_device')
-    const r = await this.call<{ url?: string }>('/functions/v1/account-portal', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id })
+    const passcode = adminPasscode?.trim()
+    let r: { url?: string }
+    try {
+      r = await this.call<{ url?: string }>('/functions/v1/account-portal', { device_token: token, device_id: this.saved.deviceId, team_id: p.team.id, ...(passcode ? { admin_passcode: passcode } : {}) })
+    } catch (e) {
+      if (e instanceof AccountFailure && e.code === 'not_admin') return null
+      if (e instanceof AccountFailure && e.code === 'invalid_credentials' && passcode) throw new AccountFailure('wrong_admin_passcode')
+      throw e
+    }
     if (!r.url?.startsWith('https://')) throw new AccountFailure('server', 'no portal url')
     return r.url
   }

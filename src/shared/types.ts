@@ -1,6 +1,6 @@
 import type { ChartLineColors } from './chart'
 import type { Lang } from './i18n'
-import type { AccountState, PlanPrices, TeamAction, WebAccess } from './account'
+import type { AccountState, PlanPrices, PortalResult, TeamAction, WebAccess } from './account'
 import type { Annotation, HeadlineStyle } from './annotation'
 import type { CourtFit, StrikeHeights } from './court'
 import type { CodeEdit, ScoutInsert } from './codeEdit'
@@ -274,7 +274,9 @@ export interface Api {
   accountSignIn(email: string, code: string): Promise<AccountState>
   accountRefresh(teamId?: number): Promise<AccountState> // a team id: switch to that team
   accountCheckout(plan: 'monthly' | 'annual'): Promise<void> // the payment page in the browser
-  accountPortal(): Promise<void> // the team's Stripe Customer Portal in the browser: cancel, card, invoices
+  // The team's Stripe Customer Portal in the browser: cancel, card, invoices. 'needs_admin': the account is
+  // a member who doesn't pay, and may try again with the team's admin passcode.
+  accountPortal(adminPasscode?: string): Promise<PortalResult>
   accountPrices(): Promise<PlanPrices | null> // what the plan buttons say; null offline
   accountWeb(): Promise<WebAccess> // the team ID (and, for an admin, the passcodes) for SyncScout Web
   accountOpenWeb(page: 'view' | 'admin'): Promise<void> // SyncScout Web in the browser

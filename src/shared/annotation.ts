@@ -519,7 +519,7 @@ function drawKind(ctx: Ctx, a: Annotation, W: number, H: number, s: number, imag
         const src = c ? { x: c.x * iw, y: c.y * ih, w: c.w * iw, h: c.h * ih } : { x: 0, y: 0, w: iw, h: ih }
         if (a.quad) {
           const q = a.quad.map(([x, y]) => [x * W, y * H]) as Quad, key = `i|${imageId(img)}|${JSON.stringify(src)}`
-          if (!drawWarpedSmooth(ctx, key, q, src.w, src.h, (c, k) => c.drawImage(img, src.x, src.y, src.w, src.h, 0, 0, src.w * k, src.h * k)))
+          if (!drawWarpedSmooth(ctx, key, q, { img, src }))
             drawWarped(ctx, img, src, q)
         }
         else if (c) ctx.drawImage(img, c.x * iw, c.y * ih, c.w * iw, c.h * ih, a.x * W, a.y * H, a.w * W, a.h * H)
@@ -732,26 +732,33 @@ function drawTextOnFloor(ctx: Ctx, a: TextAnnotation, W: number, H: number, s: n
   // The corners stand for the box: the margin goes on beyond them, the same way.
   const dst: Quad = [at(-ex, -ey), at(1 + ex, -ey), at(-ex, 1 + ey), at(1 + ex, 1 + ey)]
   const key = `t|${W}|${H}|${s}|${JSON.stringify([a.text, a.size, a.bold, a.outline, a.font, a.box, a.align, a.color])}`
-  return drawWarpedSmooth(ctx, key, dst, bw + 2 * m, bh + 2 * m, (c, k) => {
+  return drawWarpedSmooth(ctx, key, dst, { w: bw + 2 * m, h: bh + 2 * m, paint: (c, k) => {
     c.scale(k, k); c.translate(m - b.x * W, m - b.y * H)
     c.lineJoin = 'round'; c.lineCap = 'round'
     drawText(c, flat, W, H, s)
-  })
+  } })
 }
 
 // A picture or text warped with perspective, drawn smooth. Straight onto the picture, its far end
 // (where the floor shrinks it a lot) and the edges of the mesh came out jagged, worse with thin
-// fonts. So the flat thing is drawn as fine as the warp shows it at its largest, the mesh is drawn
-// onto a canvas SUPERSAMPLE times finer than the picture, and that is drawn down onto the picture
-// with high-quality smoothing. The result is kept for the next frames while nothing about it
-// changes. sw × sh: the flat thing's size in picture pixels; paint draws it flat, k times that size.
-// False without OffscreenCanvas.
-const SUPERSAMPLE = 3
-const MAX_PIXELS = 16_000_000
-interface Warped { canvas: OffscreenCanvas; x: number; y: number; w: number; h: number }
+// fonts. So the mesh is drawn onto a canvas SUPERSAMPLE times finer than the screen, and that is
+// drawn down onto the picture with high-quality smoothing. A picture is warped from itself; a text
+// is first drawn flat (paint, k times its size w × h in picture pixels) as fine as the warp shows
+// it at its largest. The result is kept for the next frames while nothing about it changes.
+// Memory is bounded: each canvas has a cap, and the kept ones a total, the oldest freed first
+// (moving or reshaping one makes a new one every frame). False without OffscreenCanvas.
+const SUPERSAMPLE = 2
+const MAX_OUT = 4_000_000 // pixels of one warped canvas
+const MAX_FLAT = 2_000_000 // pixels of a text drawn flat
+const CACHE_PIXELS = 24_000_000 // all the kept canvases together (about 96 MB)
+type Flat = { img: CanvasImageSource; src: { x: number; y: number; w: number; h: number } }
+  | { w: number; h: number; paint: (c: OffscreenCanvasRenderingContext2D, k: number) => void }
+interface Warped { canvas: OffscreenCanvas | null; x: number; y: number; w: number; h: number }
 const warpCache = new Map<string, Warped>()
-function drawWarpedSmooth(ctx: Ctx, key: string, dst: Quad, sw: number, sh: number, paint: (c: OffscreenCanvasRenderingContext2D, k: number) => void): boolean {
-  if (typeof OffscreenCanvas === 'undefined' || !(sw > 0 && sh > 0)) return false
+let warpPixels = 0
+const pixelsOf = (w: Warped) => (w.canvas ? w.canvas.width * w.canvas.height : 0)
+function drawWarpedSmooth(ctx: Ctx, key: string, dst: Quad, flat: Flat): boolean {
+  if (typeof OffscreenCanvas === 'undefined') return false
   const t = typeof ctx.getTransform === 'function' ? ctx.getTransform() : null
   const dpr = t ? Math.max(Math.hypot(t.a, t.b), Math.hypot(t.c, t.d)) || 1 : 1
   const cvs = (ctx as { canvas?: { width: number; height: number } }).canvas
@@ -759,12 +766,16 @@ function drawWarpedSmooth(ctx: Ctx, key: string, dst: Quad, sw: number, sh: numb
   let hit = warpCache.get(full)
   if (hit) { warpCache.delete(full); warpCache.set(full, hit) } // the most recent last
   else {
-    hit = warpSmooth(dst, sw, sh, paint, dpr, t && cvs && !t.b && !t.c ? { x0: -t.e / t.a, y0: -t.f / t.d, x1: (cvs.width - t.e) / t.a, y1: (cvs.height - t.f) / t.d } : null) ?? undefined
+    hit = warpSmooth(dst, flat, dpr, t && cvs && !t.b && !t.c ? { x0: -t.e / t.a, y0: -t.f / t.d, x1: (cvs.width - t.e) / t.a, y1: (cvs.height - t.f) / t.d } : null) ?? undefined
     if (!hit) return false
-    warpCache.set(full, hit)
-    while (warpCache.size > 24) warpCache.delete(warpCache.keys().next().value!)
+    warpCache.set(full, hit); warpPixels += pixelsOf(hit)
+    while (warpCache.size > 1 && (warpPixels > CACHE_PIXELS || warpCache.size > 24)) {
+      const [k, old] = warpCache.entries().next().value!
+      warpCache.delete(k); warpPixels -= pixelsOf(old)
+      if (old.canvas) { old.canvas.width = 0; old.canvas.height = 0 } // let its memory go now, not at the next GC
+    }
   }
-  if (hit.w > 0 && hit.h > 0) {
+  if (hit.canvas && hit.w > 0 && hit.h > 0) {
     ctx.save()
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(hit.canvas, hit.x, hit.y, hit.w, hit.h)
@@ -773,8 +784,10 @@ function drawWarpedSmooth(ctx: Ctx, key: string, dst: Quad, sw: number, sh: numb
   return true
 }
 
-function warpSmooth(dst: Quad, sw: number, sh: number, paint: (c: OffscreenCanvasRenderingContext2D, k: number) => void, dpr: number,
-  view: { x0: number; y0: number; x1: number; y1: number } | null): Warped | null {
+// For the memory smoke check: how many warped canvases are kept, and their size.
+export const warpStats = () => ({ kept: warpCache.size, mb: +((warpPixels * 4) / 1048576).toFixed(1) })
+
+function warpSmooth(dst: Quad, flat: Flat, dpr: number, view: { x0: number; y0: number; x1: number; y1: number } | null): Warped | null {
   // Only the part that can show: the quad's bounds, cut to the canvas.
   const xs = dst.map(p => p[0]), ys = dst.map(p => p[1])
   const lo = (a: number, b: number) => Math.min(a, b), hi = (a: number, b: number) => Math.max(a, b)
@@ -782,21 +795,26 @@ function warpSmooth(dst: Quad, sw: number, sh: number, paint: (c: OffscreenCanva
   const y0 = Math.floor(Math.max(Math.min(...ys), view ? lo(view.y0, view.y1) : -Infinity)) - 1
   const x1 = Math.ceil(Math.min(Math.max(...xs), view ? hi(view.x0, view.x1) : Infinity)) + 1
   const y1 = Math.ceil(Math.min(Math.max(...ys), view ? hi(view.y0, view.y1) : Infinity)) + 1
-  const dummy = new OffscreenCanvas(1, 1)
-  if (!(x1 > x0 && y1 > y0) || !isFinite(x0 + y0 + x1 + y1)) return { canvas: dummy, x: 0, y: 0, w: 0, h: 0 } // all of it off the picture
-  let k = SUPERSAMPLE * dpr
-  if ((x1 - x0) * (y1 - y0) * k * k > MAX_PIXELS) k = Math.sqrt(MAX_PIXELS / ((x1 - x0) * (y1 - y0)))
-  const len = (p: Pt, q: Pt) => Math.hypot(q[0] - p[0], q[1] - p[1])
-  const most = Math.max(len(dst[0], dst[1]) / sw, len(dst[2], dst[3]) / sw, len(dst[0], dst[2]) / sh, len(dst[1], dst[3]) / sh)
-  const ks = Math.max(0.25, Math.min(Math.min(most, 6) * k, 8192 / sw, 8192 / sh, Math.sqrt(MAX_PIXELS / (sw * sh))))
-  const src = new OffscreenCanvas(Math.max(1, Math.ceil(sw * ks)), Math.max(1, Math.ceil(sh * ks))), sc = src.getContext('2d')
+  if (!(x1 > x0 && y1 > y0) || !isFinite(x0 + y0 + x1 + y1)) return { canvas: null, x: 0, y: 0, w: 0, h: 0 } // all of it off the picture
+  const area = (x1 - x0) * (y1 - y0), k = Math.min(SUPERSAMPLE * dpr, Math.sqrt(MAX_OUT / area))
+  let img: CanvasImageSource, src: { x: number; y: number; w: number; h: number }
+  if ('img' in flat) ({ img, src } = flat)
+  else {
+    if (!(flat.w > 0 && flat.h > 0)) return null
+    const len = (p: Pt, q: Pt) => Math.hypot(q[0] - p[0], q[1] - p[1])
+    const most = Math.max(len(dst[0], dst[1]) / flat.w, len(dst[2], dst[3]) / flat.w, len(dst[0], dst[2]) / flat.h, len(dst[1], dst[3]) / flat.h)
+    const ks = Math.max(0.25, Math.min(most * k, Math.sqrt(MAX_FLAT / (flat.w * flat.h))))
+    const c = new OffscreenCanvas(Math.max(1, Math.ceil(flat.w * ks)), Math.max(1, Math.ceil(flat.h * ks))), sc = c.getContext('2d')
+    if (!sc) return null
+    flat.paint(sc, ks)
+    img = c; src = { x: 0, y: 0, w: flat.w * ks, h: flat.h * ks }
+  }
   const out = new OffscreenCanvas(Math.max(1, Math.ceil((x1 - x0) * k)), Math.max(1, Math.ceil((y1 - y0) * k))), oc = out.getContext('2d')
-  if (!sc || !oc) return null
-  sc.imageSmoothingEnabled = true; sc.imageSmoothingQuality = 'high'
-  paint(sc, ks)
+  if (!oc) return null
   oc.imageSmoothingEnabled = true; oc.imageSmoothingQuality = 'high'
   oc.scale(k, k); oc.translate(-x0, -y0)
-  drawWarped(oc, src, { x: 0, y: 0, w: sw * ks, h: sh * ks }, dst, WARP_STEPS, 1.2 / k)
+  drawWarped(oc, img, src, dst, WARP_STEPS, 1.2 / k)
+  if (img instanceof OffscreenCanvas) { img.width = 0; img.height = 0 } // the flat text is not needed any more
   return { canvas: out, x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 

@@ -2139,7 +2139,9 @@ export function installSmoke(h: SmokeHost): void {
       await api.smokeShot!(`clip-menu-${label === t('別のシーンへ移動') ? 'move' : 'copy'}.png`)
       const name = first.title
       first.click(); await sleep(300)
-      return latest.current.reels.find(r => r.name === name && r.id !== start.id)!.id
+      const hit = latest.current.reels.find(r => r.name === name && r.id !== start.id)
+      if (!hit) throw new Error(`no scene "${name}" among ${JSON.stringify(latest.current.reels.map(r => [r.name, r.id === start.id]))}`)
+      return hit.id
     }
     const sameIn = (sceneId: string, c: Clip) => findClip(latest.current.reels.find(r => r.id === sceneId)!, c.matchId, c.playId)
     // 0. With the real mouse: the menu closes on a click anywhere outside it (the video, the play
@@ -2181,6 +2183,29 @@ export function installSmoke(h: SmokeHost): void {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(300)
     const after = latest.current.reels.map(r => ({ id: r.id, n: Object.keys(r.clips).length }))
     const undone = JSON.stringify(after) === JSON.stringify(before)
+    // 3b. A slide: a blank one put below the first clip, then its own menu moves it to another scene
+    // (gone from here, behind the same play there when that scene has it) and undo brings it back.
+    setReelId(start.id); await sleep(500) // undo shows the scene it changed last
+    const a0 = await rightClick(0), had = new Set((latest.current.reel!.slides ?? []).map(x => x.id))
+    item(t('無地のスライド'))!.click()
+    const made = await waitFor(() => latest.current.reel!.slides?.find(x => !had.has(x.id)) ?? null, 5000, 'blank slide')
+    if (made.after !== a0.id) throw new Error(`blank slide went to ${JSON.stringify([made.group, made.after, a0.id])}`)
+    const slideEl = await waitFor(() => [...document.querySelectorAll<HTMLElement>('.reel-groups .slide-row')].find(el => el.previousElementSibling === rows()[0]) ?? null, 3000, 'slide row')
+    const sb = slideEl.getBoundingClientRect()
+    slideEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: sb.left + 60, clientY: sb.top + sb.height / 2 }))
+    await waitFor(menu, 3000, 'slide menu')
+    const slideLabels = [...menu()!.querySelectorAll('button')].map(x => x.textContent)
+    await api.smokeShot!('slide-menu.png')
+    const seen = new Set(latest.current.reels.flatMap(r => (r.slides ?? []).map(x => x.id)))
+    const toS = await into(t('別のシーンへ移動'))
+    const there = latest.current.reels.find(r => r.id === toS)!
+    const sameThere = findClip(there, a0.matchId, a0.playId)
+    const landed = there.slides?.find(x => !seen.has(x.id) && (sameThere ? x.after === sameThere.id : true))
+    if (!landed || latest.current.reels.find(r => r.id === start.id)!.slides?.some(x => x.id === made.id)) throw new Error(`slide move: ${JSON.stringify({ landed: !!landed, sameThere: !!sameThere, still: latest.current.reel!.slides?.some(x => x.id === made.id) })}`)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(300)
+    const back = latest.current.reels.find(r => r.id === start.id)!
+    const slideUndone = !!back.slides?.some(x => x.id === made.id) && !latest.current.reels.find(r => r.id === toS)!.slides?.some(x => x.id === landed.id)
+    const slideMenu = { labels: slideLabels, movedBehindSamePlay: !!sameThere, undone: slideUndone }
     // 4. One clip alone.
     let exported: unknown = null
     if (exportTo) {
@@ -2190,7 +2215,7 @@ export function installSmoke(h: SmokeHost): void {
       await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'clip export')
       exported = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind), message: latest.current.exportState?.message }
     }
-    return { clipMenu: { closes, labels, copied: { fresh, markers: copyMarkers, annotations: copy.annotations.length, trimmed: copy.inSec !== null || copy.outSec !== null }, moved: true, notice, undone, exported } }
+    return { clipMenu: { closes, labels, copied: { fresh, markers: copyMarkers, annotations: copy.annotations.length, trimmed: copy.inSec !== null || copy.outSec !== null }, moved: true, notice, undone, slideMenu, exported } }
   }
 
   // The ☀ button by the video: brightness and saturation set with its sliders, the <video> drawn through the

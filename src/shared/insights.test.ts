@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanVideoInsight, findInsights, insightReels, isClutch, refindInsights, videoInsight, zScore, type Insight } from './insights'
+import { cleanVideoInsight, findInsights, inFocus, insightReels, isClutch, refindInsights, videoInsight, zScore, type Insight } from './insights'
 import type { PlayRef } from './filter'
 import type { Play } from './types'
 
@@ -144,7 +144,7 @@ describe('insights', () => {
     const before = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...rest]
     const rot1 = findInsights(before, 'opp', noWon).find(i => i.subject === 'share|rot1')!
     const vi = videoInsight('opp', [rot1], { mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
-    expect(vi).toEqual({ team: 'opp', subjects: ['share|rot1'], mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
+    expect(vi).toEqual({ team: 'opp', subjects: ['share|rot1'], focus: { skills: [], persons: [] }, mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
     expect(cleanVideoInsight(JSON.parse(JSON.stringify(vi)))).toEqual(vi)
 
     // More matches: rotation 1 now goes to #10. The scene follows; a habit gone leaves the video.
@@ -160,6 +160,30 @@ describe('insights', () => {
     expect(cleanVideoInsight(null)).toBeNull()
     expect(cleanVideoInsight({ subjects: [] })).toBeNull()
     expect(cleanVideoInsight({ subjects: ['rotWeak|4', 3], team: 'x', limit: -2, mode: 'x' }))
-      .toEqual({ team: 'opp', subjects: ['rotWeak|4'], mode: 'keyplay', limit: null, withOthers: false, prefix: '' })
+      .toEqual({ team: 'opp', subjects: ['rotWeak|4'], focus: { skills: [], persons: [] }, mode: 'keyplay', limit: null, withOthers: false, prefix: '' })
+    expect(cleanVideoInsight({ subjects: ['a'], focus: { skills: ['A', 'X'], persons: ['opp|opp9', 2] } })?.focus).toEqual({ skills: ['A'], persons: ['opp|opp9'] })
+  })
+
+  it('looks at the skills and players asked for only', () => {
+    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r' })
+    // Rotation 1 goes to #9, rotation 2 to #10; #12 serves Zone1; rotation 4 can't side out.
+    const scope = [
+      ...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...times(14, () => so(10, 2)), ...times(1, () => so(9, 2)),
+      ...[6, 5, 4, 3].flatMap(rot => [...times(4, () => so(9, rot)), ...times(4, () => so(10, rot))]),
+      ...times(12, () => ref({ skill: 'S', jersey: 12, end: 1 })), ...times(24, i => ref({ skill: 'S', jersey: 3, end: [1, 6, 5][i % 3] })),
+      ...times(12, () => ref({ skill: 'R', jersey: 5, rot: 4 })), ...times(30, i => ref({ skill: 'R', jersey: 6, rot: [1, 6, 5, 3, 2][i % 5] })),
+    ]
+    const won = (r: PlayRef) => (r.play.skill === 'R' && r.play.jersey === 5 ? '*' : 'a')
+    const all = findInsights(scope, 'opp', won)
+    expect(new Set(kinds(all))).toEqual(new Set(['share', 'serveZone', 'rotWeak']))
+    expect(kinds(findInsights(scope, 'opp', won, 20, { skills: ['S'], persons: [] }))).toEqual(['serveZone'])
+    expect(new Set(kinds(findInsights(scope, 'opp', won, 20, { skills: ['A', 'R'], persons: [] })))).toEqual(new Set(['share', 'rotWeak']))
+    // A player: only habits about them, and a rotation's is about no one.
+    const ten = findInsights(scope, 'opp', won, 20, { skills: [], persons: ['opp|opp10'] })
+    expect(ten.map(i => i.key)).toEqual(['share|rot2|opp|opp10'])
+    expect(all.filter(i => inFocus(i, { skills: [], persons: ['opp|opp12'] })).map(i => i.kind)).toEqual(['serveZone'])
+    // Made again, the video keeps its focus.
+    const vi = videoInsight('opp', ten, { mode: 'keyplay', limit: null, withOthers: false, prefix: '' }, { skills: [], persons: ['opp|opp10'] })
+    expect(refindInsights(scope, vi, won).insights.map(i => i.key)).toEqual(['share|rot2|opp|opp10'])
   })
 })

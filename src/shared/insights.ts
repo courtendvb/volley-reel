@@ -20,6 +20,7 @@ export const INSIGHT_KINDS: InsightKind[] = ['share', 'zone', 'serveZone', 'serv
 export interface Insight {
   key: string // the same habit gets the same key when found again
   subject: string // who or what it is about, with its kind: one habit is kept per subject
+  person: string | null // the player it is about (rotationSplit personOf); null: the team's (a rotation)
   kind: InsightKind
   headline: string // the habit in a line: the scene's name
   detail: string // the numbers behind it
@@ -60,10 +61,10 @@ const passes = (hits: number, n: number, base: number, up = true): boolean => {
   return n >= MIN_N && (up ? hits >= MIN_HITS && lift >= MIN_LIFT : lift <= -MIN_LIFT) && Math.abs(zScore(hits, n, base)) >= MIN_Z
 }
 
-interface Found { key: string; subject: string; kind: InsightKind; headline: (share: string) => string; detail: (n: number, hits: number, base: string) => string; mark: string; refs: PlayRef[]; others: PlayRef[]; base: number }
+interface Found { key: string; subject: string; person: string | null; kind: InsightKind; headline: (share: string) => string; detail: (n: number, hits: number, base: string) => string; mark: string; refs: PlayRef[]; others: PlayRef[]; base: number }
 const make = (f: Found): Insight => {
   const n = f.refs.length + f.others.length, hits = f.refs.length, share = n ? hits / n : 0
-  return { key: f.key, subject: f.subject, kind: f.kind, headline: f.headline(pct(share)), detail: f.detail(n, hits, pct(f.base)), mark: f.mark, n, hits, share, base: f.base, z: zScore(hits, n, f.base), refs: f.refs, others: f.others }
+  return { key: f.key, subject: f.subject, person: f.person, kind: f.kind, headline: f.headline(pct(share)), detail: f.detail(n, hits, pct(f.base)), mark: f.mark, n, hits, share, base: f.base, z: zScore(hits, n, f.base), refs: f.refs, others: f.others }
 }
 const detailAll = (n: number, hits: number, base: string) => t('{0} 本中 {1} 本（チーム全体では {2}）', n, hits, base)
 
@@ -104,7 +105,7 @@ function shareInsights(attacks: PlayRef[]): Insight[] {
     ['clutch', t('終盤の接戦の攻撃'), attacks.filter(r => isClutch(r.play)), attacks],
   ]
   return situations.flatMap(([id, label, ctx, base]) => tendencies(ctx, base, personOf, (who, refs, others, b) => make({
-    key: `share|${id}|${who}`, subject: `share|${id}`, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]),
+    key: `share|${id}|${who}`, subject: `share|${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]),
     headline: s => t('{0}は {1} が {2}', label, playerLabel(refs[0]), s), detail: detailAll,
   })))
 }
@@ -114,7 +115,7 @@ function zoneInsights(attacks: PlayRef[]): Insight[] {
   const from = groupBy(attacks, r => r.play.startZone)
   return [...from].flatMap(([zone, base]) => [...groupBy(base, personOf)].flatMap(([who, ctx]) =>
     tendencies(ctx, base, r => r.play.endZone, (end, refs, others, b) => make({
-      key: `zone|${who}|${zone}|${end}`, subject: `zone|${who}|${zone}`, kind: 'zone', base: b, refs, others, mark: `Zone${end}`,
+      key: `zone|${who}|${zone}|${end}`, subject: `zone|${who}|${zone}`, person: who, kind: 'zone', base: b, refs, others, mark: `Zone${end}`,
       headline: s => t('{0} の Zone{1} からのアタックは Zone{2} へ {3}', playerLabel(refs[0]), zone, end, s), detail: detailAll,
     }))))
 }
@@ -127,13 +128,13 @@ function serveInsights(serves: PlayRef[], receiverOf: (r: PlayRef) => PlayRef | 
   const recKey = (r: PlayRef) => { const x = receiverOf(r); return x ? personOf(x) : null }
   for (const [who, ctx] of groupBy(serves, personOf)) {
     out.push(...tendencies(ctx, serves, r => serveZoneMarker(r.play), (z, refs, others, b) => make({
-      key: `serveZone|${who}|${z}`, subject: `serveZone|${who}`, kind: 'serveZone', base: b, refs, others, mark: SERVE_ZONE()[z],
+      key: `serveZone|${who}|${z}`, subject: `serveZone|${who}`, person: who, kind: 'serveZone', base: b, refs, others, mark: SERVE_ZONE()[z],
       headline: s => t('{0} のサーブは {1} へ {2}', playerLabel(refs[0]), SERVE_ZONE()[z], s), detail: detailAll,
     })))
     out.push(...tendencies(ctx, serves, recKey, (rec, refs, others, b) => {
       const target = receiverOf(refs[0])
       return target ? make({
-        key: `serveTarget|${who}|${rec}`, subject: `serveTarget|${who}`, kind: 'serveTarget', base: b, refs, others, mark: playerLabel(target),
+        key: `serveTarget|${who}|${rec}`, subject: `serveTarget|${who}`, person: who, kind: 'serveTarget', base: b, refs, others, mark: playerLabel(target),
         headline: s => t('{0} のサーブは {1} を狙う（{2}）', playerLabel(refs[0]), playerLabel(target), s), detail: detailAll,
       }) : null
     }))
@@ -155,7 +156,7 @@ function receptionInsights(receptions: PlayRef[]): Insight[] {
       const refs = ctx.filter(brokeDown)
       if (!passes(refs.length, ctx.length, b)) return []
       return [make({
-        key: `recWeak|${who}|${type}`, subject: `recWeak|${who}`, kind: 'recWeak', base: b, refs, others: ctx.filter(r => !brokeDown(r)), mark: t('崩れたレセプション'),
+        key: `recWeak|${who}|${type}`, subject: `recWeak|${who}`, person: who, kind: 'recWeak', base: b, refs, others: ctx.filter(r => !brokeDown(r)), mark: t('崩れたレセプション'),
         headline: s => t('{0} は{1}で崩れる（{2}）', playerLabel(refs[0]), serveKind(type), s),
         detail: (n, hits, base) => t('{0} 本中 {1} 本が - / =（チーム全体では {2}）', n, hits, base),
       })]
@@ -174,7 +175,7 @@ function rotationInsights(receptions: PlayRef[], wonBy: WonBy): Insight[] {
     const ctx = known.filter(r => rotationOf(r) === rot), refs = ctx.filter(lost)
     if (!passes(refs.length, ctx.length, b)) return []
     return [make({
-      key: `rotWeak|${rot}`, subject: `rotWeak|${rot}`, kind: 'rotWeak', base: b, refs, others: ctx.filter(r => !lost(r)), mark: t('失点'),
+      key: `rotWeak|${rot}`, subject: `rotWeak|${rot}`, person: null, kind: 'rotWeak', base: b, refs, others: ctx.filter(r => !lost(r)), mark: t('失点'),
       headline: () => t('ローテ {0} のサイドアウト率 {1}（全体 {2}）', rot, pct(1 - refs.length / ctx.length), pct(1 - b)),
       detail: (n, hits) => t('{0} 回のレセプションのうち {1} 回は点を取られた', n, hits),
     })]
@@ -193,7 +194,7 @@ function clutchInsights(attacks: PlayRef[]): Insight[] {
     if (!up && !passes(kills.length, ctx.length, b, false)) return []
     const missed = ctx.filter(r => !kill(r))
     return [{
-      key: `clutch|${who}|${up ? 'up' : 'down'}`, subject: `clutch|${who}`, kind: 'clutch', n: ctx.length, hits: up ? kills.length : missed.length, share, base: b,
+      key: `clutch|${who}|${up ? 'up' : 'down'}`, subject: `clutch|${who}`, person: who, kind: 'clutch', n: ctx.length, hits: up ? kills.length : missed.length, share, base: b,
       z: zScore(kills.length, ctx.length, b), refs: up ? kills : missed, others: up ? missed : kills,
       mark: up ? t('決まったアタック') : t('決まらなかったアタック'),
       headline: up ? t('{0} は終盤の接戦で決定率 {1}', playerLabel(all[0]), pct(share)) : t('{0} は終盤の接戦で決定率が {1} に落ちる', playerLabel(all[0]), pct(share)),
@@ -202,9 +203,21 @@ function clutchInsights(attacks: PlayRef[]): Insight[] {
   })
 }
 
-// The team's habits, the surest first. A habit of the same player or rotation and kind shows once
-// (the surest), and at most `max` are kept.
-export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy, max = 20): Insight[] {
+// The skill a kind of habit is about: attacks, serves or receptions.
+export type InsightSkill = 'A' | 'S' | 'R'
+export const INSIGHT_SKILLS: InsightSkill[] = ['A', 'S', 'R']
+export const KIND_SKILL: Record<InsightKind, InsightSkill> = { share: 'A', zone: 'A', clutch: 'A', serveZone: 'S', serveTarget: 'S', recWeak: 'R', rotWeak: 'R' }
+
+// What to look at: habits of these skills only, about these players only (personOf keys; a
+// rotation's habit is about no player, so it goes). Empty: all.
+export interface InsightFocus { skills: InsightSkill[]; persons: string[] }
+export const NO_FOCUS: InsightFocus = { skills: [], persons: [] }
+export const inFocus = (i: Insight, f: InsightFocus): boolean =>
+  (!f.skills.length || f.skills.includes(KIND_SKILL[i.kind])) && (!f.persons.length || (i.person !== null && f.persons.includes(i.person)))
+
+// The team's habits in focus, the surest first. A habit of the same player or rotation and kind
+// shows once (the surest in focus), and at most `max` are kept.
+export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy, max = 20, focus: InsightFocus = NO_FOCUS): Insight[] {
   const mine = scope.filter(r => r.teamRole === team)
   const skill = (s: string) => mine.filter(r => r.play.skill === s)
   // A serve's reception: the other team's first reception in the rally.
@@ -215,7 +228,7 @@ export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy
   const all = [
     ...shareInsights(attacks), ...zoneInsights(attacks), ...serveInsights(skill('S'), receiverOf),
     ...receptionInsights(receptions), ...rotationInsights(receptions, wonBy), ...clutchInsights(attacks),
-  ].sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+  ].filter(i => inFocus(i, focus)).sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
   const seen = new Set<string>(), out: Insight[] = []
   for (const i of all) {
     if (seen.has(i.subject)) continue
@@ -245,10 +258,11 @@ export function insightReels(list: Insight[], o: InsightReelOptions): Reel[] {
 // What an insight video was made from, kept on the video (Video.insight) so it can be made again,
 // for example after matches are added: the team, the habits picked by subject (so a rotation whose
 // sets now go to another player is still in it), and how the scenes were cut.
-export interface VideoInsight extends InsightReelOptions { team: 'our' | 'opp'; subjects: string[] }
+// The focus is kept too, so a rotation's habit made for one player stays about that player.
+export interface VideoInsight extends InsightReelOptions { team: 'our' | 'opp'; subjects: string[]; focus: InsightFocus }
 
-export const videoInsight = (team: 'our' | 'opp', list: Insight[], o: InsightReelOptions): VideoInsight =>
-  ({ team, subjects: list.map(i => i.subject), mode: o.mode, limit: o.limit, withOthers: o.withOthers, prefix: o.prefix })
+export const videoInsight = (team: 'our' | 'opp', list: Insight[], o: InsightReelOptions, focus: InsightFocus = NO_FOCUS): VideoInsight =>
+  ({ team, subjects: list.map(i => i.subject), focus: { skills: [...focus.skills], persons: [...focus.persons] }, mode: o.mode, limit: o.limit, withOthers: o.withOthers, prefix: o.prefix })
 
 // A video's insight read back from its file: null when it isn't one.
 export function cleanVideoInsight(v: unknown): VideoInsight | null {
@@ -257,8 +271,13 @@ export function cleanVideoInsight(v: unknown): VideoInsight | null {
   if (!Array.isArray(o.subjects)) return null
   const subjects = o.subjects.filter((s): s is string => typeof s === 'string' && s !== '')
   if (!subjects.length) return null
+  const f = (o.focus ?? {}) as Partial<InsightFocus>
+  const focus: InsightFocus = {
+    skills: Array.isArray(f.skills) ? INSIGHT_SKILLS.filter(k => (f.skills as unknown[]).includes(k)) : [],
+    persons: Array.isArray(f.persons) ? f.persons.filter((x): x is string => typeof x === 'string' && x !== '') : [],
+  }
   return {
-    team: o.team === 'our' ? 'our' : 'opp', subjects,
+    team: o.team === 'our' ? 'our' : 'opp', subjects, focus,
     mode: o.mode === 'toEnd' ? 'toEnd' : 'keyplay',
     limit: typeof o.limit === 'number' && o.limit > 0 ? Math.floor(o.limit) : null,
     withOthers: o.withOthers === true,
@@ -269,7 +288,7 @@ export function cleanVideoInsight(v: unknown): VideoInsight | null {
 // The habits of a video found again in these plays, in the video's order: each subject's surest
 // habit now (its outcome may have changed). `gone`: the subjects with no clear habit any more.
 export function refindInsights(scope: PlayRef[], vi: VideoInsight, wonBy: WonBy): { insights: Insight[]; gone: number } {
-  const now = new Map(findInsights(scope, vi.team, wonBy, Infinity).map(i => [i.subject, i]))
+  const now = new Map(findInsights(scope, vi.team, wonBy, Infinity, vi.focus).map(i => [i.subject, i]))
   const insights = vi.subjects.map(s => now.get(s)).filter((i): i is Insight => !!i)
   return { insights, gone: vi.subjects.length - insights.length }
 }

@@ -58,10 +58,10 @@ export function usePresetVideos(h: Host) {
   }
 
   // A video of the habits picked in the インサイト dialog (shared/insights.ts), a scene each.
-  const makeInsightVideo = ({ team, insights, name, ...options }: InsightChoice) => {
+  const makeInsightVideo = ({ team, focus, insights, name, ...options }: InsightChoice) => {
     const scenes = insightReels(insights, options)
     if (!scenes.length) return
-    addMadeVideo(name, scenes, { insight: videoInsight(team, insights, options) })
+    addMadeVideo(name, scenes, { insight: videoInsight(team, insights, options, focus) })
     setInsightOpen(false)
   }
 

@@ -272,6 +272,7 @@ button.link { border: 0; background: none; color: var(--primary); padding: var(-
 .preset-role span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .insight-dialog { width: min(760px, 94vw); }
 .insight-dialog .filter-row .field-label { width: 100px; }
+.insight-dialog .check-picker { flex: none; width: 260px; }
 .insight-list { gap: var(--space-1); max-height: 46vh; }
 .insight-row { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-3); border-radius: 6px; cursor: pointer; }
 .insight-row:hover { background: color-mix(in srgb, currentColor 6%, transparent); }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanVideoInsight, findInsights, inFocus, insightReels, isClutch, refindInsights, videoInsight, zScore, type Insight } from './insights'
+import { cleanVideoInsight, findInsights, inFocus, insightReels, isClutch, rankOf, refindInsights, videoInsight, zScore, type Insight } from './insights'
 import type { PlayRef } from './filter'
 import type { Play } from './types'
 
@@ -78,6 +78,11 @@ describe('insights', () => {
     expect(found.find(i => i.kind === 'serveZone')?.headline).toBe('#12 N12 のサーブは Zone1 へ 100%')
     expect(found.find(i => i.kind === 'serveTarget')?.headline).toBe('#12 N12 のサーブは #7 N7 を狙う（100%）')
     expect(found.find(i => i.kind === 'serveTarget')?.refs.every(r => r.play.skill === 'S')).toBe(true)
+    // As sure as the serve's zone, the target counts half: it comes after.
+    const zoneAt = found.findIndex(i => i.kind === 'serveZone'), targetAt = found.findIndex(i => i.kind === 'serveTarget')
+    expect(Math.abs(found[targetAt].z)).toBeCloseTo(Math.abs(found[zoneAt].z))
+    expect(targetAt).toBeGreaterThan(zoneAt)
+    expect(rankOf(found[targetAt])).toBeCloseTo(Math.abs(found[targetAt].z) / 2)
   })
 
   it('finds who breaks down on a kind of serve and the rotation that cannot side out', () => {

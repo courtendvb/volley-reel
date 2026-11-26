@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import type { ClipMode } from '../../../shared/reel'
 import type { WonBy } from '../../../shared/rotationSplit'
-import { INSIGHT_SKILLS, findInsights, insightKindName, type Insight, type InsightFocus, type InsightReelOptions, type InsightSkill } from '../../../shared/insights'
+import { INSIGHT_SKILLS, findInsights, insightKindName, rankOf, type Insight, type InsightFocus, type InsightReelOptions, type InsightSkill } from '../../../shared/insights'
 import { personOf, playerLabel } from '../../../shared/rotationSplit'
 import { skillName } from '../../../shared/labels'
 import { CheckPicker } from './CheckPicker'
@@ -24,15 +24,17 @@ const LIMITS: [number | null, string][] = [[5, '5'], [10, '10'], [null, '']]
 // The ones picked when the list is new: the surest few.
 const FIRST_PICKED = 8
 
+// The habits are always the project's team's (its target team): the opponents change from match to match.
+const team = 'our'
+
 // The players picked are not kept: they belong to the project open.
-interface Kept { team: 'our' | 'opp'; limit: number | null; withOthers: boolean; mode: ClipMode; skills: InsightSkill[] }
+interface Kept { limit: number | null; withOthers: boolean; mode: ClipMode; skills: InsightSkill[] }
 function readKept(): Kept {
-  const d: Kept = { team: 'opp', limit: 10, withOthers: false, mode: 'keyplay', skills: [] }
+  const d: Kept = { limit: 10, withOthers: false, mode: 'keyplay', skills: [] }
   try {
     const o = JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null') as Partial<Kept> | null
     if (!o) return d
     return {
-      team: o.team === 'our' ? 'our' : 'opp',
       limit: LIMITS.some(([n]) => n === o.limit) ? o.limit ?? null : d.limit,
       withOthers: o.withOthers === true,
       mode: o.mode === 'toEnd' ? 'toEnd' : 'keyplay',
@@ -41,9 +43,9 @@ function readKept(): Kept {
   } catch { return d }
 }
 
-// How sure a habit is, as a word and a bar: by its z-score.
-const sureness = (z: number): { word: string; level: number } => {
-  const a = Math.abs(z)
+// How sure a habit is, as a word and a bar: by its z-score weighted by its kind (rankOf).
+const sureness = (i: Insight): { word: string; level: number } => {
+  const a = rankOf(i)
   return a >= 4 ? { word: t('はっきり'), level: 3 } : a >= 3 ? { word: t('強い傾向'), level: 2 } : { word: t('傾向'), level: 1 }
 }
 
@@ -51,38 +53,29 @@ const sureness = (z: number): { word: string; level: number } => {
 // with its numbers, picked or not, made into a video with a scene each.
 export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Props) {
   const [start] = useState(readKept)
-  const [team, setTeam] = useState<'our' | 'opp'>(start.team)
   const [limit, setLimit] = useState<number | null>(start.limit)
   const [withOthers, setWithOthers] = useState(start.withOthers)
   const [mode, setMode] = useState<ClipMode>(start.mode)
   const [skills, setSkills] = useState<InsightSkill[]>(start.skills)
   const [persons, setPersons] = useState<string[]>([])
-  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ team, limit, withOthers, mode, skills })) } catch { /* not kept */ } }, [team, limit, withOthers, mode, skills])
+  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ limit, withOthers, mode, skills })) } catch { /* not kept */ } }, [limit, withOthers, mode, skills])
 
-  // The players of the team picked who made a serve, reception or attack, by jersey.
+  // The team's players who made a serve, reception or attack, by jersey.
   const people = useMemo(() => {
     const seen = new Map<string, PlayRef>()
     for (const r of scope) if (r.teamRole === team && 'SRA'.includes(r.play.skill) && !seen.has(personOf(r))) seen.set(personOf(r), r)
     return [...seen].sort((a, b) => a[1].play.jersey - b[1].play.jersey).map(([key, r]) => ({ key, label: playerLabel(r) }))
-  }, [scope, team])
-  // Another team's players are other keys: the pick starts over.
-  const pickTeam = (x: 'our' | 'opp') => { setTeam(x); setPersons([]) }
+  }, [scope])
   const focus = useMemo<InsightFocus>(() => ({ skills, persons }), [skills, persons])
   const matches = useMemo(() => new Set(scope.map(r => r.matchId)).size, [scope])
 
-  const insights = useMemo(() => findInsights(scope, team, wonBy, 20, focus), [scope, team, wonBy, focus])
+  const insights = useMemo(() => findInsights(scope, team, wonBy, 20, focus), [scope, wonBy, focus])
   const [picked, setPicked] = useState<Set<string>>(new Set())
   useEffect(() => { setPicked(new Set(insights.slice(0, FIRST_PICKED).map(i => i.key))) }, [insights])
   const chosen = insights.filter(i => picked.has(i.key))
 
-  // The team as the video's name calls it: our code, or the opponents' most common code.
-  const who = useMemo(() => {
-    if (team === 'our') return targetCode || t('対象チーム')
-    const n = new Map<string, number>()
-    for (const r of scope) if (r.teamRole === 'opp' && r.teamCode !== '—') n.set(r.teamCode, (n.get(r.teamCode) ?? 0) + 1)
-    const codes = [...n].sort((a, b) => b[1] - a[1])
-    return codes.length === 1 ? codes[0][0] : t('相手')
-  }, [team, targetCode, scope])
+  // The team as the video's name calls it.
+  const who = targetCode || t('対象チーム')
   // The name says the focus: one player, and the skills when not all.
   const focusName = [persons.length === 1 ? people.find(p => p.key === persons[0])?.label : null, skills.length && skills.length < INSIGHT_SKILLS.length ? skills.map(skillName).join('・') : null].filter(Boolean).join(' ')
   const name = t('{0} インサイト', [who, focusName].filter(Boolean).join(' '))
@@ -105,7 +98,6 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
         <p className="hint">{t('「検索する試合」のプレーから、チーム全体と比べてはっきり偏っている傾向を自動で探し、確かなものから並べます。選んだ傾向ごとに、それを示すプレーを集めたシーンを作ります（タイトルカードに数字が入ります）。')}</p>
         <p className="hint">{t('いま {0} 試合のプレーから探しています（試合は左上の「検索する試合」で選びます。試合が多いほど、確かな傾向が見つかります）。', matches)}{persons.length > 0 && t('選手を選ぶと、その選手についての傾向だけを出します（ローテーションの傾向は出ません）。')}</p>
         <section>
-          {seg(t('チーム'), team, pickTeam, [['opp', t('相手')], ['our', targetCode || t('対象チーム')]])}
           <div className="filter-row">
             <span className="field-label">{t('スキル')}</span>
             <div className="preset-checks" role="group" aria-label={t('スキル')}>
@@ -137,7 +129,7 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
         </section>
         <div className="preset-preview insight-list" role="list">
           {insights.length ? insights.map(i => {
-            const s = sureness(i.z)
+            const s = sureness(i)
             return (
               <label key={i.key} role="listitem" className={`insight-row${picked.has(i.key) ? ' on' : ''}`}>
                 <input type="checkbox" checked={picked.has(i.key)} onChange={() => toggle(i.key)} />

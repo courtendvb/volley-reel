@@ -962,7 +962,7 @@ export function App() {
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
         {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
-        {project && <button onClick={() => setInsightOpen(true)} disabled={!project.matches.length} title={t('相手や対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます')}>{t('インサイト')}</button>}
+        {project && <button onClick={() => setInsightOpen(true)} disabled={!project.matches.length} title={t('対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます')}>{t('インサイト')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         {project && <button onClick={() => setAnalysisOpen(true)} title={(internal ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)

@@ -1926,7 +1926,7 @@ export const ES: Record<string, string> = {
   "サブコートを閉じる": "Cerrar la pista pequeña",
   "サブコートで続けて直す": "Corregir en la pista pequeña",
   "ボールの位置で、始まりから終わりへドラッグ（高さ {0} m → {1} m）。点線の下が選手の足元に来れば合っています。Enter 次のプレー · Esc 終わる": "Arrastra sobre el balón del inicio al final (altura {0} m → {1} m). Es correcto si la línea de puntos acaba en los pies del jugador. Enter siguiente jugada · Esc terminar",
-  "相手や対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます": "Encuentra por sí solo los hábitos claros del rival o del equipo objetivo y reúne en una escena las jugadas que muestran cada uno",
+  "対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます": "Encuentra por sí solo los hábitos claros del equipo objetivo y reúne en una escena las jugadas que muestran cada uno",
   "インサイト": "Tendencias",
   "はっきり": "Claro",
   "強い傾向": "Fuerte",

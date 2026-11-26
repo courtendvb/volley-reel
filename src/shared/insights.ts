@@ -215,8 +215,15 @@ export const NO_FOCUS: InsightFocus = { skills: [], persons: [] }
 export const inFocus = (i: Insight, f: InsightFocus): boolean =>
   (!f.skills.length || f.skills.includes(KIND_SKILL[i.kind])) && (!f.persons.length || (i.person !== null && f.persons.includes(i.person)))
 
-// The team's habits in focus, the surest first. A habit of the same player or rotation and kind
-// shows once (the surest in focus), and at most `max` are kept.
+// How much a kind of habit counts when they are ranked, against its z-score: a server's target counts
+// half. A server has only a few receivers to aim at, so one of them easily comes out above the team's
+// share, and over several matches whom a server aimed at in one of them says little.
+export const KIND_WEIGHT: Partial<Record<InsightKind, number>> = { serveTarget: 0.5 }
+// A habit's place in the list (and how sure the dialog calls it): its z-score, weighted by its kind.
+export const rankOf = (i: Pick<Insight, 'kind' | 'z'>): number => Math.abs(i.z) * (KIND_WEIGHT[i.kind] ?? 1)
+
+// The team's habits in focus, the surest first (by rankOf). A habit of the same player or rotation
+// and kind shows once (the surest in focus), and at most `max` are kept.
 export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy, max = 20, focus: InsightFocus = NO_FOCUS): Insight[] {
   const mine = scope.filter(r => r.teamRole === team)
   const skill = (s: string) => mine.filter(r => r.play.skill === s)
@@ -228,7 +235,7 @@ export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy
   const all = [
     ...shareInsights(attacks), ...zoneInsights(attacks), ...serveInsights(skill('S'), receiverOf),
     ...receptionInsights(receptions), ...rotationInsights(receptions, wonBy), ...clutchInsights(attacks),
-  ].filter(i => inFocus(i, focus)).sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+  ].filter(i => inFocus(i, focus)).sort((a, b) => rankOf(b) - rankOf(a))
   const seen = new Set<string>(), out: Insight[] = []
   for (const i of all) {
     if (seen.has(i.subject)) continue

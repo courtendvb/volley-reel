@@ -1926,7 +1926,7 @@ export const EN: Record<string, string> = {
   "サブコートを閉じる": "Close the small court",
   "サブコートで続けて直す": "Correct on the small court",
   "ボールの位置で、始まりから終わりへドラッグ（高さ {0} m → {1} m）。点線の下が選手の足元に来れば合っています。Enter 次のプレー · Esc 終わる": "Drag on the ball from start to end (height {0} m → {1} m). Right when the dotted line ends at the player's feet. Enter next play · Esc finish",
-  "相手や対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます": "Finds the clear habits of the opponents or the target team by itself and gathers the plays that show each into a scene",
+  "対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます": "Finds the target team's clear habits by itself and gathers the plays that show each into a scene",
   "インサイト": "Insights",
   "はっきり": "Clear",
   "強い傾向": "Strong",

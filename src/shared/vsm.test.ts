@@ -45,12 +45,19 @@ describe('VolleyStation files', () => {
     expect(d.codeNames.KQ).toBe('QUICK')
     expect(vsmToDvw(vsm)).toContain('[3SCOUT]')
   })
+  it('mark the rally after a timeout, its lines as they were', () => {
+    const set = vsm.scout!.sets![0], timed: Vsm = { ...vsm, scout: { sets: [{ ...set, events: [{ timeout: { team: 'a' } }, ...set.events] }] } }
+    expect(parseScout(JSON.stringify(timed)).rallies[0].timeout).toBe('a')
+    expect(parseScout(JSON.stringify(vsm)).rallies[0].timeout).toBeUndefined()
+    expect(vsmToDvw(timed)).toBe(vsmToDvw(vsm))
+  })
   // The same match exported both ways, when the files are on this computer.
   const dvwPath = 'C:/video/&261108HTH-SAK_3-1_2nd.dvw', vsmPath = 'C:/video/261108HTH-SAK_3-1_2nd.vsm'
   it.skipIf(!existsSync(dvwPath) || !existsSync(vsmPath))('read like the DVW of the same match', () => {
     const a = parseDVW(readFileSync(dvwPath, 'latin1')), b = parseScout(readFileSync(vsmPath, 'utf8'))
     expect(b.plays.length).toBe(a.plays.length)
     expect(b.rallies.length).toBe(a.rallies.length)
+    expect(b.rallies.map(r => r.timeout ?? null)).toEqual(a.rallies.map(r => r.timeout ?? null))
     expect(b.players).toEqual(a.players)
     const keys = ['code', 'playerKey', 'score', 'homeRot', 'awayRot', 'phase', 'recEffect', 'front', 'before', 'after'] as const
     for (const [i, p] of a.plays.entries()) for (const k of keys) expect(b.plays[i][k], `${i} ${k}`).toEqual(p[k])

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALPHA, REF_P, binomTail, cleanVideoInsight, findInsights, inFocus, insightReels, isClutch, rankOf, refindInsights, videoInsight, zScore, type Insight } from './insights'
+import { MAX_P, binomTail, cleanVideoInsight, findInsights, leagueOf, inFocus, insightReels, isClutch, rankOf, sureOf, refindInsights, videoInsight, zScore, type Insight, type InsightOrder } from './insights'
 import type { PlayRef } from './filter'
 import type { Play } from './types'
 
@@ -78,10 +78,14 @@ describe('insights', () => {
     expect(found.find(i => i.kind === 'serveZone')?.headline).toBe('#12 N12 のサーブは Zone1 へ 100%')
     expect(found.find(i => i.kind === 'serveTarget')?.headline).toBe('#12 N12 のサーブは #7 N7 を狙う（100%）')
     expect(found.find(i => i.kind === 'serveTarget')?.refs.every(r => r.play.skill === 'S')).toBe(true)
-    // The target counts half: it comes after the zone.
+    // Where and whom a server serves come after every other habit, however sure.
     const zoneAt = found.findIndex(i => i.kind === 'serveZone'), targetAt = found.findIndex(i => i.kind === 'serveTarget')
     expect(targetAt).toBeGreaterThan(zoneAt)
-    expect(rankOf(found[targetAt])).toBeCloseTo(-Math.log10(found[targetAt].adjP) / 2)
+    expect(rankOf(found[targetAt])).toBeCloseTo(sureOf(found[targetAt]))
+    const mixed = findInsights([...scope, ...serves], 'opp', noWon)
+    const firstServe = mixed.findIndex(i => i.kind === 'serveZone' || i.kind === 'serveTarget')
+    expect(firstServe).toBeGreaterThan(0)
+    expect(mixed.slice(firstServe).every(i => i.kind === 'serveZone' || i.kind === 'serveTarget')).toBe(true)
   })
 
   it('serves at a receiver against the matches that receiver was in only', () => {
@@ -174,6 +178,66 @@ describe('insights', () => {
     expect(so.map(i => i.person)).not.toContain('opp|opp8')
   })
 
+  it('finds whether a setter goes back to the attacker who just scored', () => {
+    // #4 attacks without a set (scores or errs); in the next rally #1 sets #4 or #3: back to #4 18
+    // times in 24 after a score, 4 in 24 after an error.
+    const plays: PlayRef[] = []
+    const set = (attacker: number) => { const r = rally++; plays.push(ref({ skill: 'E', jersey: 1, phase: 't', rally: r }), ref({ skill: 'A', jersey: attacker, start: attacker, effect: '+', phase: 't', rally: r })) }
+    const lead = (effect: string) => plays.push(ref({ skill: 'A', jersey: 4, start: 4, effect, phase: 't' }))
+    for (let i = 0; i < 24; i++) { lead('#'); set(i < 18 ? 4 : 3) }
+    for (let i = 0; i < 24; i++) { lead('='); set(i < 4 ? 4 : 3) }
+    const follow = findInsights(plays, 'opp', noWon).filter(i => i.kind === 'setFollow')
+    expect(follow.map(i => i.headline)).toContain('#1 N1 は#4 N4 が決めた直後のとき #4 N4 へ 75%')
+    expect(follow.every(i => i.refs.every(r => r.play.skill === 'E'))).toBe(true)
+  })
+
+  it('sets the recent matches against the earlier, and the rallies after a timeout against the rest', () => {
+    // #9 hits from Zone4 to Zone5 in the newest match, to Zone1 in the three before it.
+    const plays: PlayRef[] = []
+    for (const [m, end] of [['m1', 1], ['m2', 1], ['m3', 1], ['m4', 5]] as const) for (let i = 0; i < 12; i++) plays.push({ ...ref({ skill: 'A', jersey: 9, start: 4, end, phase: 't' }), matchId: m })
+    const index = (id: string) => +id.slice(1)
+    const recent = findInsights(plays, 'opp', { wonBy: noWon, matchIndex: index }).find(i => i.kind === 'zoneBy' && i.key.includes('recent=recent'))!
+    expect(recent.headline).toBe('#9 N9 の Zone4 からのアタックは直近 1 試合のとき Zone5 へ 100%')
+    expect(recent.detail).toBe('12 本中 12 本（それより前の試合のときは 0%・36 本中 0 本）')
+    // Without the matches' order, no recent and earlier.
+    expect(findInsights(plays, 'opp', noWon).filter(i => i.kind === 'zoneBy')).toEqual([])
+
+    // The team sides out 11 of 12 right after its own timeout, 20 of 40 otherwise.
+    const rallies: PlayRef[] = [], won = new Map<number, '*' | 'a'>(), timeout = new Set<number>()
+    for (let i = 0; i < 52; i++) {
+      const r = rally++
+      rallies.push(ref({ skill: 'S', jersey: 20, team: 'our', rally: r }), ref({ skill: 'R', jersey: 5, rally: r }))
+      if (i < 12) timeout.add(r)
+      won.set(r, (i < 12 ? i < 11 : i % 2 === 0) ? 'a' : '*')
+    }
+    const by = (r: PlayRef) => (r.play.rallyId === null ? null : won.get(r.play.rallyId) ?? null)
+    const flow = findInsights(rallies, 'opp', { wonBy: by, timeoutBy: r => (timeout.has(r.play.rallyId!) ? 'a' : null) }).find(i => i.subject.startsWith('flow|rec'))!
+    expect(flow.headline).toBe('相手のサーブのラリーは自分たちのタイムアウト明けのとき サイドアウト率 92%')
+  })
+
+  it('leaves out what every team in the league does the same way', () => {
+    // On a poor pass every setter goes to Zone4 (32 of 40, against 52% in all): the league's shift +28.
+    const sets = (team: 'our' | 'opp', jersey: number, perfect: [number, number, number], poor: [number, number]) => {
+      const plays: PlayRef[] = []
+      const add = (pass: string, zone: number, n: number) => {
+        for (let i = 0; i < n; i++) { const r = rally++; plays.push(ref({ skill: 'E', jersey, team, phase: 'r', recEffect: pass, rally: r }), ref({ skill: 'A', jersey: 10 + zone, team, start: zone, phase: 'r', recEffect: pass, rally: r })) }
+      }
+      add('#', 4, perfect[0]); add('#', 3, perfect[1]); add('#', 2, perfect[2]); add('-', 4, poor[0]); add('-', 3, poor[1])
+      return plays
+    }
+    const league = leagueOf([1, 2, 3].map(j => ({ scope: sets('our', j, [20, 20, 20], [32, 8]), look: { wonBy: noWon } })), 6)
+    expect(league.shift.get('setDist|pass=-|left')?.d).toBeCloseTo(0.28)
+    const poorPass = (l: Insight[]) => l.filter(i => i.kind === 'setDist' && i.key.includes('|pass=-|'))
+    // A setter like the league's: a habit on its own, none beside the league.
+    const usual = sets('opp', 7, [20, 20, 20], [32, 8])
+    expect(poorPass(findInsights(usual, 'opp', noWon)).map(i => i.headline)).toEqual(['#7 N7 はレセプション「-」のとき Zone4 へ 80%'])
+    expect(poorPass(findInsights(usual, 'opp', { wonBy: noWon, league }))).toEqual([])
+    // A setter who goes further than the league does stays, with the league's shift in the numbers.
+    const keen = poorPass(findInsights(sets('opp', 8, [20, 20, 20], [40, 0]), 'opp', { wonBy: noWon, league }))[0]
+    expect(keen.detail).toBe('40 本中 40 本（ふだんは 60%。リーグでは同じ場面で +28 ポイント）')
+    expect(keen.league).toBeCloseTo(0.28)
+  })
+
   it('makes a kind that looks at many situations surer before it keeps a habit', () => {
     expect(binomTail(10, 10, 0.5)).toBeCloseTo(1 / 1024)
     expect(binomTail(0, 10, 0.5, false)).toBeCloseTo(1 / 1024)
@@ -186,11 +250,9 @@ describe('insights', () => {
     const among = findInsights([...habit, ...plain, ...noise], 'opp', noWon).find(i => i.key === alone.key)
     expect(alone.p).toBeLessThan(0.01)
     expect(among?.adjP ?? 1).toBeGreaterThan(alone.adjP)
-    // Short all told, it is still listed, for reference, after the sure ones.
-    expect(alone.tentative).toBeUndefined()
+    // Less sure all told, it is still listed: its own p is what keeps it.
     expect(among).toBeDefined()
-    expect(among!.tentative ?? false).toBe(among!.adjP > ALPHA)
-    expect(among!.p).toBeLessThanOrEqual(REF_P)
+    expect(among!.p).toBeLessThanOrEqual(MAX_P)
   })
 
   it('finds who breaks down on a kind of serve and the rotation that cannot side out', () => {
@@ -239,16 +301,41 @@ describe('insights', () => {
     const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r' })
     const scope = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...times(20, () => so(10, 2)), ...times(5, () => so(9, 2))]
     const [top] = findInsights(scope, 'opp', noWon)
-    const [plain] = insightReels([top], { mode: 'keyplay', limit: 5, withOthers: false, prefix: 'OPP' })
+    const [plain] = insightReels([top], { mode: 'keyplay', limit: 5, withOthers: false, prefix: 'OPP', order: 'new' })
     expect(plain.name).toBe(`OPP ${top.headline}`)
     expect(plain.cardTitle).toBe(`${top.headline}\n${top.detail}`)
     expect(plain.groups[1]).toHaveLength(5)
     expect(plain.groups[2]).toHaveLength(0)
     expect(plain.markerNames[1]).toBe(top.mark)
-    const [both] = insightReels([top], { mode: 'keyplay', limit: null, withOthers: true, prefix: '' })
+    const [both] = insightReels([top], { mode: 'keyplay', limit: null, withOthers: true, prefix: '', order: 'new' })
     expect(both.groups[1]).toHaveLength(top.refs.length)
     expect(both.groups[2]).toHaveLength(top.others.length)
     expect(both.markerNames[2]).toBe('それ以外')
+  })
+
+  it('lays out a scene newest first, oldest first or at random from the matches in turn', () => {
+    // Plays 0–2 in the old match, 3–5 in the new one; the search lists the new match first.
+    const play = (matchId: string, k: number) => ({ ...ref({ skill: 'A', jersey: 9 }), matchId, play: { id: k } as Play })
+    const refs = [play('new', 3), play('new', 4), play('new', 5), play('old', 0), play('old', 1), play('old', 2)]
+    const insight = { headline: 'h', detail: 'd', mark: 'm', refs, others: [] } as unknown as Insight
+    const index = (id: string) => (id === 'old' ? 0 : 1)
+    const ids = (order: InsightOrder, limit: number | null, rand?: () => number) => {
+      const [r] = insightReels([insight], { mode: 'keyplay', limit, withOthers: false, prefix: '', order }, index, rand)
+      return r.groups[1].map(c => r.clips[c].playId)
+    }
+    expect(ids('new', null)).toEqual([3, 4, 5, 0, 1, 2])
+    expect(ids('new', 4)).toEqual([3, 4, 5, 2]) // the latest four
+    expect(ids('old', null)).toEqual([0, 1, 2, 3, 4, 5])
+    expect(ids('old', 4)).toEqual([0, 1, 2, 3]) // the earliest four
+    // At random, four from two matches are two from each, the matches taking turns.
+    let seed = 1
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    for (let k = 0; k < 5; k++) {
+      const four = ids('random', 4, rand)
+      expect(four.filter(i => i < 3)).toHaveLength(2)
+      expect(four[0] < 3).not.toBe(four[1] < 3)
+    }
+    expect(ids('random', null, rand).sort()).toEqual([0, 1, 2, 3, 4, 5])
   })
 
   it('finds the habits of a video again by subject, as the matches have them now', () => {
@@ -256,8 +343,8 @@ describe('insights', () => {
     const rest = [6, 5, 4, 3, 2].flatMap(rot => [...times(2, () => so(9, rot)), ...times(6, () => so(10, rot))])
     const before = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...rest]
     const rot1 = findInsights(before, 'opp', noWon).find(i => i.subject === 'share|rot1')!
-    const vi = videoInsight('opp', [rot1], { mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
-    expect(vi).toEqual({ team: 'opp', subjects: ['share|rot1'], focus: { skills: [], persons: [] }, mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
+    const vi = videoInsight('opp', [rot1], { mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP', order: 'new' })
+    expect(vi).toEqual({ team: 'opp', subjects: ['share|rot1'], focus: { skills: [], persons: [] }, mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP', order: 'new' })
     expect(cleanVideoInsight(JSON.parse(JSON.stringify(vi)))).toEqual(vi)
 
     // More matches: rotation 1 now goes to #10. The scene follows; a habit gone leaves the video.
@@ -273,7 +360,7 @@ describe('insights', () => {
     expect(cleanVideoInsight(null)).toBeNull()
     expect(cleanVideoInsight({ subjects: [] })).toBeNull()
     expect(cleanVideoInsight({ subjects: ['rotWeak|4', 3], team: 'x', limit: -2, mode: 'x' }))
-      .toEqual({ team: 'opp', subjects: ['rotWeak|4'], focus: { skills: [], persons: [] }, mode: 'keyplay', limit: null, withOthers: false, prefix: '' })
+      .toEqual({ team: 'opp', subjects: ['rotWeak|4'], focus: { skills: [], persons: [] }, mode: 'keyplay', limit: null, withOthers: false, prefix: '', order: 'random' })
     expect(cleanVideoInsight({ subjects: ['a'], focus: { skills: ['A', 'X'], persons: ['opp|opp9', 2] } })?.focus).toEqual({ skills: ['A'], persons: ['opp|opp9'] })
   })
 
@@ -296,7 +383,7 @@ describe('insights', () => {
     expect(ten.map(i => i.key)).toEqual(['share|rot2|opp|opp10'])
     expect(all.filter(i => inFocus(i, { skills: [], persons: ['opp|opp12'] })).map(i => i.kind)).toEqual(['serveZone'])
     // Made again, the video keeps its focus.
-    const vi = videoInsight('opp', ten, { mode: 'keyplay', limit: null, withOthers: false, prefix: '' }, { skills: [], persons: ['opp|opp10'] })
+    const vi = videoInsight('opp', ten, { mode: 'keyplay', limit: null, withOthers: false, prefix: '', order: 'new' }, { skills: [], persons: ['opp|opp10'] })
     expect(refindInsights(scope, vi, won).insights.map(i => i.key)).toEqual(['share|rot2|opp|opp10'])
   })
 })

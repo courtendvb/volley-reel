@@ -21,6 +21,7 @@ interface VsmEvent {
   score?: { home: number; away: number } // after the event
   exchange?: { plays: VsmPlay[]; point?: '*' | 'a' }
   substitution?: { playerIn: number; playerOut: number; team: '*' | 'a' }
+  timeout?: { team: '*' | 'a' }
 }
 interface VsmSet { startingLineup?: { home: VsmLineup; away: VsmLineup }; events: VsmEvent[]; score?: { home: number; away: number } }
 interface VsmPlayer { shirtNumber: number; firstName?: string; lastName?: string; code?: string; position?: number }
@@ -42,6 +43,30 @@ export const scoutDvwText = (text: string): string => (isVsm(text) ? vsmToDvw(JS
 
 // edits: corrections by [3SCOUT] line (codeEdit.ts); a .vsm's lines are those of the DVW text it becomes.
 export function parseScout(text: string, edits?: ScoutEdits): ParsedDVW {
+  const timeouts = isVsm(text) ? vsmTimeouts(JSON.parse(text) as Vsm) : null
+  const d = scoutParse(text, edits)
+  return timeouts?.size ? { ...d, rallies: d.rallies.map(r => { const by = timeouts.get(`${r.setNum}|${r.serveTime}`); return by && !r.timeout ? { ...r, timeout: by } : r }) } : d
+}
+
+// A .vsm keeps its timeouts as events of their own, not lines of the DVW text it becomes (so its
+// lines, which corrections name, stay those VolleyStation exports): each the rally that came next,
+// by its set and its serve's video time, with the team that called it.
+function vsmTimeouts(v: Vsm): Map<string, '*' | 'a'> {
+  const out = new Map<string, '*' | 'a'>()
+  ;(v.scout?.sets ?? []).forEach((s, si) => {
+    let by: '*' | 'a' | null = null
+    for (const e of s.events) {
+      if (e.timeout) { by = e.timeout.team === 'a' ? 'a' : '*'; continue }
+      const serve = e.exchange?.plays?.find(p => p.skill === 'S')
+      if (!serve) continue
+      if (by) out.set(`${si + 1}|${(serve.time ?? 0) / 10}`, by)
+      by = null
+    }
+  })
+  return out
+}
+
+function scoutParse(text: string, edits?: ScoutEdits): ParsedDVW {
   const dvw = scoutDvwText(text)
   if (!edits || !editCount(edits)) return parseDVW(dvw)
   const r = applyScoutEdits(dvw, edits)

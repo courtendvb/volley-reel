@@ -10,7 +10,7 @@ import {
 import { MARKERS, addClips, newReel, type ClipMode, type Marker, type Reel } from './reel'
 import { displayName } from './dvw'
 import { roleName } from './roles'
-import type { ParsedDVW, Play, Player, PlayerRole } from './types'
+import type { ParsedDVW, Play, Player, PlayerRole, Side } from './types'
 import { t } from './i18n'
 
 export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
@@ -56,6 +56,7 @@ export interface PresetLookups {
   roleOf: (r: PlayRef) => PlayerRole | undefined // the project's position for the player, else the DVW roster's
   middlesFacing: (r: PlayRef) => Facing[] // an attack: the other team's middle blockers in the front row
   matchIndex?: (matchId: string) => number // the match's place, oldest first; without it, as the plays come
+  timeoutBy?: (r: PlayRef) => Side | null // the team whose timeout came right before the play's rally
 }
 
 // An attack by where it came from: the attacking team's reception phase after a good or a poor
@@ -262,6 +263,7 @@ export function presetLookups(dvws: Record<string, ParsedDVW>, roles: Record<str
   return {
     ...(matchIds ? { matchIndex: (id: string) => index.get(id) ?? -1 } : {}),
     wonBy: r => (r.play.rallyId === null ? null : dvws[r.matchId]?.rallies[r.play.rallyId]?.wonBy ?? null),
+    timeoutBy: r => (r.play.rallyId === null ? null : dvws[r.matchId]?.rallies[r.play.rallyId]?.timeout ?? null),
     roleOf: r => roles?.[r.personKey] ?? dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role,
     middlesFacing: r => {
       const d = dvws[r.matchId], front = r.play.front

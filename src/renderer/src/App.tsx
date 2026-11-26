@@ -40,6 +40,8 @@ import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { PresetDialog } from './components/PresetDialog'
 import { InsightDialog } from './components/InsightDialog'
+import { useLeague } from './app/useLeague'
+import type { League } from '../../shared/insights'
 import { usePresetVideos } from './app/usePresetVideos'
 import { Home, MissingNote } from './components/Home'
 import { CompareView } from './components/CompareView'
@@ -590,10 +592,14 @@ export function App() {
     const n = rows[i + q.dir]
     if (n && n.play.line !== undefined) { jump(n); if (!q.court) setQuickCode(n) }
   }, [listRefs]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The league the insights are set beside, for an insight video made again too (once it is loaded).
+  const leagueRef = useRef<League | null>(null)
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo, insightOpen, setInsightOpen, makeInsightVideo } = usePresetVideos({
-    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
+    latest, dvws, leagueRef, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
   })
+  const league = useLeague(insightOpen, library, project?.matches ?? [], settings ?? null)
+  useEffect(() => { if (league.league) leagueRef.current = league.league }, [league.league])
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
     () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
@@ -1367,7 +1373,7 @@ export function App() {
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
-      {insightOpen && <InsightDialog scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} wonBy={presetLook.wonBy} onMake={makeInsightVideo} onClose={() => setInsightOpen(false)} />}
+      {insightOpen && <InsightDialog scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} league={league.league} leagueStatus={league.status} onMake={makeInsightVideo} onClose={() => setInsightOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}

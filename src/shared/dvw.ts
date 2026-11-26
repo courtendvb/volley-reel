@@ -24,6 +24,7 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
   let homeRot: number | null = null
   let awayRot: number | null = null
   let rally: Rally | null = null
+  let timeout: Side | null = null // a timeout called since the last rally, by its team
   let contacts: { code: string; side: Side; skill: string; play?: Play }[] = [] // the rally so far, freeballs included
   // Each contact is the next one for the two before it.
   const touch = (x: { code: string; side: Side; skill: string; play?: Play }) => {
@@ -107,6 +108,9 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
       continue
     }
 
+    // A timeout (*T, aT): the next rally comes after it.
+    if (/^[*a]T$/i.test(code)) { timeout = code[0].toLowerCase() === 'a' ? 'a' : '*'; continue }
+
     const skill = code.charAt(3)
     if (!'SRABDEF'.includes(skill)) continue
     const jersey = parseInt(code.substring(1, 3))
@@ -126,7 +130,8 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
       // Who is on court for the rally: both lineups on the serve's line (jerseys, P1 to P6; liberos are not in them).
       const six = (cols: string[]) => cols.map(x => parseInt(x)).filter(n => !isNaN(n))
       const court = { home: six(c.slice(14, 20)), away: six(c.slice(20, 26)) }
-      rally = { id: rallies.length, setNum, serveTime: time, lastActionTime: time, pointTime: null, wonBy: null, ...(court.home.length || court.away.length ? { court } : {}) }
+      rally = { id: rallies.length, setNum, serveTime: time, lastActionTime: time, pointTime: null, wonBy: null, ...(court.home.length || court.away.length ? { court } : {}), ...(timeout ? { timeout } : {}) }
+      timeout = null
       rallies.push(rally); contacts = []
     }
     if (rally) rally.lastActionTime = Math.max(rally.lastActionTime, time)

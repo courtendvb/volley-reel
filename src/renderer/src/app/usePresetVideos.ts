@@ -4,7 +4,7 @@
 import { useMemo, useState, type RefObject } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import { cleanPreset, makePreset, presetLabels, presetLookups, presetReels } from '../../../shared/presets'
-import { cleanVideoInsight, insightReels, refindInsights, videoInsight } from '../../../shared/insights'
+import { cleanVideoInsight, insightReels, refindInsights, videoInsight, type League } from '../../../shared/insights'
 import type { Reel } from '../../../shared/reel'
 import type { ParsedDVW, PlayerRole } from '../../../shared/types'
 import { newVideo, type Video } from '../../../shared/video'
@@ -17,6 +17,7 @@ import { t } from '../../../shared/i18n'
 interface Host {
   latest: RefObject<AppLatest>
   dvws: Record<string, ParsedDVW>
+  leagueRef: RefObject<League | null> // the league, once the インサイト dialog has loaded it
   roles: Record<string, PlayerRole> | undefined // the project's positions
   team: string // the project's target team code
   matchIds: string[] // the project's matches, oldest first
@@ -58,10 +59,10 @@ export function usePresetVideos(h: Host) {
   }
 
   // A video of the habits picked in the インサイト dialog (shared/insights.ts), a scene each.
-  const makeInsightVideo = ({ team, focus, insights, name, ...options }: InsightChoice) => {
-    const scenes = insightReels(insights, options)
+  const makeInsightVideo = ({ team, focus, insights, name, league, ...options }: InsightChoice) => {
+    const scenes = insightReels(insights, options, presetLook.matchIndex)
     if (!scenes.length) return
-    addMadeVideo(name, scenes, { insight: videoInsight(team, insights, options, focus) })
+    addMadeVideo(name, scenes, { insight: videoInsight(team, insights, options, focus, league) })
     setInsightOpen(false)
   }
 
@@ -76,8 +77,8 @@ export function usePresetVideos(h: Host) {
     let scenes: Reel[], gone = 0
     if (preset) scenes = presetReels(makePreset(preset, h.scopeRefs, h.results, presetLook).scenes, presetLabels(preset, h.team).prefix, preset.mode)
     else if (insight) {
-      const found = refindInsights(h.scopeRefs, insight, presetLook.wonBy)
-      scenes = insightReels(found.insights, insight)
+      const found = refindInsights(h.scopeRefs, insight, { ...presetLook, league: insight.league ? h.leagueRef.current : null })
+      scenes = insightReels(found.insights, insight, presetLook.matchIndex)
       gone = found.gone
     } else return
     if (!scenes.length) { h.setNotice(insight ? t('はっきりした傾向が残っていないため、作り直しませんでした') : t('当てはまるプレーがないため、作り直しませんでした')); return }

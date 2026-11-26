@@ -91,6 +91,22 @@ function strikeHeight(code: string): number {
   return skill === 'S' ? (code.charAt(4) === 'Q' ? heights.jumpServe : heights.floatServe) : skill === 'A' ? heights.attack : skill === 'E' ? heights.set : 0
 }
 
+// How high the ball is at a play's two clicks, in metres, from its code: where a serve, attack or set is struck
+// (the project's strike heights), where a reception or dig is played (about the waist), and where the ball ends: on
+// the floor for an ace, a kill or an error, at the block for a blocked attack, at the set for a set, else taken by
+// the other team about the waist. Used to put clicks made on the ball in the video on the floor under it.
+export const TOUCH_Z = 0.8
+export function clickHeights(code: string): { start: number; end: number } {
+  const skill = code.charAt(3), effect = code.charAt(5)
+  const start = skill === 'R' || skill === 'D' ? TOUCH_Z : skill === 'B' ? heights.attack : strikeHeight(code)
+  const end = skill === 'S' ? (effect === '#' || effect === '=' ? 0 : TOUCH_Z)
+    : skill === 'A' ? (effect === '#' || effect === '=' ? 0 : effect === '/' ? heights.attack : TOUCH_Z)
+    : skill === 'E' ? heights.attack
+    : skill === 'R' || skill === 'D' ? heights.set
+    : 0
+  return { start, end }
+}
+
 // The shot's path: seconds in the air, and how far it rises above the straight line. A tip or soft
 // attack (T, P) loops; a hard one goes straight down. A set goes by its tempo and by the attack it
 // is for (setTo): to a quick (Q) it goes straight; to a slower one in front (M, U) it is quicker,

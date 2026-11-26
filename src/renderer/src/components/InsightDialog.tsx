@@ -43,10 +43,10 @@ function readKept(): Kept {
   } catch { return d }
 }
 
-// How sure a habit is, as a word and a bar: by its z-score weighted by its kind (rankOf).
+// How sure a habit is, as a word and a bar: by rankOf (3: one in a thousand by luck, all told).
 const sureness = (i: Insight): { word: string; level: number } => {
   const a = rankOf(i)
-  return a >= 4 ? { word: t('はっきり'), level: 3 } : a >= 3 ? { word: t('強い傾向'), level: 2 } : { word: t('傾向'), level: 1 }
+  return a >= 3 ? { word: t('はっきり'), level: 3 } : a >= 2 ? { word: t('強い傾向'), level: 2 } : { word: t('傾向'), level: 1 }
 }
 
 // Habits of a team found by themselves over the matches searched (shared/insights.ts): each a line
@@ -60,10 +60,10 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
   const [persons, setPersons] = useState<string[]>([])
   useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ limit, withOthers, mode, skills })) } catch { /* not kept */ } }, [limit, withOthers, mode, skills])
 
-  // The team's players who made a serve, reception or attack, by jersey.
+  // The team's players who made a set, serve, reception or attack, by jersey.
   const people = useMemo(() => {
     const seen = new Map<string, PlayRef>()
-    for (const r of scope) if (r.teamRole === team && 'SRA'.includes(r.play.skill) && !seen.has(personOf(r))) seen.set(personOf(r), r)
+    for (const r of scope) if (r.teamRole === team && 'ESRA'.includes(r.play.skill) && !seen.has(personOf(r))) seen.set(personOf(r), r)
     return [...seen].sort((a, b) => a[1].play.jersey - b[1].play.jersey).map(([key, r]) => ({ key, label: playerLabel(r) }))
   }, [scope])
   const focus = useMemo<InsightFocus>(() => ({ skills, persons }), [skills, persons])

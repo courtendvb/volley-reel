@@ -32,16 +32,19 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
   const followRef = useRef(follow)
   followRef.current = clip ? null : follow
   const followIdx = (t: number) => { const f = followRef.current; return f && playback.attachedKey === f.key ? followAt(f.windows, t) : -1 }
+  // Which window the playhead is in, by the play it shows (not its place in the list: picking another play makes
+  // a new list whose one window is again the first, and the caption has to be drawn again for it).
+  const followWin = (t: number) => { const f = followRef.current, i = followIdx(t); return f && i >= 0 ? `${f.key}:${f.windows[i].playId}:${f.windows[i].from}` : '' }
   const speedRef = useRef(speed)
   speedRef.current = speed
   const inSpeedAt = (t: number) => { const s = speedRef.current; return !!s && playback.attachedKey === s.key && t >= s.from - 0.01 && t <= s.to }
   // Whether the plate is on the canvas now: it can come up on a render (a touch marked while paused),
   // so leaving it has to redraw even when the state already said "out".
   const speedShown = useRef(false)
-  const [st, setSt] = useState<{ inClip: boolean; inSpeed: boolean; card: PlaybackState['card']; idx: number }>({ inClip: inClipAt(playback.current.time), inSpeed: inSpeedAt(playback.current.time), card: playback.current.card, idx: followIdx(playback.current.time) })
+  const [st, setSt] = useState<{ inClip: boolean; inSpeed: boolean; card: PlaybackState['card']; win: string }>({ inClip: inClipAt(playback.current.time), inSpeed: inSpeedAt(playback.current.time), card: playback.current.card, win: followWin(playback.current.time) })
   useEffect(() => playback.subscribe(s => {
-    const inClip = inClipAt(s.time), inSpeed = inSpeedAt(s.time), idx = followIdx(s.time)
-    setSt(p => (p.inClip === inClip && p.inSpeed === inSpeed && inSpeed === speedShown.current && p.card === s.card && p.idx === idx ? p : { inClip, inSpeed, card: s.card, idx }))
+    const inClip = inClipAt(s.time), inSpeed = inSpeedAt(s.time), win = followWin(s.time)
+    setSt(p => (p.inClip === inClip && p.inSpeed === inSpeed && inSpeed === speedShown.current && p.card === s.card && p.win === win ? p : { inClip, inSpeed, card: s.card, win }))
   }), [])
   const [logoTick, setLogoTick] = useState(0) // redraw when a logo finishes loading
   useEffect(() => subscribeAssets(() => setLogoTick(n => n + 1)), [])
@@ -86,7 +89,7 @@ export function OverlayLayer({ size, settings, clip, scoreboard, caption, overri
     if (scoreboard && settings.scoreboard.enabled && !override?.scoreboard?.hidden) drawScoreboard(ctx, size.w, size.h, scoreboard, settings.scoreboard, lookTheme(settings))
     if (scoreboard?.lineup && settings.lineup.enabled && !override?.scoreboard?.hidden) drawLineup(ctx, size.w, size.h, scoreboard.lineup, settings.lineup, lookTheme(settings))
     if (caption && settings.playerCaption.enabled && !override?.playerCaption?.hidden) drawCaption(ctx, size.w, size.h, caption, settings.playerCaption, lookTheme(settings), packPhotoImage(caption.photo))
-  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, inSpeed, speed, st.card, logoTick, flights, progress, heatOpacity, st.idx])
+  }, [size.w, size.h, settings, scoreboard, caption, override, inClip, inSpeed, speed, st.card, logoTick, flights, progress, heatOpacity, st.win])
 
   return <canvas ref={canvas} className="overlay-layer" data-testid="overlay-canvas" style={{ width: size.w, height: size.h }} />
 }

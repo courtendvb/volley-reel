@@ -53,6 +53,22 @@ describe('insights', () => {
     expect(findInsights(scope, 'our', noWon)).toEqual([])
   })
 
+  it('finds who a rotation goes to after a good and a poor reception', () => {
+    // Rotation 5 shares its side-out between #9 and #10, but on #+ it is nearly all #9, on !- #10.
+    const so = (jersey: number, rot: number, recEffect: string) => ref({ skill: 'A', jersey, rot, phase: 'r', recEffect })
+    const scope = [
+      ...times(17, () => so(9, 5, '#')), ...times(1, () => so(10, 5, '+')), ...times(3, () => so(9, 5, '-')), ...times(15, () => so(10, 5, '!')),
+      ...[1, 6, 4, 3, 2].flatMap(rot => ['#', '-'].flatMap(e => [...times(3, () => so(9, rot, e)), ...times(3, () => so(10, rot, e))])),
+    ]
+    const found = findInsights(scope, 'opp', noWon, 50).filter(i => i.kind === 'share')
+    const good = found.find(i => i.key === 'share|rot5good|opp|opp9')!
+    expect(good.headline).toBe('ローテ 5・レセプション #+ のサイドアウトは #9 N9 が 94%')
+    expect(good.detail).toBe('18 本中 17 本（ローテ 5 全体では 56%）')
+    expect(found.find(i => i.key === 'share|rot5poor|opp|opp10')!.headline).toBe('ローテ 5・レセプション !- のサイドアウトは #10 N10 が 83%')
+    // The rotation as a whole goes to neither.
+    expect(found.some(i => i.subject === 'share|rot5')).toBe(false)
+  })
+
   it('leaves out a habit seen in too few plays', () => {
     const scope = [...times(4, () => ref({ skill: 'A', jersey: 9, rot: 1, phase: 'r' })), ...times(20, () => ref({ skill: 'A', jersey: 10, rot: 2, phase: 'r' }))]
     expect(findInsights(scope, 'opp', noWon).filter(i => i.key.startsWith('share|rot1|'))).toEqual([])
@@ -147,6 +163,48 @@ describe('insights', () => {
     expect(front.headline).toBe('#1 N1 は自分が前衛のとき Zone4 へ 60%')
     expect(front.detail).toBe('30 本中 18 本（自分が後衛のときは 20%・30 本中 6 本）')
     expect(front.base).toBeCloseTo(0.2)
+  })
+
+  it('tells a blocker\'s habit from the front row, whichever way it goes', () => {
+    // The other team's Zone4 attacks: with #15 in our front row 5 kills in 21, without him 16 in 26.
+    // Zone3: with #10 in front 10 in 11, without him 10 in 21.
+    const plays: PlayRef[] = []
+    const attack = (start: number, front: number[], n: number, kills: number) => {
+      for (let i = 0; i < n; i++) {
+        const r = ref({ skill: 'A', jersey: 4, start, effect: i < kills ? '#' : '-', team: 'opp' })
+        ;(r.play as { front?: string[] }).front = front.map(j => `our${j}`)
+        plays.push(r)
+      }
+    }
+    plays.push(ref({ skill: 'S', jersey: 15, team: 'our' }), ref({ skill: 'S', jersey: 10, team: 'our' }))
+    attack(4, [15], 21, 5); attack(4, [10], 26, 16)
+    attack(3, [10], 11, 10); attack(3, [15], 21, 10)
+    const found = findInsights(plays, 'our', noWon, 50).filter(i => i.kind === 'blockFront')
+    const z4 = found.find(i => i.subject.startsWith('blockFront|our15|'))!
+    expect(z4.headline).toBe('相手の Zone4 からのアタックは#15 N15 が前衛のとき 決定率が 24% に落ちる')
+    expect(z4.detail).toBe('21 本中 5 本（#15 N15 が後衛のときは 62%・26 本中 16 本）')
+    expect(z4.refs.every(r => r.play.effect !== '#')).toBe(true)
+    const z3 = found.find(i => i.subject.startsWith('blockFront|our10|') && i.headline.includes('Zone3'))!
+    expect(z3.headline).toBe('相手の Zone3 からのアタックは#10 N10 が前衛のとき 決定率 91%')
+    expect(z3.detail).toBe('11 本中 10 本（#10 N10 が後衛のときは 48%・21 本中 10 本）')
+    expect(found.some(i => i.headline.includes('後衛のとき'))).toBe(false)
+  })
+
+  it('finds where a server breaks', () => {
+    // #12 breaks on 16 of 20 to Zone1, on 4 of 20 to Zone5: half the serves overall, as the team.
+    const serves: PlayRef[] = [], won = new Map<number, '*' | 'a'>()
+    const serve = (end: number, n: number, breaks: number) => { for (let i = 0; i < n; i++) { const r = rally++; serves.push(ref({ skill: 'S', jersey: 12, end, rally: r })); won.set(r, i < breaks ? 'a' : '*') } }
+    serve(1, 20, 16); serve(5, 20, 4)
+    const byRally = (r: PlayRef) => (r.play.rallyId === null ? null : won.get(r.play.rallyId) ?? null)
+    const found = findInsights(serves, 'opp', byRally, 50).filter(i => i.subject.startsWith('serverBreak|opp|opp12|zone'))
+    const up = found.find(i => i.key.endsWith('zone=1|won'))!
+    expect(up.headline).toBe('#12 N12 のサーブはZone1 へのサーブのとき ブレイク率 80%')
+    expect(up.detail).toBe('20 本中 16 本（ふだんは 50%）')
+    const down = found.find(i => i.key.endsWith('zone=3|!won'))!
+    expect(down.headline).toBe('#12 N12 のサーブはZone5 へのサーブのとき ブレイク率が 20% に落ちる')
+    expect(down.refs).toHaveLength(16)
+    // The server as a whole breaks as the team does.
+    expect(findInsights(serves, 'opp', byRally, 50).some(i => i.subject === 'serverBreak|opp|opp12')).toBe(false)
   })
 
   it('finds the server the team breaks with, and the receiver it sides out with less than the servers faced say', () => {

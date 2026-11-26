@@ -38,6 +38,9 @@ interface Spec {
   family?: string | null // the same search on the league's teams (familyOf)
 }
 
+// The side a two-sided condition tells its yes-or-no habit from (the other side is in brackets).
+const TELL: Record<string, string> = { x: 'in', row: 'front', oppRow: 'front' }
+
 // The habits of one search.
 // With the league, a habit is the share against what the league's shift in the same situation leads
 // one to expect (its base moved as the league's teams move), and must be LEAGUE_LIFT past it.
@@ -55,6 +58,9 @@ function search(s: Tally, x: Spec, league?: League | null): Insight[] {
       const two = combo.length === 1 && x.twoSided.includes(combo[0])
       const other = two ? all.filter(c => c.dims[combo[0]] != null && c.dims[combo[0]] !== dims[0][1]) : null
       if (other && other.length < MIN_N) continue
+      // A yes-or-no habit of two sides is told from the side where someone does something: a blocker
+      // or a setter in the front row, not out of it.
+      if (other && x.yes && TELL[combo[0]] && dims[0][1] !== TELL[combo[0]]) continue
       const looked = outs.filter(o => ctx.some(c => is(c, o)))
       tally(s, x.kind, looked.length)
       for (const o of looked) {
@@ -310,6 +316,7 @@ function attackSpecs(c: Ctx): Spec[] {
 function serveSpecs(c: Ctx, rows: RallyRow[][]): Spec[] {
   const label = commonLabel(c), out: Spec[] = []
   const before = new Map<PlayRef, Record<string, string | null>>()
+  const wonOf = new Map(rows.flat().map(row => [row.serve, row.won]))
   for (const match of rows) {
     const last = new Map<string, string>()
     match.forEach((row, i) => {
@@ -365,6 +372,15 @@ function serveSpecs(c: Ctx, rows: RallyRow[][]): Spec[] {
       combos: [['zone']], twoSided: [], label: lab,
       phrase: (o, sh) => (o === 'good' ? t('崩した率 {0}', pct(sh)) : t('崩した率が {0} に下がる', pct(1 - sh))),
       mark: o => (o === 'good' ? t('崩したサーブ') : t('崩せなかったサーブ')),
+    })
+    // The rally won on the serve (a break) by where it went, against the server's serves as a whole.
+    const decided = zoned.filter(r => wonOf.get(r) != null)
+    out.push({
+      kind: 'serverBreak', subject: `serverBreak|${who}|zone`, person: who, who: t('{0} のサーブ', name), yes: 'won',
+      cases: decided.map(r => ({ ref: r, out: wonOf.get(r) ? 'won' : 'x', dims: { zone: String(serveZoneMarker(r.play)) } })),
+      combos: [['zone']], twoSided: [], label: lab,
+      phrase: (o, sh) => (o === 'won' ? t('ブレイク率 {0}', pct(sh)) : t('ブレイク率が {0} に落ちる', pct(1 - sh))),
+      mark: o => (o === 'won' ? t('ブレイク') : t('サイドアウトされた')),
     })
   }
   return out
@@ -461,7 +477,7 @@ function specsOf(c: Ctx): Spec[] {
 // setter goes back to, a player of the team in the front row) has none.
 function familyOf(x: Spec): string | null {
   switch (x.kind) {
-    case 'setDist': case 'killRate': case 'blocked': case 'serveErr': case 'serveType': case 'serveCourse': case 'serveEffect': case 'recZone': return x.kind
+    case 'setDist': case 'killRate': case 'blocked': case 'serveErr': case 'serveType': case 'serveCourse': case 'serveEffect': case 'recZone': case 'serverBreak': return x.kind
     case 'zoneBy': return `zoneBy|${x.subject.split('|').pop()}`
     case 'soGrade': case 'rallyRec': case 'rallyServe': case 'rallyLong': return x.subject
     default: return null

@@ -88,10 +88,29 @@ function shareInsights(s: Tally, attacks: PlayRef[]): Insight[] {
     ['trans', t('トランジションの攻撃'), attacks.filter(r => r.play.phase === 't'), attacks],
     ['clutch', t('終盤の接戦の攻撃'), attacks.filter(r => isClutch(r.play)), attacks],
   ]
-  return situations.flatMap(([id, label, ctx, base]) => tendencies(s, 'share', ctx, base, personOf, (who, refs, others, b) => make({
+  const whole = situations.flatMap(([id, label, ctx, base]) => tendencies(s, 'share', ctx, base, personOf, (who, refs, others, b) => make({
     key: `share|${id}|${who}`, subject: `share|${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]),
     headline: sh => t('{0}は {1} が {2}', label, playerLabel(refs[0]), sh), detail: detailAll,
   })))
+  // Each rotation after a good (#+) and a poor (!-) reception, against the rotation's side-out as a
+  // whole; kept only when past that reception's share over every rotation too (else the reception
+  // says it all).
+  const byPass = [1, 6, 5, 4, 3, 2].flatMap(rot => {
+    const inRot = so.filter(r => rotationOf(r) === rot)
+    return ([['good', '#+', good], ['poor', '!-', poor]] as const).flatMap(([id, grade, is]) => {
+      const all = so.filter(is)
+      return tendencies(s, 'share', inRot.filter(is), inRot, personOf, (who, refs, others, b) => {
+        const share = refs.length / (refs.length + others.length)
+        if (share - all.filter(r => personOf(r) === who).length / all.length < MIN_LIFT) return null
+        return make({
+          key: `share|rot${rot}${id}|${who}`, subject: `share|rot${rot}${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]),
+          headline: sh => t('ローテ {0}・レセプション {1} のサイドアウトは {2} が {3}', rot, grade, playerLabel(refs[0]), sh),
+          detail: (n, hits, bs) => t('{0} 本中 {1} 本（ローテ {2} 全体では {3}）', n, hits, rot, bs),
+        })
+      })
+    })
+  })
+  return [...whole, ...byPass]
 }
 
 // Where an attacker hits from each zone, against the team's attacks from that zone.

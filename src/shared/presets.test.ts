@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOW, buildPreset, cleanDialogState, cleanPreset, serveZoneMarker, lineupsMissing, makePreset, orderByMatch, setterMarker, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
+import { DEFAULT_HOW, buildPreset, lineupMarkers, targetMarker, cleanDialogState, cleanPreset, serveZoneMarker, lineupsMissing, makePreset, orderByMatch, setterMarker, phaseMarker, presetLabels, presetLookups, presetReels, presetRefs, serveMarker, type Facing, type PresetLookups, type VideoPreset } from './presets'
 import type { PlayRef } from './filter'
 import type { ParsedDVW, Play, PlayerRole } from './types'
 
@@ -224,5 +224,43 @@ describe('preset dialog', () => {
     expect(cleanDialogState(JSON.parse(JSON.stringify(kept)), modes)).toEqual(kept)
     expect(cleanDialogState({ kind: 'dance', modes: { serve: 'x' } }, modes)).toEqual({ kind: 'sideout', how: DEFAULT_HOW, source: 'our', dir: 'all', modes })
     expect(cleanDialogState(null, modes).kind).toBe('sideout')
+  })
+  it('makes a scene per rotation for side-out, marked by reception, target attacker, match or setter call', () => {
+    const at = (rot: number, recEffect: string, matchId: string, set: string | null, startZone = 4): PlayRef => {
+      const r = { ...ref({ skill: 'A', jersey: 7, rot, phase: 'r', recEffect }), matchId }
+      r.play.startZone = startZone
+      if (set) sets.set(r.play, { skill: 'E', code: set, playerKey: 'S1' } as Play)
+      return r
+    }
+    const sets = new Map<Play, Play>()
+    const refs = [at(1, '#', 'a', '*05EH K1F', 4), at(6, '-', 'a', '*05EH K2C', 3), at(1, '!', 'b', '*05EH K1B', 2), at(1, '+', 'b', null), at(9, '#', 'a', null)]
+    const lk: PresetLookups = { ...look, setOf: r => sets.get(r.play) ?? null, matchLabel: r => `vs ${r.matchId}`, callName: (_r, c) => (c === 'K1' ? 'QUICK' : '') }
+    const how = (sideoutMarks: typeof DEFAULT_HOW.sideoutMarks) => ({ ...DEFAULT_HOW, sideout: 'rotation' as const, sideoutMarks })
+    const rec = buildPreset('sideout', how('reception'), refs, lk)
+    expect(titles(rec.scenes)).toEqual(['ローテ 1', 'ローテ 6'])
+    expect(rec.skipped).toBe(1)
+    expect(rec.scenes[0].counts).toEqual({ 1: 2, 2: 1 })
+    expect(buildPreset('sideout', how('target'), refs, lk).scenes[0].counts).toEqual({ 1: 1, 3: 1 })
+    expect(buildPreset('sideout', how('target'), refs, lk).scenes[0].names[3]).toBe('Zone2/1')
+    expect(buildPreset('sideout', how('match'), refs, lk).scenes[0].names).toEqual({ 1: 'vs a', 2: 'vs b' })
+    const call = buildPreset('sideout', how('call'), refs, lk).scenes[0]
+    expect(call.names).toEqual({ 1: 'K1 QUICK' })
+    expect(call.rest).toBe(1)
+    expect(targetMarker(refs[0].play, null)).toBe(null)
+    expect(presetLabels({ kind: 'sideout', how: how('call'), source: 'our', dir: 'all', mode: 'toEnd' }, 'HTH').name).toBe('HTH サイドアウト ローテーション別 セッターコール別')
+    expect(cleanPreset({ kind: 'sideout', how: { sideout: 'rotation', sideoutMarks: 'target' } })?.how).toMatchObject({ sideout: 'rotation', sideoutMarks: 'target' })
+    expect(cleanPreset({ kind: 'sideout', how: { sideout: 'player' } })?.how.sideout).toBe('one') // the split before that: one scene
+  })
+
+  it('lays the likely starting lineup out as markers, from rotation 1 in serving order', () => {
+    const s = (jersey: number, rot: number) => ref({ jersey, rot })
+    const refs = [s(1, 1), s(1, 1), s(2, 6), s(3, 5), s(3, 5), s(8, 5), s(4, 4), s(2, 3), s(6, 3), s(6, 3), s(5, 2), s(9, 2), s(5, 2)]
+    const m = lineupMarkers(refs, look.roleOf)
+    expect(m.names).toEqual({ 1: 'S #1 N1', 2: 'OH #2 N2', 3: 'MB #3 N3', 4: 'OP #4 N4', 5: '#6 N6', 6: 'MB #5 N5' })
+    expect(m.counts).toEqual({ 1: 2, 2: 2, 3: 2, 4: 1, 5: 2, 6: 2 }) // #2's rotation-3 serve stays in its marker
+    expect(m.rest).toBe(2)
+    const made = buildPreset('serve', { ...DEFAULT_HOW, serve: 'lineup' }, refs, look)
+    expect(titles(made.scenes)).toEqual(['スタメン'])
+    expect(presetLabels({ kind: 'serve', how: { ...DEFAULT_HOW, serve: 'lineup' }, source: 'our', dir: 'all', mode: 'keyplay' }, 'HTH').name).toBe('HTH サーブ スタメン')
   })
 })

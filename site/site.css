@@ -213,6 +213,8 @@ footer p + p { margin-top: 6px; }
 .dl-note { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; }
 .hero .dl-note { color: var(--on-slate-sub); font-weight: 500; }
 .dl-note:empty { display: none; }
+p.dl-alert { margin: 0; max-width: 36em; padding: 10px 14px; border-left: 4px solid var(--red); border-radius: 4px; background: var(--surface); color: var(--ink); font-size: 15px; line-height: 1.5; }
+p.dl-alert b { display: block; }
 .get .wrap { align-items: flex-start; }
 .dl { display: grid; gap: 14px; justify-items: start; flex: 1 1 24em; max-width: 620px; }
 .dl-all { display: flex; flex-wrap: wrap; gap: 8px; }

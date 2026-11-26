@@ -1,12 +1,15 @@
 // Videos made from presets (the search's "プリセットから作る", shared/presets.ts): the dialog's
-// open state, making a video, and making one again from the preset it remembers.
+// open state, making a video, and making one again from the preset it remembers. And videos of a
+// team's habits found by themselves (the インサイト dialog).
 import { useMemo, useState, type RefObject } from 'react'
 import type { PlayRef } from '../../../shared/filter'
-import { cleanPreset, makePreset, presetLabels, presetLookups, presetReels } from '../../../shared/presets'
+import { cleanPreset, makePreset, presetLabels, presetLookups, presetReels, type VideoPreset } from '../../../shared/presets'
+import { insightReels } from '../../../shared/insights'
 import type { Reel } from '../../../shared/reel'
 import type { ParsedDVW, PlayerRole } from '../../../shared/types'
 import { newVideo, type Video } from '../../../shared/video'
 import type { PresetChoice } from '../components/PresetDialog'
+import type { InsightChoice } from '../components/InsightDialog'
 import type { AppLatest } from './appState'
 import type { Snapshot } from './useUndo'
 import { t } from '../../../shared/i18n'
@@ -35,16 +38,31 @@ export function usePresetVideos(h: Host) {
   const [presetOpen, setPresetOpen] = useState(false)
   const presetLook = useMemo(() => presetLookups(h.dvws, h.roles, h.matchIds), [h.dvws, h.roles, h.matchIds])
 
-  const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
-    const scenes = presetReels(specs, prefix, preset.mode)
-    if (!scenes.length) return
-    const v: Video = { ...newVideo(name, scenes.map(r => r.id), h.latest.current.settings?.overlay), preset }
+  const [insightOpen, setInsightOpen] = useState(false)
+
+  // A new video of these scenes, as one undo step.
+  const addMadeVideo = (name: string, scenes: Reel[], preset?: VideoPreset) => {
+    const v: Video = { ...newVideo(name, scenes.map(r => r.id), h.latest.current.settings?.overlay), ...(preset ? { preset } : {}) }
     h.record([{ kind: 'video', id: v.id, value: null }, ...scenes.map(r => ({ kind: 'scene', id: r.id, value: null }) as Snapshot)], false)
     h.addScenes(scenes)
     h.addVideo(v)
     h.showScene(scenes[0].id)
-    setPresetOpen(false)
     h.setNotice(t('動画「{0}」を作りました（{1} シーン）', name, scenes.length))
+  }
+
+  const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
+    const scenes = presetReels(specs, prefix, preset.mode)
+    if (!scenes.length) return
+    addMadeVideo(name, scenes, preset)
+    setPresetOpen(false)
+  }
+
+  // A video of the habits picked in the インサイト dialog (shared/insights.ts), a scene each.
+  const makeInsightVideo = ({ insights, name, ...options }: InsightChoice) => {
+    const scenes = insightReels(insights, options)
+    if (!scenes.length) return
+    addMadeVideo(name, scenes)
+    setInsightOpen(false)
   }
 
   // Made again from the matches searched now: its own scenes are replaced (and deleted), scenes it
@@ -65,5 +83,5 @@ export function usePresetVideos(h: Host) {
     h.setNotice(t('動画「{0}」を作り直しました（{1} シーン）', v.name, scenes.length))
   }
 
-  return { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo }
+  return { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo, insightOpen, setInsightOpen, makeInsightVideo }
 }

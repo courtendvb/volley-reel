@@ -10,15 +10,18 @@ import {
 import { MARKERS, addClips, newReel, type ClipMode, type Marker, type Reel } from './reel'
 import { displayName } from './dvw'
 import { roleName } from './roles'
+import { SET_TARGETS, setBefore, setTarget, setTargetName, setterCall } from './setChart'
 import type { ParsedDVW, Play, Player, PlayerRole } from './types'
 import { t } from './i18n'
 
 export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
 // How each preset lays the scenes out:
-//  sideout  one scene with the side-out attacks after the receptions picked (sideoutRec), a marker
-//           per rotation (marker n: rotation n), played in the order a team rotates
+//  sideout  the side-out attacks after the receptions picked (sideoutRec): 'one' one scene with a
+//           marker per rotation (marker n: rotation n), played in the order a team rotates;
+//           'rotation' a scene per rotation in that order, marked as sideoutMarks says
 //  serve    a scene per server: 'rotation' in the order of the rotation each serves in most, 'count'
-//           the most serves first, 'jersey' by jersey number; marked as serveMarks says
+//           the most serves first, 'jersey' by jersey number; marked as serveMarks says. 'lineup'
+//           one scene with the likely starting lineup as markers (lineupMarkers)
 //  block    'middle' a scene per middle blocker with every attack of the other team while that
 //           middle was in the front row (touched or not), the most first, marked 1 after the
 //           attacking team's good reception, 2 after its poor one, 3 in transition (blockMarks
@@ -30,7 +33,9 @@ export type PresetKind = 'sideout' | 'serve' | 'block' | 'attack'
 //           'combo' a scene per attacker (the most first) with a marker per attack code
 export interface PresetHow {
   sideoutRec: RecMark[] // the receptions side-out attacks come after; all of them: every side-out attack
-  serve: 'rotation' | 'count' | 'jersey'
+  sideout: 'one' | 'rotation'
+  sideoutMarks: SideoutMarks // inside each rotation's scene
+  serve: 'rotation' | 'count' | 'jersey' | 'lineup'
   serveMarks: ServeMarks // inside each server's scene
   block: 'middle' | 'rotation'
   blockMarks: 'phase' | 'setter' // inside each middle's scene
@@ -40,10 +45,14 @@ export interface PresetHow {
 // A reception's evaluation, as a side-out video picks them (an error (=) has no attack after it).
 export type RecMark = '#' | '+' | '!' | '-' | '/'
 export const REC_MARKS: RecMark[] = ['#', '+', '!', '-', '/']
-export const DEFAULT_HOW: PresetHow = { sideoutRec: [...REC_MARKS], serve: 'rotation', serveMarks: 'reception', block: 'middle', blockMarks: 'phase', attack: 'count', order: 'old' }
+export const DEFAULT_HOW: PresetHow = { sideoutRec: [...REC_MARKS], sideout: 'one', sideoutMarks: 'reception', serve: 'rotation', serveMarks: 'reception', block: 'middle', blockMarks: 'phase', attack: 'count', order: 'old' }
 // A server's serves in markers: 'reception' by the reception they drew (serveMarker), 'zone' by where
 // they landed (serveZoneMarker), 'time' all in one marker as they came.
 export type ServeMarks = 'reception' | 'zone' | 'time'
+// A rotation's side-out attacks in markers: 'reception' 1 after a good reception (# +), 2 after a poor
+// one (! - /); 'target' by the set's target attacker (targetMarker); 'match' a marker per match in
+// the order they play (the seventh on: unmarked); 'call' a marker per setter call, the most first.
+export type SideoutMarks = 'reception' | 'target' | 'match' | 'call'
 
 // order: the markers in the order they play (else 1 to 6).
 export interface SceneSpec extends Marked { title: string; order?: Marker[] }
@@ -56,6 +65,9 @@ export interface PresetLookups {
   roleOf: (r: PlayRef) => PlayerRole | undefined // the project's position for the player, else the DVW roster's
   middlesFacing: (r: PlayRef) => Facing[] // an attack: the other team's middle blockers in the front row
   matchIndex?: (matchId: string) => number // the match's place, oldest first; without it, as the plays come
+  setOf?: (r: PlayRef) => Play | null // an attack: the same team's set right before it
+  matchLabel?: (r: PlayRef) => string // the play's match as a marker names it (the date and the other team)
+  callName?: (r: PlayRef, call: string) => string // a setter call's name in the play's match ('' when none)
 }
 
 // An attack by where it came from: the attacking team's reception phase after a good or a poor
@@ -109,6 +121,55 @@ const serveMarks = (refs: PlayRef[], by: ServeMarks): Marked =>
     : by === 'time' ? marked(refs, () => 1, { 1: t('時系列') })
       : marked(refs, r => serveMarker(r.play), SERVE_NAMES())
 
+// A side-out attack after a good reception (# +) or a poor one (! - /).
+export function receptionMarker(attack: Play): Marker | null {
+  const e = attack.phase === 'r' ? attack.recEffect : undefined
+  return e === '#' || e === '+' ? 1 : e === '-' || e === '!' || e === '/' ? 2 : null
+}
+const RECEPTION_NAMES = (): Partial<Record<Marker, string>> => ({ 1: t('良いレセプションから'), 2: t('悪いレセプションから') })
+
+// An attack by the set's target attacker (Zone4, the middle, Zone2/1, the pipe, the setter's own
+// attack: markers 1 to 5), placed as the set distribution places it (setChart.ts setTarget). With no
+// set before it: none.
+export function targetMarker(attack: Play, set: Play | null | undefined): Marker | null {
+  if (!set) return null
+  const k = setTarget(attack, set.playerKey, set)
+  return k ? ((SET_TARGETS.indexOf(k) + 1) as Marker) : null
+}
+const TARGET_NAMES = (): Partial<Record<Marker, string>> => Object.fromEntries(SET_TARGETS.map((k, i) => [i + 1, setTargetName(k)]))
+
+function sideoutMarks(refs: PlayRef[], by: SideoutMarks, look: PresetLookups): Marked {
+  if (by === 'target') return marked(refs, r => targetMarker(r.play, look.setOf?.(r)), TARGET_NAMES())
+  if (by === 'call') {
+    const call = (r: PlayRef) => { const s = look.setOf?.(r); return s ? setterCall(s) || null : null }
+    return rankedMarkers(refs, call, r => { const c = call(r)!, name = look.callName?.(r, c); return name ? `${c} ${name}` : c })
+  }
+  if (by === 'match') {
+    // The plays are already in the match order picked, so the first seen is the first played.
+    const ids = [...new Set(refs.map(r => r.matchId))].slice(0, MARKERS.length)
+    const names: Partial<Record<Marker, string>> = {}
+    ids.forEach((id, i) => { names[MARKERS[i]] = look.matchLabel?.(refs.find(r => r.matchId === id)!) ?? id })
+    return marked(refs, r => { const i = ids.indexOf(r.matchId); return i < 0 ? null : MARKERS[i] }, names)
+  }
+  return marked(refs, r => receptionMarker(r.play), RECEPTION_NAMES())
+}
+
+// The starting lineup a team likely has, as markers in the order it serves: marker 1 the player who
+// serves most in rotation 1 (the setter, in zone 1), then rotations 6, 5, 4, 3 and 2. A player is in
+// one marker only (the first rotation they serve most in); each marker holds all that player's
+// serves, and serves by anyone else stay unmarked. Marker names: the position, then the player.
+export function lineupMarkers(refs: PlayRef[], roleOf: PresetLookups['roleOf']): Marked {
+  const taken = new Map<string, Marker>()
+  const names: Partial<Record<Marker, string>> = {}
+  ROTATION_ORDER.forEach((rot, i) => {
+    const top = byCount(refs.filter(r => rotationOf(r) === rot), personOf).find(p => !taken.has(p.key))
+    if (!top) return
+    taken.set(top.key, MARKERS[i])
+    names[MARKERS[i]] = [roleOf(top.refs[0]), playerLabel(top.refs[0])].filter(Boolean).join(' ')
+  })
+  return marked(refs, r => taken.get(personOf(r)) ?? null, names)
+}
+
 const SKILL: Record<Exclude<PresetKind, 'sideout'>, string> = { serve: 'S', block: 'B', attack: 'A' }
 const otherTeam = { our: 'opp', opp: 'our', all: 'all' } as const
 
@@ -150,6 +211,12 @@ const comboLabel = (r: PlayRef): string => (r.comboName ? `${r.combo} ${r.comboN
 
 export function buildPreset(kind: PresetKind, how: PresetHow, plays: PlayRef[], look: PresetLookups): { scenes: SceneSpec[]; skipped: number } {
   const refs = orderByMatch(plays, how.order, look.matchIndex)
+  if (kind === 'sideout' && how.sideout === 'rotation') {
+    const known = refs.filter(r => { const rot = rotationOf(r); return rot !== null && rot >= 1 && rot <= 6 })
+    const scenes = ROTATION_ORDER.map(rot => ({ rot, refs: known.filter(r => rotationOf(r) === rot) })).filter(g => g.refs.length)
+      .map(g => ({ title: t('ローテ {0}', g.rot), ...sideoutMarks(g.refs, how.sideoutMarks, look) }))
+    return { scenes, skipped: refs.length - known.length }
+  }
   if (kind === 'sideout' || (kind === 'block' && how.block === 'rotation')) {
     const { skipped, ...g } = byRotation(refs)
     return { scenes: g.items.length ? [{ title: t('ローテーション別'), ...g }] : [], skipped }
@@ -169,6 +236,7 @@ export function buildPreset(kind: PresetKind, how: PresetHow, plays: PlayRef[], 
   }
   const people = byCount(refs, personOf)
   if (kind === 'serve') {
+    if (how.serve === 'lineup') return { scenes: refs.length ? [{ title: t('スタメン'), ...lineupMarkers(refs, look.roleOf) }] : [], skipped: 0 }
     const order = how.serve === 'count' ? people
       : how.serve === 'jersey' ? [...people].sort((a, b) => a.refs[0].play.jersey - b.refs[0].play.jersey)
       : [...people].sort((a, b) => mainRotation(a.refs) - mainRotation(b.refs))
@@ -192,7 +260,9 @@ export const PRESET_KINDS: PresetKind[] = ['sideout', 'serve', 'block', 'attack'
 // The choices each one-of setting has (side-out's receptions are picked as a set instead).
 type OneOf = Exclude<keyof PresetHow, 'sideoutRec'>
 export const HOW_OPTIONS = (): { [K in OneOf]: [PresetHow[K], string][] } => ({
-  serve: [['rotation', t('ローテ順')], ['count', t('打数順')], ['jersey', t('背番号順')]],
+  sideout: [['one', t('ローテをマーカーに')], ['rotation', t('ローテごとのシーン')]],
+  sideoutMarks: [['reception', t('レセプション別')], ['target', t('ターゲットアタッカー別')], ['match', t('試合別')], ['call', t('セッターコール別')]],
+  serve: [['rotation', t('ローテ順')], ['count', t('打数順')], ['jersey', t('背番号順')], ['lineup', t('スタメン')]],
   serveMarks: [['reception', t('レセプション評価別')], ['zone', t('ゾーン別')], ['time', t('時系列')]],
   block: [['middle', t('ミドル別')], ['rotation', t('ローテ別')]],
   blockMarks: [['phase', t('レセプション別')], ['setter', t('相手セッター位置別')]],
@@ -220,9 +290,11 @@ export function presetLabels(p: VideoPreset, team: string): { name: string; pref
   const k = p.kind
   const how = k === 'sideout' ? t('ローテーション別') : (HOW_OPTIONS()[k] as [string, string][]).find(([v]) => v === p.how[k])?.[1] ?? ''
   const dir = p.dir === 'up' ? '↑' : p.dir === 'down' ? '↓' : ''
-  const marks = p.kind === 'serve' ? HOW_OPTIONS().serveMarks.find(([v]) => v === p.how.serveMarks)?.[1] ?? ''
+  const rec = p.kind === 'sideout' && p.how.sideoutRec.length < REC_MARKS.length ? recLabel(p.how.sideoutRec) : ''
+  const marks = p.kind === 'serve' ? (p.how.serve === 'lineup' ? '' : HOW_OPTIONS().serveMarks.find(([v]) => v === p.how.serveMarks)?.[1] ?? '')
+    : p.kind === 'sideout' && p.how.sideout === 'rotation' ? [HOW_OPTIONS().sideoutMarks.find(([v]) => v === p.how.sideoutMarks)?.[1], rec].filter(Boolean).join(' ')
     : p.kind === 'block' && p.how.block === 'middle' && p.how.blockMarks === 'setter' ? HOW_OPTIONS().blockMarks.find(([v]) => v === 'setter')?.[1] ?? ''
-      : p.kind === 'sideout' && p.how.sideoutRec.length < REC_MARKS.length ? recLabel(p.how.sideoutRec) : ''
+      : rec
   const name = [who, presetName(p.kind), how, marks, dir].filter(Boolean).join(' ')
   return { name, prefix: [who, presetName(p.kind)].filter(Boolean).join(' ') }
 }
@@ -239,7 +311,7 @@ export function cleanPreset(v: unknown): VideoPreset | null {
   const how = { ...DEFAULT_HOW }
   const opts = HOW_OPTIONS()
   const saved = o.how as Record<string, unknown> | undefined
-  for (const k of ['serve', 'block', 'attack', 'serveMarks', 'blockMarks', 'order'] as OneOf[]) {
+  for (const k of Object.keys(opts) as OneOf[]) {
     const x = saved?.[k]
     if ((opts[k] as [string, string][]).some(([val]) => val === x)) (how as Record<string, unknown>)[k] = x
   }
@@ -261,6 +333,18 @@ export function presetLookups(dvws: Record<string, ParsedDVW>, roles: Record<str
   const index = new Map(matchIds?.map((id, i) => [id, i]))
   return {
     ...(matchIds ? { matchIndex: (id: string) => index.get(id) ?? -1 } : {}),
+    setOf: r => {
+      const d = dvws[r.matchId]
+      return d ? setBefore(d.plays, d.plays.includes(r.play) ? r.play : d.plays.find(p => p.id === r.play.id) ?? r.play) : null
+    },
+    matchLabel: r => {
+      const d = dvws[r.matchId]
+      if (!d) return r.matchId
+      const other = d.teams[r.play.side === '*' ? 1 : 0]
+      const date = d.date ? `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}` : ''
+      return [date, `vs ${other.code || other.name}`].filter(Boolean).join(' ')
+    },
+    callName: (r, c) => dvws[r.matchId]?.codeNames[c] ?? '',
     wonBy: r => (r.play.rallyId === null ? null : dvws[r.matchId]?.rallies[r.play.rallyId]?.wonBy ?? null),
     roleOf: r => roles?.[r.personKey] ?? dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role,
     middlesFacing: r => {

@@ -140,6 +140,7 @@ export function corruptFirstReel(dir: string): void {
 //  mouse and keys; with VR_SMOKE_EXPORT=<out.mp4> also export the clip with the court]
 // [VR_SMOKE_SETTER=reception|rotation|rot|serve|attack: a setter's data slide made from the dialog (serve: a server's, with the starts; attack: an attacker's, its three columns)]
 // [VR_SMOKE_CARDINSERT=<pack.vrpack>|<logo image>: a player's photo and a team logo put on a marker card from its bar]
+// [VR_SMOKE_PRESETSIDEOUT=1: side-out as one scene and by rotation scenes with each marking, the serve preset's starting lineup, in the dialog's preview]
 // [VR_SMOKE_PRESETSERVE=1: the serve preset's player order and markers (zone, in order) in the dialog's preview]
 // [VR_SMOKE_ANALYSIS=1: each report of the 分析 window: a screenshot and its tables read back]
 // [VR_SMOKE_MATCHREPORT=1: the match report: click its numbers, the play list shows as many plays]
@@ -187,6 +188,7 @@ export async function runSmoke(c: SmokeContext, w: BrowserWindow, outPng: string
       presets: !!process.env.VR_SMOKE_PRESETS,
       picker: !!process.env.VR_SMOKE_PICKER,
       presetServe: !!process.env.VR_SMOKE_PRESETSERVE,
+      presetSideout: !!process.env.VR_SMOKE_PRESETSIDEOUT,
       analysis: !!process.env.VR_SMOKE_ANALYSIS,
       matchReport: !!process.env.VR_SMOKE_MATCHREPORT,
       presetBlock: !!process.env.VR_SMOKE_PRESETBLOCK,

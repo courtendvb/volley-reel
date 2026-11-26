@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { PlayRef } from '../../../shared/filter'
 import type { ClipMode } from '../../../shared/reel'
 import type { WonBy } from '../../../shared/rotationSplit'
@@ -45,6 +45,7 @@ function readKept(): Kept {
 
 // How sure a habit is, as a word and a bar: by rankOf (3: one in a thousand by luck, all told).
 const sureness = (i: Insight): { word: string; level: number } => {
+  if (i.tentative) return { word: t('参考'), level: 0 }
   const a = rankOf(i)
   return a >= 3 ? { word: t('はっきり'), level: 3 } : a >= 2 ? { word: t('強い傾向'), level: 2 } : { word: t('傾向'), level: 1 }
 }
@@ -71,7 +72,9 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
 
   const insights = useMemo(() => findInsights(scope, team, wonBy, 20, focus), [scope, wonBy, focus])
   const [picked, setPicked] = useState<Set<string>>(new Set())
-  useEffect(() => { setPicked(new Set(insights.slice(0, FIRST_PICKED).map(i => i.key))) }, [insights])
+  // Those for reference are not picked at first.
+  useEffect(() => { setPicked(new Set(insights.filter(i => !i.tentative).slice(0, FIRST_PICKED).map(i => i.key))) }, [insights])
+  const firstRef = insights.findIndex(i => i.tentative)
   const chosen = insights.filter(i => picked.has(i.key))
 
   // The team as the video's name calls it.
@@ -128,10 +131,12 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
           </div>
         </section>
         <div className="preset-preview insight-list" role="list">
-          {insights.length ? insights.map(i => {
+          {insights.length ? insights.map((i, n) => {
             const s = sureness(i)
             return (
-              <label key={i.key} role="listitem" className={`insight-row${picked.has(i.key) ? ' on' : ''}`}>
+              <Fragment key={i.key}>
+              {n === firstRef && <p className="insight-ref-head muted" role="presentation">{t('参考: それだけを見れば偏っているが、たくさんの組み合わせを調べた中では偶然の範囲かもしれないもの')}</p>}
+              <label role="listitem" className={`insight-row${picked.has(i.key) ? ' on' : ''}`}>
                 <input type="checkbox" checked={picked.has(i.key)} onChange={() => toggle(i.key)} />
                 <span className="insight-kind">{insightKindName(i.kind)}</span>
                 <span className="insight-text">
@@ -140,6 +145,7 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
                 </span>
                 <span className={`insight-sure l${s.level}`} title={t('偏りの確かさ（z = {0}）', Math.abs(i.z).toFixed(1))}><i /><i /><i />{s.word}</span>
               </label>
+              </Fragment>
             )
           }) : <span className="muted">{t('はっきりした傾向は見つかりませんでした。試合を増やすと見つかりやすくなります。')}</span>}
         </div>

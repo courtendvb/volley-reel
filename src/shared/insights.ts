@@ -37,6 +37,7 @@ export interface Insight {
   z: number // the share against the base, in standard errors (negative: below it)
   p: number // the chance of a share this far from the base by luck alone (exact binomial, one-sided)
   adjP: number // p against the situations its kind looked at (Benjamini–Hochberg): how sure it is, all told
+  tentative?: boolean // true: for reference only, short of ALPHA all told though well past chance alone (REF_P)
   refs: PlayRef[] // the plays that show the habit, in the order played
   others: PlayRef[] // the rest of the situation's plays
 }
@@ -49,6 +50,9 @@ export const MIN_N = 10
 export const MIN_HITS = 5
 export const MIN_LIFT = 0.12
 export const ALPHA = 0.2
+// A habit short of ALPHA all told is still listed, for reference (Insight.tentative), when its own p is
+// within this: the more situations a kind looks at, the more of these, but none is lost for it.
+export const REF_P = 0.01
 
 export const pct = (x: number): string => `${Math.round(x * 100)}%`
 
@@ -446,8 +450,9 @@ export const KIND_WEIGHT: Partial<Record<InsightKind, number>> = { serveTarget: 
 // power of ten (2: one in a hundred), weighted by its kind.
 export const rankOf = (i: Pick<Insight, 'kind' | 'adjP'>): number => -Math.log10(Math.max(i.adjP, 1e-12)) * (KIND_WEIGHT[i.kind] ?? 1)
 
-// The team's habits in focus, the surest first (by rankOf). A habit of the same player or rotation
-// and kind shows once (the surest in focus), and at most `max` are kept.
+// The team's habits in focus, the surest first (by rankOf), then those for reference (tentative). A
+// habit of the same player or rotation and kind shows once (the surest in focus); at most `max` sure
+// ones are kept, and half as many for reference after them.
 export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy, max = 20, focus: InsightFocus = NO_FOCUS): Insight[] {
   const mine = scope.filter(r => r.teamRole === team)
   const skill = (s: string) => mine.filter(r => r.play.skill === s)
@@ -473,13 +478,22 @@ export function findInsights(scope: PlayRef[], team: 'our' | 'opp', wonBy: WonBy
     let least = 1
     for (let j = list.length - 1; j >= 0; j--) { least = Math.min(least, (list[j].p * m) / (j + 1)); list[j].adjP = least }
   }
-  const kept = all.filter(i => i.adjP <= ALPHA && inFocus(i, focus)).sort((a, b) => rankOf(b) - rankOf(a))
+  // The sure ones first; after them, for reference, those alone well past chance (p within REF_P) that
+  // fell short only for the many situations their kind looked at.
+  const weighed = (i: Insight) => -Math.log10(Math.max(i.p, 1e-12)) * (KIND_WEIGHT[i.kind] ?? 1)
+  const sure = all.filter(i => i.adjP <= ALPHA).sort((a, b) => rankOf(b) - rankOf(a))
+  const maybe = all.filter(i => i.adjP > ALPHA && i.p <= REF_P).map(i => ({ ...i, tentative: true })).sort((a, b) => weighed(b) - weighed(a))
+  // Each list to its own limit, so sure ones filling theirs leave room for the rest.
   const seen = new Set<string>(), out: Insight[] = []
-  for (const i of kept) {
-    if (seen.has(i.subject)) continue
-    seen.add(i.subject)
-    out.push(i)
-    if (out.length >= max) break
+  for (const [list, limit] of [[sure, max], [maybe, Math.ceil(max / 2)]] as const) {
+    let n = 0
+    for (const i of list) {
+      if (n >= limit) break
+      if (!inFocus(i, focus) || seen.has(i.subject)) continue
+      seen.add(i.subject)
+      out.push(i)
+      n++
+    }
   }
   return out
 }

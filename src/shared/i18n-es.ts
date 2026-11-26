@@ -1952,6 +1952,8 @@ export const ES: Record<string, string> = {
   "{0} の Zone{1} からのアタックは Zone{2} へ {3}": "{0} desde la Zona{1} ataca a la Zona{2} el {3}",
   "{0} のサーブは {1} へ {2}": "{0} saca a {1} el {2}",
   "{0} のサーブは {1} を狙う（{2}）": "{0} saca a {1} ({2})",
+  "参考": "Referencia",
+  "参考: それだけを見れば偏っているが、たくさんの組み合わせを調べた中では偶然の範囲かもしれないもの": "Referencia: claros por sí solos, pero entre las muchas situaciones revisadas pueden ser azar",
   "{0} 本中 {1} 本（{2}のときは {3}・{4} 本中 {5} 本）": "{1} de {0} ({2}: {3}, {5} de {4})",
   "{0} のサーブはブレイク率 {1}": "saque de {0}: break {1}",
   "{0} のレセプションはサイドアウト率 {1}": "recepción de {0}: side-out {1}",

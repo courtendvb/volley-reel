@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { binomTail, cleanVideoInsight, findInsights, inFocus, insightReels, isClutch, rankOf, refindInsights, videoInsight, zScore, type Insight } from './insights'
+import { ALPHA, REF_P, binomTail, cleanVideoInsight, findInsights, inFocus, insightReels, isClutch, rankOf, refindInsights, videoInsight, zScore, type Insight } from './insights'
 import type { PlayRef } from './filter'
 import type { Play } from './types'
 
@@ -186,6 +186,11 @@ describe('insights', () => {
     const among = findInsights([...habit, ...plain, ...noise], 'opp', noWon).find(i => i.key === alone.key)
     expect(alone.p).toBeLessThan(0.01)
     expect(among?.adjP ?? 1).toBeGreaterThan(alone.adjP)
+    // Short all told, it is still listed, for reference, after the sure ones.
+    expect(alone.tentative).toBeUndefined()
+    expect(among).toBeDefined()
+    expect(among!.tentative ?? false).toBe(among!.adjP > ALPHA)
+    expect(among!.p).toBeLessThanOrEqual(REF_P)
   })
 
   it('finds who breaks down on a kind of serve and the rotation that cannot side out', () => {

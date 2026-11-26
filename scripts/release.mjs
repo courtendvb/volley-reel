@@ -8,6 +8,7 @@
 // leaving the release without latest.yml). Apps don't see a draft, so they never get half a release.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { missingInAsar } from './asar-deps.mjs'
 import { packsToShip } from './packs-guard.mjs'
 import { pruneReleases } from './prune-releases.mjs'
 
@@ -43,6 +44,14 @@ console.log(`SyncScout Video Editor ${version} を書き出して公開します
 if (!existing) gh('release', 'create', tag, '--repo', REPO, '--draft', '--title', version, '--notes', `SyncScout Video Editor ${version}`)
 run('npx', ['electron-vite', 'build'])
 run('npx', ['electron-builder', '--win', '--x64', '--publish', 'always'])
+
+// The app's modules all packed (asar-deps.mjs): otherwise it would stop on start for everyone who updates.
+const missingMods = missingInAsar('release/win-unpacked/resources/app.asar')
+if (missingMods.length) {
+  console.error(`アプリに入っていないモジュールがあります（下書きのまま）: ${missingMods.join(', ')}`)
+  console.error('node_modules がジャンクションや別のチェックアウトのものだと起きます。このフォルダーで npm ci してから、もう一度リリースしてください')
+  process.exit(1)
+}
 
 const files = JSON.parse(gh('release', 'view', tag, '--repo', REPO, '--json', 'assets')).assets.map(a => a.name)
 const need = ['latest.yml', `syncscout-video-editor-setup-${version}.exe`, `syncscout-video-editor-setup-${version}.exe.blockmap`]

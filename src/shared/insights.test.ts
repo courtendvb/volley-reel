@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findInsights, insightReels, isClutch, zScore, type Insight } from './insights'
+import { cleanVideoInsight, findInsights, insightReels, isClutch, refindInsights, videoInsight, zScore, type Insight } from './insights'
 import type { PlayRef } from './filter'
 import type { Play } from './types'
 
@@ -136,5 +136,30 @@ describe('insights', () => {
     expect(both.groups[1]).toHaveLength(top.refs.length)
     expect(both.groups[2]).toHaveLength(top.others.length)
     expect(both.markerNames[2]).toBe('それ以外')
+  })
+
+  it('finds the habits of a video again by subject, as the matches have them now', () => {
+    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r' })
+    const rest = [6, 5, 4, 3, 2].flatMap(rot => [...times(2, () => so(9, rot)), ...times(6, () => so(10, rot))])
+    const before = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...rest]
+    const rot1 = findInsights(before, 'opp', noWon).find(i => i.subject === 'share|rot1')!
+    const vi = videoInsight('opp', [rot1], { mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
+    expect(vi).toEqual({ team: 'opp', subjects: ['share|rot1'], mode: 'toEnd', limit: 5, withOthers: true, prefix: 'OPP' })
+    expect(cleanVideoInsight(JSON.parse(JSON.stringify(vi)))).toEqual(vi)
+
+    // More matches: rotation 1 now goes to #10. The scene follows; a habit gone leaves the video.
+    const after = [...before, ...times(40, () => so(10, 1)), ...[6, 5, 4, 3, 2].flatMap(rot => times(6, () => so(9, rot)))]
+    const again = refindInsights(after, vi, noWon)
+    expect(again.gone).toBe(0)
+    expect(again.insights[0].key).toBe('share|rot1|opp|opp10')
+    const flat = [1, 6, 5, 4, 3, 2].flatMap(rot => [...times(6, () => so(9, rot)), ...times(6, () => so(10, rot))])
+    expect(refindInsights(flat, vi, noWon)).toEqual({ insights: [], gone: 1 })
+  })
+
+  it('reads a saved insight with care', () => {
+    expect(cleanVideoInsight(null)).toBeNull()
+    expect(cleanVideoInsight({ subjects: [] })).toBeNull()
+    expect(cleanVideoInsight({ subjects: ['rotWeak|4', 3], team: 'x', limit: -2, mode: 'x' }))
+      .toEqual({ team: 'opp', subjects: ['rotWeak|4'], mode: 'keyplay', limit: null, withOthers: false, prefix: '' })
   })
 })

@@ -1969,4 +1969,8 @@ export const EN: Record<string, string> = {
   "サーブコース": "Serve direction",
   "サーブの狙い": "Serve target",
   "勝負所": "Clutch",
+  "はっきりした傾向が残っていないため、作り直しませんでした": "No clear habit is left, so the video was not made again",
+  "動画「{0}」を作り直しました（{1} シーン。傾向がはっきりしなくなった {2} シーンは外しました）": "Made the video \"{0}\" again ({1} scenes; {2} whose habit is no longer clear were left out)",
+  "動画「{0}」をインサイトで作り直しますか？\n今「検索する試合」で選んでいる試合から、同じ傾向（同じ選手・ローテなど）を探し直します。数字やトスの上がる選手が変わっていれば新しい中身になり、傾向がはっきりしなくなったものは外れます。この動画だけで使っているシーンは新しいシーンに置き換わります（そこで加えた図形やトリムも消えます。Ctrl+Z で元に戻せます）。": "Make the video \"{0}\" again from insights?\nThe same habits (the same players, rotations…) are looked for again in the matches picked in \"Matches to search\". Where the numbers or the player the sets go to have changed, the scene shows that, and habits no longer clear leave the video. Scenes used only in this video are replaced by new ones (shapes and trims added there go too; Ctrl+Z undoes it).",
+  "この動画で選んだ傾向を、今の試合から探し直して作り直す": "Look for this video's habits again in the matches now and make it again",
 }

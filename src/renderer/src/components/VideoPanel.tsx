@@ -49,7 +49,7 @@ export function VideoPanel(p: Props) {
   useEffect(() => { listRef.current?.querySelector('.video-scene.current')?.scrollIntoView({ block: 'nearest' }) }, [p.currentSceneId, v?.id])
   const byId = Object.fromEntries(p.scenes.map(s => [s.id, s]))
   const usedIn = (id: string) => p.videos.filter(x => x.sceneIds.includes(id)).length
-  const presetPrefix = v?.preset ? sharedPrefix(v.sceneIds.map(id => byId[id]?.name).filter((n): n is string => !!n)) : ''
+  const presetPrefix = v?.preset || v?.insight ? sharedPrefix(v.sceneIds.map(id => byId[id]?.name).filter((n): n is string => !!n)) : ''
   const total = v ? v.sceneIds.reduce((acc, id) => { const s = byId[id]; if (!s) return acc; const st = p.sceneStats(s); return { clips: acc.clips + st.clips, sec: acc.sec + st.sec } }, { clips: 0, sec: 0 }) : { clips: 0, sec: 0 }
 
   if (p.part === 'head') {
@@ -87,6 +87,10 @@ export function VideoPanel(p: Props) {
         {v.preset && (
           <button onClick={() => { if (confirm(keyName(t('動画「{0}」をプリセットで作り直しますか？\n今「検索する試合」で選んでいる試合から集め直します。この動画だけで使っているシーンは新しいシーンに置き換わります（そこで加えた図形やトリムも消えます。Ctrl+Z で元に戻せます）。', v.name)))) p.onRemake(v.id) }}
             title={t('この動画を作ったプリセットで、今の試合から作り直す')}>{t('作り直す')}</button>
+        )}
+        {!v.preset && v.insight && (
+          <button onClick={() => { if (confirm(keyName(t('動画「{0}」をインサイトで作り直しますか？\n今「検索する試合」で選んでいる試合から、同じ傾向（同じ選手・ローテなど）を探し直します。数字やトスの上がる選手が変わっていれば新しい中身になり、傾向がはっきりしなくなったものは外れます。この動画だけで使っているシーンは新しいシーンに置き換わります（そこで加えた図形やトリムも消えます。Ctrl+Z で元に戻せます）。', v.name)))) p.onRemake(v.id) }}
+            title={t('この動画で選んだ傾向を、今の試合から探し直して作り直す')}>{t('作り直す')}</button>
         )}
         <button onClick={() => {
           const own = [...new Set(v.sceneIds)].filter(id => byId[id] && usedIn(id) === 1).length

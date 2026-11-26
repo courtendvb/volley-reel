@@ -6,7 +6,7 @@ import { findInsights, insightKindName, type Insight, type InsightReelOptions } 
 import { t } from '../../../shared/i18n'
 
 // What the dialog makes: the habits picked, in the order shown, and how their scenes are cut.
-export interface InsightChoice extends InsightReelOptions { insights: Insight[]; name: string }
+export interface InsightChoice extends InsightReelOptions { team: 'our' | 'opp'; insights: Insight[]; name: string }
 
 interface Props {
   scope: PlayRef[] // every play of the matches searched
@@ -113,7 +113,7 @@ export function InsightDialog({ scope, targetCode, wonBy, onMake, onClose }: Pro
         <p className="hint">{chosen.length ? t('{0} シーン・{1} 本で、新しい動画「{2}」を作ります。', chosen.length, clips, name) : t('作る傾向を 1 つ以上チェックしてください。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!chosen.length} onClick={() => onMake({ insights: chosen, name, mode, limit, withOthers, prefix: who })}>{t('作る')}</button>
+          <button className="primary" disabled={!chosen.length} onClick={() => onMake({ team, insights: chosen, name, mode, limit, withOthers, prefix: who })}>{t('作る')}</button>
         </div>
       </div>
     </div>

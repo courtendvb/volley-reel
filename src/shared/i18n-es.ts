@@ -1969,4 +1969,8 @@ export const ES: Record<string, string> = {
   "サーブコース": "Dirección del saque",
   "サーブの狙い": "Objetivo del saque",
   "勝負所": "Momentos clave",
+  "はっきりした傾向が残っていないため、作り直しませんでした": "No queda ningún hábito claro, así que el vídeo no se rehízo",
+  "動画「{0}」を作り直しました（{1} シーン。傾向がはっきりしなくなった {2} シーンは外しました）": "Se rehízo el vídeo \"{0}\" ({1} escenas; se quitaron {2} cuyo hábito ya no es claro)",
+  "動画「{0}」をインサイトで作り直しますか？\n今「検索する試合」で選んでいる試合から、同じ傾向（同じ選手・ローテなど）を探し直します。数字やトスの上がる選手が変わっていれば新しい中身になり、傾向がはっきりしなくなったものは外れます。この動画だけで使っているシーンは新しいシーンに置き換わります（そこで加えた図形やトリムも消えます。Ctrl+Z で元に戻せます）。": "¿Rehacer el vídeo \"{0}\" desde tendencias?\nSe vuelven a buscar los mismos hábitos (los mismos jugadores, rotaciones…) en los partidos elegidos en \"Partidos a buscar\". Si los números o el jugador que recibe el armado han cambiado, la escena lo muestra, y los hábitos que ya no son claros salen del vídeo. Las escenas que solo usa este vídeo se sustituyen por otras nuevas (también se pierden las formas y recortes añadidos; Ctrl+Z lo deshace).",
+  "この動画で選んだ傾向を、今の試合から探し直して作り直す": "Buscar de nuevo los hábitos de este vídeo en los partidos actuales y rehacerlo",
 }

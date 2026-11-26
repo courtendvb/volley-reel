@@ -3,8 +3,8 @@
 // team's habits found by themselves (the インサイト dialog).
 import { useMemo, useState, type RefObject } from 'react'
 import type { PlayRef } from '../../../shared/filter'
-import { cleanPreset, makePreset, presetLabels, presetLookups, presetReels, type VideoPreset } from '../../../shared/presets'
-import { insightReels } from '../../../shared/insights'
+import { cleanPreset, makePreset, presetLabels, presetLookups, presetReels } from '../../../shared/presets'
+import { cleanVideoInsight, insightReels, refindInsights, videoInsight } from '../../../shared/insights'
 import type { Reel } from '../../../shared/reel'
 import type { ParsedDVW, PlayerRole } from '../../../shared/types'
 import { newVideo, type Video } from '../../../shared/video'
@@ -41,8 +41,8 @@ export function usePresetVideos(h: Host) {
   const [insightOpen, setInsightOpen] = useState(false)
 
   // A new video of these scenes, as one undo step.
-  const addMadeVideo = (name: string, scenes: Reel[], preset?: VideoPreset) => {
-    const v: Video = { ...newVideo(name, scenes.map(r => r.id), h.latest.current.settings?.overlay), ...(preset ? { preset } : {}) }
+  const addMadeVideo = (name: string, scenes: Reel[], made: Pick<Video, 'preset' | 'insight'>) => {
+    const v: Video = { ...newVideo(name, scenes.map(r => r.id), h.latest.current.settings?.overlay), ...made }
     h.record([{ kind: 'video', id: v.id, value: null }, ...scenes.map(r => ({ kind: 'scene', id: r.id, value: null }) as Snapshot)], false)
     h.addScenes(scenes)
     h.addVideo(v)
@@ -53,34 +53,42 @@ export function usePresetVideos(h: Host) {
   const makePresetVideo = ({ preset, scenes: specs, name, prefix }: PresetChoice) => {
     const scenes = presetReels(specs, prefix, preset.mode)
     if (!scenes.length) return
-    addMadeVideo(name, scenes, preset)
+    addMadeVideo(name, scenes, { preset })
     setPresetOpen(false)
   }
 
   // A video of the habits picked in the インサイト dialog (shared/insights.ts), a scene each.
-  const makeInsightVideo = ({ insights, name, ...options }: InsightChoice) => {
+  const makeInsightVideo = ({ team, insights, name, ...options }: InsightChoice) => {
     const scenes = insightReels(insights, options)
     if (!scenes.length) return
-    addMadeVideo(name, scenes)
+    addMadeVideo(name, scenes, { insight: videoInsight(team, insights, options) })
     setInsightOpen(false)
   }
 
   // Made again from the matches searched now: its own scenes are replaced (and deleted), scenes it
   // shares with other videos only leave it. Its name and settings stay. One undo step puts it back.
+  // A preset video gathers its plays again; an insight video finds its habits again (one whose habit
+  // is no longer clear leaves it, and the notice says how many).
   const remakePresetVideo = (id: string) => {
     const v = h.latest.current.videos.find(x => x.id === id)
-    const preset = cleanPreset(v?.preset)
-    if (!v || !preset) return
-    const { prefix } = presetLabels(preset, h.team)
-    const scenes = presetReels(makePreset(preset, h.scopeRefs, h.results, presetLook).scenes, prefix, preset.mode)
-    if (!scenes.length) { h.setNotice(t('当てはまるプレーがないため、作り直しませんでした')); return }
+    if (!v) return
+    const preset = cleanPreset(v.preset), insight = preset ? null : cleanVideoInsight(v.insight)
+    let scenes: Reel[], gone = 0
+    if (preset) scenes = presetReels(makePreset(preset, h.scopeRefs, h.results, presetLook).scenes, presetLabels(preset, h.team).prefix, preset.mode)
+    else if (insight) {
+      const found = refindInsights(h.scopeRefs, insight, presetLook.wonBy)
+      scenes = insightReels(found.insights, insight)
+      gone = found.gone
+    } else return
+    if (!scenes.length) { h.setNotice(insight ? t('はっきりした傾向が残っていないため、作り直しませんでした') : t('当てはまるプレーがないため、作り直しませんでした')); return }
     const own = h.scenesOnlyIn(v)
     h.record([h.videoSnap(v.id), ...scenes.map(r => ({ kind: 'scene', id: r.id, value: null }) as Snapshot), ...own.map(h.sceneSnap)], false)
     h.addScenes(scenes)
     h.putVideo({ ...v, sceneIds: scenes.map(r => r.id), updatedAt: new Date().toISOString() })
     h.removeScenes(own)
     h.showScene(scenes[0].id)
-    h.setNotice(t('動画「{0}」を作り直しました（{1} シーン）', v.name, scenes.length))
+    h.setNotice(gone ? t('動画「{0}」を作り直しました（{1} シーン。傾向がはっきりしなくなった {2} シーンは外しました）', v.name, scenes.length, gone)
+      : t('動画「{0}」を作り直しました（{1} シーン）', v.name, scenes.length))
   }
 
   return { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo, insightOpen, setInsightOpen, makeInsightVideo }

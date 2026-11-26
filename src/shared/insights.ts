@@ -242,6 +242,38 @@ export function insightReels(list: Insight[], o: InsightReelOptions): Reel[] {
   })
 }
 
+// What an insight video was made from, kept on the video (Video.insight) so it can be made again,
+// for example after matches are added: the team, the habits picked by subject (so a rotation whose
+// sets now go to another player is still in it), and how the scenes were cut.
+export interface VideoInsight extends InsightReelOptions { team: 'our' | 'opp'; subjects: string[] }
+
+export const videoInsight = (team: 'our' | 'opp', list: Insight[], o: InsightReelOptions): VideoInsight =>
+  ({ team, subjects: list.map(i => i.subject), mode: o.mode, limit: o.limit, withOthers: o.withOthers, prefix: o.prefix })
+
+// A video's insight read back from its file: null when it isn't one.
+export function cleanVideoInsight(v: unknown): VideoInsight | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as Partial<VideoInsight>
+  if (!Array.isArray(o.subjects)) return null
+  const subjects = o.subjects.filter((s): s is string => typeof s === 'string' && s !== '')
+  if (!subjects.length) return null
+  return {
+    team: o.team === 'our' ? 'our' : 'opp', subjects,
+    mode: o.mode === 'toEnd' ? 'toEnd' : 'keyplay',
+    limit: typeof o.limit === 'number' && o.limit > 0 ? Math.floor(o.limit) : null,
+    withOthers: o.withOthers === true,
+    prefix: typeof o.prefix === 'string' ? o.prefix : '',
+  }
+}
+
+// The habits of a video found again in these plays, in the video's order: each subject's surest
+// habit now (its outcome may have changed). `gone`: the subjects with no clear habit any more.
+export function refindInsights(scope: PlayRef[], vi: VideoInsight, wonBy: WonBy): { insights: Insight[]; gone: number } {
+  const now = new Map(findInsights(scope, vi.team, wonBy, Infinity).map(i => [i.subject, i]))
+  const insights = vi.subjects.map(s => now.get(s)).filter((i): i is Insight => !!i)
+  return { insights, gone: vi.subjects.length - insights.length }
+}
+
 export const insightKindName = (k: InsightKind): string => ({
   share: t('セット配分'), zone: t('コース'), serveZone: t('サーブコース'), serveTarget: t('サーブの狙い'),
   clutch: t('勝負所'), recWeak: t('レセプション'), rotWeak: t('ローテーション'),

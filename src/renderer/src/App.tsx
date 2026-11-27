@@ -3,7 +3,7 @@ import { clipRangeSource } from '../../shared/markRange'
 import { EMPTY_FILTER, isCorrected, withDeleted, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel, shortEffectName, shortSkillName } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setClipCourt, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, copyClipTo, copySlideTo, removeClip, removeSlide, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setClipCourt, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -464,6 +464,17 @@ export function App() {
     if (move) { putScene(removeClip(from, clipId)); if (latest.current.activeClipId === clipId) setActiveClipId(null) }
     setNotice(existed ? (move ? t('「{0}」には同じプレーがあるため、そのクリップにマーカーを付け、ここからは外しました', to.name) : t('「{0}」には同じプレーがあるため、そのクリップにマーカーだけ付けました', to.name))
       : move ? t('「{0}」へ移動しました', to.name) : t('「{0}」へコピーしました', to.name))
+  }
+  // A slide's right-click: the slide into another scene, in the same group (behind the same play
+  // when that scene has it), moved or copied. One undo step covers both scenes.
+  const slideToScene = (slideId: string, toId: string, move: boolean) => {
+    const { reel: from, reels: rs } = latest.current
+    const to = rs.find(r => r.id === toId), s = from?.slides?.find(x => x.id === slideId)
+    if (!from || !to || !s) return
+    record([sceneSnap(from.id), sceneSnap(to.id)], false)
+    putScene(copySlideTo(s, from, to, whenIn(to)))
+    if (move) putScene(removeSlide(from, slideId))
+    setNotice(move ? t('「{0}」へ移動しました', to.name) : t('「{0}」へコピーしました', to.name))
   }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
@@ -1328,7 +1339,7 @@ export function App() {
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
               onSlide={(spot, how) => void putSlide(spot, how)} onEditSlide={id => reel && editCard(reel.id, null, id)}
               editingSlideId={cardEdit?.slideId ?? null} canFrame={!!match}
-              onClipToScene={clipToScene} onExportClip={(id, g) => { if (reel) void exportClip(reel.id, id, g) }}
+              onClipToScene={clipToScene} onSlideToScene={slideToScene} onExportClip={(id, g) => { if (reel) void exportClip(reel.id, id, g) }}
             />
             <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem}
               clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} />

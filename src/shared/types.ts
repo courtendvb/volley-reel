@@ -86,6 +86,7 @@ export interface Rally {
   pointTime: number | null
   wonBy: Side | null
   court?: { home: number[]; away: number[] } // the jerseys on court (the lineups at the serve; no liberos)
+  timeout?: Side // the rally came right after a timeout by this team
 }
 
 export interface ParsedDVW {

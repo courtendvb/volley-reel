@@ -39,6 +39,9 @@ import { ExportPanel } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { PresetDialog } from './components/PresetDialog'
+import { InsightDialog } from './components/InsightDialog'
+import { useLeague } from './app/useLeague'
+import type { League } from '../../shared/insights'
 import { usePresetVideos } from './app/usePresetVideos'
 import { Home, MissingNote } from './components/Home'
 import { CompareView } from './components/CompareView'
@@ -589,10 +592,14 @@ export function App() {
     const n = rows[i + q.dir]
     if (n && n.play.line !== undefined) { jump(n); if (!q.court) setQuickCode(n) }
   }, [listRefs]) // eslint-disable-line react-hooks/exhaustive-deps
-  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
-    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
+  // The league the insights are set beside, for an insight video made again too (once it is loaded).
+  const leagueRef = useRef<League | null>(null)
+  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo, insightOpen, setInsightOpen, makeInsightVideo } = usePresetVideos({
+    latest, dvws, leagueRef, dress: { headline: settings?.headline, courtOf: id => matches[id]?.court }, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
   })
+  const league = useLeague(insightOpen, library, project?.matches ?? [], settings ?? null)
+  useEffect(() => { if (league.league) leagueRef.current = league.league }, [league.league])
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
     () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
@@ -961,6 +968,7 @@ export function App() {
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
         {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
+        {project && <button onClick={() => setInsightOpen(true)} disabled={!project.matches.length} title={t('対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます')}>{t('インサイト')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         {project && <button onClick={() => setAnalysisOpen(true)} title={(internal ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
@@ -1365,6 +1373,7 @@ export function App() {
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
+      {insightOpen && <InsightDialog scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} league={league.league} leagueStatus={league.status} onMake={makeInsightVideo} onClose={() => setInsightOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}

@@ -19,6 +19,14 @@ export const LANGS: { id: Lang; name: string }[] = [{ id: 'ja', name: '日本語
 let lang: Lang = 'ja'
 export function setLang(l: Lang): void { lang = l === 'en' || l === 'es' ? l : 'ja' }
 export function getLang(): Lang { return lang }
+export const isLang = (l: unknown): l is Lang => l === 'ja' || l === 'en' || l === 'es'
+// Text made in another language than the interface's (a video's headlines): the language is
+// switched for the call and back.
+export function inLang<T>(l: Lang, f: () => T): T {
+  const was = lang
+  setLang(l)
+  try { return f() } finally { lang = was }
+}
 
 // For a label that starts a line on its own (a tab, a field name, a button): the translation
 // with its first letter capitalised, where the same word is lowercase inside a sentence

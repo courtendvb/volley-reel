@@ -10,6 +10,7 @@ import { groupRows, markerCardOn, type Clip, type Group, type Marker, type Reel,
 import type { Match } from './types'
 import { t } from './i18n'
 import type { VideoPreset } from './presets'
+import type { VideoInsight } from './insights'
 
 export interface Video {
   id: string
@@ -26,6 +27,7 @@ export interface Video {
   // cleanGridStyle. None: the video has not been set and follows the tab as it is with no video open.
   court?: GridStyle
   preset?: VideoPreset // made from a preset (shared/presets.ts): kept so it can be made again
+  insight?: VideoInsight // made from insights (shared/insights.ts): kept so it can be made again
   updatedAt: string
 }
 

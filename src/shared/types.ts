@@ -76,6 +76,7 @@ export interface Play {
   phase: 'r' | 't' | null // reception phase or transition (dvw.ts phaseOf); null for serves
   recEffect?: string // in the reception phase: the evaluation of the reception it came from
   front?: string[] // player keys of both teams' front rows at this play (dvw.ts); missing: the file has no lineups
+  back?: string[] // the same for the back rows (P1, P5, P6; liberos are not in the lineups)
 }
 
 export interface Rally {
@@ -339,6 +340,7 @@ export interface Api {
   readPackPhoto(id: string, photo: string): Promise<Uint8Array>
   setPlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // asks for a picture; kept in the local pack
   removePlayerPhoto(target: PhotoTarget): Promise<PackInfo[]> // only a photo set in the app
+  setPlayerCaption(target: PhotoTarget, caption: string | null): Promise<PackInfo[]> // the player's caption name in every video; kept in the local pack
   usePackPhoto(id: string, photo: string): Promise<{ assetId: string; width: number; height: number }> // copied into the project
   smokeImportPack?: (path: string) => Promise<PackInfo[]>
   smokeSetPhoto?: (target: PhotoTarget, path: string) => Promise<PackInfo[]>

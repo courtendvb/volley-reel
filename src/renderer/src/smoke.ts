@@ -1805,7 +1805,26 @@ export function installSmoke(h: SmokeHost): void {
     const afterClip = [nameOn(0), nameOn(1), nameOn(2)]
     await sleep(400)
     await api.smokeShot!('caption-names.png')
-    return { captionNames: { player: twice[0].name, other: other.name, before, scopeDefault, afterVideo, saved, afterClip } }
+    // 'Every video': kept in the local pack, the video's own name for the player taken away; a new
+    // video shows it too. The field offers the DVW's names.
+    activateClip(clip(0)); await sleep(500)
+    const choices = [...document.querySelectorAll<HTMLOptionElement>('.clip-overlay datalist option')].map(o => o.value)
+    const sel0 = await waitFor(() => document.querySelector<HTMLSelectElement>('.clip-overlay select[aria-label="' + t('名前を使う範囲') + '"]'), 5000, 'scope select')
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel0, 'player')
+    sel0.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200)
+    await type('Every Video Name')
+    await waitFor(() => nameOn(0) === 'Every Video Name' || null, 8000, 'every-video name')
+    const afterPlayer = [nameOn(0), nameOn(1), nameOn(2)], videoNames = latest.current.video?.captionNames ?? null
+    const local = (await api.listPacks()).find(pk => pk.id === 'local')?.names ?? []
+    const v2 = newVideo('names smoke 2', [built.id])
+    setVideos(vs => [...vs, v2]); setVideoId(v2.id)
+    await waitFor(() => latest.current.video?.id === v2.id || null, 10000, 'second video')
+    const inNewVideo = nameOn(0)
+    activateClip(clip(0)); await sleep(500)
+    const scopeOpens = document.querySelector<HTMLSelectElement>('.clip-overlay select[aria-label="' + t('名前を使う範囲') + '"]')?.value
+    await api.smokeShot!('caption-names-player.png')
+    return { captionNames: { player: twice[0].name, other: other.name, before, scopeDefault, afterVideo, saved, afterClip,
+      choices, afterPlayer, videoNames, local, inNewVideo, scopeOpens } }
   }
 
   // The caption's photo: off by default; on, a play whose player has a photo shows it above a

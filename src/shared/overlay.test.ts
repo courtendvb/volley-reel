@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import { DEFAULT_OVERLAY, can1080, captionData, exportHeight, lookTheme, overlaySettings, scoreboardData, withTeamColors } from './overlay'
+import { localName, type PackInfo } from './pack'
 
 // HTH away in this made-up match; SATO appears twice on HTH so names get an initial.
 const D = parseDVW(`[3TEAMS]
@@ -97,6 +98,15 @@ describe('caption data', () => {
     expect(captionData(D, D.plays[2], s, { name: 'K. SATO' }, names).name).toBe('K. SATO') // the clip's own wins
     expect(captionData(D, D.plays[1], s, undefined, names).name).toBe('SATO J.') // another player
     expect(captionData(D, D.plays[2], s, undefined, { [key]: '  ' }).name).toBe('SATO K.') // blank: the DVW's
+  })
+
+  it("uses the player's name from a pack in every video, under the video's and the clip's", () => {
+    const p = D.players[`${D.plays[2].side}${D.plays[2].jersey}`]
+    const packs: PackInfo[] = [{ id: 'local', name: 'local', players: [], names: [localName({ key: p.key, team: D.teams[D.plays[2].side === '*' ? 0 : 1].code, jersey: p.jersey, lastName: p.lastName, firstName: p.firstName }, 'Kenta')] }]
+    expect(captionData(D, D.plays[2], s, undefined, undefined, packs).name).toBe('Kenta')
+    expect(captionData(D, D.plays[2], s, undefined, { [D.plays[2].playerKey]: 'K. Sato' }, packs).name).toBe('K. Sato') // the video's wins
+    expect(captionData(D, D.plays[2], s, { name: 'KS' }, undefined, packs).name).toBe('KS') // the clip's wins
+    expect(captionData(D, D.plays[1], s, undefined, undefined, packs).name).toBe('SATO J.') // another player
   })
 })
 

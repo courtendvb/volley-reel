@@ -194,7 +194,11 @@ OPP;AWAY;;;;
   it('takes P2 to P4 of both lineups, by player key', () => {
     expect(lines('1;2;3;4;5;6;7;16;9;10;11;12;').front).toMatchObject({ 0: 'TAN-TAR-02', 1: '*3', 2: '*4', 3: 'a16', 5: 'a10', length: 6 })
   })
+  it('takes P1, P5 and P6 of both lineups as the back row', () => {
+    expect(lines('1;2;3;4;5;6;7;16;9;10;11;12;').back).toEqual(['*1', '*5', '*6', 'a7', 'a11', 'a12'])
+  })
   it('leaves it out for a file without lineups', () => {
     expect(lines('').front).toBeUndefined()
+    expect(lines('').back).toBeUndefined()
   })
 })

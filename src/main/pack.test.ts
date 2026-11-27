@@ -66,6 +66,21 @@ describe('Library packs', () => {
     expect(await lib.packs()).toEqual([])
   })
 
+  it('keeps caption names set in the app with the local photos, apart from them', async () => {
+    const lib = await Library.open(join(dir, 'lib'))
+    const tg = { key: 'NUN-JUD', team: 'HTH', jersey: 9, lastName: 'NUNES', firstName: 'Judson' }
+    await lib.setPlayerCaption(tg, 'Judson')
+    await lib.setPlayerCaption(tg, ' Juju ') // replaces the first
+    const names = () => lib.packs().then(ps => ps.find(p => p.id === 'local')?.names)
+    expect(await names()).toEqual([{ team: 'HTH', jersey: 9, lastName: 'NUNES', firstName: 'Judson', ids: ['NUN-JUD'], caption: 'Juju' }])
+    const a = join(dir, 'a.png'); writeFileSync(a, png)
+    await lib.setPlayerPhoto(tg, a)
+    await lib.removePlayerPhoto(tg) // the photo goes, the name stays
+    expect((await names())?.[0].caption).toBe('Juju')
+    await lib.setPlayerCaption(tg, null)
+    expect(await lib.packs()).toEqual([])
+  })
+
   it('lists the packs shipped with the app, read-only, unless the library has one of the same id', async () => {
     const shipped = join(dir, 'shipped'), own = join(dir, 'lib')
     const put = (root: string, name: string) => {

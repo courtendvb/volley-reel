@@ -31,7 +31,8 @@ export interface PlayFilter {
   sets: number[]
   rots: number[] // our team's rotation
   oppRots: number[] // the opponent's rotation
-  frontPlayers: string[] // players of either team who are all in the front row at the play
+  courtPlayers: string[] // players of either team who are all on court at the play,
+  courtRow: 'court' | 'front' | 'back' // anywhere on court, all in the front row, or all in the back row
   startZones: number[] // empty = any
   endZones: number[]
   tempos: string[] // detailed search
@@ -42,17 +43,15 @@ export interface PlayFilter {
   prevSkills: string[] // the contact just before in the rally (F: freeball)
   prevEffects: string[]
   prevTeam: 'any' | 'same' | 'opp' // relative to the play's own team
-  prevSkipSet: boolean // look past the team's own set: the reception or dig an attack came from
   nextSkills: string[] // the contact just after, the same way
   nextEffects: string[]
   nextTeam: 'any' | 'same' | 'opp'
-  nextSkipSet: boolean // look past the team's own set: the attack a reception or dig led to
 }
 
 export const EMPTY_FILTER: PlayFilter = {
-  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], frontPlayers: [], startZones: [], endZones: [], tempos: [], combos: [], hits: [],
-  phase: 'all', recEffects: [], prevSkills: [], prevEffects: [], prevTeam: 'any', prevSkipSet: false,
-  nextSkills: [], nextEffects: [], nextTeam: 'any', nextSkipSet: false,
+  team: 'all', dir: 'all', persons: [], skills: [], effects: [], sets: [], rots: [], oppRots: [], courtPlayers: [], courtRow: 'court', startZones: [], endZones: [], tempos: [], combos: [], hits: [],
+  phase: 'all', recEffects: [], prevSkills: [], prevEffects: [], prevTeam: 'any',
+  nextSkills: [], nextEffects: [], nextTeam: 'any',
 }
 
 // Search conditions kept under a name in the project, to put back with one click.
@@ -65,7 +64,7 @@ export interface SavedFilter {
 // A filter read back from project.json: each condition takes the shape it has in EMPTY_FILTER, and
 // anything missing or of the wrong kind falls back to "any" (also for conditions added later).
 const CHOICES: Partial<Record<keyof PlayFilter, readonly string[]>> = {
-  team: ['all', 'our', 'opp'], dir: ['all', 'up', 'down'], phase: ['all', 'reception', 'transition'], prevTeam: ['any', 'same', 'opp'], nextTeam: ['any', 'same', 'opp'],
+  team: ['all', 'our', 'opp'], dir: ['all', 'up', 'down'], phase: ['all', 'reception', 'transition'], courtRow: ['court', 'front', 'back'], prevTeam: ['any', 'same', 'opp'], nextTeam: ['any', 'same', 'opp'],
 }
 const NUMBERS = new Set<keyof PlayFilter>(['sets', 'rots', 'oppRots', 'startZones', 'endZones'])
 
@@ -83,6 +82,9 @@ export function cleanFilter(x: unknown): PlayFilter {
   if (typeof o.person === 'string' && o.person) out.persons = [o.person] // saved when one player could be picked
   if (Number.isInteger(o.startZone)) out.startZones = [o.startZone] // saved when one zone could be picked
   if (Number.isInteger(o.endZone)) out.endZones = [o.endZone]
+  if (Array.isArray(o.frontPlayers) && o.frontPlayers.length && !('courtPlayers' in o)) { // saved when only the front row could be picked
+    out.courtPlayers = o.frontPlayers.filter(e => typeof e === 'string' && e !== ''); out.courtRow = 'front'
+  }
   return out as unknown as PlayFilter
 }
 
@@ -187,7 +189,7 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.sets.length && !f.sets.includes(p.setNum)) return false
     if (f.rots.length && (r.ourRot === null || !f.rots.includes(r.ourRot))) return false
     if (f.oppRots?.length && (r.oppRot === null || !f.oppRots.includes(r.oppRot))) return false
-    if (f.frontPlayers?.length && !f.frontPlayers.every(k => p.front?.includes(k))) return false
+    if (f.courtPlayers?.length && !f.courtPlayers.every(k => (f.courtRow !== 'back' && p.front?.includes(k)) || (f.courtRow !== 'front' && p.back?.includes(k)))) return false
     if (f.startZones?.length && (p.startZone === null || !f.startZones.includes(p.startZone))) return false
     if (f.tempos?.length && (!r.tempo || !f.tempos.includes(r.tempo))) return false
     if (f.combos?.length && (!r.combo || !f.combos.includes(r.combo))) return false
@@ -195,23 +197,25 @@ export function applyFilter(refs: PlayRef[], f: PlayFilter): PlayRef[] {
     if (f.endZones?.length && (p.endZone === null || !f.endZones.includes(p.endZone))) return false
     if (f.phase && f.phase !== 'all' && p.phase !== f.phase[0]) return false
     if (f.recEffects?.length && (!p.recEffect || !f.recEffects.includes(p.recEffect))) return false
-    return nearMatches(r, r.play.before, f.prevSkills, f.prevEffects, f.prevTeam, f.prevSkipSet)
-      && nearMatches(r, r.play.after, f.nextSkills, f.nextEffects, f.nextTeam, f.nextSkipSet)
+    return nearMatches(r, r.play.before, f.prevSkills, f.prevEffects, f.prevTeam)
+      && nearMatches(r, r.play.after, f.nextSkills, f.nextEffects, f.nextTeam)
   })
 }
 
-// The contact next to a play (codes from p.before or p.after), past the team's own set if asked.
-function nearCode(p: Play, codes: string[], skipSet: boolean): string | null {
+// The contact next to a play (codes from p.before or p.after). The team's own set is looked past
+// (the reception or dig an attack came from, the attack a reception led to) unless the set itself
+// is what is asked for.
+function nearCode(p: Play, codes: string[], skills: string[]): string | null {
   const [c, d] = codes
-  return (skipSet && c?.[3] === 'E' && c[0] === p.side ? d : c) ?? null
+  return (!skills.includes('E') && c?.[3] === 'E' && c[0] === p.side ? d : c) ?? null
 }
 
 // With no condition anything passes; otherwise a play with nothing there (a serve has nothing
 // before, a rally's last play nothing after) fails. All-home plays pass the team condition, as with
 // the team filter.
-function nearMatches(r: PlayRef, codes: string[], skills: string[] = [], effects: string[] = [], team: string = 'any', skipSet = false): boolean {
+function nearMatches(r: PlayRef, codes: string[], skills: string[] = [], effects: string[] = [], team: string = 'any'): boolean {
   if (!skills.length && !effects.length && team === 'any') return true
-  const c = nearCode(r.play, codes, skipSet)
+  const c = nearCode(r.play, codes, skills)
   if (!c) return false
   if (skills.length && !skills.includes(c[3])) return false
   if (effects.length && !effects.includes(c[5])) return false

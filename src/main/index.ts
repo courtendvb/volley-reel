@@ -618,6 +618,7 @@ function registerIpc(): void {
     if (!r.canceled && r.filePaths[0]) await lib().setPlayerPhoto(tg, r.filePaths[0])
     return lib().packs()
   })
+  ipcMain.handle('pack:setCaption', async (_e, tg: PhotoTarget, caption: string | null) => { await lib().setPlayerCaption(tg, caption); return lib().packs() })
   ipcMain.handle('pack:removePhoto', async (_e, tg: PhotoTarget) => { await lib().removePlayerPhoto(tg); return lib().packs() })
   ipcMain.handle('pack:readPhoto', (_e, id: string, photo: string) => lib().readPackPhoto(id, photo))
   ipcMain.handle('pack:usePhoto', async (_e, id: string, photo: string) => {

@@ -4,6 +4,7 @@ import type { Annotation } from './annotation'
 import type { ClipCourtStyle } from './courtStyle'
 import { displayName } from './dvw'
 import { ourSide } from './filter'
+import { packCaption, type PackInfo } from './pack'
 import { effectName, skillName } from './labels'
 import type { ParsedDVW, Play } from './types'
 import type { CourtFit } from './court'
@@ -203,11 +204,12 @@ export function scoreboardData(dvw: ParsedDVW, play: Play, ourCodes: string[], f
   }
 }
 
-// The name: the clip's own, else the video's name for the player (Video.captionNames), else the DVW's.
-export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption'], names?: Record<string, string>): CaptionData {
+// The name: the clip's own, else the video's name for the player (Video.captionNames), else the one
+// set for the player in a pack (every video: shared/pack.ts findCaption), else the DVW's.
+export function captionData(dvw: ParsedDVW, play: Play, s: OverlaySettings['playerCaption'], o?: ClipOverlayOverride['playerCaption'], names?: Record<string, string>, packs?: PackInfo[]): CaptionData {
   const parts = [s.showSkill ? skillName(play.skill) : null, s.showEvaluation ? effectName(play.skill, play.effect) : null].filter(Boolean) as string[]
   const autoLine = parts.length ? parts.join(' · ').toUpperCase() : null
-  const name = o?.name?.trim() || names?.[play.playerKey]?.trim() || displayName(dvw.players, play.side, play.jersey)
+  const name = o?.name?.trim() || names?.[play.playerKey]?.trim() || (packs && packCaption(packs, dvw, play)) || displayName(dvw.players, play.side, play.jersey)
   return {
     number: s.showNumber ? play.jersey : null,
     name: s.showName ? name : null,

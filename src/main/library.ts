@@ -13,7 +13,7 @@ const scoutEditsOf = (m: Match): ScoutEdits => ({ edits: m.codeEdits, inserts: m
 import { decodeScout } from '../shared/scoutText'
 
 import { rosterOf, type RosterPlayer } from '../shared/packMaker'
-import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
+import { LOCAL_PACK, PACK_ID, PACK_PHOTO, isFor, localEntry, localName, readManifest, type PackInfo, type PackManifest, type PhotoTarget } from '../shared/pack'
 import { VIDEO_EXTENSIONS, matchDate, pairFiles, type DvwInfo } from '../shared/pairing'
 import type { Annotation } from '../shared/annotation'
 import type { CourtFit } from '../shared/court'
@@ -225,26 +225,40 @@ export class Library {
     if (!m) throw new Error(t('パックの manifest.json が読めません（形式・バージョン・id を確かめてください）'))
     if (m.id === LOCAL_PACK) throw new Error(t('id「{0}」はアプリが使うため、パックには使えません', LOCAL_PACK))
     const players = m.players.filter(p => zip[`${root}photos/${p.photo}`])
-    if (!players.length) throw new Error(t('パックに使える写真がありません'))
+    if (!players.length && !m.names?.length) throw new Error(t('パックに使える写真がありません'))
     const tmp = join(this.dir, 'addons', `.${m.id}-${randomUUID()}`), to = join(this.dir, 'addons', m.id)
     await mkdir(join(tmp, 'photos'), { recursive: true })
     for (const photo of new Set(players.map(p => p.photo))) await writeFile(join(tmp, 'photos', photo), zip[`${root}photos/${photo}`])
     await writeJSON(join(tmp, 'manifest.json'), { ...m, players })
     await rm(to, { recursive: true, force: true })
     await rename(tmp, to)
-    return { id: m.id, name: m.name, players }
+    return { id: m.id, name: m.name, players, ...(m.names ? { names: m.names } : {}) }
   }
 
-  // Photos set in the app: kept in addons/local/ (shared/pack.ts LOCAL_PACK), one per player; a new
-  // one replaces the player's old one, file and all.
+  // Photos and caption names set in the app: kept in addons/local/ (shared/pack.ts LOCAL_PACK), one
+  // of each per player; a new photo replaces the player's old one, file and all.
+  private async local(): Promise<{ players: PackInfo['players']; names: NonNullable<PackInfo['names']> }> {
+    const pk = (await this.packs()).find(p => p.id === LOCAL_PACK)
+    return { players: pk?.players ?? [], names: pk?.names ?? [] }
+  }
+
   private async localPlayers(): Promise<PackInfo['players']> {
-    return (await this.packs()).find(p => p.id === LOCAL_PACK)?.players ?? []
+    return (await this.local()).players
   }
 
-  private async saveLocal(players: PackInfo['players']): Promise<void> {
+  private async saveLocal(players: PackInfo['players'], names?: PackInfo['names']): Promise<void> {
     const dir = join(this.dir, 'addons', LOCAL_PACK)
-    if (!players.length) { await rm(dir, { recursive: true, force: true }); return }
-    await writeJSON(join(dir, 'manifest.json'), { format: 'volley-reel-pack', version: 1, id: LOCAL_PACK, name: LOCAL_PACK, players })
+    const keep = names ?? (await this.local()).names
+    if (!players.length && !keep.length) { await rm(dir, { recursive: true, force: true }); return }
+    await mkdir(dir, { recursive: true })
+    await writeJSON(join(dir, 'manifest.json'), { format: 'volley-reel-pack', version: 1, id: LOCAL_PACK, name: LOCAL_PACK, players, ...(keep.length ? { names: keep } : {}) })
+  }
+
+  // The player's name on the caption in every video; null takes it away (the DVW's name again).
+  async setPlayerCaption(tg: PhotoTarget, caption: string | null): Promise<void> {
+    const { players, names } = await this.local()
+    const n = caption?.trim()
+    await this.saveLocal(players, [...names.filter(x => !isFor(x, tg)), ...(n ? [localName(tg, n)] : [])])
   }
 
   async setPlayerPhoto(tg: PhotoTarget, file: string): Promise<void> {
@@ -633,7 +647,7 @@ async function readPacks(dir: string): Promise<PackInfo[]> {
     if (!existsSync(f)) continue
     try {
       const m = readManifest(JSON.parse(await readFile(f, 'utf8')))
-      if (m && m.id === id) out.push({ id: m.id, name: m.name, players: m.players })
+      if (m && m.id === id) out.push({ id: m.id, name: m.name, players: m.players, ...(m.names ? { names: m.names } : {}) })
     } catch { /* an unreadable pack is left out */ }
   }
   return out

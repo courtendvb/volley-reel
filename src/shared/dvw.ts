@@ -137,9 +137,10 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
     if (rally) rally.lastActionTime = Math.max(rally.lastActionTime, time)
 
     const p = players[`${side}${jersey}`]
-    // Each line lists both lineups, P1 to P6 (home in 14–19, away in 20–25): P2–P4 are the front row.
+    // Each line lists both lineups, P1 to P6 (home in 14–19, away in 20–25): P2–P4 are the front row, P1, P5 and P6 the back row.
     const row = (s: Side, cols: string[]) => cols.map(x => parseInt(x)).filter(n => !isNaN(n)).map(n => players[`${s}${n}`]?.key ?? `${s}${n}`)
     const front = [...row('*', c.slice(15, 18)), ...row('a', c.slice(21, 24))]
+    const back = [...row('*', [c[14], ...c.slice(18, 20)]), ...row('a', [c[20], ...c.slice(24, 26)])]
     const play: Play = {
       id: plays.length,
       fingerprint: `${setNum}|${score.home}-${score.away}|${src?.insert ? `+${src.insert}` : original}|${time}`,
@@ -172,6 +173,7 @@ export function parseDVW(text: string, sources?: ScoutSource[]): ParsedDVW {
       phase: rally && skill !== 'S' ? phaseOf(contacts, side, skill) : null,
       after: [],
       ...(front.length ? { front } : {}),
+      ...(back.length ? { back } : {}),
     }
     plays.push(play)
     if (rally) touch({ code, side, skill, play })

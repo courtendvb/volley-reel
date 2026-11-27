@@ -62,8 +62,10 @@ export function unifyPlayers(d: ParsedDVW, index: PlayerIndex): ParsedDVW {
     ...d, players,
     plays: d.plays.map(pl => {
       const playerKey = re(pl.playerKey)
-      const front = pl.front?.map(re)
-      return playerKey === pl.playerKey && !front?.some((k, i) => k !== pl.front![i]) ? pl : { ...pl, playerKey, ...(front ? { front } : {}) }
+      const front = pl.front?.map(re), back = pl.back?.map(re)
+      const same = (a: string[] | undefined, b: string[] | undefined) => !a?.some((k, i) => k !== b![i])
+      return playerKey === pl.playerKey && same(front, pl.front) && same(back, pl.back) ? pl
+        : { ...pl, playerKey, ...(front ? { front } : {}), ...(back ? { back } : {}) }
     }),
   }
 }

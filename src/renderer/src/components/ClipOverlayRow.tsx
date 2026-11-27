@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { type Anchor, type ClipOverlayOverride, type OverlaySettings } from '../../../shared/overlay'
 import { composing } from '../keys'
 import { t } from '../../../shared/i18n'
@@ -14,21 +14,32 @@ interface Props {
   videoName: string | undefined // the video's name for this clip's player (every clip of theirs in the video)
   canVideo: boolean // there is a video to keep it in
   onVideoName: (name: string | undefined) => void
+  playerName: string | undefined // the player's name in every video (kept in the local pack)
+  canPlayer: boolean // the player is in the roster: a name can be kept for them
+  onPlayerName: (name: string | undefined) => void
+  nameChoices: string[] // the DVW's surname, first name and both: picked in the name field
 }
+
+type Scope = 'player' | 'video' | 'clip'
 
 // Per-clip exceptions to the reel's overlay settings: hide an element, or rewrite the caption.
 const SB_POSITIONS: [Anchor, string][] = [['tl', t('左上')], ['tc', t('中央上')], ['tr', t('右上')]]
 
-export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange, videoName, canVideo, onVideoName }: Props) {
+export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, autoLine, onChange, videoName, canVideo, onVideoName, playerName, canPlayer, onPlayerName, nameChoices }: Props) {
   const [gear, setGear] = useState(false)
   const gearPop = useAnchoredPop<HTMLSpanElement>(gear, 'above-right')
-  // Where a name typed here goes: the player's name in the whole video (the default), or this clip only.
+  const listId = useId()
+  // Where a name typed here goes: the player's name in every video, in the whole video (the default),
+  // or this clip only. It opens on the one that names the player now.
   const ownName = o?.playerCaption?.name
-  const [scope, setScope] = useState<'video' | 'clip'>(ownName || !canVideo ? 'clip' : 'video')
-  const nameAt = (sc: 'video' | 'clip') => (sc === 'clip' ? ownName ?? '' : videoName ?? '')
+  const scopeNow = (): Scope => (ownName ? 'clip' : videoName && canVideo ? 'video' : playerName && canPlayer ? 'player' : canVideo ? 'video' : 'clip')
+  const [scope, setScope] = useState<Scope>(scopeNow)
+  const nameAt = (sc: Scope) => (sc === 'clip' ? ownName ?? '' : sc === 'video' ? videoName ?? '' : playerName ?? '')
   const [name, setName] = useState(nameAt(scope))
   const [line, setLine] = useState(o?.playerCaption?.line ?? '')
-  useEffect(() => { const sc = ownName || !canVideo ? 'clip' : 'video'; setScope(sc); setName(nameAt(sc)); setLine(o?.playerCaption?.line ?? '') }, [o, videoName, canVideo])
+  useEffect(() => { const sc = scopeNow(); setScope(sc); setName(nameAt(sc)); setLine(o?.playerCaption?.line ?? '') }, [o, videoName, canVideo, playerName, canPlayer])
+  // What shows when the field is empty: the name the next scope out gives.
+  const fallback = scope === 'clip' ? videoName || playerName || autoName : scope === 'video' ? playerName || autoName : autoName
 
   const write = (next: ClipOverlayOverride) => {
     const sb = next.scoreboard?.hidden ? { hidden: true } : undefined
@@ -40,7 +51,11 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
   }
   const commit = () => {
     const n = name.trim() || undefined
-    if (scope === 'video') {
+    if (scope === 'player') {
+      if (n !== playerName) onPlayerName(n)
+      if (n && videoName) onVideoName(undefined) // the video's own name would cover it
+      write({ ...o, playerCaption: { ...o?.playerCaption, name: undefined, line: line.trim() || undefined } })
+    } else if (scope === 'video') {
       if (n !== videoName) onVideoName(n)
       write({ ...o, playerCaption: { ...o?.playerCaption, name: undefined, line: line.trim() || undefined } }) // the clip follows the video's name
     } else write({ ...o, playerCaption: { ...o?.playerCaption, name: n, line: line.trim() || undefined } })
@@ -66,13 +81,16 @@ export function ClipOverlayRow({ override: o, overlay: s, onOverlay, autoName, a
         <input type="checkbox" checked={!o?.courtMarks?.hidden} onChange={e => write({ ...o, courtMarks: { hidden: !e.target.checked } })} /> {t('分析表示')}</label>
       <ServeSpeedCheck overlay={s} onOverlay={onOverlay} />
       <LineupCheck overlay={s} onOverlay={onOverlay} />
-      <input className="ov-text" value={name} placeholder={scope === 'clip' ? videoName || autoName : autoName} aria-label={t('テロップの名前（空欄で自動）')}
+      <input className="ov-text" value={name} placeholder={fallback} aria-label={t('テロップの名前（空欄で自動）')} list={nameChoices.length ? listId : undefined}
+        title={t('姓・名・名 姓は入力欄の候補から選べます')}
         onChange={e => setName(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter' && !composing(e)) commit() }} />
-      {canVideo && (
+      {nameChoices.length > 0 && <datalist id={listId}>{nameChoices.map(c => <option key={c} value={c} />)}</datalist>}
+      {(canVideo || canPlayer) && (
         <select className="ov-pos" value={scope} aria-label={t('名前を使う範囲')}
-          title={t('動画全体: この動画の、この選手のすべてのクリップのテロップに使う。このクリップだけ: このクリップだけ別の名前にする')}
-          onChange={e => { const sc = e.target.value as 'video' | 'clip'; setScope(sc); setName(nameAt(sc)) }}>
-          <option value="video">{t('動画全体（この選手）')}</option>
+          title={t('すべての動画: この選手のテロップに、どの動画でも使う（姓で呼ぶか名で呼ぶかなど）。動画全体: この動画の、この選手のすべてのクリップのテロップに使う。このクリップだけ: このクリップだけ別の名前にする')}
+          onChange={e => { const sc = e.target.value as Scope; setScope(sc); setName(nameAt(sc)) }}>
+          {canPlayer && <option value="player">{t('すべての動画（この選手）')}</option>}
+          {canVideo && <option value="video">{t('動画全体（この選手）')}</option>}
           <option value="clip">{t('このクリップだけ')}</option>
         </select>
       )}

@@ -37,6 +37,12 @@ a01SQ=~~~15B;;;;;;;10.00.30;1;1;2;1;130;;
 describe('parseDVW', () => {
   const d = parseDVW(FIXTURE)
 
+  it('marks the rally after a timeout with the team that called it', () => {
+    const d2 = parseDVW(FIXTURE.replace('a01SQ=~~~15B', '*T;;;;;;;10.00.20;1;1;1;1;120;;\na01SQ=~~~15B'))
+    expect(d2.rallies.map(r => r.timeout ?? null)).toEqual([null, '*', null])
+    expect(d2.plays).toHaveLength(d.plays.length)
+  })
+
   it('reads date and teams', () => {
     expect(d.date).toBe('2026-10-11')
     expect(d.teams.map(t => t.code)).toEqual(['HTH', 'OPP'])

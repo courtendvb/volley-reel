@@ -341,7 +341,10 @@ export class Library {
 
   // Points a match at its video or DVW after the file moved. A video is checked like on import
   // (and prepared again when it needs it); a DVW must parse and have plays. Returns a note for the user.
-  async relocate(id: string, part: MissingPart, path: string, progress: (p: ImportProgress) => void): Promise<string> {
+  // replace: the DVW is still there and another scout file of the same match takes its place (a
+  // staff member's corrections merged into a new file); the scenes' clips find their plays again
+  // when the project is read again (reel.ts relink).
+  async relocate(id: string, part: MissingPart, path: string, progress: (p: ImportProgress) => void, replace = false): Promise<string> {
     const m = this.matches.get(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
     let next: Match, note: string
@@ -350,7 +353,9 @@ export class Library {
       if (!dvw.plays.length) throw new Error(t('{0} にプレーがありません', basename(path)))
       const codes = dvw.teams.map(t => t.code).join('-'), was = m.teams.map(t => t.code).join('-')
       next = { ...m, dvwPath: path }
-      note = codes === was ? t('{0}: DVW の場所を更新しました', m.name) : t('{0}: DVW の場所を更新しました（チームが {1} から {2} に変わっています。別の試合でないか確認してください）', m.name, was, codes)
+      note = replace
+        ? (codes === was ? t('{0}: スカウトファイルを {1} に差し替えました', m.name, basename(path)) : t('{0}: スカウトファイルを {1} に差し替えました（チームが {2} から {3} に変わっています。別の試合でないか確認してください）', m.name, basename(path), was, codes))
+        : (codes === was ? t('{0}: DVW の場所を更新しました', m.name) : t('{0}: DVW の場所を更新しました（チームが {1} から {2} に変わっています。別の試合でないか確認してください）', m.name, was, codes))
     } else {
       progress({ stage: 'probe', message: t('{0} を確認しています', basename(path)) })
       const info = await probe(path)

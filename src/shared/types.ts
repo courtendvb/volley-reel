@@ -87,6 +87,7 @@ export interface Rally {
   pointTime: number | null
   wonBy: Side | null
   court?: { home: number[]; away: number[] } // the jerseys on court (the lineups at the serve; no liberos)
+  timeout?: Side // the rally came right after a timeout by this team
 }
 
 export interface ParsedDVW {
@@ -223,7 +224,8 @@ export interface Api {
   matchUsers(id: string): Promise<string[]> // names of the projects that list this match
   deleteMatch(id: string): Promise<{ library: LibraryInfo; project: ProjectInfo | null }> // off the library (its file moves to matches/deleted/; the video and DVW stay)
   deleteProject(path: string): Promise<RecentProject[]> // the folder to the trash; the recent list as it is now
-  relocateMatch(id: string, part: MissingPart): Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string } | null> // choose where the moved file is now
+  scoutTimes(ids: string[]): Promise<Record<string, number | null>> // when each match's scout file was last written (null: not there)
+  relocateMatch(id: string, part: MissingPart, replace?: boolean): Promise<{ library: LibraryInfo; project: ProjectInfo | null; note: string } | null> // choose where the moved file is now (replace: another scout file in place of one still there)
   scanFolders(): Promise<ScanResult | null> // pick folders, propose DVW ↔ video pairs
   importPairs(pairs: { dvwPath: string; video: string }[]): Promise<{ imported: Match[]; failed: { dvwPath: string; message: string }[] }>
   recentProjects(): Promise<RecentProject[]>
@@ -352,7 +354,8 @@ export interface Api {
   // Closing the window: the main process asks for pending saves to be written, then closes.
   onFlushRequest(cb: () => Promise<void>): () => void
   // Dev smoke check only: edit a match's DVW copy (adds a point, deletes one play line).
-  smokeEditDvw?: (matchId: string, deleteCode: string, deleteTime: number) => Promise<string>
+  smokeEditDvw?: (matchId: string, deleteCode: string, deleteTime: number, to?: string) => Promise<{ path: string; note: string }>
+  smokeNextOpen?: (path: string) => Promise<void> // the next open-file dialog answers with this path
   // Dev smoke check only: the dialog-free versions of scanning folders and creating a project.
   smokeScan?: (folders: string[]) => Promise<ScanResult>
   smokeCreateProject?: (dir: string, init: ProjectInit) => Promise<ProjectInfo>

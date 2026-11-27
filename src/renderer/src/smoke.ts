@@ -87,7 +87,7 @@ export interface SmokeHost {
   insertImage: (path?: string) => Promise<string | null>
   jump: (r: PlayRef) => void
   latest: RefObject<AppLatest>
-  loadProject: (p: ProjectInfo | null) => Promise<void>
+  loadProject: (p: ProjectInfo | null) => Promise<unknown>
   overlapsRef: RefObject<Map<string, string[]>>
   playThrough: (target: 'video' | 'scene', startAt?: number) => void
   putSlide: (spot: SlideSpot, how: SlideHow, files?: SlideFile[]) => Promise<void>
@@ -1002,6 +1002,34 @@ export function installSmoke(h: SmokeHost): void {
       updateReel({ ...r, name })
       return { renamedTo: name } // returns before the autosave delay; closing must write it
     }
+    if (mode === 'scout-overwrite' || mode === 'scout-replace') {
+      // A merged scout comes in while a scene is being made: saved over the file (noticed when the
+      // window comes to the front) or under another name (the replace button). The scene's clips stay.
+      const picks = [10, 100, 300, 600, 900].map(i => res[i]).filter(Boolean)
+      const built = addClips(newReel(`${mode} smoke`), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
+      setReels(rs => [...rs, built]); setReelId(built.id)
+      await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'scout reel')
+      await sleep(SAVE_DELAY_MS + 600)
+      const mid = picks[0].matchId
+      const pathOf = async () => (await api.getProject())!.matches.find(m => m.id === mid)!.dvwPath
+      const pathBefore = await pathOf()
+      const before = picks.map(p => ({ code: p.play.code, time: p.play.time }))
+      const edited = await window.api.smokeEditDvw!(mid, picks[4].play.code, picks[4].play.time, mode === 'scout-replace' ? 'merged scout.dvw' : undefined)
+      if (mode === 'scout-overwrite') window.dispatchEvent(new Event('focus'))
+      else {
+        await window.api.smokeNextOpen!(edited.path)
+        const btn = await waitFor(() => document.querySelector<HTMLButtonElement>('.scout-file-row button'), 20000, 'replace button')
+        btn.click()
+      }
+      const word = mode === 'scout-overwrite' ? '読み直しました' : '差し替えました'
+      const notice = await waitFor(() => (latest.current.notice?.includes(word) ? latest.current.notice : null), 30000, 'scout notice')
+      await sleep(SAVE_DELAY_MS + 600)
+      const r = latest.current.reels.find(x => x.id === built.id)!
+      const d = latest.current.dvwsRef!
+      const after = Object.values(r.clips).map(c => ({ code: d[c.matchId].plays[c.playId]?.code, time: d[c.matchId].plays[c.playId]?.time }))
+      const savedReel = (await api.listReels()).find(x => x.id === built.id)!
+      return { edited, notice, pathBefore, pathAfter: await pathOf(), row: document.querySelector('.scout-file-row')?.textContent, before, after, missing: relink(r, d).missing.size, savedClips: Object.keys(savedReel.clips).length }
+    }
     if (mode === 'relink') {
       const picks = [10, 100, 300, 600, 900].map(i => res[i]).filter(Boolean)
       const built = addClips(newReel('relink smoke'), picks.map(x => ({ matchId: x.matchId, play: x.play }))).reel
@@ -1009,7 +1037,7 @@ export function installSmoke(h: SmokeHost): void {
       await waitFor(() => latest.current.reel?.id === built.id || null, 20000, 'relink reel')
       await sleep(SAVE_DELAY_MS + 600)
       const before = Object.values(built.clips).map(c => ({ id: c.id, playId: c.playId, code: picks.find(p => p.play.id === c.playId)!.play.code, time: picks.find(p => p.play.id === c.playId)!.play.time }))
-      const edited = await window.api.smokeEditDvw!(picks[0].matchId, picks[4].play.code, picks[4].play.time)
+      const edited = (await window.api.smokeEditDvw!(picks[0].matchId, picks[4].play.code, picks[4].play.time)).note
       await loadProject(await api.getProject())
       await waitFor(() => latest.current.reels.some(x => x.id === built.id) || null, 20000, 'reloaded')
       const r = latest.current.reels.find(x => x.id === built.id)!
@@ -2158,7 +2186,9 @@ export function installSmoke(h: SmokeHost): void {
       await api.smokeShot!(`clip-menu-${label === t('別のシーンへ移動') ? 'move' : 'copy'}.png`)
       const name = first.title
       first.click(); await sleep(300)
-      return latest.current.reels.find(r => r.name === name && r.id !== start.id)!.id
+      const hit = latest.current.reels.find(r => r.name === name && r.id !== start.id)
+      if (!hit) throw new Error(`no scene "${name}" among ${JSON.stringify(latest.current.reels.map(r => [r.name, r.id === start.id]))}`)
+      return hit.id
     }
     const sameIn = (sceneId: string, c: Clip) => findClip(latest.current.reels.find(r => r.id === sceneId)!, c.matchId, c.playId)
     // 0. With the real mouse: the menu closes on a click anywhere outside it (the video, the play
@@ -2200,6 +2230,29 @@ export function installSmoke(h: SmokeHost): void {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(300)
     const after = latest.current.reels.map(r => ({ id: r.id, n: Object.keys(r.clips).length }))
     const undone = JSON.stringify(after) === JSON.stringify(before)
+    // 3b. A slide: a blank one put below the first clip, then its own menu moves it to another scene
+    // (gone from here, behind the same play there when that scene has it) and undo brings it back.
+    setReelId(start.id); await sleep(500) // undo shows the scene it changed last
+    const a0 = await rightClick(0), had = new Set((latest.current.reel!.slides ?? []).map(x => x.id))
+    item(t('無地のスライド'))!.click()
+    const made = await waitFor(() => latest.current.reel!.slides?.find(x => !had.has(x.id)) ?? null, 5000, 'blank slide')
+    if (made.after !== a0.id) throw new Error(`blank slide went to ${JSON.stringify([made.group, made.after, a0.id])}`)
+    const slideEl = await waitFor(() => [...document.querySelectorAll<HTMLElement>('.reel-groups .slide-row')].find(el => el.previousElementSibling === rows()[0]) ?? null, 3000, 'slide row')
+    const sb = slideEl.getBoundingClientRect()
+    slideEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: sb.left + 60, clientY: sb.top + sb.height / 2 }))
+    await waitFor(menu, 3000, 'slide menu')
+    const slideLabels = [...menu()!.querySelectorAll('button')].map(x => x.textContent)
+    await api.smokeShot!('slide-menu.png')
+    const seen = new Set(latest.current.reels.flatMap(r => (r.slides ?? []).map(x => x.id)))
+    const toS = await into(t('別のシーンへ移動'))
+    const there = latest.current.reels.find(r => r.id === toS)!
+    const sameThere = findClip(there, a0.matchId, a0.playId)
+    const landed = there.slides?.find(x => !seen.has(x.id) && (sameThere ? x.after === sameThere.id : true))
+    if (!landed || latest.current.reels.find(r => r.id === start.id)!.slides?.some(x => x.id === made.id)) throw new Error(`slide move: ${JSON.stringify({ landed: !!landed, sameThere: !!sameThere, still: latest.current.reel!.slides?.some(x => x.id === made.id) })}`)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); await sleep(300)
+    const back = latest.current.reels.find(r => r.id === start.id)!
+    const slideUndone = !!back.slides?.some(x => x.id === made.id) && !latest.current.reels.find(r => r.id === toS)!.slides?.some(x => x.id === landed.id)
+    const slideMenu = { labels: slideLabels, movedBehindSamePlay: !!sameThere, undone: slideUndone }
     // 4. One clip alone.
     let exported: unknown = null
     if (exportTo) {
@@ -2209,7 +2262,7 @@ export function installSmoke(h: SmokeHost): void {
       await waitFor(() => ['done', 'error', 'cancelled'].includes(latest.current.exportState?.status ?? '') || null, 180000, 'clip export')
       exported = { status: latest.current.exportState?.status, items: job?.items.map(it => it.kind), message: latest.current.exportState?.message }
     }
-    return { clipMenu: { closes, labels, copied: { fresh, markers: copyMarkers, annotations: copy.annotations.length, trimmed: copy.inSec !== null || copy.outSec !== null }, moved: true, notice, undone, exported } }
+    return { clipMenu: { closes, labels, copied: { fresh, markers: copyMarkers, annotations: copy.annotations.length, trimmed: copy.inSec !== null || copy.outSec !== null }, moved: true, notice, undone, slideMenu, exported } }
   }
 
   // The ☀ button by the video: brightness and saturation set with its sliders, the <video> drawn through the

@@ -3,7 +3,7 @@ import { clipRangeSource } from '../../shared/markRange'
 import { EMPTY_FILTER, isCorrected, withDeleted, type PlayFilter, type PlayRef } from '../../shared/filter'
 import { effectName, playLabel, shortEffectName, shortSkillName } from '../../shared/labels'
 import {
-  DEFAULT_RANGE, addClips, clipRange, copyClipTo, removeClip, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setClipCourt, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
+  DEFAULT_RANGE, addClips, clipRange, copyClipTo, copySlideTo, removeClip, removeSlide, defaultRange, findClip, findOverlaps, groupOf, groupRows, markersOf, playOrder, rangeDefaults, setClipCourt, setOverlayOverride, setServeSpeed, setSkillTime, setSlide, setTag, setTiming, spotAt, toggleMarker, trimClip,
   type Clip, type ClipMode, type Group, type Marker, type Reel, type Slide,
 } from '../../shared/reel'
 import type { ImportProgress, Match, ParsedDVW, Play, ProjectInfo, ProjectSettings } from '../../shared/types'
@@ -39,8 +39,11 @@ import { ExportPanel } from './components/ExportPanel'
 import { VideoPanel } from './components/VideoPanel'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { PresetDialog } from './components/PresetDialog'
+import { InsightDialog } from './components/InsightDialog'
+import { useLeague } from './app/useLeague'
+import type { League } from '../../shared/insights'
 import { usePresetVideos } from './app/usePresetVideos'
-import { Home, MissingNote } from './components/Home'
+import { Home, MissingNote, ReplaceScoutButton } from './components/Home'
 import { CompareView } from './components/CompareView'
 import { CompareMenu } from './components/CompareMenu'
 import { useCompare } from './app/useCompare'
@@ -462,6 +465,17 @@ export function App() {
     setNotice(existed ? (move ? t('「{0}」には同じプレーがあるため、そのクリップにマーカーを付け、ここからは外しました', to.name) : t('「{0}」には同じプレーがあるため、そのクリップにマーカーだけ付けました', to.name))
       : move ? t('「{0}」へ移動しました', to.name) : t('「{0}」へコピーしました', to.name))
   }
+  // A slide's right-click: the slide into another scene, in the same group (behind the same play
+  // when that scene has it), moved or copied. One undo step covers both scenes.
+  const slideToScene = (slideId: string, toId: string, move: boolean) => {
+    const { reel: from, reels: rs } = latest.current
+    const to = rs.find(r => r.id === toId), s = from?.slides?.find(x => x.id === slideId)
+    if (!from || !to || !s) return
+    record([sceneSnap(from.id), sceneSnap(to.id)], false)
+    putScene(copySlideTo(s, from, to, whenIn(to)))
+    if (move) putScene(removeSlide(from, slideId))
+    setNotice(move ? t('「{0}」へ移動しました', to.name) : t('「{0}」へコピーしました', to.name))
+  }
   const orderMemo = useMemo(() => new WeakMap<Reel, Clip[]>(), [dvws, infoFor])
   const orderOf = useCallback((s: Reel): Clip[] => {
     const hit = orderMemo.get(s)
@@ -589,10 +603,14 @@ export function App() {
     const n = rows[i + q.dir]
     if (n && n.play.line !== undefined) { jump(n); if (!q.court) setQuickCode(n) }
   }, [listRefs]) // eslint-disable-line react-hooks/exhaustive-deps
-  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo } = usePresetVideos({
-    latest, dvws, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
+  // The league the insights are set beside, for an insight video made again too (once it is loaded).
+  const leagueRef = useRef<League | null>(null)
+  const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo, insightOpen, setInsightOpen, makeInsightVideo } = usePresetVideos({
+    latest, dvws, leagueRef, dress: { headline: settings?.headline, courtOf: id => matches[id]?.court }, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
   })
+  const league = useLeague(insightOpen, library, project?.matches ?? [], settings ?? null)
+  useEffect(() => { if (league.league) leagueRef.current = league.league }, [league.league])
   const { appVersion, update, updateLater, setUpdateLater, updateBusy, restartToUpdate } = useUpdates(flushAll,
     () => { const st = latest.current.exportState?.status; return st === 'running' || st === 'preparing' }, setError)
 
@@ -961,6 +979,7 @@ export function App() {
         <span className="spacer" />
         {project && <span className={`save-state ${saveState}`} title={t('シーンと動画は自動で保存されます')}>{saveState === 'saved' ? t('保存済み') : saveState === 'pending' ? t('保存中…') : t('保存に失敗')}</span>}
         {project && <button onClick={() => setPresetOpen(true)} disabled={!project.matches.length} title={t('サイドアウト・サーブ・ブロック・アタックのビデオを、決まった形のシーンに分けて作ります')}>{t('プリセットから作る')}</button>}
+        {project && <button onClick={() => setInsightOpen(true)} disabled={!project.matches.length} title={t('対象チームの、はっきり偏っている傾向を自動で見つけ、それを示すプレーのシーンにまとめます')}>{t('インサイト')}</button>}
         {project && <button onClick={() => setBoardOpen(true)} title={t('複数の選手のサーブやアタックを、チャートとデータで並べたスライドを作る')}>{t('データスライド作成')}</button>}
         {project && <button onClick={() => setReportOpen(true)} title={t('試合ごとの選手とチームの数字を、A4 1 枚のレポートにする（PDF にも書き出せる）')}>{t('マッチレポート')}</button>}
         {project && <button onClick={() => setAnalysisOpen(true)} title={(internal ? t('対象チームの全試合の得点率・ミス率などを、試合ごとの表で見る') : null)
@@ -1013,7 +1032,7 @@ export function App() {
       ) : !project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
           onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
-          onRelocate={(id, part) => void relocate(id, part)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
+          onRelocate={(id, part, replace) => void relocate(id, part, replace)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
       ) : !project.matches.length ? (
         <div className="empty"><h2>{t('試合を選びましょう')}</h2>
           <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
@@ -1029,6 +1048,13 @@ export function App() {
                 {([['old', t('古い試合から')], ['new', t('新しい試合から')]] as const).map(([v, l]) => (
                   <button key={v} role="radio" aria-checked={matchOrder === v} className={matchOrder === v ? 'on' : ''} onClick={() => setMatchOrder(v)}>{l}</button>
                 ))}
+              </div>
+            )}
+            {match && !project.missing[match.id]?.includes('dvw') && (
+              <div className="scout-file-row" title={match.dvwPath}>
+                <span className="field-label">{t('スカウト')}</span>
+                <span className="scout-file-name">{match.dvwPath.split(/[\\/]/).pop()}</span>
+                <ReplaceScoutButton busy={!!progress} onClick={() => void relocate(match.id, 'dvw', true)} />
               </div>
             )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}
@@ -1327,7 +1353,7 @@ export function App() {
               markerCardDefault={overlay.titleCard.enabled} onEditCard={m => reel && editCard(reel.id, m)}
               onSlide={(spot, how) => void putSlide(spot, how)} onEditSlide={id => reel && editCard(reel.id, null, id)}
               editingSlideId={cardEdit?.slideId ?? null} canFrame={!!match}
-              onClipToScene={clipToScene} onExportClip={(id, g) => { if (reel) void exportClip(reel.id, id, g) }}
+              onClipToScene={clipToScene} onSlideToScene={slideToScene} onExportClip={(id, g) => { if (reel) void exportClip(reel.id, id, g) }}
             />
             <PalettePanel disabled={!cardEditCard && !(active && activeInfo?.range)} selection={paletteSelection} onUse={putPaletteItem}
               clipIn={cardEditCard ? null : activeInfo?.range?.in ?? null} />
@@ -1372,6 +1398,7 @@ export function App() {
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {presetOpen && <PresetDialog results={results} scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} roles={settings?.roles ?? {}} rosterRoleOf={r => dvws[r.matchId]?.players[`${r.play.side}${r.play.jersey}`]?.role} onRoles={r => { if (settings) void saveSettings({ ...settings, roles: r }, false) }} onMake={makePresetVideo} onClose={() => setPresetOpen(false)} />}
+      {insightOpen && <InsightDialog scope={scopeRefs} targetCode={settings?.ourTeamCodes[0] ?? ''} look={presetLook} league={league.league} leagueStatus={league.status} onMake={makeInsightVideo} onClose={() => setInsightOpen(false)} />}
       {scan && <ScanDialog result={scan} onImport={p => void importPairs(p)} onClose={() => setScan(null)} />}
       {picker && library && (
         <MatchPicker mode={picker} matches={library.matches} onClose={() => setPicker(null)} onDone={r => void pickerDone(r)} sceneClips={picker === 'edit' ? sceneClips : undefined}

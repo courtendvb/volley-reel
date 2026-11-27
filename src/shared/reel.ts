@@ -311,6 +311,25 @@ export function setSlide(reel: Reel, slide: Slide): Reel {
   return touch({ ...reel, slides: (reel.slides ?? []).map(s => (s.id === slide.id ? slide : s)) })
 }
 
+// A copy of a slide put into another scene (to move it, the caller also takes it out of `from`). It
+// keeps its group. Behind a clip, it goes behind the same play in `to` when that play is in the
+// group there (after the slides already behind it); else at the end of the group. At a group's top,
+// it stays at the top (after the slides already there). `when` orders the unmarked clips as listed.
+export function copySlideTo(slide: Slide, from: Reel, to: Reel, when: (c: Clip) => [string, number]): Reel {
+  const g = slide.group
+  const ids = g === 'head' ? [] : g === 'none' ? chronological(to, to.groups.none, when).map(c => c.id) : to.groups[g]
+  const rows = groupRows(to, g, ids)
+  const slidesFrom = (i: number) => { let k = i; while (k < rows.length && rows[k].kind === 'slide') k++; return k }
+  let k = rows.length
+  if (slide.after === null) k = slidesFrom(0)
+  else {
+    const src = from.clips[slide.after], same = src && findClip(to, src.matchId, src.playId)
+    const i = same ? rows.findIndex(r => r.kind === 'clip' && r.id === same.id) : -1
+    if (i >= 0) k = slidesFrom(i + 1)
+  }
+  return putSlides(to, [{ ...structuredClone(slide), id: uid() }], spotAt(rows, g, k))
+}
+
 export function removeSlide(reel: Reel, id: string): Reel {
   return touch({ ...reel, slides: (reel.slides ?? []).filter(s => s.id !== id) })
 }
@@ -372,6 +391,23 @@ export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Ree
     changed = true
   }
   return { reel: changed ? { ...reel, clips } : reel, missing, changed, how }
+}
+
+// What relink did to one match's clips, over all scenes: found as they were, found again at
+// another play (the scout was fixed), or not found. For the note after a scout file is replaced.
+export interface RelinkCount { kept: number; moved: number; missing: number }
+
+export function relinkCount(results: ReturnType<typeof relink>[], matchId: string): RelinkCount {
+  const n: RelinkCount = { kept: 0, moved: 0, missing: 0 }
+  for (const r of results) {
+    for (const c of Object.values(r.reel.clips)) {
+      if (c.matchId !== matchId) continue
+      if (r.missing.has(c.id)) n.missing++
+      else if (r.how.get(c.id) === 'id') n.kept++
+      else n.moved++
+    }
+  }
+  return n
 }
 
 const NEAR_TIME_SEC = 2

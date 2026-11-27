@@ -5,7 +5,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
-import { BrowserWindow, ClipboardItem, app, clipboard, ipcMain, nativeImage } from 'electron'
+import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage } from 'electron'
 import type { PhotoTarget } from '../shared/pack'
 import { decodeScout } from '../shared/scoutText'
 import type { PickedAsset, ProjectInit, SlideFile } from '../shared/types'
@@ -72,7 +72,9 @@ export function registerSmokeIpc(c: SmokeContext): void {
     return c.project()!.info()
   })
   // Smoke only: add a point after the first point line and delete one play line in a DVW copy.
-  ipcMain.handle('smoke:editDvw', async (_e, matchId: string, code: string, time: number) => {
+  // A point added early (every later score shifts) and one play taken out, in the match's DVW
+  // (to: a new file next to it instead, as a merged scout saved under another name).
+  ipcMain.handle('smoke:editDvw', async (_e, matchId: string, code: string, time: number, to?: string) => {
     const m = c.library()?.getMatch(matchId)
     if (!m) throw new Error('no match')
     // Only ever a copy in the temp folder: a smoke run must not change a real scout file.
@@ -84,8 +86,14 @@ export function registerSmokeIpc(c: SmokeContext): void {
     lines.splice(at + 1, 0, lines[at].replace(/^[*a]p(\d+):(\d+)/i, (_s, h, a) => `*p${String(+h + 1).padStart(2, '0')}:${a}`))
     const del = lines.findIndex(l => l.startsWith(code + ';') && l.split(';')[12] === String(time))
     lines.splice(del, 1)
-    await writeFile(m.dvwPath, lines.join('\r\n'), encoding) // back in the copy's own encoding
-    return `added a point after line ${at + 1}, deleted line ${del + 1} (${code} @ ${time})`
+    const out = to ? join(dirname(m.dvwPath), basename(to)) : m.dvwPath
+    await writeFile(out, lines.join('\r\n'), encoding) // back in the copy's own encoding
+    return { path: out, note: `added a point after line ${at + 1}, deleted line ${del + 1} (${code} @ ${time})` }
+  })
+  // The next open-file dialog answers with this path (the replace-scout button, driven by a smoke run).
+  ipcMain.handle('smoke:nextOpen', (_e, path: string) => {
+    const real = dialog.showOpenDialog.bind(dialog)
+    dialog.showOpenDialog = (async () => { dialog.showOpenDialog = real; return { canceled: false, filePaths: [path] } }) as typeof dialog.showOpenDialog
   })
 }
 

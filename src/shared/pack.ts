@@ -13,7 +13,16 @@ export interface PackPlayer {
   label?: string // shown in the picker in place of the DVW name (e.g. 山田 太郎)
   ids?: string[] // DataVolley player IDs this player has been scouted under
   photo: string // a file in the pack's photos/
+  caption?: string // the name on the caption, when it is not the DVW's surname (a player called by their first name)
 }
+
+// Who a pack entry is: what a scouted player is matched by (fit).
+export type PackPerson = Pick<PackPlayer, 'team' | 'teams' | 'jersey' | 'lastName' | 'firstName' | 'ids'>
+
+// A player's name on the caption without a photo (manifest.names): set in the app from a clip, kept in
+// the local pack, or shipped in a league's pack. A player is called by their surname in one country and
+// by their first name in another; this name goes on the caption in every video.
+export interface PackName extends PackPerson { caption: string }
 
 export interface PackManifest {
   format: 'volley-reel-pack'
@@ -21,37 +30,45 @@ export interface PackManifest {
   id: string // folder name in addons/: [a-z0-9_-]
   name: string
   players: PackPlayer[]
+  names?: PackName[]
 }
 
 // bundled: shipped with the app (resources/packs), read-only; a pack of the same id in the library wins.
-export interface PackInfo { id: string; name: string; players: PackPlayer[]; bundled?: true }
+export interface PackInfo { id: string; name: string; players: PackPlayer[]; names?: PackName[]; bundled?: true }
 
 export const PACK_PHOTO = /^[A-Za-z0-9_.-]{1,80}\.(png|jpg|jpeg)$/i // PNG or JPEG: what the app reads sizes of
 export const PACK_ID = /^[a-z0-9_-]{1,40}$/
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
-// The manifest as read from a pack: players without a usable photo name or last name are dropped;
-// a wrong format, version or id is an error (null: the reason is given to the user by the caller).
+// The manifest as read from a pack: players without a usable photo name or last name are dropped, and
+// names without a last name or a caption; a wrong format, version or id is an error (null: the reason
+// is given to the user by the caller).
 export function readManifest(raw: unknown): PackManifest | null {
   const m = raw as Partial<PackManifest> | null
   if (!m || m.format !== 'volley-reel-pack' || m.version !== 1 || !PACK_ID.test(str(m.id)) || !Array.isArray(m.players)) return null
-  const players: PackPlayer[] = []
-  for (const p of m.players as Partial<PackPlayer>[]) {
-    if (!p || !str(p.team) || !str(p.lastName) || !PACK_PHOTO.test(str(p.photo))) continue
+  const person = (p: Partial<PackPerson>): PackPerson => {
     const jersey = Number(p.jersey)
-    players.push({
+    return {
       team: str(p.team).toUpperCase(),
       ...(Array.isArray(p.teams) ? { teams: p.teams.map(str).filter(Boolean).map(s => s.toUpperCase()) } : {}),
       ...(Number.isInteger(jersey) && jersey >= 0 ? { jersey } : {}),
       lastName: str(p.lastName),
       ...(str(p.firstName) ? { firstName: str(p.firstName) } : {}),
-      ...(str(p.label) ? { label: str(p.label) } : {}),
       ...(Array.isArray(p.ids) ? { ids: p.ids.map(str).filter(Boolean) } : {}),
-      photo: str(p.photo),
-    })
+    }
   }
-  return { format: 'volley-reel-pack', version: 1, id: str(m.id), name: str(m.name) || str(m.id), players }
+  const players: PackPlayer[] = []
+  for (const p of m.players as Partial<PackPlayer>[]) {
+    if (!p || !str(p.team) || !str(p.lastName) || !PACK_PHOTO.test(str(p.photo))) continue
+    players.push({ ...person(p), ...(str(p.label) ? { label: str(p.label) } : {}), photo: str(p.photo), ...(str(p.caption) ? { caption: str(p.caption) } : {}) })
+  }
+  const names: PackName[] = []
+  for (const p of (Array.isArray(m.names) ? m.names : []) as Partial<PackName>[]) {
+    if (!p || !str(p.team) || !str(p.lastName) || !str(p.caption)) continue
+    names.push({ ...person(p), caption: str(p.caption) })
+  }
+  return { format: 'volley-reel-pack', version: 1, id: str(m.id), name: str(m.name) || str(m.id), players, ...(names.length ? { names } : {}) }
 }
 
 const norm = (s: string | undefined) => (s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
@@ -93,7 +110,7 @@ const alike = (a: string | undefined, b: string | undefined) => {
 // The names as written fit best; then a surname spelt another way; then a scout that has the two
 // names the other way round (NUNES/Judson for JUDSON/Nunes); last, the same jersey and first name
 // under a surname romanised another way (LEE and RI).
-export function fit(pp: PackPlayer, p: Player, teamCode: string): number {
+export function fit(pp: PackPerson, p: Player, teamCode: string): number {
   if (pp.ids?.some(id => id.replace(/-a$/i, '').toUpperCase() === p.key.toUpperCase())) return 100
   const code = teamCode.toUpperCase()
   if (pp.team !== code && !pp.teams?.includes(code)) return 0
@@ -123,7 +140,7 @@ export function localEntry(tg: PhotoTarget, photo: string): PackPlayer {
 }
 
 // A local entry made for this player (by ID, or by team, surname and jersey): replaced by a new photo.
-export function isFor(pp: PackPlayer, tg: PhotoTarget): boolean {
+export function isFor(pp: PackPerson, tg: PhotoTarget): boolean {
   return !!pp.ids?.some(id => id.toUpperCase() === tg.key.toUpperCase())
     || (pp.team === tg.team.toUpperCase() && norm(pp.lastName) === norm(tg.lastName) && pp.jersey === tg.jersey)
 }
@@ -147,6 +164,46 @@ export function captionPhoto(packs: PackInfo[], dvw: ParsedDVW, play: Play): { p
   if (!p) return null
   const hit = findPhoto(packs, p, dvw.teams[play.side === '*' ? 0 : 1].code)
   return hit ? { pack: hit.pack, photo: hit.player.photo } : null
+}
+
+// The name set for a player on the caption, across every pack (a pack's names, and its players with a
+// caption); the local pack's wins, as with photos. null when none fits or two fit equally with other names.
+export function findCaption(packs: PackInfo[], p: Player, teamCode: string): string | null {
+  let best: string | null = null, top = 0, tie = false
+  for (const pk of packs) {
+    for (const pp of [...(pk.names ?? []), ...pk.players.filter(x => x.caption)]) {
+      let s = fit(pp, p, teamCode)
+      if (s > 0 && pk.id === LOCAL_PACK) s += 1000
+      if (s > top) { best = pp.caption!; top = s; tie = false } else if (s && s === top && pp.caption !== best) tie = true
+    }
+  }
+  return tie ? null : best
+}
+
+// The name set in a pack for a play's player.
+export function packCaption(packs: PackInfo[], dvw: ParsedDVW, play: Play): string | null {
+  const p = dvw.players[`${play.side}${play.jersey}`]
+  return p ? findCaption(packs, p, dvw.teams[play.side === '*' ? 0 : 1].code) : null
+}
+
+// The local pack's name entry for a player, set from a clip.
+export function localName(tg: PhotoTarget, caption: string): PackName {
+  return { team: tg.team.toUpperCase(), jersey: tg.jersey, lastName: tg.lastName, ...(tg.firstName ? { firstName: tg.firstName } : {}), ids: [tg.key], caption }
+}
+
+// The player a caption name is set for: as for a photo (the scouted player and their team's code).
+export function playTarget(dvw: ParsedDVW, play: Play): PhotoTarget | null {
+  const p = dvw.players[`${play.side}${play.jersey}`]
+  return p ? { key: p.key, team: dvw.teams[play.side === '*' ? 0 : 1].code, jersey: p.jersey, lastName: p.lastName, firstName: p.firstName } : null
+}
+
+// The names offered in the caption's name field: the DVW's surname, first name, and first name and
+// surname (as written in the DVW, so names the scout swapped show as they are).
+export function nameChoices(dvw: ParsedDVW, play: Play): string[] {
+  const p = dvw.players[`${play.side}${play.jersey}`]
+  if (!p) return []
+  const both = p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : ''
+  return [...new Set([p.lastName, p.firstName, both].map(s => s.trim()).filter(Boolean))]
 }
 
 // For the picker's search box: the label, the names and the team code.

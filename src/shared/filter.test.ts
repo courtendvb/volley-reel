@@ -156,10 +156,15 @@ describe('rally context', () => {
   })
 
   it('looks past the set to what an attack came from', () => {
-    expect(codes({ skills: ['A'], prevSkills: ['R'], prevEffects: ['#'] })).toEqual([])
-    expect(codes({ skills: ['A'], prevSkills: ['R'], prevEffects: ['#'], prevSkipSet: true })).toEqual(['a03AU+'])
-    expect(codes({ skills: ['A'], prevSkills: ['F'], prevSkipSet: true })).toEqual(['a11AM-', 'a02AH#'])
-    expect(codes({ skills: ['A'], prevSkills: ['D'], prevSkipSet: true })).toEqual(['*23AH#', 'a03AH#'])
+    expect(codes({ skills: ['A'], prevSkills: ['R'], prevEffects: ['#'] })).toEqual(['a03AU+'])
+    expect(codes({ skills: ['A'], prevSkills: ['F'] })).toEqual(['a11AM-', 'a02AH#'])
+    expect(codes({ skills: ['A'], prevSkills: ['D'] })).toEqual(['*23AH#', 'a03AH#'])
+  })
+
+  it('keeps the set when the set is what is asked for', () => {
+    expect(codes({ skills: ['A'], prevSkills: ['E'] }).length).toBeGreaterThan(0)
+    expect(codes({ skills: ['A'], prevSkills: ['E', 'R'] })).toEqual(codes({ skills: ['A'], prevSkills: ['E'] }))
+    expect(codes({ skills: ['R'], nextSkills: ['E'] }).length).toBeGreaterThan(0)
   })
 
   it('matches the play just after, and nothing after a rally ends', () => {
@@ -170,19 +175,19 @@ describe('rally context', () => {
   })
 
   it('looks past the set to the attack a reception led to', () => {
-    expect(codes({ skills: ['R'], nextSkills: ['A'] })).toEqual([])
-    expect(codes({ skills: ['R'], nextSkills: ['A'], nextEffects: ['+', '!'], nextSkipSet: true })).toEqual(['a14RM#', 'a18RM+'])
-    expect(codes({ skills: ['R'], prevSkills: ['S'], nextSkills: ['A'], nextSkipSet: true })).toEqual(['a14RM#', 'a18RM+'])
+    expect(codes({ skills: ['R'], nextSkills: ['A'], nextEffects: ['+', '!'] })).toEqual(['a14RM#', 'a18RM+'])
+    expect(codes({ skills: ['R'], prevSkills: ['S'], nextSkills: ['A'] })).toEqual(['a14RM#', 'a18RM+'])
   })
 })
 
 describe('saved filters', () => {
   it('reads back what was saved, and anything broken as "any"', () => {
-    const f = { ...EMPTY_FILTER, team: 'our' as const, skills: ['A'], effects: ['#'], startZones: [4], phase: 'transition' as const, prevSkills: ['D'], prevSkipSet: true }
+    const f = { ...EMPTY_FILTER, team: 'our' as const, skills: ['A'], effects: ['#'], startZones: [4], phase: 'transition' as const, prevSkills: ['D'] }
     expect(cleanFilter(JSON.parse(JSON.stringify(f)))).toEqual(f)
     expect(cleanFilter({ person: 'K' })).toEqual({ ...EMPTY_FILTER, persons: ['K'] }) // saved when one could be picked
     expect(cleanFilter({ startZone: 4, endZone: 6 })).toEqual({ ...EMPTY_FILTER, startZones: [4], endZones: [6] }) // saved when one zone could be picked
     expect(cleanFilter({ team: 'x', skills: 'A', sets: [1, 'two', 2.5], endZone: '3', nextSkipSet: 'yes', phase: 'serve' })).toEqual({ ...EMPTY_FILTER, sets: [1] })
+    expect(cleanFilter({ prevSkills: ['R'], prevSkipSet: true })).toEqual({ ...EMPTY_FILTER, prevSkills: ['R'] }) // saved when skipping the set was a choice
     expect(cleanFilter(null)).toEqual(EMPTY_FILTER)
   })
 
@@ -212,26 +217,34 @@ describe('direction', () => {
   })
 })
 
-describe('front row condition', () => {
+describe('players on court condition', () => {
   const D = parseDVW(dvw('HTH', 'OPP', ['TAN-TAR-02', 'TANAKA', 'Taro'], ['SMI-JOH-95', 'SMITH', 'John'], `
 *01SQ-~~~16A;;;;;;;;1;1;3;1;100;;2;1;3;4;5;6;7;8;9;10;11;12;
 a01AQ#PA~36BH1;;;;;;;;1;1;3;1;104;;2;1;3;4;5;6;7;8;9;10;11;12;
 ap00:01;;;;;;;;1;1;3;1;114;;
 *07SQ-~~~16A;;;;;;;;1;1;3;1;120;;1;2;3;4;5;6;7;8;9;10;11;12;
 a01AQ#PA~36BH1;;;;;;;;1;1;3;1;124;;1;2;3;4;5;6;7;8;9;10;11;12;
+*08SQ-~~~16A;;;;;;;;1;1;3;1;130;;2;3;4;5;6;8;7;9;10;11;12;13;
+a01AQ#PA~36BH1;;;;;;;;1;1;3;1;134;;2;3;4;5;6;8;7;9;10;11;12;13;
 `))
   const refs = buildRefs('d', D, { ourTeamCodes: ['HTH'] })
   const times = (f: Partial<typeof EMPTY_FILTER>) => applyFilter(refs, { ...EMPTY_FILTER, ...f }).map(r => r.play.time)
 
   it("finds the opponent's attacks while our player is in front", () => {
-    expect(times({ team: 'opp', skills: ['A'], frontPlayers: ['TAN-TAR-02'] })).toEqual([104])
+    expect(times({ team: 'opp', skills: ['A'], courtPlayers: ['TAN-TAR-02'], courtRow: 'front' })).toEqual([104])
   })
-  it('needs all the players picked in front together', () => {
-    expect(times({ skills: ['A'], frontPlayers: ['TAN-TAR-02', '*3'] })).toEqual([104])
-    expect(times({ skills: ['A'], frontPlayers: ['TAN-TAR-02', '*2'] })).toEqual([])
+  it('finds them while the player is in the back row, or anywhere on court', () => {
+    expect(times({ team: 'opp', skills: ['A'], courtPlayers: ['TAN-TAR-02'], courtRow: 'back' })).toEqual([124])
+    expect(times({ team: 'opp', skills: ['A'], courtPlayers: ['TAN-TAR-02'] })).toEqual([104, 124])
   })
-  it('keeps the condition when saved, and reads old filters', () => {
-    expect(cleanFilter({ frontPlayers: ['TAN-TAR-02', 1] }).frontPlayers).toEqual(['TAN-TAR-02'])
-    expect(cleanFilter({}).frontPlayers).toEqual([])
+  it('needs all the players picked in that row together', () => {
+    expect(times({ skills: ['A'], courtPlayers: ['TAN-TAR-02', '*3'], courtRow: 'front' })).toEqual([104])
+    expect(times({ skills: ['A'], courtPlayers: ['TAN-TAR-02', '*2'], courtRow: 'front' })).toEqual([])
+    expect(times({ skills: ['A'], courtPlayers: ['TAN-TAR-02', '*3'] })).toEqual([104, 124])
+  })
+  it('keeps the condition when saved, and reads old front-row filters', () => {
+    expect(cleanFilter({ courtPlayers: ['TAN-TAR-02', 1], courtRow: 'back' })).toMatchObject({ courtPlayers: ['TAN-TAR-02'], courtRow: 'back' })
+    expect(cleanFilter({ frontPlayers: ['TAN-TAR-02', 1] })).toMatchObject({ courtPlayers: ['TAN-TAR-02'], courtRow: 'front' })
+    expect(cleanFilter({})).toMatchObject({ courtPlayers: [], courtRow: 'court' })
   })
 })

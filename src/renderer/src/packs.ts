@@ -32,6 +32,7 @@ export async function savePack(manifest: PackManifest, files: Record<string, Uin
 export async function removePack(id: string): Promise<void> { set(await api.removePack(id)) }
 export async function setPlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.setPlayerPhoto(tg)) }
 export async function removePlayerPhoto(tg: PhotoTarget): Promise<void> { set(await api.removePlayerPhoto(tg)) }
+export async function setPlayerCaption(tg: PhotoTarget, caption: string | null): Promise<void> { set(await api.setPlayerCaption(tg, caption)) }
 
 // Thumbnails are small: decoded at most 160 px on the long side.
 const photos = new Map<string, Promise<ImageBitmap | null>>()

@@ -38,12 +38,15 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
   const detailCount = f.tempos.length + f.combos.length + f.hits.length + f.startZones.length + f.endZones.length
   const [detailOpen, setDetailOpen] = useState(detailCount > 0)
   useEffect(() => { if (detailCount > 0) setDetailOpen(true) }, [detailCount > 0]) // show detailed conditions that are in use
-  // Set, rotations, phase and the plays around: folded like the detailed search, opened when one is in use.
-  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.frontPlayers?.length ?? 0) + (f.phase !== 'all' ? 1 : 0) + (f.recEffects?.length ?? 0)
-    + f.prevSkills.length + f.prevEffects.length + (f.prevTeam !== 'any' ? 1 : 0) + (f.prevSkipSet ? 1 : 0)
-    + f.nextSkills.length + f.nextEffects.length + (f.nextTeam !== 'any' ? 1 : 0) + (f.nextSkipSet ? 1 : 0)
+  // Set, rotations, who is on court and phase: folded like the detailed search, opened when one is in use.
+  const situCount = f.sets.length + f.rots.length + (f.oppRots?.length ?? 0) + (f.courtPlayers?.length ?? 0) + (f.phase !== 'all' ? 1 : 0) + (f.recEffects?.length ?? 0)
   const [situOpen, setSituOpen] = useState(situCount > 0)
   useEffect(() => { if (situCount > 0) setSituOpen(true) }, [situCount > 0])
+  // The plays around (just before, just after): little used, so folded on their own.
+  const nearCount = f.prevSkills.length + f.prevEffects.length + (f.prevTeam !== 'any' ? 1 : 0)
+    + f.nextSkills.length + f.nextEffects.length + (f.nextTeam !== 'any' ? 1 : 0)
+  const [nearOpen, setNearOpen] = useState(nearCount > 0)
+  useEffect(() => { if (nearCount > 0) setNearOpen(true) }, [nearCount > 0])
   // The target team's players, or the opponents' once the team says so; unknown teams (all-home
   // files) stay, and so does anyone already picked.
   const wanted = f.team === 'opp' ? 'opp' : 'our'
@@ -94,7 +97,7 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
         render={k => effectHint ? `${k} ${effectHint[k]}` : k} />
       <div className="filter-row">
         <button className="link" aria-expanded={situOpen} onClick={() => setSituOpen(o => !o)}>
-          {situOpen ? '▾' : '▸'} {t('試合の状況（セット・ローテ・前衛・局面・直前直後）')}{situCount ? t('（{0}）', situCount) : ''}</button>
+          {situOpen ? '▾' : '▸'} {t('試合の状況（セット・ローテ・コート上の選手・局面）')}{situCount ? t('（{0}）', situCount) : ''}</button>
       </div>
       {situOpen && (
         <div className="filter-detail">
@@ -104,9 +107,10 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           title={() => t('{0}のローテーション', targetCode || t('対象チーム'))} />
         <Chips label={t('相手ローテ')} values={[1, 2, 3, 4, 5, 6]} selected={f.oppRots ?? []} onChange={oppRots => set({ oppRots })}
           title={() => t('相手チームのローテーション')} />
-        <div className="filter-row" title={t('選んだ選手が前衛にいるときのプレーに絞ります（どちらのチームの選手でも選べます）。複数選ぶと全員が前衛のとき。例: チームを相手、スキルをアタックにして、自チームのブロッカーを選ぶと、その選手が前衛のときの相手アタック')}>
-          <span className="field-label">{t('前衛')}</span>
-          <CheckPicker label={t('前衛にいる選手')} all={t('指定なし')} selected={f.frontPlayers ?? []} onChange={frontPlayers => set({ frontPlayers })} options={people.map(personOption)} />
+        <div className="filter-row" title={t('選んだ選手がコートにいるとき（前衛・後衛を選ぶと、そこにいるとき）のプレーに絞ります。どちらのチームの選手でも選べます。複数選ぶと全員がそこにいるとき。例: チームを相手、スキルをアタック、前衛にして自チームのブロッカーを選ぶと、その選手が前衛のときの相手アタック。リベロはスコアのラインナップに入らないため選んでも当たりません')}>
+          <span className="field-label">{t('コート上')}</span>
+          <CheckPicker label={t('コートにいる選手')} all={t('指定なし')} selected={f.courtPlayers ?? []} onChange={courtPlayers => set({ courtPlayers })} options={people.map(personOption)} />
+          <Segmented value={f.courtRow ?? 'court'} onChange={courtRow => set({ courtRow })} options={[['court', t('どこでも')], ['front', t('前衛')], ['back', t('後衛')]]} />
         </div>
         <div className="filter-row" title={t('レセプション: サーブを受けたチームのレセプションから、ボールが相手に返るまで（レセプションアタックとそのトス）。トランジション: それ以外のプレー（ディグ・フリーボール・ブロックフォローからの攻撃など）。サーブはどちらにも入りません')}>
           <label className="field-label">{t('局面')}</label>
@@ -116,10 +120,16 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
           <Chips label={t('レセプション評価')} values={EFFECT_KEYS} selected={f.recEffects ?? []} onChange={recEffects => set({ recEffects })}
             render={k => `${k} ${effectName('R', k)}`} title={() => t('そのラリーのレセプションの評価で絞ります。レセプションアタックとそのトスは、もとのレセプションの評価で探します')} />
         )}
-        <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）')}
-          skipTitle={t('直前が自チームのトスなら、その前のプレーで探します。レセプション#からのアタックなど')} />
-        <Near f={f} set={set} which="next" label={t('直後')} title={t('同じラリーで一つ後のプレー（フリーボールも数えます）。ラリー最後のプレーは入りません')}
-          skipTitle={t('直後が自チームのトスなら、その次のプレーで探します。レセプションからのアタックの結果など')} />
+        </div>
+      )}
+      <div className="filter-row">
+        <button className="link" aria-expanded={nearOpen} onClick={() => setNearOpen(o => !o)}>
+          {nearOpen ? '▾' : '▸'} {t('前後のプレー（直前・直後）')}{nearCount ? t('（{0}）', nearCount) : ''}</button>
+      </div>
+      {nearOpen && (
+        <div className="filter-detail">
+        <Near f={f} set={set} which="prev" label={t('直前')} title={t('同じラリーで一つ前のプレー（フリーボールも数えます）。自チームのトスは飛ばして、その前のプレーで探します（レセプション#からのアタックなど）。トスそのものは、セットを選ぶと探せます')} />
+        <Near f={f} set={set} which="next" label={t('直後')} title={t('同じラリーで一つ後のプレー（フリーボールも数えます）。自チームのトスは飛ばして、その次のプレーで探します（レセプションからのアタックの結果など）。トスそのものは、セットを選ぶと探せます。ラリー最後のプレーは入りません')} />
         </div>
       )}
       <div className="filter-row">
@@ -158,9 +168,9 @@ export function FilterPanel({ filter: f, onChange, people, details, targetCode, 
 }
 
 // The play just before or just after: its skill, and once that is used, its evaluation and team.
-function Near({ f, set, which, label, title, skipTitle }: { f: PlayFilter; set: (p: Partial<PlayFilter>) => void; which: 'prev' | 'next'; label: string; title: string; skipTitle: string }) {
+function Near({ f, set, which, label, title }: { f: PlayFilter; set: (p: Partial<PlayFilter>) => void; which: 'prev' | 'next'; label: string; title: string }) {
   const put = (s: string, v: unknown) => set({ [`${which}${s}`]: v } as Partial<PlayFilter>)
-  const skills = f[`${which}Skills`], effects = f[`${which}Effects`], team = f[`${which}Team`], skipSet = f[`${which}SkipSet`]
+  const skills = f[`${which}Skills`], effects = f[`${which}Effects`], team = f[`${which}Team`]
   const hint = skills.length === 1 ? effectNames(skills[0]) : null
   return (
     <>
@@ -173,8 +183,6 @@ function Near({ f, set, which, label, title, skipTitle }: { f: PlayFilter; set: 
             <label className="field-label">{t('{0}チーム', label)}</label>
             <Segmented value={team} onChange={v => put('Team', v)} options={[['any', t('どちらでも')], ['same', t('同じチーム')], ['opp', t('相手')]]} />
           </div>
-          <label className="check" title={skipTitle}>
-            <input type="checkbox" checked={skipSet} onChange={e => put('SkipSet', e.target.checked)} /> {t('トスは飛ばす')}</label>
         </div>
       )}
     </>

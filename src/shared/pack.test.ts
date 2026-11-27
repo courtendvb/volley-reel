@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LOCAL_PACK, captionPhoto, findPhoto, fit, isFor, localEntry, matchesQuery, readManifest, type PackInfo, type PackPlayer } from './pack'
+import { LOCAL_PACK, captionPhoto, findCaption, findPhoto, fit, isFor, localEntry, localName, matchesQuery, nameChoices, packCaption, playTarget, readManifest, type PackInfo, type PackPlayer } from './pack'
 import type { ParsedDVW, Play, Player } from './types'
 
 const player = (o: Partial<Player>): Player => ({ key: 'X', side: '*', jersey: 1, lastName: '', firstName: '', ...o })
@@ -17,6 +17,17 @@ describe('readManifest', () => {
       ],
     })
     expect(m?.players).toEqual([{ team: 'SUN', jersey: 7, lastName: 'YAMADA', label: '山田 太郎', photo: 'yamada.jpg' }])
+  })
+
+  it('keeps caption names, with or without a photo', () => {
+    const m = readManifest({
+      format: 'volley-reel-pack', version: 1, id: 'a', name: 'A',
+      players: [{ team: 'SUN', lastName: 'SILVA', photo: 's.jpg', caption: ' Bruno ' }],
+      names: [{ team: 'sun', jersey: 9, lastName: 'NUNES', firstName: 'Judson', caption: 'Judson' }, { team: 'SUN', lastName: 'X', caption: ' ' }, { team: 'SUN', caption: 'Y' }],
+    })
+    expect(m?.players[0].caption).toBe('Bruno')
+    expect(m?.names).toEqual([{ team: 'SUN', jersey: 9, lastName: 'NUNES', firstName: 'Judson', caption: 'Judson' }])
+    expect(readManifest({ format: 'volley-reel-pack', version: 1, id: 'a', name: 'A', players: [] })?.names).toBeUndefined()
   })
 
   it('rejects another format, version or a bad id', () => {
@@ -132,5 +143,37 @@ describe('captionPhoto', () => {
     expect(captionPhoto(packs, dvw, play('*', 7))).toEqual({ pack: 'sv', photo: 'yamada.png' })
     expect(captionPhoto(packs, dvw, play('a', 7))).toBeNull() // the other team's #7
     expect(captionPhoto(packs, dvw, play('*', 9))).toBeNull() // not in the roster
+  })
+})
+
+describe('caption names', () => {
+  const dvw = { teams: [{ code: 'SUN', name: 'Sun' }, { code: 'OPP', name: 'Opp' }], players: {
+    '*9': player({ key: 'NUN-JUD', side: '*', jersey: 9, lastName: 'NUNES', firstName: 'Judson' }),
+    'a9': player({ key: 'KIM-MIN', side: 'a', jersey: 9, lastName: 'KIM', firstName: 'Min' }),
+  } } as unknown as ParsedDVW
+  const play = (side: '*' | 'a', jersey: number) => ({ side, jersey }) as Play
+  const tg = playTarget(dvw, play('*', 9))!
+
+  it("is found by the player's ID or name, the local pack's first", () => {
+    expect(tg).toEqual({ key: 'NUN-JUD', team: 'SUN', jersey: 9, lastName: 'NUNES', firstName: 'Judson' })
+    const league: PackInfo = { id: 'sv', name: 'SV', players: [pp({ lastName: 'NUNES', jersey: 9, caption: 'NUNES J.' })] }
+    expect(packCaption([league], dvw, play('*', 9))).toBe('NUNES J.') // a league player with a photo and a caption
+    const local: PackInfo = { id: LOCAL_PACK, name: LOCAL_PACK, players: [], names: [localName(tg, 'Judson')] }
+    expect(packCaption([league, local], dvw, play('*', 9))).toBe('Judson')
+    expect(packCaption([league, local], dvw, play('a', 9))).toBeNull() // the other team's #9
+    expect(packCaption([league], dvw, play('*', 3))).toBeNull() // not in the roster
+    expect(findCaption([{ id: 'x', name: 'X', players: [pp({ lastName: 'NUNES' })] }], dvw.players['*9'], 'SUN')).toBeNull() // a photo alone names no one
+  })
+
+  it('gives no name when two packs fit equally with different names', () => {
+    const a: PackInfo = { id: 'a', name: 'A', players: [], names: [{ team: 'SUN', lastName: 'NUNES', caption: 'Judson' }] }
+    const b: PackInfo = { id: 'b', name: 'B', players: [], names: [{ team: 'SUN', lastName: 'NUNES', caption: 'Nunes' }] }
+    expect(packCaption([a, b], dvw, play('*', 9))).toBeNull()
+    expect(packCaption([a, { ...b, names: [{ team: 'SUN', lastName: 'NUNES', caption: 'Judson' }] }], dvw, play('*', 9))).toBe('Judson')
+  })
+
+  it("offers the DVW's surname, first name and both", () => {
+    expect(nameChoices(dvw, play('*', 9))).toEqual(['NUNES', 'Judson', 'Judson NUNES'])
+    expect(nameChoices(dvw, play('*', 3))).toEqual([])
   })
 })

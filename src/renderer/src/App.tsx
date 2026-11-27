@@ -61,8 +61,8 @@ import { DEFAULT_CORNERS, DEFAULT_GRID_STYLE, withoutPlayerMarks, cleanGridStyle
 import type { SmokeHost } from './smoke'
 import { playback, type SequenceItem } from './playback'
 import { t } from '../../shared/i18n'
-import { captionPhoto, findPhoto } from '../../shared/pack'
-import { usePacks } from './packs'
+import { captionPhoto, findPhoto, nameChoices, packCaption, playTarget } from '../../shared/pack'
+import { setPlayerCaption, usePacks } from './packs'
 import { playMaximized } from './maximize'
 import { clipPlayedSec } from '../../shared/timing'
 import { markerFor, missingOf, overlaySample, type AppLatest } from './app/appState'
@@ -803,7 +803,7 @@ export function App() {
     if (!c || !d || !play) return null
     const tm = playTimes(serveMarkOf(matches[c.matchId], play), c)
     const kmh = measuredSpeed(play, tm.skillSec ?? play.time + (matches[c.matchId]?.offsetSec ?? 0), tm.touchSec)
-    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames)
+    const caption = captionData(d, play, overlay.playerCaption, c.overlayOverride?.playerCaption, video?.captionNames, packs)
     const speed = kmh && tm.touchSec !== undefined ? { kmh, touchSec: tm.touchSec } : null
     return { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], matches[c.matchId]?.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption, speed }
   }, [dvws, settings, overlay, packs, video?.captionNames, matches, teamColors])
@@ -834,7 +834,7 @@ export function App() {
         if (!play) return null
         let v = cache.get(playId)
         if (!v) {
-          const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames)
+          const caption = captionData(d, play, overlay.playerCaption, undefined, video?.captionNames, packs)
           v = { scoreboard: withTeamColors(scoreboardData(d, play, settings?.ourTeamCodes ?? [], match.court), teamColors), caption: overlay.playerCaption.photo ? { ...caption, photo: captionPhoto(packs, d, play) } : caption }
           cache.set(playId, v)
         }
@@ -1281,6 +1281,13 @@ export function App() {
                   const names = name ? { ...rest, [key]: name } : rest
                   updateVideo({ ...v, captionNames: Object.keys(names).length ? names : undefined, updatedAt: new Date().toISOString() })
                 }}
+                playerName={dvws[active.matchId] ? packCaption(packs, dvws[active.matchId], activeInfo.ref.play) ?? undefined : undefined}
+                canPlayer={!!(dvws[active.matchId] && playTarget(dvws[active.matchId], activeInfo.ref.play))}
+                onPlayerName={name => {
+                  const d = dvws[active.matchId], tg = d && playTarget(d, activeInfo.ref!.play)
+                  if (tg) void setPlayerCaption(tg, name ?? null).catch(e => setError(String(e)))
+                }}
+                nameChoices={dvws[active.matchId] ? nameChoices(dvws[active.matchId], activeInfo.ref.play) : []}
                 autoLine={dvws[active.matchId] ? captionData(dvws[active.matchId], activeInfo.ref.play, { ...overlay.playerCaption, showSkill: true, showEvaluation: true }).line ?? '' : ''}
                 onChange={o => { const r = latest.current.reel; if (r) updateReel(setOverlayOverride(r, active.id, o)) }}
               />

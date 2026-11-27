@@ -120,6 +120,7 @@ const api: Api = {
   readPackPhoto: (id, photo) => ipcRenderer.invoke('pack:readPhoto', id, photo),
   setPlayerPhoto: target => ipcRenderer.invoke('pack:setPhoto', target),
   removePlayerPhoto: target => ipcRenderer.invoke('pack:removePhoto', target),
+  setPlayerCaption: (target, caption) => ipcRenderer.invoke('pack:setCaption', target, caption),
   usePackPhoto: (id, photo) => ipcRenderer.invoke('pack:usePhoto', id, photo),
   smokeImportPack: path => ipcRenderer.invoke('smoke:importPack', path),
   smokeSetPhoto: (target, path) => ipcRenderer.invoke('smoke:setPhoto', target, path),

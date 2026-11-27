@@ -52,7 +52,7 @@ describe('the skill comparison', () => {
     expect(all(home)).toMatchObject({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'ATTACK ERR%': '', 'RECEPTION#%': '' })
     // Away: its serve error gave no possibility; three attacks after # or + receptions: a kill, an error, one blocked.
     expect(SKILL_ROWS.find(r => r.id === 'possSet')!.format(SKILL_ROWS.find(r => r.id === 'possSet')!.value({ ...home, poss: 3, sets: 2 })!)).toBe('1.50')
-    expect(all(away)).toEqual({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'KILL% #+ REC': '33.3%', 'KILL% -! REC': '', 'TRANSITION KILL%': '', 'ATTACK ERR%': '33.3%', 'BLOCKED%': '33.3%', 'RECEPTION#%': '50.0%' })
+    expect(all(away)).toEqual({ 'POSS%': '0.0%', 'POSSIBILITY/SET': '0.00', 'KILL% #+ REC': '33.3%', 'KILL% -! REC': '', 'TRANSITION KILL%': '', 'ATTACK ERR%': '33.3%', 'BLOCKED%': '33.3%', 'RECEPTION#%': '50.0%', 'SERVICE ACE / MATCH': '0.00', 'BLOCK KILL / MATCH': '0.00' })
   })
   // Possibilities are the team's own (src/internal/README.md): offered only to an account allowed them.
   it('offers the possibility rows only to an account allowed them', () => {
@@ -90,6 +90,8 @@ describe('the skill comparison', () => {
     expect(better(row('err'), home, away)).toBe('a')
     expect(better(row('rec'), home, away)).toBe(null) // the home team has no receptions
     expect(better(row('block'), away, home)).toBe('b')
+    expect(row('blockPerMatch').value(home)).toBe(1) // one block point in one match
+    expect(row('acePerMatch').value(home)).toBe(1)
     expect(better(row('errPts'), home, away)).toBe('a') // fewer points given
   })
 })

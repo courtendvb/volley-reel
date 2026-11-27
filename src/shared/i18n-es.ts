@@ -1600,6 +1600,8 @@ export const ES: Record<string, string> = {
   "サーブミス（=）÷ サーブ": "Errores de saque (=) ÷ saques",
   "レセプションの # と + ÷ レセプション": "Recepciones # y + ÷ recepciones",
   "ブロック得点（#）÷ セット数": "Puntos de bloqueo (#) ÷ sets",
+  "サーブエース（#）÷ 試合数": "Aces (#) ÷ partidos",
+  "ブロック得点（#）÷ 試合数": "Puntos de bloqueo (#) ÷ partidos",
   "チーム比較": "Comparación de equipos",
   "ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ サーブ": "Posibilidades (rallies en que el equipo que sacó consiguió un ataque propio) ÷ saques",
   "ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ セット数": "Posibilidades (rallies en que el equipo que sacó consiguió un ataque propio) ÷ sets",

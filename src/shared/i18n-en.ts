@@ -1604,6 +1604,8 @@ export const EN: Record<string, string> = {
   "サーブミス（=）÷ サーブ": "Serve errors (=) ÷ serves",
   "レセプションの # と + ÷ レセプション": "Receptions # and + ÷ receptions",
   "ブロック得点（#）÷ セット数": "Block points (#) ÷ sets",
+  "サーブエース（#）÷ 試合数": "Aces (#) ÷ matches",
+  "ブロック得点（#）÷ 試合数": "Block points (#) ÷ matches",
   "チーム比較": "Team comparison",
   "ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ サーブ": "Possibilities (rallies where the serving team got an attack of its own) ÷ serves",
   "ポッシビリティー（サーブ側が自分たちのアタックを生み出せたラリー）÷ セット数": "Possibilities (rallies where the serving team got an attack of its own) ÷ sets",

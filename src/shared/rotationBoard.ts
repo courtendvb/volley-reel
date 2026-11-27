@@ -99,6 +99,9 @@ export function rotationSideOut(dvws: ParsedDVW[], team: string, keep?: (p: Play
   return out
 }
 
+// The places' tabs on the court (their name, the share beside it): how much larger than first drawn.
+const LABEL_SCALE = 1.1
+
 // The team's own call groups (src/internal/README.md): CALL A is the sets on the KA and KC calls, CALL B
 // those on KB and KQ, after a # + ! reception (the side-out, as the slide's heading says).
 export const CALL_GROUPS: { title: string; calls: string[]; fill: string }[] = [
@@ -144,7 +147,7 @@ function table(title: string, head: { fill: string; text: string }, sp: SetSplit
 }
 
 // A call group's table at the bottom left: its title on its colour, then N · Pipe and Z2/1 · Quick · Z4,
-// each a label over its share, the places' in their colours. One group. k: its size (1 = as first drawn;
+// each a label over its share, the places' in their colours, all in bold. One group. k: its size (1 = as first drawn;
 // CALL_GROUP_SIZE the range), the type growing with it.
 const GROUP_W = 0.17, GROUP_HEAD = 0.045, GROUP_ROW = 0.04, GROUP_H = GROUP_HEAD + 4 * GROUP_ROW
 export const CALL_GROUP_SIZE = { min: 0.6, max: 1.6, step: 0.1 }
@@ -153,7 +156,7 @@ function callGroupTable(title: string, fill: string, sp: SetSplit, x: number, y:
   const cell = (c: number, top: number, h: number, text: string, o: { fill?: string; color?: string; bold?: boolean; span?: number; size?: number } = {}) => {
     const w = cw * (o.span ?? 1)
     out.push(words(x + c * cw + w / 2, top, text, Math.round((o.size ?? 17) * k), o.color ?? '#475569', {
-      align: 'center', bold: o.bold ?? false, groupId: g,
+      align: 'center', bold: o.bold ?? true, groupId: g,
       box: { fill: o.fill ?? '#FFFFFF', fillOpacity: 1, stroke: '#CBD5E1', strokeWidth: 1, padding: Math.round(4 * k), width: w, height: h },
     }))
   }
@@ -439,14 +442,14 @@ function courtView(so: SetterSet[], formation: FormationSpot[], look: DiscLook, 
   // spaced with the quick in the middle; Pipe straight under the quick, over the far attack line. A
   // tab in the place's colour with its name, the share beside it. Picture points (tuned by hand).
   const LABEL: [SetPlace, [number, number]][] = [['right', [0.163, 0.429]], ['middle', [0.34, 0.429]], ['left', [0.517, 0.429]], ['pipe', [0.34, 0.326]]]
-  const tw = 0.04, nw = 0.056, bh = 0.042
+  const tw = 0.04 * LABEL_SCALE, nw = 0.056 * LABEL_SCALE, bh = 0.042 * LABEL_SCALE
   for (const [k, [cx, cy]] of LABEL) {
     const by = cy - bh / 2
     const x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
-    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
-    out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
-    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 24, '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
-    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], 12, '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
+    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: Math.round(3 * LABEL_SCALE), radius: Math.round(5 * LABEL_SCALE), width: w, height: bh, ...o })
+    out.push(words(x0 + (tw + nw) / 2 + 0.003 * LABEL_SCALE, by + 0.005 * LABEL_SCALE, ' ', Math.round(22 * LABEL_SCALE), '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
+    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), Math.round(24 * LABEL_SCALE), '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
+    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], Math.round(12 * LABEL_SCALE), '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
   }
   for (const u of [0, 1]) {
     const [x, y] = at(u, 0.5)
@@ -469,13 +472,13 @@ function flatNet(out: Annotation[], at: (u: number, v: number) => [number, numbe
   for (const u of [0, 1]) { const p = at(u, 0.5); out.push({ id: uid(), kind: 'polyline', color: '#DC2626', width: 4, points: [[p[0], p[1] - 0.008], [p[0], p[1] + 0.008]], groupId: g, locked: true }) }
   for (const p of [a, b]) out.push({ id: uid(), kind: 'circle', color: '#1E293B', width: 1, x: p[0] - 0.006, y: p[1] - 0.0107, w: 0.012, h: 0.0213, fill: '#475569', fillOpacity: 1, groupId: g, locked: true })
   const LABEL: [SetPlace, TeamPt][] = [['left', { u: -0.34, v: 0.5 }], ['middle', { u: 0.5, v: 0.6 }], ['right', { u: 1.34, v: 0.5 }], ['pipe', { u: 0.5, v: 0.68 }]]
-  const tw = 0.04, nw = 0.056, bh = 0.042
+  const tw = 0.04 * LABEL_SCALE, nw = 0.056 * LABEL_SCALE, bh = 0.042 * LABEL_SCALE
   for (const [k, pt] of LABEL) {
     const [cx, cy] = team(pt), by = cy - bh / 2, x0 = cx - (tw + nw) / 2, gg = uid(), color = PLACE_COLOR[k]!
-    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: 3, radius: 5, width: w, height: bh, ...o })
-    out.push(words(x0 + (tw + nw) / 2 + 0.003, by + 0.005, ' ', 22, '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
-    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), 24, '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
-    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], 12, '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
+    const box = (fill: string, w: number, o: Partial<TextBox> = {}): TextBox => ({ fill, fillOpacity: 1, stroke: null, strokeWidth: 0, padding: Math.round(3 * LABEL_SCALE), radius: Math.round(5 * LABEL_SCALE), width: w, height: bh, ...o })
+    out.push(words(x0 + (tw + nw) / 2 + 0.003 * LABEL_SCALE, by + 0.005 * LABEL_SCALE, ' ', Math.round(22 * LABEL_SCALE), '#000000', { align: 'center', groupId: gg, box: box('#000000', tw + nw, { fillOpacity: 0.3 }) }))
+    out.push(words(x0 + tw + nw / 2, by, pct(sp.by[k].n, total), Math.round(24 * LABEL_SCALE), '#0F172A', { align: 'center', groupId: gg, font: NUMBER_FONT, box: box('#FFFFFF', nw, { stroke: color, strokeWidth: 2 }) }))
+    out.push(words(x0 + tw / 2, by, PLACE_LABEL[k], Math.round(12 * LABEL_SCALE), '#FFFFFF', { align: 'center', groupId: gg, box: box(color, tw) }))
   }
 }
 

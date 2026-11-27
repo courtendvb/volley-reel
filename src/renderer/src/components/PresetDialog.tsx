@@ -29,7 +29,13 @@ const STORE_KEY = 'vr.presetDialog'
 const DEFAULT_MODE: Record<PresetKind, ClipMode> = { sideout: 'toEnd', serve: 'keyplay', block: 'keyplay', attack: 'keyplay' }
 
 const HINTS = (): Record<string, string> => ({
-  'sideout': t('1 つのシーンに、レセプションから相手コートへ返すまでのアタックを入れ、ローテーションをマーカーにします（マーカー 1〜6 がローテ 1〜6、回る順 1→6→5→4→3→2 に再生）。'),
+  'sideout:one': t('1 つのシーンに、レセプションから相手コートへ返すまでのアタックを入れ、ローテーションをマーカーにします（マーカー 1〜6 がローテ 1〜6、回る順 1→6→5→4→3→2 に再生）。'),
+  'sideout:rotation': t('ローテーションごとのシーンに、レセプションから相手コートへ返すまでのアタックを入れます（回る順 1→6→5→4→3→2）。'),
+  'sideoutMarks:reception': t('中はマーカー 1 に良いレセプション（# +）から、2 に悪いレセプション（! - /）からのアタックを入れます。'),
+  'sideoutMarks:target': t('中はトスのターゲットアタッカーで、マーカー 1 に Zone4、2 に Zone3、3 に Zone2/1、4 に Pipe、5 に SD（セッターのツー）を入れます（セット配分と同じ分け方）。トスの記録がないものはマーカーなしで最後に入ります。'),
+  'sideoutMarks:match': t('中は試合ごとにマーカー 1〜6 を付けます（試合の並びの順）。7 試合目からはマーカーなしで最後に入ります。'),
+  'sideoutMarks:call': t('中はトスのセッターコール（K1 など）を本数の多い順にマーカー 1〜6 にします。7 つ目からとコールのないものはマーカーなしで最後に入ります。'),
+  'serve:lineup': t('1 つのシーンに、想定スタメンをマーカーにして並べます。マーカー 1 がローテ 1 でいちばん多くサーブした選手（セッター）、2〜6 がローテ 6・5・4・3・2 でいちばん多くサーブした選手で、それぞれのサーブを全部入れます。ほかの選手のサーブはマーカーなしで最後に入ります。'),
   'serve:rotation': t('サーブした選手ごとのシーンを、いちばん多くサーブしたローテーションの回る順（1→6→5→4→3→2）に並べます。'),
   'serve:count': t('サーブした選手ごとのシーンを、本数の多い順に並べます。'),
   'serve:jersey': t('サーブした選手ごとのシーンを、背番号順に並べます。'),
@@ -112,20 +118,23 @@ export function PresetDialog({ results, scope, targetCode, look, roles, rosterRo
               </div>
             </div>
           ) : seg(kind === 'serve' ? t('選手の並べ方') : t('作り方'), how[kind] as string, v => setHow({ ...how, [kind]: v }), HOW_OPTIONS()[kind] as [string, string][])}
-          {kind === 'serve' && seg(t('マーカーの分け方'), how.serveMarks, v => setHow({ ...how, serveMarks: v }), HOW_OPTIONS().serveMarks)}
+          {kind === 'sideout' && seg(t('作り方'), how.sideout, v => setHow({ ...how, sideout: v }), HOW_OPTIONS().sideout)}
+          {kind === 'sideout' && how.sideout === 'rotation' && seg(t('マーカーの分け方'), how.sideoutMarks, v => setHow({ ...how, sideoutMarks: v }), HOW_OPTIONS().sideoutMarks)}
+          {kind === 'serve' && how.serve !== 'lineup' && seg(t('マーカーの分け方'), how.serveMarks, v => setHow({ ...how, serveMarks: v }), HOW_OPTIONS().serveMarks)}
           {kind === 'block' && how.block === 'middle' && seg(t('マーカーの分け方'), how.blockMarks, v => setHow({ ...how, blockMarks: v }), HOW_OPTIONS().blockMarks)}
           {seg(t('試合の並び'), how.order, v => setHow({ ...how, order: v }), HOW_OPTIONS().order)}
           {seg(t('コートの向き'), dir, setDir, [['all', t('すべて')], ['up', t('↑ 下から上')], ['down', t('↓ 上から下')]])}
           {seg(t('切り出し'), modes[kind], m => setModes({ ...modes, [kind]: m }), [['keyplay', t('プレー前後')], ['toEnd', t('ラリー終わりまで')]])}
         </section>
         <p className="hint">
-          {HINTS()[kind === 'sideout' ? 'sideout' : `${kind}:${how[kind]}${kind === 'block' && how.block === 'middle' && how.blockMarks === 'setter' ? ':setter' : ''}`]}
+          {HINTS()[`${kind}:${how[kind]}${kind === 'block' && how.block === 'middle' && how.blockMarks === 'setter' ? ':setter' : ''}`]}
           {source === 'results' ? t('今の検索結果のうち、このビデオに入るプレーだけを使います。') : t('「検索する試合」で選んでいる試合から集めます。')}
           {dir !== 'all' && t('向きは、サーブ・アタックは打った側から、ブロックは相手側から見ます。')}
           {unknownDir > 0 && t('コートのグリッドを合わせていない試合のプレー {0} 件は、向きが分からないため除いています', unknownDir)}
         </p>
         {kind === 'sideout' && !how.sideoutRec.length && <p className="hint warning">{t('レセプションの評価を 1 つ以上チェックしてください。')}</p>}
-        {kind === 'serve' && <p className="hint">{HINTS()[`serveMarks:${how.serveMarks}`]}</p>}
+        {kind === 'sideout' && how.sideout === 'rotation' && <p className="hint">{HINTS()[`sideoutMarks:${how.sideoutMarks}`]}</p>}
+        {kind === 'serve' && how.serve !== 'lineup' && <p className="hint">{HINTS()[`serveMarks:${how.serveMarks}`]}</p>}
         {kind === 'block' && how.block === 'middle' && how.blockMarks === 'setter' && <p className="hint">{HINTS()['blockMarks:setter']}</p>}
         {how.order === 'new' && <p className="hint">{HINTS()['order:new']}</p>}
         {needRoles && (

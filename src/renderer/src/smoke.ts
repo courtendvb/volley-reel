@@ -63,6 +63,7 @@ export interface SmokeOpts {
   clipMenu?: boolean // a clip's right-click menu: copied and moved to another scene, exported alone (with exportTo)
   look?: boolean // the ☀ picture correction: sliders, the <video>'s filter, saved with the match, exported (with exportTo)
   presetBlock?: boolean // the block preset by middle split by the opposing setter, made with the newest matches first
+  presetSideout?: boolean // side-out by rotation scene with each way of marking, and the serve preset's starting lineup (the dialog left open)
   presetServe?: boolean // the serve preset's two choices: players by count, markers by zone, then in order (the dialog left open)
   presets?: boolean // a preset video made from the dialog, made again, a position set and undone, the video deleted with its scenes, undone and redone
   listRun?: boolean // the list follows on to the next plays (プレー前後)
@@ -167,7 +168,7 @@ export function installSmoke(h: SmokeHost): void {
     if (opts.savedFilters) return smokeSavedFilters(want, res.length)
     if (opts.clipMenu) return smokeClipMenu(opts.exportTo)
     if (opts.look) return smokeLook(res, opts.exportTo)
-    if (opts.presets || opts.presetServe || opts.presetBlock) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : 'all')
+    if (opts.presets || opts.presetServe || opts.presetBlock || opts.presetSideout) return smokePresets(opts.presetServe ? 'serve' : opts.presetBlock ? 'block' : opts.presetSideout ? 'sideout' : 'all')
     if (opts.picker) return smokePicker()
     if (opts.analysis) return smokeAnalysis()
     if (opts.matchReport) return smokeMatchReport()
@@ -2235,7 +2236,7 @@ export function installSmoke(h: SmokeHost): void {
     return { look: { filter, prims, saved, exported } }
   }
 
-  const smokePresets = async (only: 'all' | 'serve' | 'block') => {
+  const smokePresets = async (only: 'all' | 'serve' | 'block' | 'sideout') => {
     const serveOnly = only === 'serve'
     const until = async <T,>(get: () => Promise<T | null>, label: string, ms = 10000): Promise<T> => {
       for (const end = Date.now() + ms; ;) { const v = await get(); if (v) return v; if (Date.now() > end) throw new Error(`timeout waiting for ${label}`); await sleep(100) }
@@ -2276,6 +2277,32 @@ export function installSmoke(h: SmokeHost): void {
         if (byTime.some(r => r.markers.length !== 1 || r.markers[0].n !== r.total)) throw new Error(`time markers: ${JSON.stringify(byTime.slice(0, 3))}`)
         await pick(t('マーカーの分け方'), t('ゾーン別'))
         return { byZone: byZone.slice(0, 4), timeRows: byTime.length, hint: dialog()!.querySelectorAll('.hint')[1]?.textContent }
+      }
+      if (only === 'sideout') {
+        // Side-out: one scene with the rotations as markers, then a scene per rotation marked each
+        // way; serves: the starting lineup as markers.
+        await open()
+        await pick(t('ビデオ'), t('サイドアウト'))
+        await pick(t('作り方'), t('ローテをマーカーに'))
+        const one = await waitFor(() => { const p = preview(); return p.length ? p : null }, 5000, 'preview rows')
+        if (one.length !== 1) throw new Error(`one scene: ${one.length}`)
+        await pick(t('作り方'), t('ローテごとのシーン'))
+        const out: Record<string, unknown> = { one: one[0] }
+        for (const [k, label] of [['reception', t('レセプション別')], ['target', t('ターゲットアタッカー別')], ['match', t('試合別')], ['call', t('セッターコール別')]]) {
+          await pick(t('マーカーの分け方'), label)
+          const rows = preview()
+          if (rows.map(r => r.title).join() !== [1, 6, 5, 4, 3, 2].map(n => t('ローテ {0}', n)).join()) throw new Error(`rotation scenes: ${rows.map(r => r.title).join()}`)
+          if (rows.reduce((n, r) => n + r.total, 0) !== one[0].total) throw new Error(`${k}: ${rows.reduce((n, r) => n + r.total, 0)} vs ${one[0].total}`)
+          if (!rows.some(r => r.markers.length)) throw new Error(`${k}: no markers`)
+          out[k] = rows.slice(0, 2)
+          await api.smokeShot!(`preset-sideout-${k}.png`)
+        }
+        await pick(t('ビデオ'), t('サーブ'))
+        await pick(t('選手の並べ方'), t('スタメン'))
+        const lineup = preview()
+        if (lineup.length !== 1 || lineup[0].markers.length !== 6) throw new Error(`lineup: ${JSON.stringify(lineup)}`)
+        await api.smokeShot!('preset-serve-lineup.png')
+        return { ...out, lineup: lineup[0] }
       }
       if (only === 'block') {
         // Middles by reception, then by the opposing setter: fewer attacks (good receptions only),

@@ -74,10 +74,12 @@ export const SKILL_ROWS: SkillRow[] = [
   // The team's serve index: each serve weighed by its evaluation (SERVE_WEIGHTS), per serve.
   { id: 'serveIndex', label: 'SERVE INDEX', value: c => ratio(c.serveWeight, c.serve), format: v => v.toFixed(3), higher: true, title: '（# × 1 ＋ / × 0.752 ＋ + × 0.455 ＋ ! × 0.344 ＋ - × 0.281）÷ サーブ' },
   { id: 'ace', label: 'SERVICE ACE%', value: c => ratio(c.ace, c.serve), format: pct, higher: true, title: 'サーブエース（#）÷ サーブ' },
+  { id: 'acePerMatch', label: 'SERVICE ACE / MATCH', value: c => ratio(c.ace, c.matches), format: v => v.toFixed(2), higher: true, title: 'サーブエース（#）÷ 試合数' },
   { id: 'err', label: 'SERVICE ERR%', value: c => ratio(c.serveErr, c.serve), format: pct, higher: false, title: 'サーブミス（=）÷ サーブ' },
   { id: 'rec', label: 'RECEPTION#+%', value: c => ratio(c.recPos, c.rec), format: pct, higher: true, title: 'レセプションの # と + ÷ レセプション' },
   { id: 'recExc', label: 'RECEPTION#%', value: c => ratio(c.recExc, c.rec), format: pct, higher: true, title: 'レセプションの # ÷ レセプション' },
   { id: 'block', label: 'BLOCK PTS/SET', value: c => ratio(c.blockPts, c.sets), format: v => v.toFixed(2), higher: true, title: 'ブロック得点（#）÷ セット数' },
+  { id: 'blockPerMatch', label: 'BLOCK KILL / MATCH', value: c => ratio(c.blockPts, c.matches), format: v => v.toFixed(2), higher: true, title: 'ブロック得点（#）÷ 試合数' },
   { id: 'errPts', label: 'ERR PTS/SET', value: c => ratio(c.errPts, c.sets), format: v => v.toFixed(2), higher: false, title: '自チームのミスで相手に入った点 ÷ セット数（相手が得点のプレーなしで取ったラリー。サーブ・アタック・ブロック・セットのミスや反則。レセプションミスと被ブロックは相手のエース・ブロック得点なので入れない）' },
 ]
 // What a slide shows unless other rows are picked: the rows it always had.

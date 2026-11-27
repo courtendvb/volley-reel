@@ -14,6 +14,10 @@ import { t } from './i18n'
 export const MIN_N = 10
 export const MIN_HITS = 5
 export const MIN_LIFT = 0.12
+// How much a choice made after a poor reception (!-) counts when habits are ranked: the setter sets
+// to whoever can be set more than to whom they would, so it says less of a choice.
+export const POOR_WEIGHT = 0.5
+export const isPoorPass = (e: string | null | undefined) => e === '!' || e === '-' || e === '/'
 export const ALPHA = 0.2
 export const MAX_P = 0.01
 // With the league to set beside: how far past the league's shift in the same situation a habit must go.
@@ -88,5 +92,8 @@ export const rallyKey = (r: PlayRef): string | null => (r.play.rallyId === null 
 
 // A serve's zone as serveZoneMarker gives it (1 Zone1, 2 Zone6, 3 Zone5, 4 short), as scenes name it.
 export const SERVE_ZONE = (): Record<number, string> => ({ 1: 'Zone1', 2: 'Zone6', 3: 'Zone5', 4: t('ショート') })
+// The court zones of each: a serve's marker (short: the whole front row), a place a setter sets to.
+export const SERVE_ZONES: Record<number, number[]> = { 1: [1], 2: [6], 3: [5], 4: [2, 3, 4] }
+export const TARGET_ZONES: Record<string, number[]> = { left: [4], middle: [3], right: [2, 1], pipe: [6], dump: [] }
 // A serve's kind as its type letter tells it: jump spin (Q), jump float (M), float (H).
 export const serveKind = (type: string): string => ({ Q: t('ジャンプサーブ'), M: t('ジャンプフローター'), H: t('フローター') })[type] ?? tempoName(type)

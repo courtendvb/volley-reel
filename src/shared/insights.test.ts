@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_P, binomTail, cleanVideoInsight, findInsights, leagueOf, inFocus, insightReels, isClutch, rankOf, sureOf, refindInsights, videoInsight, zScore, type Insight, type InsightOrder } from './insights'
 import type { PlayRef } from './filter'
+import { getLang, inLang } from './i18n'
 import type { Play } from './types'
 
 let id = 0, rally = 0
@@ -67,6 +68,63 @@ describe('insights', () => {
     expect(found.find(i => i.key === 'share|rot5poor|opp|opp10')!.headline).toBe('ローテ 5・レセプション !- のサイドアウトは #10 N10 が 83%')
     // The rotation as a whole goes to neither.
     expect(found.some(i => i.subject === 'share|rot5')).toBe(false)
+    // The poor reception's habit is ranked lower.
+    expect(found.find(i => i.key === 'share|rot5poor|opp|opp10')!.weight).toBe(0.5)
+    expect(good.weight).toBeUndefined()
+  })
+
+  it("tells a rotation's side-out as a whole only when its good receptions lean the same way", () => {
+    // Rotation 5 goes to #10 as a whole, from the poor receptions alone in the first; on #+ too in the second.
+    const so = (jersey: number, rot: number, recEffect: string) => ref({ skill: 'A', jersey, rot, phase: 'r', recEffect })
+    const rest = [1, 6, 4, 3, 2].flatMap(rot => ['#', '-'].flatMap(e => [...times(4, () => so(9, rot, e)), ...times(2, () => so(10, rot, e))]))
+    const whole = (scope: PlayRef[]) => findInsights(scope, 'opp', noWon, 50).find(i => i.subject === 'share|rot5')
+    expect(whole([...times(8, () => so(9, 5, '#')), ...times(4, () => so(10, 5, '#')), ...times(24, () => so(10, 5, '-')), ...rest])).toBeUndefined()
+    expect(whole([...times(4, () => so(9, 5, '#')), ...times(10, () => so(10, 5, '#')), ...times(20, () => so(10, 5, '-')), ...rest])?.key).toBe('share|rot5|opp|opp10')
+  })
+
+  it('finds a place a setter all but stops setting to', () => {
+    // In the front row on a perfect pass #1 never goes to Zone2/1; elsewhere a third of the time or so.
+    const plays: PlayRef[] = []
+    const set = (rot: number, pass: string, z4: number, z3: number, z2: number) => {
+      for (const [z, n] of [[4, z4], [3, z3], [2, z2]]) for (let i = 0; i < n; i++) {
+        const r = rally++
+        plays.push(ref({ skill: 'E', jersey: 1, rot, phase: 'r', recEffect: pass, rally: r }), ref({ skill: 'A', jersey: 10 + z, start: z, rot, phase: 'r', recEffect: pass, rally: r }))
+      }
+    }
+    for (const rot of [2, 3, 4]) { set(rot, '#', 4, 3, 0); set(rot, '-', 2, 3, 2) }
+    for (const rot of [1, 6, 5]) { set(rot, '#', 2, 3, 2); set(rot, '-', 2, 3, 2) }
+    const low = findInsights(plays, 'opp', noWon, 50).filter(i => i.kind === 'setDist' && i.key.endsWith('|low'))
+    const none = low.find(i => i.key.includes('row=front&pass=#'))!
+    expect(none.headline).toBe('#1 N1 は自分が前衛・レセプション「#」のとき Zone2/1 へ 0%')
+    expect(none.detail).toMatch(/^21 本中 0 本（ふだんは \d+%）$/)
+    expect(none.refs).toHaveLength(21)
+    expect(none.others).toEqual([])
+    expect(none.low).toBe(true)
+    expect(none.paint).toEqual({ zones: [2, 1], side: 'own' })
+    expect(none.weight).toBeUndefined()
+    // After a poor reception a setter's choice counts less.
+    expect(findInsights(plays, 'opp', noWon, 50).filter(i => i.kind === 'setDist' && /pass=-/.test(i.key)).every(i => i.weight === 0.5)).toBe(true)
+    // A side of two (the front row alone) is not told low: that is the back row's high.
+    expect(low.some(i => i.key.includes('|row=front|'))).toBe(false)
+  })
+
+  it('finds an attacker in the front row the side-out hardly goes to', () => {
+    // Rotation 1: #11 is in the front row but gets 0 of 20; in the other rotations each gets a third.
+    const plays: PlayRef[] = []
+    const so = (jersey: number, rot: number, front: number[]) => {
+      const r = ref({ skill: 'A', jersey, rot, phase: 'r', recEffect: '+' })
+      ;(r.play as { front?: string[] }).front = front.map(j => `opp${j}`)
+      plays.push(r)
+    }
+    for (let i = 0; i < 10; i++) { so(9, 1, [9, 10, 11]); so(10, 1, [9, 10, 11]) }
+    for (const rot of [6, 5, 4, 3, 2]) for (let i = 0; i < 4; i++) for (const j of [9, 10, 11]) so(j, rot, [9, 10, 11])
+    const low = findInsights(plays, 'opp', noWon, 50).filter(i => i.kind === 'share' && i.key.endsWith('|low'))
+    const r1 = low.find(i => i.key === 'share|rot1|opp|opp11|low')!
+    expect(r1.headline).toBe('ローテ 1 のサイドアウトは #11 N11 が 0%')
+    expect(r1.mark).toBe('#11 N11 以外')
+    // Not in the front row: no habit, only where the player stands.
+    for (const p of plays) if (p.play.jersey !== 11 && p.oppRot === 1) (p.play as { front?: string[] }).front = ['opp9', 'opp10']
+    expect(findInsights(plays, 'opp', noWon, 50).some(i => i.key === 'share|rot1|opp|opp11|low')).toBe(false)
   })
 
   it('leaves out a habit seen in too few plays', () => {
@@ -184,25 +242,31 @@ describe('insights', () => {
     expect(z4.headline).toBe('相手の Zone4 からのアタックは#15 N15 が前衛のとき 決定率が 24% に落ちる')
     expect(z4.detail).toBe('21 本中 5 本（#15 N15 が後衛のときは 62%・26 本中 16 本）')
     expect(z4.refs.every(r => r.play.effect !== '#')).toBe(true)
+    expect(z4.low).toBe(true)
+    expect(z4.paint).toEqual({ zones: [4], side: 'own' })
     const z3 = found.find(i => i.subject.startsWith('blockFront|our10|') && i.headline.includes('Zone3'))!
     expect(z3.headline).toBe('相手の Zone3 からのアタックは#10 N10 が前衛のとき 決定率 91%')
     expect(z3.detail).toBe('11 本中 10 本（#10 N10 が後衛のときは 48%・21 本中 10 本）')
+    expect(z3.low).toBeUndefined()
     expect(found.some(i => i.headline.includes('後衛のとき'))).toBe(false)
   })
 
   it('finds where a server breaks', () => {
     // #12 breaks on 16 of 20 to Zone1, on 4 of 20 to Zone5: half the serves overall, as the team.
+    // Each zone is set against the other zones; neither is told from the other zones' side.
     const serves: PlayRef[] = [], won = new Map<number, '*' | 'a'>()
     const serve = (end: number, n: number, breaks: number) => { for (let i = 0; i < n; i++) { const r = rally++; serves.push(ref({ skill: 'S', jersey: 12, end, rally: r })); won.set(r, i < breaks ? 'a' : '*') } }
     serve(1, 20, 16); serve(5, 20, 4)
     const byRally = (r: PlayRef) => (r.play.rallyId === null ? null : won.get(r.play.rallyId) ?? null)
     const found = findInsights(serves, 'opp', byRally, 50).filter(i => i.subject.startsWith('serverBreak|opp|opp12|zone'))
-    const up = found.find(i => i.key.endsWith('zone=1|won'))!
+    const up = found.find(i => i.key.endsWith('z1=in|won'))!
     expect(up.headline).toBe('#12 N12 のサーブはZone1 へのサーブのとき ブレイク率 80%')
-    expect(up.detail).toBe('20 本中 16 本（ふだんは 50%）')
-    const down = found.find(i => i.key.endsWith('zone=3|!won'))!
+    expect(up.detail).toBe('20 本中 16 本（ほかのゾーンへのサーブのときは 20%・20 本中 4 本）')
+    const down = found.find(i => i.key.endsWith('z3=in|!won'))!
     expect(down.headline).toBe('#12 N12 のサーブはZone5 へのサーブのとき ブレイク率が 20% に落ちる')
     expect(down.refs).toHaveLength(16)
+    expect(found.some(i => i.headline.includes('ほかのゾーン'))).toBe(false)
+    expect(up.maxP).toBe(0.1)
     // The server as a whole breaks as the team does.
     expect(findInsights(serves, 'opp', byRally, 50).some(i => i.subject === 'serverBreak|opp|opp12')).toBe(false)
   })
@@ -234,6 +298,13 @@ describe('insights', () => {
     expect(seven.refs.every(r => r.play.skill === 'R')).toBe(true)
     expect(so.map(i => i.person)).not.toContain('opp|opp5')
     expect(so.map(i => i.person)).not.toContain('opp|opp8')
+
+    // A gap of 10 points is told (the set and the attack come after the reception); one of 5 is not.
+    recs.length = 0; out.clear()
+    face(22, 1, 100, 60); face(22, 2, 100, 60); face(22, 3, 100, 60); face(22, 4, 200, 144); face(22, 10, 200, 130)
+    const near = findInsights(recs, 'opp', r => (r.play.rallyId === null ? null : out.get(r.play.rallyId) ?? null)).filter(i => i.kind === 'receiverSO')
+    expect(near.map(i => i.person)).toContain('opp|opp4')
+    expect(near.map(i => i.person)).not.toContain('opp|opp10')
   })
 
   it('finds whether a setter goes back to the attacker who just scored', () => {
@@ -285,7 +356,7 @@ describe('insights', () => {
     }
     const league = leagueOf([1, 2, 3].map(j => ({ scope: sets('our', j, [20, 20, 20], [32, 8]), look: { wonBy: noWon } })), 6)
     expect(league.shift.get('setDist|pass=-|left')?.d).toBeCloseTo(0.28)
-    const poorPass = (l: Insight[]) => l.filter(i => i.kind === 'setDist' && i.key.includes('|pass=-|'))
+    const poorPass = (l: Insight[]) => l.filter(i => i.kind === 'setDist' && i.key.includes('|pass=-|') && !i.key.endsWith('|low'))
     // A setter like the league's: a habit on its own, none beside the league.
     const usual = sets('opp', 7, [20, 20, 20], [32, 8])
     expect(poorPass(findInsights(usual, 'opp', noWon)).map(i => i.headline)).toEqual(['#7 N7 はレセプション「-」のとき Zone4 へ 80%'])
@@ -356,7 +427,7 @@ describe('insights', () => {
   })
 
   it('makes a scene per insight with its numbers on the title card', () => {
-    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r' })
+    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r', recEffect: '#' })
     const scope = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...times(20, () => so(10, 2)), ...times(5, () => so(9, 2))]
     const [top] = findInsights(scope, 'opp', noWon)
     const [plain] = insightReels([top], { mode: 'keyplay', limit: 5, withOthers: false, prefix: 'OPP', order: 'new' })
@@ -369,6 +440,50 @@ describe('insights', () => {
     expect(both.groups[1]).toHaveLength(top.refs.length)
     expect(both.groups[2]).toHaveLength(top.others.length)
     expect(both.markerNames[2]).toBe('それ以外')
+    // Every clip has the habit as its headline, with which way it goes.
+    expect(plain.annotations).toHaveLength(1)
+    expect(plain.annotations![0]).toMatchObject({ kind: 'text', quick: true, align: 'center', text: `↑ ${top.headline}` })
+  })
+
+  it('words the habits in the language chosen for the headlines, the same habits', () => {
+    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r', recEffect: '#' })
+    const scope = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...times(20, () => so(10, 2)), ...times(5, () => so(9, 2))]
+    const ja = findInsights(scope, 'opp', noWon)
+    const vi = videoInsight('opp', ja, { mode: 'keyplay', limit: null, withOthers: false, prefix: '', order: 'old', lang: 'en' })
+    expect(cleanVideoInsight(JSON.parse(JSON.stringify(vi)))!.lang).toBe('en')
+    expect(cleanVideoInsight({ ...vi, lang: 'fr' })!.lang).toBeUndefined()
+    for (const l of ['en', 'es'] as const) {
+      const [r] = inLang(l, () => insightReels(refindInsights(scope, vi, noWon).insights, vi))
+      expect(r.annotations![0]).toMatchObject({ kind: 'text' })
+      const text = (r.annotations![0] as { text: string }).text
+      expect(text).not.toMatch(/[ぁ-んァ-ン]/)
+      expect(r.groups[1]).toHaveLength(ja[0].refs.length)
+    }
+    expect(getLang()).toBe('ja')
+  })
+
+  it('paints the zone a habit is about on each clip, red above usual and blue below', () => {
+    // #9 hits from Zone4 to Zone5 11 times in 12; the others spread out.
+    const habit = times(12, i => ref({ skill: 'A', jersey: 9, start: 4, end: i < 11 ? 5 : 1, phase: 't' }))
+    const plain = times(36, i => ref({ skill: 'A', jersey: 11, start: 4, end: [1, 5, 6][i % 3], phase: 't' }))
+    const found = findInsights([...habit, ...plain], 'opp', noWon, 50)
+    const up = found.find(i => i.key === 'zone|opp|opp9|4|5')!
+    expect(up.low).toBeUndefined()
+    expect(up.paint).toEqual({ zones: [5], side: 'other' })
+    const fit = { corners: [{ x: 0.36, y: 0.28 }, { x: 0.64, y: 0.28 }, { x: 0.14, y: 0.9 }, { x: 0.86, y: 0.9 }] as [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }], nearSet1: '*' as const }
+    const [r] = insightReels([up], { mode: 'keyplay', limit: null, withOthers: false, prefix: '', order: 'old' }, undefined, Math.random, { courtOf: () => fit })
+    const clip = r.clips[r.groups[1][0]]
+    // The attack is the other team's (a), set 1: they are far, so Zone5 is painted on the near half.
+    expect(clip.annotations).toHaveLength(1)
+    expect(clip.annotations[0]).toMatchObject({ kind: 'polygon', fill: '#DC2626', cell: { row: 5, col: 0, div: 3 } })
+    // Without a fitted court nothing is painted.
+    const [bare] = insightReels([up], { mode: 'keyplay', limit: null, withOthers: false, prefix: '', order: 'old' })
+    expect(bare.clips[bare.groups[1][0]].annotations).toEqual([])
+    // A habit of less: blue, its headline with ↓.
+    const low = { ...up, low: true }
+    const [down] = insightReels([low], { mode: 'keyplay', limit: null, withOthers: false, prefix: '', order: 'old' }, undefined, Math.random, { courtOf: () => fit })
+    expect(down.clips[down.groups[1][0]].annotations[0]).toMatchObject({ fill: '#2563EB' })
+    expect(down.annotations![0]).toMatchObject({ text: `↓ ${up.headline}` })
   })
 
   it('lays out a scene newest first, oldest first or at random from the matches in turn', () => {
@@ -397,7 +512,7 @@ describe('insights', () => {
   })
 
   it('finds the habits of a video again by subject, as the matches have them now', () => {
-    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r' })
+    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r', recEffect: '#' })
     const rest = [6, 5, 4, 3, 2].flatMap(rot => [...times(2, () => so(9, rot)), ...times(6, () => so(10, rot))])
     const before = [...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...rest]
     const rot1 = findInsights(before, 'opp', noWon).find(i => i.subject === 'share|rot1')!
@@ -423,7 +538,7 @@ describe('insights', () => {
   })
 
   it('looks at the skills and players asked for only', () => {
-    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r' })
+    const so = (jersey: number, rot: number) => ref({ skill: 'A', jersey, rot, phase: 'r', recEffect: '#' })
     // Rotation 1 goes to #9, rotation 2 to #10; #12 serves Zone1; rotation 4 can't side out.
     const scope = [
       ...times(14, () => so(9, 1)), ...times(1, () => so(10, 1)), ...times(14, () => so(10, 2)), ...times(1, () => so(9, 2)),

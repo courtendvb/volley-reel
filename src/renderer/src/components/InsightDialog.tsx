@@ -6,7 +6,7 @@ import type { LeagueStatus } from '../app/useLeague'
 import { personOf, playerLabel } from '../../../shared/rotationSplit'
 import { skillName } from '../../../shared/labels'
 import { CheckPicker } from './CheckPicker'
-import { t } from '../../../shared/i18n'
+import { LANGS, getLang, isLang, t, type Lang } from '../../../shared/i18n'
 
 // What the dialog makes: the habits picked, in the order shown, and how their scenes are cut.
 export interface InsightChoice extends InsightReelOptions { team: 'our' | 'opp'; insights: Insight[]; name: string; focus: InsightFocus; league: boolean }
@@ -30,9 +30,12 @@ const FIRST_PICKED = 8
 const team = 'our'
 
 // The players picked are not kept: they belong to the project open.
-interface Kept { limit: number | null; withOthers: boolean; mode: ClipMode; skills: InsightSkill[]; order: InsightOrder; useLeague: boolean }
+// The headlines' languages offered: the interface's, and English beside it (an English interface: English only).
+const headlineLangs = (): Lang[] => (getLang() === 'en' ? ['en'] : [getLang(), 'en'])
+
+interface Kept { limit: number | null; withOthers: boolean; mode: ClipMode; skills: InsightSkill[]; order: InsightOrder; useLeague: boolean; lang: Lang }
 function readKept(): Kept {
-  const d: Kept = { limit: 10, withOthers: false, mode: 'keyplay', skills: [], order: 'random', useLeague: true }
+  const d: Kept = { limit: 10, withOthers: false, mode: 'keyplay', skills: [], order: 'random', useLeague: true, lang: getLang() }
   try {
     const o = JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null') as Partial<Kept> | null
     if (!o) return d
@@ -43,6 +46,7 @@ function readKept(): Kept {
       skills: Array.isArray(o.skills) ? INSIGHT_SKILLS.filter(k => o.skills!.includes(k)) : [],
       order: INSIGHT_ORDERS.includes(o.order as InsightOrder) ? o.order as InsightOrder : d.order,
       useLeague: o.useLeague !== false,
+      lang: isLang(o.lang) && headlineLangs().includes(o.lang) ? o.lang : d.lang,
     }
   } catch { return d }
 }
@@ -63,9 +67,10 @@ export function InsightDialog({ scope, targetCode, look, league, leagueStatus, o
   const [mode, setMode] = useState<ClipMode>(start.mode)
   const [skills, setSkills] = useState<InsightSkill[]>(start.skills)
   const [order, setOrder] = useState<InsightOrder>(start.order)
+  const [lang, setLang] = useState<Lang>(start.lang)
   const [useLeague, setUseLeague] = useState(start.useLeague)
   const [persons, setPersons] = useState<string[]>([])
-  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ limit, withOthers, mode, skills, order, useLeague })) } catch { /* not kept */ } }, [limit, withOthers, mode, skills, order, useLeague])
+  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ limit, withOthers, mode, skills, order, useLeague, lang })) } catch { /* not kept */ } }, [limit, withOthers, mode, skills, order, useLeague, lang])
 
   // The team's players who made a set, serve, reception or attack, by jersey.
   const people = useMemo(() => {
@@ -135,6 +140,7 @@ export function InsightDialog({ scope, targetCode, look, league, leagueStatus, o
             {useLeague && <span className="muted">{leagueStatus === 'loading' ? t('リーグの試合を読み込んでいます…') : leagueStatus === 'ready' && league ? t('{0} チーム・{1} 試合の平均', league.teams, league.matches) : leagueStatus === 'none' ? t('比べられるほかのチームの試合がライブラリにありません') : ''}</span>}
           </div>
           {seg(t('並び順'), order, setOrder, [['random', t('ランダム')], ['new', t('新しい順')], ['old', t('古い順')]])}
+          {headlineLangs().length > 1 && seg(t('見出しの言語'), lang, setLang, headlineLangs().map(id => [id, LANGS.find(l => l.id === id)!.name] as [Lang, string]))}
           {seg(t('切り出し'), mode, setMode, [['keyplay', t('プレー前後')], ['toEnd', t('ラリー終わりまで')]])}
           <div className="filter-row">
             <span className="field-label" />
@@ -151,7 +157,7 @@ export function InsightDialog({ scope, targetCode, look, league, leagueStatus, o
                 <input type="checkbox" checked={picked.has(i.key)} onChange={() => toggle(i.key)} />
                 <span className="insight-kind">{insightKindName(i.kind)}</span>
                 <span className="insight-text">
-                  <b>{i.headline}</b>
+                  <b><span className={`insight-dir ${i.low ? 'down' : 'up'}`} title={i.low ? t('低い傾向') : t('高い傾向')}>{i.low ? '↓' : '↑'}</span>{i.headline}</b>
                   <span className="muted">{i.detail}</span>
                 </span>
                 <span className={`insight-sure l${s.level}`} title={t('偏りの確かさ（z = {0}）', Math.abs(i.z).toFixed(1))}><i /><i /><i />{s.word}</span>
@@ -162,7 +168,7 @@ export function InsightDialog({ scope, targetCode, look, league, leagueStatus, o
         <p className="hint">{chosen.length ? t('{0} シーン・{1} 本で、新しい動画「{2}」を作ります。', chosen.length, clips, name) : t('作る傾向を 1 つ以上チェックしてください。')}</p>
         <div className="modal-actions">
           <button onClick={onClose}>{t('キャンセル')}</button>
-          <button className="primary" disabled={!chosen.length} onClick={() => onMake({ team, focus, insights: chosen, name, mode, limit, withOthers, prefix: who, order, league: setBeside })}>{t('作る')}</button>
+          <button className="primary" disabled={!chosen.length} onClick={() => onMake({ team, focus, insights: chosen, name, mode, limit, withOthers, prefix: who, order, lang, league: setBeside })}>{t('作る')}</button>
         </div>
       </div>
     </div>

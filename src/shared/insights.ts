@@ -19,9 +19,11 @@ import type { PlayRef } from './filter'
 import { MARKERS, addClips, newReel, type ClipMode, type Marker, type Reel } from './reel'
 import { personOf, playerLabel, rotationOf, type WonBy } from './rotationSplit'
 import { orderByMatch, serveZoneMarker } from './presets'
-import { t } from './i18n'
+import { isLang, t, type Lang } from './i18n'
+import { DEFAULT_TEXT_BOX, HEADLINE_SIZE, type Annotation, type HeadlineStyle } from './annotation'
+import { nearSide, zoneCell, zoneCellQuad, type CourtFit } from './courtGeometry'
 import { situationInsights, type InsightLookups } from './insightSituations'
-import { MIN_N, MIN_LIFT, ALPHA, MAX_P, binomTail, groupBy, normalTail, pct, rallyKey, tally, worth, zScore, isClutch, SERVE_ZONE, serveKind, type Tally } from './insightStats'
+import { MIN_N, MIN_LIFT, ALPHA, MAX_P, binomTail, groupBy, normalTail, pct, rallyKey, tally, worth, zScore, isClutch, isPoorPass, POOR_WEIGHT, SERVE_ZONE, SERVE_ZONES, serveKind, type Tally } from './insightStats'
 
 export type { InsightLookups, League } from './insightSituations'
 export { leagueOf, LEAGUE_TEAMS } from './insightSituations'
@@ -46,14 +48,21 @@ export interface Insight {
   p: number // the chance of a share this far from the base by luck alone (exact binomial, one-sided)
   adjP: number // p against the situations its kind looked at (Benjamini–Hochberg): how sure it is, all told
   league?: number // how much the league's teams move the same way in the same situation (none: not set beside it)
+  maxP?: number // kept by p up to this, past MAX_P (a kind kept on less)
+  low?: boolean // the number shown is below what it is set against (↓); else above it (↑)
+  paint?: InsightPaint // the court zones it is about, painted on its clips
+  weight?: number // its rank weighted by this too (POOR_WEIGHT: a choice after a poor reception)
   refs: PlayRef[] // the plays that show the habit, in the order played
   others: PlayRef[] // the rest of the situation's plays
 }
 
-interface Found { key: string; subject: string; person: string | null; kind: InsightKind; headline: (share: string) => string; detail: (n: number, hits: number, base: string) => string; mark: string; refs: PlayRef[]; others: PlayRef[]; base: number }
+// The zones a habit is about, on the half of the team that made the clip's play (own) or the other's.
+export interface InsightPaint { zones: number[]; side: 'own' | 'other' }
+
+interface Found { key: string; subject: string; person: string | null; kind: InsightKind; headline: (share: string) => string; detail: (n: number, hits: number, base: string) => string; mark: string; refs: PlayRef[]; others: PlayRef[]; base: number; low?: boolean; paint?: InsightPaint; weight?: number }
 const make = (f: Found): Insight => {
   const n = f.refs.length + f.others.length, hits = f.refs.length, share = n ? hits / n : 0, p = binomTail(hits, n, f.base)
-  return { key: f.key, subject: f.subject, person: f.person, kind: f.kind, headline: f.headline(pct(share)), detail: f.detail(n, hits, pct(f.base)), mark: f.mark, n, hits, share, base: f.base, z: zScore(hits, n, f.base), p, adjP: p, refs: f.refs, others: f.others }
+  return { key: f.key, subject: f.subject, person: f.person, kind: f.kind, headline: f.headline(pct(share)), detail: f.detail(n, hits, pct(f.base)), mark: f.mark, n, hits, share, base: f.base, z: zScore(hits, n, f.base), p, adjP: p, refs: f.refs, others: f.others, ...(f.low ? { low: true } : {}), ...(f.paint?.zones.length ? { paint: f.paint } : {}), ...(f.weight ? { weight: f.weight } : {}) }
 }
 const detailAll = (n: number, hits: number, base: string) => t('{0} 本中 {1} 本（チーム全体では {2}）', n, hits, base)
 
@@ -75,12 +84,47 @@ function tendencies<K>(s: Tally, kind: InsightKind, ctx: PlayRef[], base: PlayRe
   return out
 }
 
+// The other way: each outcome of the base hardly ever seen in the situation (none at all too), with
+// its share well below the base's. ok: an outcome that could have been (an attacker in the front row).
+// The scenes are the situation's other plays.
+function lows<K>(s: Tally, kind: InsightKind, ctx: PlayRef[], base: PlayRef[], outcome: (r: PlayRef) => K | null, ok: (k: K, known: PlayRef[]) => boolean, found: (k: K, refs: PlayRef[], elsewhere: PlayRef[], share0: number, one: PlayRef) => Found | null): Insight[] {
+  const known = ctx.filter(r => outcome(r) !== null), baseKnown = base.filter(r => outcome(r) !== null)
+  if (known.length < MIN_N || !baseKnown.length) return []
+  const byK = groupBy(baseKnown, r => outcome(r)!)
+  tally(s, kind, byK.size)
+  const out: Insight[] = []
+  for (const [k, theirs] of byK) {
+    const refs = known.filter(r => outcome(r) === k), share0 = theirs.length / baseKnown.length
+    if (!worth(refs.length, known.length, share0, false) || !ok(k, known)) continue
+    const f = found(k, refs, known.filter(r => outcome(r) !== k), share0, theirs[0])
+    if (!f) continue
+    const n = known.length, hits = refs.length, share = hits / n, p = binomTail(hits, n, share0, false)
+    out.push({ key: f.key, subject: f.subject, person: f.person, kind: f.kind, headline: f.headline(pct(share)), detail: f.detail(n, hits, pct(share0)), mark: f.mark, n, hits, share, base: share0, z: zScore(hits, n, share0), p, adjP: p, refs: f.refs, others: f.others, low: true, ...(f.paint?.zones.length ? { paint: f.paint } : {}), ...(f.weight ? { weight: f.weight } : {}) })
+  }
+  return out
+}
+// An attacker in the front row in nearly all of the situation's plays: one who could have been set.
+const frontIn = (who: string, known: PlayRef[]) => {
+  const key = who.split('|').slice(1).join('|'), told = known.filter(r => r.play.front)
+  return told.length >= known.length * 0.8 && told.filter(r => r.play.front!.includes(key)).length >= told.length * 0.8
+}
+
 // Who the attacks go to: in each rotation's side-out, after a good and a poor reception, in
 // transition and at the end of a close set, against the team's attacks of that phase.
 function shareInsights(s: Tally, attacks: PlayRef[]): Insight[] {
   const so = attacks.filter(r => r.play.phase === 'r')
   const good = (r: PlayRef) => r.play.recEffect === '#' || r.play.recEffect === '+'
-  const poor = (r: PlayRef) => r.play.recEffect === '!' || r.play.recEffect === '-' || r.play.recEffect === '/'
+  const poor = (r: PlayRef) => isPoorPass(r.play.recEffect)
+  // A rotation's habit as a whole shows only when its good receptions (#+) lean the same way: else
+  // it is the poor ones, where the setter sets to whoever can be set.
+  const goodIn = new Map([1, 6, 5, 4, 3, 2].map(rot => [`rot${rot}`, so.filter(r => rotationOf(r) === rot && good(r))]))
+  const leans = (id: string, who: string, b: number, up: boolean) => {
+    const g = goodIn.get(id)
+    if (!g) return true
+    if (g.length < MIN_N) return false
+    const sh = g.filter(r => personOf(r) === who).length / g.length
+    return up ? sh - b >= MIN_LIFT : b - sh >= MIN_LIFT
+  }
   const situations: [string, string, PlayRef[], PlayRef[]][] = [
     ...[1, 6, 5, 4, 3, 2].map((rot): [string, string, PlayRef[], PlayRef[]] => [`rot${rot}`, t('ローテ {0} のサイドアウト', rot), so.filter(r => rotationOf(r) === rot), so]),
     ['good', t('良いレセプションからの攻撃'), so.filter(good), so],
@@ -88,8 +132,8 @@ function shareInsights(s: Tally, attacks: PlayRef[]): Insight[] {
     ['trans', t('トランジションの攻撃'), attacks.filter(r => r.play.phase === 't'), attacks],
     ['clutch', t('終盤の接戦の攻撃'), attacks.filter(r => isClutch(r.play)), attacks],
   ]
-  const whole = situations.flatMap(([id, label, ctx, base]) => tendencies(s, 'share', ctx, base, personOf, (who, refs, others, b) => make({
-    key: `share|${id}|${who}`, subject: `share|${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]),
+  const whole = situations.flatMap(([id, label, ctx, base]) => tendencies(s, 'share', ctx, base, personOf, (who, refs, others, b) => !leans(id, who, b, true) ? null : make({
+    key: `share|${id}|${who}`, subject: `share|${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]), ...(id === 'poor' ? { weight: POOR_WEIGHT } : {}),
     headline: sh => t('{0}は {1} が {2}', label, playerLabel(refs[0]), sh), detail: detailAll,
   })))
   // Each rotation after a good (#+) and a poor (!-) reception, against the rotation's side-out as a
@@ -103,14 +147,35 @@ function shareInsights(s: Tally, attacks: PlayRef[]): Insight[] {
         const share = refs.length / (refs.length + others.length)
         if (share - all.filter(r => personOf(r) === who).length / all.length < MIN_LIFT) return null
         return make({
-          key: `share|rot${rot}${id}|${who}`, subject: `share|rot${rot}${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]),
+          key: `share|rot${rot}${id}|${who}`, subject: `share|rot${rot}${id}`, person: who, kind: 'share', base: b, refs, others, mark: playerLabel(refs[0]), ...(id === 'poor' ? { weight: POOR_WEIGHT } : {}),
           headline: sh => t('ローテ {0}・レセプション {1} のサイドアウトは {2} が {3}', rot, grade, playerLabel(refs[0]), sh),
           detail: (n, hits, bs) => t('{0} 本中 {1} 本（ローテ {2} 全体では {3}）', n, hits, rot, bs),
         })
       })
     })
   })
-  return [...whole, ...byPass]
+  // And who they hardly go to, though in the front row; not by the pass alone (a poor pass takes the
+  // quick away from every team).
+  const wholeLow = situations.filter(([id]) => !['good', 'poor', 'trans'].includes(id)).flatMap(([id, label, ctx, base]) => lows(s, 'share', ctx, base, personOf, frontIn, (who, refs, elsewhere, b, one) => !leans(id, who, b, false) ? null : ({
+    key: `share|${id}|${who}|low`, subject: `share|${id}|low`, person: who, kind: 'share', base: b, refs: elsewhere, others: refs, mark: t('{0} 以外', playerLabel(one)),
+    headline: sh => t('{0}は {1} が {2}', label, playerLabel(one), sh), detail: detailAll,
+  })))
+  const byPassLow = [1, 6, 5, 4, 3, 2].flatMap(rot => {
+    const inRot = so.filter(r => rotationOf(r) === rot)
+    return ([['good', '#+', good], ['poor', '!-', poor]] as const).flatMap(([id, grade, is]) => {
+      const all = so.filter(is)
+      return lows(s, 'share', inRot.filter(is), inRot, personOf, frontIn, (who, refs, elsewhere, b, one) => {
+        const share = refs.length / (refs.length + elsewhere.length)
+        if (all.filter(r => personOf(r) === who).length / all.length - share < MIN_LIFT) return null
+        return {
+          key: `share|rot${rot}${id}|${who}|low`, subject: `share|rot${rot}${id}|low`, person: who, kind: 'share', base: b, refs: elsewhere, others: refs, mark: t('{0} 以外', playerLabel(one)), ...(id === 'poor' ? { weight: POOR_WEIGHT } : {}),
+          headline: sh => t('ローテ {0}・レセプション {1} のサイドアウトは {2} が {3}', rot, grade, playerLabel(one), sh),
+          detail: (n, hits, bs) => t('{0} 本中 {1} 本（ローテ {2} 全体では {3}）', n, hits, rot, bs),
+        }
+      })
+    })
+  })
+  return [...whole, ...byPass, ...wholeLow, ...byPassLow]
 }
 
 // Where an attacker hits from each zone, against the team's attacks from that zone.
@@ -118,9 +183,12 @@ function zoneInsights(s: Tally, attacks: PlayRef[]): Insight[] {
   const from = groupBy(attacks, r => r.play.startZone)
   return [...from].flatMap(([zone, base]) => [...groupBy(base, personOf)].flatMap(([who, ctx]) =>
     tendencies(s, 'zone', ctx, base, r => r.play.endZone, (end, refs, others, b) => make({
-      key: `zone|${who}|${zone}|${end}`, subject: `zone|${who}|${zone}`, person: who, kind: 'zone', base: b, refs, others, mark: `Zone${end}`,
+      key: `zone|${who}|${zone}|${end}`, subject: `zone|${who}|${zone}`, person: who, kind: 'zone', base: b, refs, others, mark: `Zone${end}`, paint: { zones: [end], side: 'other' },
       headline: sh => t('{0} の Zone{1} からのアタックは Zone{2} へ {3}', playerLabel(refs[0]), zone, end, sh), detail: detailAll,
-    }))))
+    })).concat(lows(s, 'zone', ctx, base, r => r.play.endZone, () => true, (end, refs, elsewhere, b) => ({
+      key: `zone|${who}|${zone}|${end}|low`, subject: `zone|${who}|${zone}|low`, person: who, kind: 'zone', base: b, refs: elsewhere, others: refs, mark: t('{0} 以外', `Zone${end}`), paint: { zones: [end], side: 'other' },
+      headline: sh => t('{0} の Zone{1} からのアタックは Zone{2} へ {3}', playerLabel(ctx[0]), zone, end, sh), detail: detailAll,
+    })))))
 }
 
 
@@ -135,7 +203,7 @@ function serveInsights(s: Tally, serves: PlayRef[], receiverOf: (r: PlayRef) => 
   for (const r of received) { const k = recKey(r)!; matchesOf.set(k, (matchesOf.get(k) ?? new Set()).add(r.matchId)) }
   for (const [who, ctx] of groupBy(serves, personOf)) {
     out.push(...tendencies(s, 'serveZone', ctx, serves, r => serveZoneMarker(r.play), (z, refs, others, b) => make({
-      key: `serveZone|${who}|${z}`, subject: `serveZone|${who}`, person: who, kind: 'serveZone', base: b, refs, others, mark: SERVE_ZONE()[z],
+      key: `serveZone|${who}|${z}`, subject: `serveZone|${who}`, person: who, kind: 'serveZone', base: b, refs, others, mark: SERVE_ZONE()[z], paint: { zones: SERVE_ZONES[z], side: 'other' },
       headline: sh => t('{0} のサーブは {1} へ {2}', playerLabel(refs[0]), SERVE_ZONE()[z], sh), detail: detailAll,
     })))
     for (const rec of new Set(ctx.map(recKey).filter((k): k is string => k !== null))) {
@@ -190,7 +258,7 @@ function rotationInsights(s: Tally, receptions: PlayRef[], wonBy: WonBy): Insigh
     tally(s, 'rotWeak')
     if (!worth(refs.length, ctx.length, b)) return []
     return [make({
-      key: `rotWeak|${rot}`, subject: `rotWeak|${rot}`, person: null, kind: 'rotWeak', base: b, refs, others: ctx.filter(r => !lost(r)), mark: t('失点'),
+      key: `rotWeak|${rot}`, subject: `rotWeak|${rot}`, person: null, kind: 'rotWeak', base: b, low: true, refs, others: ctx.filter(r => !lost(r)), mark: t('失点'),
       headline: () => t('ローテ {0} のサイドアウト率 {1}（全体 {2}）', rot, pct(1 - refs.length / ctx.length), pct(1 - b)),
       detail: (n, hits) => t('{0} 回のレセプションのうち {1} 回は点を取られた', n, hits),
     })]
@@ -213,7 +281,7 @@ function breakInsights(s: Tally, serves: PlayRef[], wonBy: WonBy): Insight[] {
     const p = binomTail(breaks.length, ctx.length, b, up)
     return [{
       key: `serverBreak|${who}|${up ? 'up' : 'down'}`, subject: `serverBreak|${who}`, person: who, kind: 'serverBreak', n: ctx.length, hits: up ? breaks.length : lost.length, share, base: b,
-      z: zScore(breaks.length, ctx.length, b), p, adjP: p, refs: up ? breaks : lost, others: up ? lost : breaks,
+      z: zScore(breaks.length, ctx.length, b), p, adjP: p, refs: up ? breaks : lost, others: up ? lost : breaks, ...(up ? {} : { low: true }),
       mark: up ? t('ブレイク') : t('サイドアウトされた'),
       headline: t('{0} のサーブはブレイク率 {1}', playerLabel(ctx[0]), pct(share)),
       detail: t('{0} 本中 {1} 本でブレイク（チーム全体では {2}）', ctx.length, breaks.length, pct(b)),
@@ -227,6 +295,9 @@ function breakInsights(s: Tally, serves: PlayRef[], wonBy: WonBy): Insight[] {
 // (SERVER_PRIOR serves' worth) and without this receiver's own receptions: a receiver isn't weak for
 // having faced the strong servers, nor a server strong for having served at this receiver.
 const SERVER_PRIOR = 10
+// How far a receiver's side-out rate is from what their servers would give, to be told: less than
+// elsewhere, since the set and the attack come after the reception and even out the gap.
+const RECEIVER_LIFT = 0.08
 function sideOutInsights(s: Tally, receptions: PlayRef[], serverOf: (r: PlayRef) => PlayRef | null, wonBy: WonBy): Insight[] {
   const known = receptions.filter(r => r.side !== null && wonBy(r) !== null && serverOf(r) !== null)
   if (!known.length) return []
@@ -245,13 +316,13 @@ function sideOutInsights(s: Tally, receptions: PlayRef[], serverOf: (r: PlayRef)
     tally(s, 'receiverSO', 2) // up and down
     const ok = ctx.filter(sidedOut), lost = ctx.filter(r => !sidedOut(r)), chances = ctx.map(expectedSideOut)
     const expect = chances.reduce((a, c) => a + c, 0), spread = Math.sqrt(chances.reduce((a, c) => a + c * (1 - c), 0))
-    const share = ok.length / ctx.length, base = expect / ctx.length, up = share - base >= MIN_LIFT
-    if (!up && share - base > -MIN_LIFT) return []
+    const share = ok.length / ctx.length, base = expect / ctx.length, up = share - base >= RECEIVER_LIFT
+    if (!up && share - base > -RECEIVER_LIFT) return []
     const z = spread ? (ok.length - expect) / spread : 0
     const p = normalTail(z)
     return [{
       key: `receiverSO|${who}|${up ? 'up' : 'down'}`, subject: `receiverSO|${who}`, person: who, kind: 'receiverSO', n: ctx.length, hits: up ? ok.length : lost.length, share, base,
-      z, p, adjP: p, refs: up ? ok : lost, others: up ? lost : ok,
+      z, p, adjP: p, refs: up ? ok : lost, others: up ? lost : ok, ...(up ? {} : { low: true }),
       mark: up ? t('サイドアウト') : t('失点'),
       headline: t('{0} のレセプションはサイドアウト率 {1}', playerLabel(ctx[0]), pct(share)),
       detail: t('{0} 本中 {1} 本でサイドアウト（受けたサーバーからの見込みは {2}）', ctx.length, ok.length, pct(base)),
@@ -273,7 +344,7 @@ function clutchInsights(s: Tally, attacks: PlayRef[]): Insight[] {
     const missed = ctx.filter(r => !kill(r)), p = binomTail(kills.length, ctx.length, b, up)
     return [{
       key: `clutch|${who}|${up ? 'up' : 'down'}`, subject: `clutch|${who}`, person: who, kind: 'clutch', n: ctx.length, hits: up ? kills.length : missed.length, share, base: b,
-      z: zScore(kills.length, ctx.length, b), p, adjP: p, refs: up ? kills : missed, others: up ? missed : kills,
+      z: zScore(kills.length, ctx.length, b), p, adjP: p, refs: up ? kills : missed, others: up ? missed : kills, ...(up ? {} : { low: true }),
       mark: up ? t('決まったアタック') : t('決まらなかったアタック'),
       headline: up ? t('{0} は終盤の接戦で決定率 {1}', playerLabel(all[0]), pct(share)) : t('{0} は終盤の接戦で決定率が {1} に落ちる', playerLabel(all[0]), pct(share)),
       detail: t('{0} 本中 {1} 本が決まった（ふだんは {2}）', ctx.length, kills.length, pct(b)),
@@ -307,7 +378,7 @@ export const LAST_KINDS: InsightKind[] = ['serveZone', 'serveCourse', 'serveTarg
 // How sure a habit is all told: how unlikely it is, as a power of ten (2: one in a hundred).
 export const sureOf = (i: Pick<Insight, 'adjP'>): number => -Math.log10(Math.max(i.adjP, 1e-12))
 // A habit's place in the list: how sure it is, weighted by its kind.
-export const rankOf = (i: Pick<Insight, 'kind' | 'adjP'>): number => sureOf(i) * (KIND_WEIGHT[i.kind] ?? 1)
+export const rankOf = (i: Pick<Insight, 'kind' | 'adjP' | 'weight'>): number => sureOf(i) * (KIND_WEIGHT[i.kind] ?? 1) * (i.weight ?? 1)
 
 // The team's habits in focus, the surest first (by rankOf, then by their own p), LAST_KINDS after the rest. A habit of the same
 // player or rotation and kind shows once (the surest in focus), and at most `max` are kept.
@@ -338,7 +409,7 @@ export function findInsights(scope: PlayRef[], team: 'our' | 'opp', look: WonBy 
     let least = 1
     for (let j = list.length - 1; j >= 0; j--) { least = Math.min(least, (list[j].p * m) / (j + 1)); list[j].adjP = least }
   }
-  const kept = all.filter(i => (i.adjP <= ALPHA || i.p <= MAX_P) && inFocus(i, focus)).sort((a, b) => +LAST_KINDS.includes(a.kind) - +LAST_KINDS.includes(b.kind) || rankOf(b) - rankOf(a) || a.p - b.p)
+  const kept = all.filter(i => (i.adjP <= ALPHA || i.p <= (i.maxP ?? MAX_P)) && inFocus(i, focus)).sort((a, b) => +LAST_KINDS.includes(a.kind) - +LAST_KINDS.includes(b.kind) || rankOf(b) - rankOf(a) || a.p - b.p)
   const seen = new Set<string>(), out: Insight[] = []
   for (const i of kept) {
     if (seen.has(i.subject)) continue
@@ -358,8 +429,43 @@ export function findInsights(scope: PlayRef[], team: 'our' | 'opp', look: WonBy 
 // matchIndex: a match's place, oldest first (PresetLookups); without it, the plays' order stands for it.
 export type InsightOrder = 'new' | 'old' | 'random'
 export const INSIGHT_ORDERS: InsightOrder[] = ['random', 'new', 'old']
-export interface InsightReelOptions { mode: ClipMode; limit: number | null; withOthers: boolean; prefix: string; order: InsightOrder }
-export function insightReels(list: Insight[], o: InsightReelOptions, matchIndex?: (matchId: string) => number, rand: () => number = Math.random): Reel[] {
+// lang: the language of the scenes' headlines, title cards and markers (missing: the interface's).
+export interface InsightReelOptions { mode: ClipMode; limit: number | null; withOthers: boolean; prefix: string; order: InsightOrder; lang?: Lang }
+// How the scenes look: the habit as every clip's headline (in the project's look for headlines), and
+// the zones it is about painted on each clip whose match has its court fitted (red: more than usual,
+// blue: less).
+export interface InsightDress { headline?: HeadlineStyle; courtOf?: (matchId: string) => CourtFit | undefined }
+export const PAINT_UP = '#DC2626', PAINT_DOWN = '#2563EB', PAINT_OPACITY = 0.35
+const HEADLINE_ROOM = 1200 // px at 720p the headline may take across
+
+// The headline object: one centered text at the top middle, as the headline field makes it, its size
+// brought down until it fits across.
+export function insightHeadline(i: Insight, h: HeadlineStyle = {}): Annotation {
+  const text = `${i.low ? '↓' : '↑'} ${i.headline}`
+  const wide = [...text].reduce((w, ch) => w + (/[ -~]/.test(ch) ? 0.6 : 1), 0)
+  const size = Math.max(20, Math.min(h.size ?? HEADLINE_SIZE, Math.floor(HEADLINE_ROOM / wide)))
+  return {
+    id: globalThis.crypto.randomUUID(), kind: 'text', color: h.color ?? '#FFFFFF', x: 0.5, y: 0.05, text, size, align: 'center', quick: true,
+    ...(h.bold !== undefined ? { bold: h.bold } : {}), ...(h.outline !== undefined ? { outline: h.outline } : {}), ...(h.font ? { font: h.font } : {}),
+    box: { ...DEFAULT_TEXT_BOX, ...(h.box ? { fill: h.box } : {}) },
+  }
+}
+
+// The habit's zones on one clip's court: on the half of the clip's team (own) or the other's, which
+// of the two is near the camera following the set and the score. One object, however many zones.
+export function insightPaint(i: Insight, ref: PlayRef, fit: CourtFit | undefined): Annotation[] {
+  if (!i.paint || !fit || ref.side === null) return []
+  const side = i.paint.side === 'own' ? ref.side : ref.side === '*' ? 'a' : '*'
+  const near = nearSide(fit, ref.play) === side, color = i.low ? PAINT_DOWN : PAINT_UP, group = globalThis.crypto.randomUUID()
+  return i.paint.zones.flatMap(z => {
+    const c = zoneCell(z, near)
+    if (!c) return []
+    const cell = { ...c, div: 3 as const }
+    return [{ id: globalThis.crypto.randomUUID(), kind: 'polygon', color, width: 0, points: zoneCellQuad(fit.corners, cell), fill: color, fillOpacity: PAINT_OPACITY, cell, groupId: group } as Annotation]
+  })
+}
+
+export function insightReels(list: Insight[], o: InsightReelOptions, matchIndex?: (matchId: string) => number, rand: () => number = Math.random, dress: InsightDress = {}): Reel[] {
   const shuffle = <T,>(xs: T[]): T[] => {
     const a = [...xs]
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
@@ -378,10 +484,19 @@ export function insightReels(list: Insight[], o: InsightReelOptions, matchIndex?
     return shown.filter(r => latest.has(r))
   }
   return list.map(i => {
-    let r: Reel = { ...newReel(o.prefix ? `${o.prefix} ${i.headline}` : i.headline), scope: 'all', sceneCard: true, cardTitle: `${i.headline}\n${i.detail}` }
+    let r: Reel = { ...newReel(o.prefix ? `${o.prefix} ${i.headline}` : i.headline), scope: 'all', sceneCard: true, cardTitle: `${i.headline}\n${i.detail}`, annotations: [insightHeadline(i, dress.headline)] }
     r = { ...r, markerNames: { ...r.markerNames, 1: i.mark, ...(o.withOthers ? { 2: t('それ以外') } : {}) } }
     const groups: [Marker, PlayRef[]][] = [[MARKERS[0], take(i.refs)], ...(o.withOthers ? [[MARKERS[1], take(i.others)] as [Marker, PlayRef[]]] : [])]
-    for (const [m, refs] of groups) if (refs.length) r = addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), m, o.mode).reel
+    for (const [m, refs] of groups) {
+      if (!refs.length) continue
+      const added = addClips(r, refs.map(x => ({ matchId: x.matchId, play: x.play })), m, o.mode)
+      const clips = { ...added.reel.clips }
+      added.ids.forEach((id, k) => {
+        const paint = insightPaint(i, refs[k], dress.courtOf?.(refs[k].matchId))
+        if (paint.length) clips[id] = { ...clips[id], annotations: [...paint, ...clips[id].annotations] }
+      })
+      r = { ...added.reel, clips }
+    }
     return r
   })
 }
@@ -394,7 +509,7 @@ export function insightReels(list: Insight[], o: InsightReelOptions, matchIndex?
 export interface VideoInsight extends InsightReelOptions { team: 'our' | 'opp'; subjects: string[]; focus: InsightFocus; league?: boolean }
 
 export const videoInsight = (team: 'our' | 'opp', list: Insight[], o: InsightReelOptions, focus: InsightFocus = NO_FOCUS, league = false): VideoInsight =>
-  ({ ...(league ? { league } : {}), team, subjects: list.map(i => i.subject), focus: { skills: [...focus.skills], persons: [...focus.persons] }, mode: o.mode, limit: o.limit, withOthers: o.withOthers, prefix: o.prefix, order: o.order })
+  ({ ...(league ? { league } : {}), team, subjects: list.map(i => i.subject), focus: { skills: [...focus.skills], persons: [...focus.persons] }, mode: o.mode, limit: o.limit, withOthers: o.withOthers, prefix: o.prefix, order: o.order, ...(o.lang ? { lang: o.lang } : {}) })
 
 // A video's insight read back from its file: null when it isn't one.
 export function cleanVideoInsight(v: unknown): VideoInsight | null {
@@ -416,6 +531,7 @@ export function cleanVideoInsight(v: unknown): VideoInsight | null {
     prefix: typeof o.prefix === 'string' ? o.prefix : '',
     order: INSIGHT_ORDERS.includes(o.order as InsightOrder) ? o.order as InsightOrder : 'random',
     ...(o.league === true ? { league: true } : {}),
+    ...(isLang(o.lang) ? { lang: o.lang } : {}),
   }
 }
 

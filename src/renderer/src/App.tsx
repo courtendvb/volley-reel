@@ -595,7 +595,7 @@ export function App() {
   // The league the insights are set beside, for an insight video made again too (once it is loaded).
   const leagueRef = useRef<League | null>(null)
   const { presetOpen, setPresetOpen, presetLook, makePresetVideo, remakePresetVideo, insightOpen, setInsightOpen, makeInsightVideo } = usePresetVideos({
-    latest, dvws, leagueRef, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
+    latest, dvws, leagueRef, dress: { headline: settings?.headline, courtOf: id => matches[id]?.court }, roles: settings?.roles, team: settings?.ourTeamCodes[0] ?? '', matchIds: projectMatchIds, scopeRefs, results,
     addScenes, addVideo, putVideo, scenesOnlyIn, removeScenes, showScene, setNotice, record, sceneSnap, videoSnap,
   })
   const league = useLeague(insightOpen, library, project?.matches ?? [], settings ?? null)

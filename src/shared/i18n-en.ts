@@ -1300,6 +1300,7 @@ export const EN: Record<string, string> = {
   "文字を入力している間は、キー操作は入力欄に送られます。← → の秒数は「設定」で変えられます。": "While typing, keys go to the field. The ← → seconds are in Settings.",
   "つまみのドラッグで縦横比を保つ（画像は比率を外す）": "Keeps the proportions while dragging a handle (frees them for images)",
   "折れ線・多角形の頂点を 1 つ戻す": "Undo a polyline or polygon point",
+  "矢印・折れ線を描くとき、まっすぐ縦か横に引く": "Draws an arrow or polyline segment straight up/down or across",
   "折れ線・多角形を確定": "Finish a polyline or polygon",
   "テキストの改行": "New line in text",
   "折れ線 / 多角形": "Polyline / polygon",

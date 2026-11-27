@@ -114,6 +114,12 @@ export function dragHandle(a: Annotation, id: string, x: number, y: number,
   return { a, id }
 }
 
+// Shift while drawing a line or an arrow: the end goes straight up/down or straight across from the
+// start, whichever is nearer to where the pointer is (measured in pixels, not 0..1).
+export function axisLock(from: [number, number], x: number, y: number, W: number, H: number): [number, number] {
+  return Math.abs((x - from[0]) * W) >= Math.abs((y - from[1]) * H) ? [x, from[1]] : [from[0], y]
+}
+
 // Shift while dragging a vertex (or an arrow end): the point lines up with a neighbor — the nearer of
 // "same x" and "same y" always, so that edge stays upright or level; the other one too when it is
 // within tolPx. Neighbors are the vertices on either side (for a midpoint, the edge's two ends).

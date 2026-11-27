@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyStyle, arrowPath, bounds, cubicAt, fadeAlpha, hitTest, pointInPolygon, roundCoords, subCubic, translate, type Annotation } from './annotation'
-import { snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, setCurved, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
+import { axisLock, snapTime, snapToNeighbors, cropHandle, fullRect, panCrop, zoomCrop, dragHandle, handlesOf, removeVertex, resizeBox, setClosed, setCurved, simplify, simplifyPoints, toPolygon, trianglePoints } from './annotationEdit'
 
 const rect: Annotation = { id: 'r', kind: 'rect', color: '#FFF', x: 0.2, y: 0.2, w: 0.4, h: 0.2, width: 6 }
 const poly: Annotation = { id: 'p', kind: 'polygon', color: '#FFF', width: 4, points: [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]] }
@@ -208,5 +208,14 @@ describe('curved arrows', () => {
       expect(a[0]).toBeCloseTo(b[0]); expect(a[1]).toBeCloseTo(b[1])
     }
     expect(roundCoords(curve)).toMatchObject({ c1: curve.c1!.map(v => Math.round(v * 10000) / 10000) })
+  })
+})
+
+describe('axisLock', () => {
+  it('sends the end straight up/down or across from the start, by the nearer axis in pixels', () => {
+    expect(axisLock([0.5, 0.5], 0.52, 0.2, 1000, 1000)).toEqual([0.5, 0.2])
+    expect(axisLock([0.5, 0.5], 0.8, 0.47, 1000, 1000)).toEqual([0.8, 0.5])
+    // On a wide picture 0.1 across is more pixels than 0.15 down.
+    expect(axisLock([0.5, 0.5], 0.6, 0.65, 1920, 1080)).toEqual([0.6, 0.5])
   })
 })

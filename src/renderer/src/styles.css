@@ -1112,6 +1112,9 @@ button.warn { border-color: var(--amber); color: var(--danger-text); }
 .court-fix-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* Corrections in the list and around it. */
+.scout-file-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); min-width: 0; }
+.scout-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-label); color: var(--sub); }
+.scout-file-row button { flex: none; }
 .list-view-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .play-row.deleted { opacity: .45; text-decoration: line-through; cursor: context-menu; }
 .action-notice { display: flex; align-items: center; gap: var(--space-3); }

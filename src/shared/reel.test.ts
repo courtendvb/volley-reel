@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
-  addClips, copyClipTo, copySlideTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, removeClip,
+  addClips, copyClipTo, copySlideTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, relinkCount, removeClip,
   setServeSpeed, setSkillTime, setClipCourt, setOverlayOverride, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers, cleanRange,
 } from './reel'
@@ -160,6 +160,17 @@ describe('relink', () => {
     expect(edited.plays[r.reel.clips[c[0]].playId].fingerprint).toBe(d.plays[2].fingerprint)
     expect(relink(reel, { A: parseDVW(DVW.replace('a01AQ#', 'a01AQ+')) }).missing.has(c[0])).toBe(true)
     expect(relink(reel, {}).missing.size).toBe(2)
+  })
+
+  it('counts per match the clips kept, found again and not found', () => {
+    const { reel } = reelWith([2, 4])
+    const shifted = parseDVW(DVW.replace('*01SQ-', '*01SQ-~~~16A;;;;;;;;1;1;1;1;99;;\n*03SQ-'))
+    expect(relinkCount([relink(reel, { A: d })], 'A')).toEqual({ kept: 2, moved: 0, missing: 0 })
+    const moved = relinkCount([relink(reel, { A: shifted })], 'A')
+    expect(moved.kept + moved.moved).toBe(2)
+    expect(moved.moved).toBeGreaterThan(0)
+    expect(relinkCount([relink(reel, {})], 'A')).toEqual({ kept: 0, moved: 0, missing: 2 })
+    expect(relinkCount([relink(reel, { A: d })], 'B')).toEqual({ kept: 0, moved: 0, missing: 0 })
   })
 })
 

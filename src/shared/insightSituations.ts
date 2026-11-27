@@ -38,6 +38,7 @@ interface Spec {
   family?: string | null // the same search on the league's teams (familyOf)
   low?: boolean // a search of choices: the choices hardly made in a situation too (lowOf)
   paint?: (out: string, dims: [string, string][]) => InsightPaint | null // the zones a habit is about
+  drop?: (out: string, dims: [string, string][]) => boolean // a habit that says nothing of a choice
   maxP?: number // kept by its own chance by luck alone up to this, however many were looked at (MAX_P)
 }
 
@@ -49,6 +50,8 @@ const TELL: Record<string, string> = { x: 'in', row: 'front', oppRow: 'front', z
 // A server's break rate by zone, a habit a coach can use at once: kept on less (and shown as the
 // weakest).
 const ZONE_BREAK_P = 0.1
+// A serve to Zone6 (marker 2) is the safe one: that it breaks less there is no habit.
+const SAFE = '2'
 
 // The habits of one search.
 // With the league, a habit is the share against what the league's shift in the same situation leads
@@ -75,7 +78,7 @@ function search(s: Tally, x: Spec, league?: League | null): Insight[] {
       for (const o of looked) {
         const refs = ctx.filter(c => is(c, o)), share = refs.length / ctx.length
         const phrase = x.phrase(o, share)
-        if (!phrase) continue
+        if (!phrase || x.drop?.(o, dims)) continue
         const lg = league && x.family ? league.shift.get(`${x.family}|${key}|${o}`) : undefined
         let base: number, z: number, p: number, h2 = 0
         if (other) {
@@ -421,7 +424,7 @@ function serveSpecs(c: Ctx, rows: RallyRow[][]): Spec[] {
     out.push({
       kind: 'serveEffect', subject: `serveEffect|${who}`, person: who, who: t('{0} のサーブ', name), yes: 'good',
       cases: zoned.map(r => ({ ref: r, out: '#/+'.includes(r.play.effect) ? 'good' : 'x', dims: { zone: String(serveZoneMarker(r.play)) } })),
-      combos: [['zone']], twoSided: [], label: lab, paint: (_o, d) => ({ zones: SERVE_ZONES[+d[0][1]] ?? [], side: 'other' }),
+      combos: [['zone']], twoSided: [], label: lab, paint: (_o, d) => ({ zones: SERVE_ZONES[+d[0][1]] ?? [], side: 'other' }), drop: (o, d) => o !== 'good' && d[0][1] === SAFE,
       phrase: (o, sh) => (o === 'good' ? t('崩した率 {0}', pct(sh)) : t('崩した率が {0} に下がる', pct(1 - sh))),
       mark: o => (o === 'good' ? t('崩したサーブ') : t('崩せなかったサーブ')),
     })
@@ -433,7 +436,7 @@ function serveSpecs(c: Ctx, rows: RallyRow[][]): Spec[] {
       kind: 'serverBreak', subject: `serverBreak|${who}|zone`, person: who, who: t('{0} のサーブ', name), yes: 'won', maxP: ZONE_BREAK_P,
       cases: decided.map(r => ({ ref: r, out: wonOf.get(r) ? 'won' : 'x', dims: Object.fromEntries(zones.map(z => [`z${z}`, String(serveZoneMarker(r.play)) === z ? 'in' : 'out'])) })),
       combos: zones.map(z => [`z${z}`]), twoSided: zones.map(z => `z${z}`), paint: (_o, d) => ({ zones: SERVE_ZONES[+d[0][0].slice(1)] ?? [], side: 'other' }),
-      label: (d, v) => (v === 'in' ? serveTo(+d.slice(1)) : t('ほかのゾーンへのサーブ')),
+      label: (d, v) => (v === 'in' ? serveTo(+d.slice(1)) : t('ほかのゾーンへのサーブ')), drop: (o, d) => o !== 'won' && d[0][0] === `z${SAFE}`,
       phrase: (o, sh) => (o === 'won' ? t('ブレイク率 {0}', pct(sh)) : t('ブレイク率が {0} に落ちる', pct(1 - sh))),
       mark: o => (o === 'won' ? t('ブレイク') : t('サイドアウトされた')),
     })

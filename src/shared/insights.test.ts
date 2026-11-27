@@ -267,6 +267,13 @@ describe('insights', () => {
     expect(down.refs).toHaveLength(16)
     expect(found.some(i => i.headline.includes('ほかのゾーン'))).toBe(false)
     expect(up.maxP).toBe(0.1)
+    // To Zone6 the serve is the safe one: breaking less there is not told; more is.
+    const sixes = (zone6: number, other: number) => {
+      serves.length = 0; won.clear(); serve(6, 20, zone6); serve(1, 20, other)
+      return findInsights(serves, 'opp', byRally, 50).filter(i => /serverBreak\|opp\|opp12\|zone/.test(i.subject) && i.headline.includes('Zone6'))
+    }
+    expect(sixes(4, 16)).toEqual([])
+    expect(sixes(16, 4).map(i => i.low)).toEqual([undefined])
     // The server as a whole breaks as the team does.
     expect(findInsights(serves, 'opp', byRally, 50).some(i => i.subject === 'serverBreak|opp|opp12')).toBe(false)
   })

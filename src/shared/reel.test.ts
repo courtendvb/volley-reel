@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDVW } from './dvw'
 import {
-  addClips, copyClipTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, relinkCount, removeClip,
+  addClips, copyClipTo, copySlideTo, clipRange, defaultRange, groupOf, markersOf, moveClip, newReel, placeGroup, playOrder, relink, relinkCount, removeClip,
   setServeSpeed, setSkillTime, setClipCourt, setOverlayOverride, toggleMarker, trimClip, findOverlaps, rangeDefaults, DEFAULT_RANGE, MIN_CLIP_SEC, parseFingerprint, type Reel,
   chronological, groupRows, newSlide, putSlides, removeSlide, setSlide, spotAt, setTag, sortByTag, clipEdits, withAllMarkers, cleanRange,
 } from './reel'
@@ -451,6 +451,33 @@ describe('a clip into another scene', () => {
     expect(markersOf(again.reel, tc[0])).toEqual([1, 3])
     expect(Object.keys(again.reel.clips)).toHaveLength(1)
     expect(copyClipTo(src.clips[c[1]], to0, []).reel.groups.none).toEqual([tc[0]])
+  })
+})
+
+describe('a slide into another scene', () => {
+  const when = (r: Reel) => (x: { playId: number }) => ['A', r.clips ? x.playId : 0] as [string, number]
+  const ids = (r: Reel, g: 'head' | 'none' | 1) => groupRows(r, g, g === 'none' ? chronological(r, r.groups.none, when(r)).map(x => x.id) : undefined)
+    .map(x => (x.kind === 'clip' ? r.clips[x.id].playId : x.slide.annotations.length ? 'S*' : 's'))
+  it('goes behind the same play when the scene has it, else to the end of the group, with a new id', () => {
+    const { reel: f0, c } = reelWith([0, 2])
+    const s = { ...newSlide({ kind: 'blank' }), annotations: [{ id: 'a' }] as unknown as ReturnType<typeof newSlide>['annotations'] }
+    const from = putSlides(f0, [s], { group: 'none', after: c[0], index: 0 })
+    const { reel: t0 } = reelWith([0, 2, 4])
+    const to = copySlideTo(from.slides![0], from, t0, when(t0))
+    expect(ids(to, 'none')).toEqual([0, 'S*', 2, 4])
+    expect(to.slides![0].id).not.toBe(s.id)
+    expect(to.slides![0].annotations).toEqual(s.annotations)
+    const { reel: other } = reelWith([4])
+    expect(ids(copySlideTo(from.slides![0], from, other, when(other)), 'none')).toEqual([4, 'S*'])
+  })
+  it('keeps a slide at the top of its group, or in the scene head, after the slides already there', () => {
+    const { reel: f0 } = reelWith([0])
+    const top = putSlides(f0, [{ ...newSlide({ kind: 'blank' }), annotations: [{ id: 'a' }] as never }], { group: 1, after: null, index: 0 })
+    const { reel: t0, c: tc } = reelWith([2])
+    const t1 = putSlides(toggleMarker(t0, tc[0], 1), [newSlide({ kind: 'blank' })], { group: 1, after: null, index: 0 })
+    expect(ids(copySlideTo(top.slides![0], top, t1, when(t1)), 1)).toEqual(['s', 'S*', 2])
+    const head = putSlides(f0, [newSlide({ kind: 'blank' })], { group: 'head', after: null, index: 0 })
+    expect(copySlideTo(head.slides![0], head, t1, when(t1)).slides!.filter(x => x.group === 'head')).toHaveLength(1)
   })
 })
 

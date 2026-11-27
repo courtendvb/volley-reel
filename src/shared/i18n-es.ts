@@ -1296,6 +1296,7 @@ export const ES: Record<string, string> = {
   "文字を入力している間は、キー操作は入力欄に送られます。← → の秒数は「設定」で変えられます。": "Mientras escribes, las teclas van al campo. Los segundos de ← → están en Configuración.",
   "つまみのドラッグで縦横比を保つ（画像は比率を外す）": "Mantiene las proporciones al arrastrar un tirador (las libera en imágenes)",
   "折れ線・多角形の頂点を 1 つ戻す": "Deshacer un punto de polilínea o polígono",
+  "矢印・折れ線を描くとき、まっすぐ縦か横に引く": "Traza una flecha o un tramo de polilínea recto en vertical u horizontal",
   "折れ線・多角形を確定": "Terminar una polilínea o polígono",
   "テキストの改行": "Nueva línea en el texto",
   "折れ線 / 多角形": "Polilínea / polígono",

@@ -66,6 +66,7 @@ const groups = (): { title: string; keys: [string, string][] }[] => [
       ['Enter', t('折れ線・多角形を確定')],
       ['Backspace', t('折れ線・多角形の頂点を 1 つ戻す')],
       ['Shift', t('つまみのドラッグで縦横比を保つ（画像は比率を外す）')],
+      ['Shift', t('矢印・折れ線を描くとき、まっすぐ縦か横に引く')],
     ],
   },
 ]

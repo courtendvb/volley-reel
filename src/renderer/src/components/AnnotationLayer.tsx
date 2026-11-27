@@ -5,7 +5,7 @@ import {
   type Annotation, type AnnotationKind, type ImageAnnotation, type ImageLookup, type Rect, type StylePatch, nextNumber, numberCircle, refloorTexts } from '../../../shared/annotation'
 import { snapMove, unionBox, type Guide } from '../../../shared/annotationAlign'
 import { setAnnFrame } from '../annFrame'
-import { cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
+import { axisLock, cropHandle, dragHandle, fullRect, handlesOf, panCrop, removeVertex, snapToNeighbors, trianglePoints, zoomCrop, type BoxHandle, type Handle } from '../../../shared/annotationEdit'
 import { assetImage, subscribeAssets } from '../assets'
 import { prepareCanvas } from '../canvas'
 import { playback } from '../playback'
@@ -284,7 +284,9 @@ export function AnnotationLayer(p: Props) {
       // Clicking the first point closes a polygon.
       const first = q.points[0]
       if (q.kind === 'polygon' && q.points.length >= 3 && Math.hypot((first[0] - pt[0]) * p.size.w, (first[1] - pt[1]) * p.size.h) <= HANDLE_PX) { finishPath(); return }
-      setPath({ ...q, points: [...q.points, pt] })
+      // Shift: this segment goes straight up/down or across from the last point.
+      const next = e.shiftKey ? axisLock(q.points[q.points.length - 1], pt[0], pt[1], p.size.w, p.size.h) : pt
+      setPath({ ...q, points: [...q.points, next] })
       return
     }
     if (p.tool === 'select' && cropImg) {
@@ -326,8 +328,13 @@ export function AnnotationLayer(p: Props) {
   }
 
   const onMove = (e: PointerEvent) => {
-    const [x, y] = at(e)
-    if (pathRef.current) { setPath({ ...pathRef.current, hover: [x, y] }); return }
+    const [x0, y0] = at(e)
+    const q = pathRef.current
+    if (q) {
+      const hover = e.shiftKey ? axisLock(q.points[q.points.length - 1], x0, y0, p.size.w, p.size.h) : [x0, y0] as [number, number]
+      setPath({ ...q, hover }); return
+    }
+    let x = x0, y = y0
     const drag = dragRef.current
     if (!drag) return
     if (drag.mode === 'move') {
@@ -363,6 +370,8 @@ export function AnnotationLayer(p: Props) {
       return
     }
     const d = drag.draft
+    // Shift: an arrow (or curve) goes straight up/down or across.
+    if (d.kind === 'arrow' && e.shiftKey) [x, y] = axisLock([d.x1, d.y1], x, y, p.size.w, p.size.h)
     const next: Annotation = d.kind === 'arrow' ? { ...d, x2: x, y2: y, ...(d.c1 ? curveControls(d.x1, d.y1, x, y) : {}) }
       : d.kind === 'freehand' ? { ...d, points: [...d.points, [x, y]] }
       : d.kind === 'rect' || d.kind === 'circle' ? { ...d, w: x - drag.from[0], h: y - drag.from[1] }

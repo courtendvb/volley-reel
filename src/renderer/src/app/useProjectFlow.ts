@@ -2,7 +2,7 @@
 // importing matches, picking a project's matches, and saving its settings.
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { EMPTY_FILTER, type PlayFilter } from '../../../shared/filter'
-import { relink, type Reel } from '../../../shared/reel'
+import { relink, relinkCount, type Reel } from '../../../shared/reel'
 import { settingsChange } from '../../../shared/settingsUndo'
 import type { ImportProgress, LibraryInfo, Match, MissingPart, ParsedDVW, ProjectInfo, ProjectSettings, RecentProject, ScanResult } from '../../../shared/types'
 import type { Video } from '../../../shared/video'
@@ -59,22 +59,25 @@ export function useProjectFlow(h: Host) {
   // Every match's DVW is parsed up front (a few ms each) so "all matches" search is instant.
   // Reels are re-linked to the fresh parse, in case a DVW was edited since they were saved.
   // Only the latest call applies its results, so overlapping loads can't overwrite newer state.
+  // Resolves to what relink did and the fresh parses (null when another load took over or no project).
   const loadGen = useRef(0)
-  const loadProject = useCallback(async (p: ProjectInfo | null) => {
+  const scoutTimes = useRef<Record<string, number | null>>({}) // each loaded match's scout file, as last read
+  const loadProject = useCallback(async (p: ProjectInfo | null): Promise<{ relinked: ReturnType<typeof relink>[]; parsed: Record<string, ParsedDVW> } | null> => {
     const gen = ++loadGen.current
     if (p?.path !== latest.current.projectPath) resetAssets() // another project's pictures go
     latest.current.projectPath = p?.path ?? null
     setProject(p)
     setMatchId(id => (p && id && p.matches.some(m => m.id === id) ? id : p?.matches[0]?.id ?? null))
     setMatchIds(ids => ids.filter(id => p?.matches.some(m => m.id === id)))
-    if (!p) { setDvws({}); setSceneMatches([]); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return }
+    if (!p) { scoutTimes.current = {}; setDvws({}); setSceneMatches([]); setReels([]); setReelId(null); setVideos([]); setVideoId(null); return null }
+    const times = await api.scoutTimes(p.matches.map(m => m.id))
     const parsed: Record<string, ParsedDVW> = {}
     for (const m of p.matches) {
       try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
     }
-    if (gen !== loadGen.current) return
+    if (gen !== loadGen.current) return null
     const listed = await api.listReels()
-    if (gen !== loadGen.current) return
+    if (gen !== loadGen.current) return null
     // Matches the scenes' clips use but the project no longer searches (taken off its list): loaded
     // too, so those clips keep their plays. Only a match gone from the library stays missing.
     const used = [...new Set(listed.flatMap(r => Object.values(r.clips).map(c => c.matchId)))].filter(id => !parsed[id])
@@ -83,11 +86,14 @@ export function useProjectFlow(h: Host) {
     for (const m of extra) {
       try { parsed[m.id] = await api.parseMatch(m.id) } catch (e) { setError(`${m.name}: ${(e as Error).message}`) }
     }
-    if (gen !== loadGen.current) return
+    const extraTimes = extra.length ? await api.scoutTimes(extra.map(m => m.id)) : {}
+    if (gen !== loadGen.current) return null
+    // A file that could not be read (half written?) is tried again at the next check.
+    scoutTimes.current = Object.fromEntries(Object.entries({ ...times, ...extraTimes }).map(([id, ms]) => [id, parsed[id] ? ms : -1]))
     setSceneMatches(extra.filter(m => parsed[m.id]))
     setDvws(parsed)
     const vids = await api.listVideos()
-    if (gen !== loadGen.current) return
+    if (gen !== loadGen.current) return null
     // Scenes whose clips were re-pointed to their plays (the DVW changed) count as unsaved, so the
     // new pointers are written; the rest are clean as loaded.
     const relinked = listed.map(r => relink(r, parsed))
@@ -104,6 +110,45 @@ export function useProjectFlow(h: Host) {
     const notes = await api.takeNotices()
     if (notes.length) setNotice(notes.join(' / '))
     setReelId(id => (id && loaded.some(r => r.id === id) ? id : loaded[0]?.id ?? null))
+    return { relinked, parsed }
+  }, [])
+
+  // After a match's scout file changed: how the scenes' clips found their plays in it, and corrections
+  // made in the app that no longer fit it.
+  const relinkNote = (r: { relinked: ReturnType<typeof relink>[]; parsed: Record<string, ParsedDVW> }, id: string): string => {
+    const n = relinkCount(r.relinked, id)
+    const parts: string[] = []
+    if (n.kept + n.moved) parts.push(t('シーンのクリップ: {0} 件はそのまま、{1} 件を直ったスカウトのプレーに付け直しました', n.kept, n.moved))
+    if (n.missing) parts.push(t('{0} 件は対応するプレーが見つかりません（シーンには残っています）', n.missing))
+    const stale = r.parsed[id]?.stale, s = (stale?.edits.length ?? 0) + (stale?.inserts.length ?? 0)
+    if (s) parts.push(t('アプリでの修正 {0} 件が新しいスカウトに合いません（修正の一覧で確かめてください）', s))
+    return parts.join(' / ')
+  }
+
+  // A scout file overwritten while the project is open (a merged file saved over it) is read again
+  // when the window comes back to the front: pending edits are saved first, then the scenes re-link.
+  const checking = useRef(false)
+  useEffect(() => {
+    const check = async () => {
+      const was = scoutTimes.current, ids = Object.keys(was)
+      if (checking.current || !ids.length) return
+      checking.current = true
+      try {
+        const now = await api.scoutTimes(ids)
+        const changed = ids.filter(id => now[id] !== null && now[id] !== was[id])
+        if (!changed.length) return
+        await flushAll()
+        const p = await api.getProject()
+        const r = await loadProject(p)
+        if (!r || !p) return
+        const lib = changed.some(id => !p.matches.some(m => m.id === id)) ? await api.getLibrary() : null
+        const nameOf = (id: string) => p.matches.find(m => m.id === id)?.name ?? lib?.matches.find(m => m.id === id)?.name ?? id
+        setNotice(changed.map(id => [t('{0}: スカウトファイルが更新されたので読み直しました', nameOf(id)), relinkNote(r, id)].filter(Boolean).join(' / ')).join(' / '))
+      } catch (e) { setError((e as Error).message) } finally { checking.current = false }
+    }
+    const onFocus = () => void check()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
   }, [])
 
   const guard = async (fn: () => Promise<void>) => {
@@ -137,12 +182,16 @@ export function useProjectFlow(h: Host) {
     if (r.failed.length) setError(t('取り込めなかった試合があります: {0}', r.failed.map(f => t('{0}（{1}）', f.dvwPath.split(/[\\/]/).pop(), f.message)).join(' / ')))
     else setNotice(t('{0} 試合を倉庫に取り込みました', r.imported.length))
   })
-  const relocate = (id: string, part: MissingPart) => guard(async () => {
-    const r = await api.relocateMatch(id, part)
+  // replace: another scout file in place of the match's one (still there). Pending edits are saved
+  // first, since the project is read again; the note says how the scenes' clips found their plays.
+  const relocate = (id: string, part: MissingPart, replace = false) => guard(async () => {
+    await flushAll()
+    const r = await api.relocateMatch(id, part, replace)
     if (!r) return
     setLibrary(r.library)
-    if (r.project) await loadProject(r.project)
-    setNotice(r.note)
+    const loaded = r.project ? await loadProject(r.project) : null
+    const more = loaded && part === 'dvw' ? relinkNote(loaded, id) : ''
+    setNotice(more ? `${r.note} / ${more}` : r.note)
   })
   const deleteMatch = (m: Match) => guard(async () => {
     const users = await api.matchUsers(m.id)

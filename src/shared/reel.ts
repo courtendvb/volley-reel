@@ -374,6 +374,23 @@ export function relink(reel: Reel, dvws: Record<string, ParsedDVW>): { reel: Ree
   return { reel: changed ? { ...reel, clips } : reel, missing, changed, how }
 }
 
+// What relink did to one match's clips, over all scenes: found as they were, found again at
+// another play (the scout was fixed), or not found. For the note after a scout file is replaced.
+export interface RelinkCount { kept: number; moved: number; missing: number }
+
+export function relinkCount(results: ReturnType<typeof relink>[], matchId: string): RelinkCount {
+  const n: RelinkCount = { kept: 0, moved: 0, missing: 0 }
+  for (const r of results) {
+    for (const c of Object.values(r.reel.clips)) {
+      if (c.matchId !== matchId) continue
+      if (r.missing.has(c.id)) n.missing++
+      else if (r.how.get(c.id) === 'id') n.kept++
+      else n.moved++
+    }
+  }
+  return n
+}
+
 const NEAR_TIME_SEC = 2
 
 function findPlay(d: ParsedDVW, fingerprint: string): { play: Play; how: RelinkHow } | null {

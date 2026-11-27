@@ -43,7 +43,7 @@ import { InsightDialog } from './components/InsightDialog'
 import { useLeague } from './app/useLeague'
 import type { League } from '../../shared/insights'
 import { usePresetVideos } from './app/usePresetVideos'
-import { Home, MissingNote } from './components/Home'
+import { Home, MissingNote, ReplaceScoutButton } from './components/Home'
 import { CompareView } from './components/CompareView'
 import { CompareMenu } from './components/CompareMenu'
 import { useCompare } from './app/useCompare'
@@ -1021,7 +1021,7 @@ export function App() {
       ) : !project ? (
         <Home library={library} recent={recent} busy={!!progress} onChooseLibrary={chooseLibrary} onScan={scanFolders}
           onImportOne={importOne} onNewProject={() => setPicker('create')} onOpenProject={p => void openProject(p)} onOpenMatch={(id, code) => void openMatch(id, code)}
-          onRelocate={(id, part) => void relocate(id, part)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
+          onRelocate={(id, part, replace) => void relocate(id, part, replace)} onDeleteMatch={m => void deleteMatch(m)} onDeleteProject={r => void deleteProject(r)} />
       ) : !project.matches.length ? (
         <div className="empty"><h2>{t('試合を選びましょう')}</h2>
           <p className="muted">{t('倉庫から、このプロジェクトで使う試合を選びます。')}</p>
@@ -1037,6 +1037,13 @@ export function App() {
                 {([['old', t('古い試合から')], ['new', t('新しい試合から')]] as const).map(([v, l]) => (
                   <button key={v} role="radio" aria-checked={matchOrder === v} className={matchOrder === v ? 'on' : ''} onClick={() => setMatchOrder(v)}>{l}</button>
                 ))}
+              </div>
+            )}
+            {match && !project.missing[match.id]?.includes('dvw') && (
+              <div className="scout-file-row" title={match.dvwPath}>
+                <span className="field-label">{t('スカウト')}</span>
+                <span className="scout-file-name">{match.dvwPath.split(/[\\/]/).pop()}</span>
+                <ReplaceScoutButton busy={!!progress} onClick={() => void relocate(match.id, 'dvw', true)} />
               </div>
             )}
             {match?.warnings.map(w => <p key={w} className="warning">{w}</p>)}

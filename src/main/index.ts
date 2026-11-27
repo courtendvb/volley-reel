@@ -337,15 +337,29 @@ function registerIpc(): void {
     return l.importMatch(v.filePaths[0], d.filePaths[0], p => e.sender.send('import:progress', p))
   })
 
-  ipcMain.handle('match:relocate', async (e, id: string, part: 'video' | 'dvw') => {
+  // When each match's scout file was last written (null: not there), so a file overwritten while the
+  // project is open is noticed and read again.
+  ipcMain.handle('match:scoutTimes', async (_e, ids: string[]) => {
+    const out: Record<string, number | null> = {}
+    for (const id of ids) {
+      const path = library?.getMatch(id)?.dvwPath
+      out[id] = path ? await stat(path).then(s => s.mtimeMs, () => null) : null
+    }
+    return out
+  })
+  // replace: another scout file of the match takes the place of one that is still there.
+  ipcMain.handle('match:relocate', async (e, id: string, part: 'video' | 'dvw', replace?: boolean) => {
     const l = lib()
     const m = l.getMatch(id)
     if (!m) throw new Error(t('試合が見つかりません: {0}', id))
+    const swap = part === 'dvw' && replace === true
     const r = await dialog.showOpenDialog(win!, part === 'video'
       ? { title: t('{0} の動画を選択（元: {1}）', m.name, basename(m.sourceVideoPath)), properties: ['openFile'], filters: [videoFilter()] }
-      : { title: t('{0} の DVW を選択（元: {1}）', m.name, basename(m.dvwPath)), properties: ['openFile'], filters: [dvwFilter] })
+      : swap
+        ? { title: t('{0} の新しいスカウトファイルを選択（今: {1}）', m.name, basename(m.dvwPath)), defaultPath: dirname(m.dvwPath), properties: ['openFile'], filters: [dvwFilter] }
+        : { title: t('{0} の DVW を選択（元: {1}）', m.name, basename(m.dvwPath)), properties: ['openFile'], filters: [dvwFilter] })
     if (r.canceled || !r.filePaths[0]) return null
-    const note = await l.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p))
+    const note = await l.relocate(id, part, r.filePaths[0], p => e.sender.send('import:progress', p), swap)
     return { library: l.info(), project: project?.info() ?? null, note }
   })
 

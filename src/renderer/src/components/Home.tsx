@@ -15,7 +15,7 @@ interface Props {
   onNewProject: () => void
   onOpenProject: (path?: string) => void
   onOpenMatch: (matchId: string, code: string) => void // the match alone, that team ours
-  onRelocate: (id: string, part: MissingPart) => void
+  onRelocate: (id: string, part: MissingPart, replace?: boolean) => void // replace: another scout file in place of one still there
   onDeleteMatch: (m: Match) => void
   onDeleteProject: (r: RecentProject) => void
 }
@@ -49,7 +49,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
             <AccountNote what="import" matches={library.matches.length} />
             <p className="count">{shown.length} / {library.matches.length} {t('試合')}</p>
             <div className="match-table" role="list">
-              {shown.map(m => <MatchRow key={m.id} m={m} missing={library.missing[m.id]} busy={busy} onRelocate={part => onRelocate(m.id, part)} onOpen={code => onOpenMatch(m.id, code)} onDelete={() => onDeleteMatch(m)} />)}
+              {shown.map(m => <MatchRow key={m.id} m={m} missing={library.missing[m.id]} busy={busy} onRelocate={part => onRelocate(m.id, part)} onReplaceScout={() => onRelocate(m.id, 'dvw', true)} onOpen={code => onOpenMatch(m.id, code)} onDelete={() => onDeleteMatch(m)} />)}
               {!library.matches.length && <p className="muted pad">{t('まだ試合がありません。「フォルダから一括取り込み」で、動画と DVW のあるフォルダを選んでください。')}</p>}
             </div>
           </>
@@ -78,7 +78,7 @@ export function Home({ library, recent, busy, onChooseLibrary, onScan, onImportO
   )
 }
 
-function MatchRow({ m, missing, busy, onRelocate, onOpen, onDelete }: { m: Match; missing?: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void; onOpen: (code: string) => void; onDelete: () => void }) {
+function MatchRow({ m, missing, busy, onRelocate, onReplaceScout, onOpen, onDelete }: { m: Match; missing?: MissingPart[]; busy: boolean; onRelocate: (part: MissingPart) => void; onReplaceScout: () => void; onOpen: (code: string) => void; onDelete: () => void }) {
   return (
     <div className={`match-row${missing ? ' lost' : ''}`} role="listitem" title={`${m.sourceVideoPath}\n${m.dvwPath}`}>
       <MatchCells m={m} />
@@ -90,9 +90,19 @@ function MatchRow({ m, missing, busy, onRelocate, onOpen, onDelete }: { m: Match
           <button key={code} className="small" disabled={busy} onClick={() => onOpen(code)}
             title={t('この試合だけのプロジェクトを、{0} を対象チームにして開きます（初回は倉庫の projects に作り、次からは同じものを開く）', code)}>{t('{0} で開く', code)}</button>
         ))}
+        {!missing?.includes('dvw') && <ReplaceScoutButton busy={busy} onClick={onReplaceScout} />}
         <button className="small" disabled={busy} onClick={onDelete} title={t('この試合を倉庫から削除（動画と DVW のファイルは消えません）')}>{t('削除')}</button>
       </span>
     </div>
+  )
+}
+
+// Another scout file of the match in place of its own (the staff's corrections merged into a new file):
+// the scenes' clips find their plays in it, so work in progress stays. Shown on a library row and in a project.
+export function ReplaceScoutButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
+  return (
+    <button className="small" disabled={busy} onClick={e => { e.stopPropagation(); onClick() }}
+      title={t('修正されたスカウトファイルに差し替えます。作りかけのシーンのクリップは、新しいファイルのプレーに付け直されます（同じ名前で上書きしたときは、差し替えなくても読み直します）')}>{t('スカウトを差し替え…')}</button>
   )
 }
 

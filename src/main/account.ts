@@ -11,6 +11,7 @@ import { createPublicKey, randomUUID, verify, type KeyObject } from 'node:crypto
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hostname } from 'node:os'
+import { getLang } from '../shared/i18n'
 import {
   EDITOR_APP, gate, leaseState, refreshDue, splitLease, type Gate, type GateRefusal,
   type AccountError, type AccountState, type LeasePayload, type PlanPrices, type LeaseResponse, type LeaseTeam, type TeamAction, type WebAccess,
@@ -152,7 +153,8 @@ export class Account {
     this.save()
   }
 
-  private who() { return { device_id: this.saved.deviceId, device_name: hostname(), app: EDITOR_APP, app_version: this.deps.appVersion } }
+  // lang: the interface language, so the mail the server sends on starting the trial is in it.
+  private who() { return { device_id: this.saved.deviceId, device_name: hostname(), app: EDITOR_APP, app_version: this.deps.appVersion, lang: getLang() } }
 
   // Step 1 of signing in: the server mails a one-time code to the address.
   async sendCode(email: string): Promise<void> {

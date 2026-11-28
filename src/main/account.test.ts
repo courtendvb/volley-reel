@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Account } from './account'
+import { setLang } from '../shared/i18n'
 import type { LeasePayload } from '../shared/account'
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519')
@@ -240,7 +241,10 @@ describe('Account', () => {
     expect(await a.teamAction({ action: 'claim', team_id: 30 })).toMatchObject({ kind: 'ok', team: { id: 30 }, suggested: [] })
     expect(await a.teamAction({ action: 'leave', team_id: 30 })).toMatchObject({ kind: 'ok', team: { id: 41 } })
     expect(await a.teamAction({ action: 'leave', team_id: 41 })).toMatchObject({ kind: 'needs_team' })
+    setLang('es')
     expect(await a.teamAction({ action: 'trial' })).toMatchObject({ kind: 'ok', status: 'trialing', team: { id: 50 } })
+    expect(s.calls.at(-1)!.body).toMatchObject({ action: 'trial', lang: 'es' }) // the trial mail is written in it
+    setLang('ja')
     await expect(a.teamAction({ action: 'trial' })).rejects.toMatchObject({ code: 'trial_used' })
   })
 

@@ -20,7 +20,11 @@ describe('rangePlays', () => {
   it('takes the rally from the match', () => {
     expect(rangePlays('rally', p(1, 1), () => all, src).map(x => x.id)).toEqual([1, 2])
   })
+  it('takes the search results', () => {
+    expect(rangePlays('filter', p(1, 1), () => all, { ...src, filter: () => [p(4, 3)] }).map(x => x.id)).toEqual([4])
+  })
   it('falls back to every shot where there is no source', () => {
+    expect(rangePlays('filter', p(1, 1), () => all, src)).toBe(all)
     expect(rangePlays('scene', p(1, 1), () => all)).toBe(all)
     expect(rangePlays('rally', p(1, null), () => all, src)).toBe(all)
   })

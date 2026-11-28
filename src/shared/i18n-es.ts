@@ -1546,6 +1546,7 @@ export const ES: Record<string, string> = {
   "このシーンだけ": "Solo esta escena",
   "このマーカーだけ": "Solo este marcador",
   "このラリーだけ": "Solo este rally",
+  "検索条件のみ": "Solo los resultados de búsqueda",
   "着弾の波紋": "Onda de caída",
   "選んだサーブ・アタックの着弾点から光の波紋が床に広がり（0.8 秒）、着弾の印を残して 3 秒で消える。ヒートマップとは別に動き、ヒートマップはいつもどおり出たまま（書き出しも同じ）": "Un anillo de luz se expande sobre el piso desde donde cae el saque o ataque seleccionado (0.8 s), dejando una marca que se desvanece en 3 s. Es aparte del mapa de calor, que se muestra como siempre (también en la exportación)",
   "波紋を着弾の何秒前に出すか。着弾の時刻は DVW の秒単位からの推定なので、映像に合わせて調整する。0 で推定の着弾と同時、マイナスにすると着弾のあと（書き出しも同じ）": "Cuántos segundos antes de la caída empieza la onda. El momento de la caída se estima a partir de los segundos enteros del DVW, así que ajústalo a la imagen. 0 es la caída estimada; por debajo de 0, después (también en la exportación)",

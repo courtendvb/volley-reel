@@ -199,7 +199,7 @@ function scattered(c: ClickPoint, i: number): ClickPoint {
 export interface ChartSource { filtered?: () => Play[]; name?: string; setterName?: (set: Play) => string; ranges?: RangeSource } // setterName: the set chart's title; ranges: where the 範囲 choices look (markRange.ts)
 export function playerMarks(play: Pick<Play, 'skill' | 'playerKey' | 'code'> & ZonePlay, fit: CourtFit, style0: GridStyle, all: () => Play[], source?: ChartSource): PlayerMarks | null {
   const style = markStyle(style0, play.skill)
-  const plays = () => rangePlays(style.range, play, all, source?.ranges)
+  const plays = () => rangePlays(style.range, play, all, { ...source?.ranges, ...(source?.filtered ? { filter: source.filtered } : {}) })
   // A set, an attack after one, or a reception: the setter's distribution in that rotation.
   const setsAll = (style.setChart || style.setCourt) && (play.skill === 'E' || play.skill === 'A' || play.skill === 'R') ? setChart(play as Play, plays(), source?.setterName, style.setFilter) : null
   const setMarks: PlayerMarks = setsAll ? {

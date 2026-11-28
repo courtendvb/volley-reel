@@ -188,6 +188,7 @@ export function CourtBar({ match, style: s, onStyle, fitting, onFitting, onFit, 
               <option value="scene">{t('このシーンだけ')}</option>
               <option value="marker">{t('このマーカーだけ')}</option>
               <option value="rally">{t('このラリーだけ')}</option>
+              <option value="filter">{t('検索条件のみ')}</option>
             </select>
           </label>
           {selected !== tab && <span className="muted small">{selected ? t('いま選んでいるのは{0}。この設定は{1}を選んだときに出ます', tabName(selected), tabName(tab)) : t('この設定は{0}を選んだときに出ます', tabName(tab))}</span>}

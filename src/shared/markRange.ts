@@ -1,16 +1,16 @@
 // How far the player's marks reach (the 表示 tab's 範囲): every shot of the player in the project's
 // matches (the usual), only the match on screen, the scene the clip is in, the marker group it is in,
-// or the rally of the play shown. The marks (heatmap, landings, flights, cones, charts) are made from
-// the shots left.
+// the rally of the play shown, or the plays of the search. The marks (heatmap, landings, flights,
+// cones, charts) are made from the shots left.
 import type { Group, Reel } from './reel'
 import type { ParsedDVW, Play } from './types'
 
-export type MarkRange = 'all' | 'match' | 'scene' | 'marker' | 'rally'
-export const MARK_RANGES: MarkRange[] = ['all', 'match', 'scene', 'marker', 'rally']
+export type MarkRange = 'all' | 'match' | 'scene' | 'marker' | 'rally' | 'filter'
+export const MARK_RANGES: MarkRange[] = ['all', 'match', 'scene', 'marker', 'rally', 'filter']
 export const isMarkRange = (x: unknown): x is MarkRange => typeof x === 'string' && (MARK_RANGES as string[]).includes(x)
 
 // Where the narrower ranges look, each only when asked for.
-export interface RangeSource { match?: () => Play[]; scene?: () => Play[]; marker?: () => Play[] }
+export interface RangeSource { match?: () => Play[]; scene?: () => Play[]; marker?: () => Play[]; filter?: () => Play[] }
 
 // The shots the marks of `play` are made from. A range with no source (no scene open, say) is the whole pool.
 export function rangePlays(range: MarkRange | undefined, play: Pick<Play, 'rallyId'>, all: () => Play[], src?: RangeSource): Play[] {
